@@ -132,7 +132,7 @@ def case_evidence(disruption: Disruption) -> list[EvidenceItem]:
         return [EvidenceItem(**item) for item in demo_fixtures.demo_evidence()]
     return [
         EvidenceItem(
-            evidence_id=f"RL-EVD-{disruption.disruption_id}",
+            evidence_id=f"RL-EVD-{disruption.disruption_id.split('-')[-1]}",
             source=disruption.signal_source,
             reference=disruption.signal_reference or disruption.disruption_id,
             title=f"Supplier signal {disruption.disruption_id}",

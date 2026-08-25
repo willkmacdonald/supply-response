@@ -13,7 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from data.fixtures.demo import HORIZON_END, HORIZON_START, demo_dataset
+from data.fixtures.demo import (
+    DEMO_DISRUPTION_ID,
+    HORIZON_END,
+    HORIZON_START,
+    demo_dataset,
+)
 from services.scenarios.evaluator import (
     EvaluationContext,
     calculate_baseline,
@@ -108,7 +113,7 @@ def test_generated_dataset_reproduces_the_demo_results(expected):
     dataset = generate_dataset(42)
     context = EvaluationContext(
         disruption=next(
-            d for d in dataset.disruptions if d.disruption_id == "RL-001"
+            d for d in dataset.disruptions if d.disruption_id == DEMO_DISRUPTION_ID
         ),
         horizon_start=HORIZON_START,
         horizon_end=HORIZON_END,
@@ -126,7 +131,7 @@ def test_generated_dataset_reproduces_the_demo_results(expected):
     assert baseline.max_shortage_qty == expected["baseline"]["max_shortage_qty"]
 
     scenarios = [
-        s for s in dataset.response_scenarios if s.disruption_id == "RL-001"
+        s for s in dataset.response_scenarios if s.disruption_id == DEMO_DISRUPTION_ID
     ]
     evaluations = evaluate_scenarios(scenarios, context, CALCULATED_AT)
     assert [e.scenario_id for e in evaluations] == [

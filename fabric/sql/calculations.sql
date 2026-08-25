@@ -38,12 +38,30 @@ JOIN bom_components b ON b.parent_part_id = p.part_id
 WHERE p.status IN ('planned', 'released', 'in_progress')
 GROUP BY b.component_part_id, p.plant_id, p.start_date;
 
+-- Approved inter-plant transfers, derived from the action ledger. A transfer is
+-- a receipt at the receiving plant and an issue at the sending plant.
+CREATE VIEW vw_approved_transfers AS
+SELECT
+    d.part_id,
+    d.plant_id,
+    COALESCE(s.available_date, d.original_date) AS transfer_date,
+    SUM(s.transfer_qty) AS transfer_qty
+FROM action_ledger a
+JOIN response_scenarios s ON s.scenario_id = a.scenario_id
+JOIN disruptions d ON d.disruption_id = s.disruption_id
+WHERE a.status = 'approved'
+  AND s.transfer_qty > 0
+GROUP BY d.part_id, d.plant_id, COALESCE(s.available_date, d.original_date);
+
 -- projected balance by date =
 --     prior balance + confirmed receipts + approved transfers - component demand
 CREATE VIEW vw_projected_balance AS
 WITH movements AS (
     SELECT part_id, plant_id, receipt_date AS movement_date, confirmed_receipts AS delta
     FROM vw_confirmed_receipts
+    UNION ALL
+    SELECT part_id, plant_id, transfer_date AS movement_date, transfer_qty AS delta
+    FROM vw_approved_transfers
     UNION ALL
     SELECT part_id, plant_id, demand_date AS movement_date, -component_demand AS delta
     FROM vw_component_demand
