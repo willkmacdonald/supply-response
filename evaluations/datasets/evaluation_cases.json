@@ -1,0 +1,76 @@
+{
+  "version": "1.0.0",
+  "description": "Evaluation cases for the Supply Response deterministic services. All data is fictional (RL- prefix).",
+  "cases": [
+    {
+      "id": "RL-EVAL-001",
+      "name": "Confirmed supplier recovery date",
+      "input": "Delayed purchase order carries a revised_date inside the horizon.",
+      "expected": "The revised date is used as the receipt date and the quantity counts as a confirmed receipt.",
+      "test": "tests/test_calculations.py::test_confirmed_recovery_date_is_counted"
+    },
+    {
+      "id": "RL-EVAL-002",
+      "name": "Unconfirmed recovery date",
+      "input": "Delayed purchase order RL-PO-000101 with revised_date = null.",
+      "expected": "No receipt is created and the unconfirmed date is reported as an open question.",
+      "test": "tests/test_calculations.py::test_delayed_po_without_revised_date_is_not_counted"
+    },
+    {
+      "id": "RL-EVAL-003",
+      "name": "Partial shipment",
+      "input": "Supplier Alpha offers 3,000 units on 2025-09-06 by air freight.",
+      "expected": "RL-SCN-002 is executable, costs 28,000.00 and protects 273,000.00 of revenue.",
+      "test": "tests/test_calculations.py::test_expedite_scenario_numbers"
+    },
+    {
+      "id": "RL-EVAL-004",
+      "name": "Conflicting email and ERP dates",
+      "input": "Email states no recovery date; ERP carries revised_date 2025-09-20.",
+      "expected": "The ERP commitment is used and the conflict is surfaced, never silently resolved.",
+      "test": "tests/test_calculations.py::test_conflicting_email_and_erp_dates_prefers_erp_revision"
+    },
+    {
+      "id": "RL-EVAL-005",
+      "name": "Alternate supplier approved",
+      "input": "Supplier Alpha qualification RL-QUALITY-002 for MAT-10247.",
+      "expected": "The policy check returns executable = true with no blocking constraint.",
+      "test": "tests/test_calculations.py::test_supplier_alpha_is_approved"
+    },
+    {
+      "id": "RL-EVAL-006",
+      "name": "Alternate supplier not approved",
+      "input": "Supplier Beta qualification RL-QUALITY-001 for MAT-10247.",
+      "expected": "RL-SCN-005 is not executable, is ranked last, and is retained as a conditional option.",
+      "test": "tests/test_calculations.py::test_beta_scenario_is_not_executable_and_ranked_last"
+    },
+    {
+      "id": "RL-EVAL-007",
+      "name": "Inventory available at another plant",
+      "input": "9,000 usable units transferred from RL-PLANT-02 on 2025-09-03.",
+      "expected": "No stockout, no affected production orders, zero revenue at risk.",
+      "test": "tests/test_calculations.py::test_inventory_at_another_plant_removes_the_stockout"
+    },
+    {
+      "id": "RL-EVAL-008",
+      "name": "No feasible mitigation",
+      "input": "Accept the delay with no expedite, transfer, or resequencing.",
+      "expected": "Revenue protected is 0.00 and the full baseline exposure is retained.",
+      "test": "tests/test_calculations.py::test_accept_delay_protects_no_revenue"
+    },
+    {
+      "id": "RL-EVAL-009",
+      "name": "Premium freight above approval threshold",
+      "input": "Premium freight of 28,000.00 against a 25,000.00 threshold.",
+      "expected": "requires_approval = true and finance_approver is added to the approver roles.",
+      "test": "tests/test_calculations.py::test_premium_freight_above_threshold_requires_finance"
+    },
+    {
+      "id": "RL-EVAL-010",
+      "name": "Missing or stale collaboration evidence",
+      "input": "A supplier with no quality qualification record for the part.",
+      "expected": "The scenario is blocked with code QUALITY_NO_RECORD rather than assumed approved.",
+      "test": "tests/test_calculations.py::test_missing_qualification_record_blocks"
+    }
+  ]
+}

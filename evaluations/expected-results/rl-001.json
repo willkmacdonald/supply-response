@@ -1,0 +1,133 @@
+{
+  "disruption_id": "RL-001",
+  "calculation_version": "1.0.0",
+  "horizon": {
+    "start": "2025-09-01",
+    "end": "2025-09-30"
+  },
+  "baseline": {
+    "usable_inventory": 4000,
+    "first_stockout_date": "2025-09-05",
+    "max_shortage_qty": 6800,
+    "total_shortage_qty": 6800,
+    "revenue_at_risk": 1071000.0,
+    "margin_at_risk": 408000.0,
+    "otif_lines_at_risk": 4,
+    "affected_production_orders": [
+      "RL-PRD-000102",
+      "RL-PRD-000103",
+      "RL-PRD-000104",
+      "RL-PRD-000105"
+    ],
+    "affected_customer_orders": [
+      "RL-CO-000102",
+      "RL-CO-000103",
+      "RL-CO-000104",
+      "RL-CO-000105"
+    ]
+  },
+  "scenarios": [
+    {
+      "scenario_id": "RL-SCN-006",
+      "rank": 1,
+      "executable": true,
+      "recommended": true,
+      "response_cost": 35800.0,
+      "revenue_protected": 777000.0,
+      "revenue_at_risk": 294000.0,
+      "otif_lines_at_risk": 2,
+      "max_shortage_qty": 1400,
+      "first_stockout_date": "2025-09-05",
+      "score": 737800.0,
+      "blocking_constraint": null,
+      "approver_roles": [
+        "finance_approver"
+      ]
+    },
+    {
+      "scenario_id": "RL-SCN-004",
+      "rank": 2,
+      "executable": true,
+      "recommended": false,
+      "response_cost": 3000.0,
+      "revenue_protected": 357000.0,
+      "revenue_at_risk": 714000.0,
+      "otif_lines_at_risk": 4,
+      "max_shortage_qty": 3400,
+      "first_stockout_date": "2025-09-05",
+      "score": 346600.0,
+      "blocking_constraint": null,
+      "approver_roles": [
+        "material_planner"
+      ]
+    },
+    {
+      "scenario_id": "RL-SCN-002",
+      "rank": 3,
+      "executable": true,
+      "recommended": false,
+      "response_cost": 28000.0,
+      "revenue_protected": 273000.0,
+      "revenue_at_risk": 798000.0,
+      "otif_lines_at_risk": 4,
+      "max_shortage_qty": 3800,
+      "first_stockout_date": "2025-09-05",
+      "score": 237200.0,
+      "blocking_constraint": null,
+      "approver_roles": [
+        "finance_approver"
+      ]
+    },
+    {
+      "scenario_id": "RL-SCN-003",
+      "rank": 4,
+      "executable": true,
+      "recommended": false,
+      "response_cost": 4800.0,
+      "revenue_protected": 168000.0,
+      "revenue_at_risk": 903000.0,
+      "otif_lines_at_risk": 4,
+      "max_shortage_qty": 4300,
+      "first_stockout_date": "2025-09-05",
+      "score": 154900.0,
+      "blocking_constraint": null,
+      "approver_roles": [
+        "material_planner"
+      ]
+    },
+    {
+      "scenario_id": "RL-SCN-001",
+      "rank": 5,
+      "executable": true,
+      "recommended": false,
+      "response_cost": 17000.0,
+      "revenue_protected": 0.0,
+      "revenue_at_risk": 1071000.0,
+      "otif_lines_at_risk": 4,
+      "max_shortage_qty": 6800,
+      "first_stockout_date": "2025-09-05",
+      "score": -27800.0,
+      "blocking_constraint": null,
+      "approver_roles": [
+        "material_planner"
+      ]
+    },
+    {
+      "scenario_id": "RL-SCN-005",
+      "rank": 6,
+      "executable": false,
+      "recommended": false,
+      "response_cost": 5100.0,
+      "revenue_protected": 0.0,
+      "revenue_at_risk": 1071000.0,
+      "otif_lines_at_risk": 4,
+      "max_shortage_qty": 5200,
+      "first_stockout_date": "2025-09-05",
+      "score": null,
+      "blocking_constraint": "RL-QUALITY-001: supplier RL-SUP-0002 is not approved for RL-PART-10247 (supplier audit incomplete; first-article approval incomplete).",
+      "approver_roles": [
+        "material_planner"
+      ]
+    }
+  ]
+}

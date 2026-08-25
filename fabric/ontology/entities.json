@@ -1,0 +1,41 @@
+{
+  "ontology": "SupplyResponse",
+  "version": "1.0.0",
+  "status": "stretch-goal; optional until the September 11 go/no-go",
+  "entities": [
+    { "name": "Supplier", "source_table": "suppliers", "key": "supplier_id", "display": "supplier_name" },
+    { "name": "Part", "source_table": "parts", "key": "part_id", "display": "part_number" },
+    { "name": "PurchaseOrder", "source_table": "purchase_orders", "key": "po_id", "display": "po_id" },
+    { "name": "InventoryPosition", "source_table": "inventory_positions", "key": "inventory_id", "display": "inventory_id" },
+    { "name": "Plant", "source_table": "inventory_positions", "key": "plant_id", "display": "plant_id" },
+    { "name": "ProductionOrder", "source_table": "production_orders", "key": "production_order_id", "display": "production_order_id" },
+    { "name": "Product", "source_table": "parts", "key": "part_id", "display": "part_number", "filter": "part_type = 'finished_good'" },
+    { "name": "CustomerOrder", "source_table": "customer_orders", "key": "customer_order_id", "display": "customer_order_id" },
+    { "name": "Disruption", "source_table": "disruptions", "key": "disruption_id", "display": "disruption_id" },
+    { "name": "ResponseScenario", "source_table": "response_scenarios", "key": "scenario_id", "display": "title" }
+  ],
+  "relationships": [
+    { "name": "supplies", "from": "Supplier", "to": "Part", "via": "supplier_parts" },
+    { "name": "orders", "from": "PurchaseOrder", "to": "Part", "via": "purchase_orders.part_id" },
+    { "name": "isUsedBy", "from": "Part", "to": "Product", "via": "bom_components" },
+    { "name": "produces", "from": "Plant", "to": "Product", "via": "production_orders" },
+    { "name": "requires", "from": "ProductionOrder", "to": "Part", "via": "bom_components" },
+    { "name": "requests", "from": "CustomerOrder", "to": "Product", "via": "customer_orders.part_id" },
+    { "name": "affects", "from": "Disruption", "to": "PurchaseOrder", "via": "disruptions.po_id" },
+    { "name": "mitigates", "from": "ResponseScenario", "to": "Disruption", "via": "response_scenarios.disruption_id" }
+  ],
+  "known_answer_tests": [
+    {
+      "question": "Which purchase order does disruption RL-001 affect?",
+      "expected": "RL-PO-000101"
+    },
+    {
+      "question": "Which suppliers supply MAT-10247?",
+      "expected": ["RL-SUP-0001", "RL-SUP-0002"]
+    },
+    {
+      "question": "Which response scenarios mitigate RL-001?",
+      "expected": ["RL-SCN-001", "RL-SCN-002", "RL-SCN-003", "RL-SCN-004", "RL-SCN-005", "RL-SCN-006"]
+    }
+  ]
+}

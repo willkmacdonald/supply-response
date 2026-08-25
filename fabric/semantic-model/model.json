@@ -1,0 +1,76 @@
+{
+  "name": "SupplyResponse",
+  "description": "Semantic model for the Supply Response demo. All data is fictional (RL- prefix).",
+  "version": "1.0.0",
+  "tables": [
+    { "name": "suppliers", "key": "supplier_id" },
+    { "name": "parts", "key": "part_id" },
+    { "name": "supplier_parts", "key": "supplier_part_id" },
+    { "name": "purchase_orders", "key": "po_id" },
+    { "name": "inventory_positions", "key": "inventory_id" },
+    { "name": "bom_components", "key": "bom_id" },
+    { "name": "production_orders", "key": "production_order_id" },
+    { "name": "customers", "key": "customer_id" },
+    { "name": "customer_orders", "key": "customer_order_id" },
+    { "name": "transport_options", "key": "transport_option_id" },
+    { "name": "quality_qualifications", "key": "qualification_id" },
+    { "name": "disruptions", "key": "disruption_id" },
+    { "name": "response_scenarios", "key": "scenario_id" },
+    { "name": "action_ledger", "key": "action_id" },
+    { "name": "outcome_history", "key": "outcome_id" }
+  ],
+  "relationships": [
+    { "from": "supplier_parts.supplier_id", "to": "suppliers.supplier_id", "cardinality": "many-to-one" },
+    { "from": "supplier_parts.part_id", "to": "parts.part_id", "cardinality": "many-to-one" },
+    { "from": "purchase_orders.supplier_id", "to": "suppliers.supplier_id", "cardinality": "many-to-one" },
+    { "from": "purchase_orders.part_id", "to": "parts.part_id", "cardinality": "many-to-one" },
+    { "from": "inventory_positions.part_id", "to": "parts.part_id", "cardinality": "many-to-one" },
+    { "from": "bom_components.parent_part_id", "to": "parts.part_id", "cardinality": "many-to-one" },
+    { "from": "bom_components.component_part_id", "to": "parts.part_id", "cardinality": "many-to-one" },
+    { "from": "production_orders.part_id", "to": "parts.part_id", "cardinality": "many-to-one" },
+    { "from": "customer_orders.customer_id", "to": "customers.customer_id", "cardinality": "many-to-one" },
+    { "from": "customer_orders.part_id", "to": "parts.part_id", "cardinality": "many-to-one" },
+    { "from": "disruptions.po_id", "to": "purchase_orders.po_id", "cardinality": "many-to-one" },
+    { "from": "response_scenarios.disruption_id", "to": "disruptions.disruption_id", "cardinality": "many-to-one" },
+    { "from": "action_ledger.disruption_id", "to": "disruptions.disruption_id", "cardinality": "many-to-one" },
+    { "from": "outcome_history.action_id", "to": "action_ledger.action_id", "cardinality": "many-to-one" }
+  ],
+  "measures": [
+    {
+      "name": "Usable Inventory",
+      "expression": "SUMX(inventory_positions, MAX(inventory_positions[on_hand] - inventory_positions[quality_hold] - inventory_positions[protected_allocation], 0))"
+    },
+    {
+      "name": "Revenue At Risk",
+      "expression": "SUM(customer_orders[quantity] * customer_orders[unit_price])"
+    },
+    {
+      "name": "Margin At Risk",
+      "expression": "SUM(customer_orders[quantity] * (customer_orders[unit_price] - customer_orders[unit_cost]))"
+    },
+    {
+      "name": "OTIF Lines At Risk",
+      "expression": "COUNTROWS(FILTER(customer_orders, customer_orders[status] IN {\"open\", \"allocated\"}))"
+    },
+    {
+      "name": "Response Cost",
+      "expression": "SUM(action_ledger[predicted_cost])"
+    },
+    {
+      "name": "Revenue Protected",
+      "expression": "SUM(action_ledger[predicted_revenue_protected])"
+    },
+    {
+      "name": "Revenue Variance",
+      "expression": "SUM(outcome_history[actual_revenue_protected]) - SUM(outcome_history[predicted_revenue_protected])"
+    },
+    {
+      "name": "Cost Variance",
+      "expression": "SUM(outcome_history[actual_cost]) - SUM(outcome_history[predicted_cost])"
+    },
+    {
+      "name": "Active Disruptions",
+      "expression": "COUNTROWS(FILTER(disruptions, NOT disruptions[status] IN {\"closed\", \"approved\", \"rejected\"}))"
+    }
+  ]
+}
