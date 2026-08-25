@@ -220,3 +220,26 @@ def test_openapi_contract_exposes_required_endpoints(client: TestClient):
     ]:
         assert path in paths, path
         assert method in paths[path], f"{method} {path}"
+
+
+def test_narrative_before_analysis(client: TestClient):
+    created = client.post("/api/cases", json={"disruption_id": DEMO_DISRUPTION_ID})
+    fresh_case = created.json()["case_id"]
+    response = client.get(f"/api/cases/{fresh_case}/narrative")
+    assert response.status_code == 409
+
+
+def test_narrative_after_analysis(client: TestClient, case_id: str):
+    response = client.get(f"/api/cases/{case_id}/narrative")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["case_id"] == case_id
+    assert len(body["narrative"]) > 50
+    assert body["source"] in {"deterministic", "azure_openai"}
+    assert body["agent_version"]
+    # Recommended scenario must appear in the narrative
+    assert "RL-SCN-006" in body["narrative"]
+
+
+def test_narrative_unknown_case(client: TestClient):
+    assert client.get("/api/cases/RL-CASE-999999/narrative").status_code == 404

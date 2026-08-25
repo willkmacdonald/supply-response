@@ -122,6 +122,13 @@ class DecisionResponse(ApiModel):
     bounded_actions: list[str] = Field(default_factory=list)
 
 
+class NarrativeResponse(ApiModel):
+    case_id: str
+    narrative: str
+    source: str
+    agent_version: str
+
+
 class DashboardSummary(ApiModel):
     generated_at: datetime
     calculation_version: str
@@ -149,5 +156,6 @@ __all__ = [
     "DecisionRequest",
     "DecisionResponse",
     "EvidenceItem",
+    "NarrativeResponse",
     "ScenarioListResponse",
 ]

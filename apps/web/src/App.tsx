@@ -3,12 +3,15 @@ import { api } from './api';
 import CaseHeader from './components/CaseHeader';
 import EvidencePanel from './components/EvidencePanel';
 import ExposurePanel from './components/ExposurePanel';
+import NarrativePanel from './components/NarrativePanel';
 import ScenarioTable from './components/ScenarioTable';
 import ApprovalPanel from './components/ApprovalPanel';
-import type { CaseDetail } from './types';
+import type { CaseDetail, NarrativeResponse } from './types';
 
 export default function App() {
   const [detail, setDetail] = useState<CaseDetail | null>(null);
+  const [narrative, setNarrative] = useState<NarrativeResponse | null>(null);
+  const [narrativeBusy, setNarrativeBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -29,6 +32,17 @@ export default function App() {
   useEffect(() => {
     void start();
   }, [start]);
+
+  const loadNarrative = async (caseId: string) => {
+    setNarrativeBusy(true);
+    try {
+      setNarrative(await api.narrative(caseId));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setNarrativeBusy(false);
+    }
+  };
 
   const decide = async (scenarioId: string, approve: boolean, rationale: string) => {
     if (!detail) return;
@@ -61,6 +75,18 @@ export default function App() {
           <EvidencePanel detail={detail} />
           <ExposurePanel exposure={detail.exposure} />
           <ScenarioTable scenarios={detail.scenarios} />
+          {narrative ? (
+            <NarrativePanel narrative={narrative} />
+          ) : (
+            <section className="panel">
+              <button
+                disabled={narrativeBusy || detail.status === 'new'}
+                onClick={() => void loadNarrative(detail.case_id)}
+              >
+                {narrativeBusy ? 'Generating narrative…' : 'Generate decision narrative'}
+              </button>
+            </section>
+          )}
           <ApprovalPanel detail={detail} busy={busy} onDecide={decide} />
         </>
       )}

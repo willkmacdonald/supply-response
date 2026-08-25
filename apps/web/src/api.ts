@@ -1,4 +1,4 @@
-import type { AnalyzeResponse, CaseDetail, DashboardSummary, DecisionResponse } from './types';
+import type { AnalyzeResponse, CaseDetail, DashboardSummary, DecisionResponse, NarrativeResponse } from './types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
@@ -38,7 +38,9 @@ export const api = {
       body: JSON.stringify({ scenario_id: scenarioId, decided_by: 'Alex Morgan', rationale })
     }),
 
-  dashboard: () => request<DashboardSummary>('/api/dashboard/summary')
+  dashboard: () => request<DashboardSummary>('/api/dashboard/summary'),
+
+  narrative: (caseId: string) => request<NarrativeResponse>(`/api/cases/${caseId}/narrative`),
 };
 
 export const currency = (value: number) =>

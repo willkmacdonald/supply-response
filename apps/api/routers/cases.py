@@ -18,9 +18,10 @@ from apps.api.schemas import (
     CaseSummary,
     DecisionRequest,
     DecisionResponse,
+    NarrativeResponse,
     ScenarioListResponse,
 )
-from services.exposure.calculator import CALCULATION_VERSION
+from services.exposure.calculator import CALCULATION_VERSION, ExposureResult
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 
@@ -212,3 +213,44 @@ def reject_case(
     case_id: str, request: DecisionRequest, session: Session = Depends(get_session)
 ) -> DecisionResponse:
     return _decide(session, case_id, request, approve=False)
+
+
+@router.get("/{case_id}/narrative", response_model=NarrativeResponse)
+def get_narrative(case_id: str, session: Session = Depends(get_session)) -> NarrativeResponse:
+    """Return a narrative explanation produced by the Decision agent.
+
+    The case must be analyzed before calling this endpoint (exposure and
+    scenarios must already be stored).  Uses Azure OpenAI when configured;
+    falls back to a deterministic template in all other cases.
+    """
+    from agents.decision import agent as decision_agent
+
+    case = _get_case(session, case_id)
+    evaluations = services.load_scenarios(case)
+    if not evaluations or case.exposure is None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Case {case_id} has not been analyzed yet. POST /api/cases/{case_id}/analyze first.",
+        )
+
+    dataset = get_dataset()
+    disruption = services.find_disruption(dataset, case.disruption_id)
+    exposure = ExposureResult.model_validate(case.exposure)
+    facts = services.case_facts(disruption)
+    uncertainties = services.case_uncertainties(disruption, dataset)
+    recommended_id = services.recommended_scenario_id(evaluations)
+
+    narrative, source = decision_agent.narrate(
+        facts=facts,
+        uncertainties=uncertainties,
+        exposure=exposure,
+        evaluations=evaluations,
+        recommended_scenario_id=recommended_id,
+    )
+
+    return NarrativeResponse(
+        case_id=case.case_id,
+        narrative=narrative,
+        source=source,
+        agent_version=decision_agent.AGENT_VERSION,
+    )

@@ -91,3 +91,18 @@ button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
+
+.narrative {
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.narrative-source {
+  color: #5a5a66;
+  font-size: 12px;
+  font-weight: normal;
+}

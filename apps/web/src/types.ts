@@ -162,3 +162,10 @@ export interface AnalyzeResponse {
   uncertainties: string[];
   evidence: EvidenceItem[];
 }
+
+export interface NarrativeResponse {
+  case_id: string;
+  narrative: string;
+  source: string;
+  agent_version: string;
+}
