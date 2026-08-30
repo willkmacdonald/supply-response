@@ -5,6 +5,7 @@ __pycache__/
 .env
 node_modules/
 dist/
+*.tsbuildinfo
 coverage/
 .DS_Store
 *.db
