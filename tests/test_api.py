@@ -10,8 +10,11 @@ def setup_function():
     ACTION_LEDGER.clear()
 
 
-def create_and_analyze():
-    r = client.post("/api/cases", json={"disruption": DATASET.disruptions[0].model_dump(mode="json")})
+def create_and_analyze():  # allowed - shared API test fixture, not application logic
+    r = client.post(
+        "/api/cases",
+        json={"disruption": DATASET.disruptions[0].model_dump(mode="json")},
+    )
     assert r.status_code == 201
     case_id = r.json()["case_id"]
     r = client.post(f"/api/cases/{case_id}/analyze")
@@ -29,14 +32,20 @@ def test_api_contract_create_get_analyze_and_scenarios():
 
 def test_cannot_approve_non_executable_beta_scenario():
     case_id, _ = create_and_analyze()
-    r = client.post(f"/api/cases/{case_id}/approve", json={"scenario_id": "RL-SCENARIO-5", "evidence_refs": ["RL-QUALITY-001"]})
+    r = client.post(
+        f"/api/cases/{case_id}/approve",
+        json={"scenario_id": "RL-SCENARIO-5", "evidence_refs": ["RL-QUALITY-001"]},
+    )
     assert r.status_code == 409
     assert ACTION_LEDGER == []
 
 
 def test_approval_writes_action_ledger():
     case_id, _ = create_and_analyze()
-    r = client.post(f"/api/cases/{case_id}/approve", json={"scenario_id": "RL-SCENARIO-2", "evidence_refs": ["RL-001"]})
+    r = client.post(
+        f"/api/cases/{case_id}/approve",
+        json={"scenario_id": "RL-SCENARIO-2", "evidence_refs": ["RL-001"]},
+    )
     assert r.status_code == 200
     assert r.json()["status"] == "approved"
     assert len(ACTION_LEDGER) == 1
