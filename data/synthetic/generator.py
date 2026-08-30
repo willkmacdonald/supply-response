@@ -285,6 +285,9 @@ def generate_dataset(
             status=QualificationStatus.APPROVED,
             effective_date=date(2020, 1, 1),
             evidence_ref="RL-QUALITY-ALPHA",
+            audit_complete=True,
+            first_article_complete=True,
+            expected_decision_date=None,
         ),
         QualityQualification(
             qualification_id="RL-QUAL-BETA",
@@ -293,6 +296,9 @@ def generate_dataset(
             status=QualificationStatus.NOT_APPROVED,
             effective_date=None,
             evidence_ref="RL-QUALITY-001",
+            audit_complete=False,
+            first_article_complete=False,
+            expected_decision_date=date(2026, 9, 15),
         ),
     ]
     disruptions = [

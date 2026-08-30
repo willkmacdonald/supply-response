@@ -81,3 +81,23 @@ def test_alternate_supplier_approved_is_executable():
 def test_premium_freight_above_threshold_requires_approval():
     assert requires_finance_approval(Decimal("22500")) is True
     assert requires_finance_approval(Decimal("20000")) is False
+
+
+def test_blocked_alternate_supplier_carries_stable_evidence_metadata():
+    beta = build_initial_scenarios(
+        disruption(), [qualification(QualificationStatus.NOT_APPROVED)]
+    )[4]
+    assert beta.constraint_codes == ("QUALITY_NOT_APPROVED",)
+    assert beta.evidence_refs == ("RL-QUALITY-001",)
+    assert beta.required_approver_roles == ("material_planner",)
+
+
+def test_expedite_above_threshold_names_finance_approver():
+    expedite = build_initial_scenarios(
+        disruption(), [qualification(QualificationStatus.NOT_APPROVED)]
+    )[1]
+    assert expedite.response_cost == Decimal("22500.00")
+    assert expedite.required_approver_roles == (
+        "material_planner",
+        "finance_approver",
+    )

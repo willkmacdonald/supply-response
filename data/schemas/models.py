@@ -113,6 +113,9 @@ class QualityQualification(FrozenModel):
     status: QualificationStatus
     effective_date: date | None = None
     evidence_ref: str
+    audit_complete: bool | None = None
+    first_article_complete: bool | None = None
+    expected_decision_date: date | None = None
 
 
 class Disruption(FrozenModel):
@@ -135,6 +138,9 @@ class ResponseScenario(FrozenModel):
     name: str
     executable: bool
     constraint_violations: tuple[str, ...] = ()
+    constraint_codes: tuple[str, ...] = ()
+    evidence_refs: tuple[str, ...] = ()
+    required_approver_roles: tuple[str, ...] = ()
     response_cost: Decimal = Decimal("0")
     revenue_protected: Decimal = Decimal("0")
     remaining_uncertainty: tuple[str, ...] = ()
