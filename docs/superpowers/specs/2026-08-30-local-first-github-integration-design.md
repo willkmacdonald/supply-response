@@ -23,6 +23,8 @@ Clean-room verification established the following baseline:
 
 The donor build fails because its Vite configuration references Node globals without Node types, mixes Vitest configuration into a Vite-only type, and references a TypeScript project that disables emit. The donor also represents financial values with `float`, uses 2025 fixture dates, and contains optional Azure OpenAI code without declaring the `openai` package. Work IQ retrieval remains a deterministic fallback.
 
+Pre-implementation review found that the local generator created `RL-MAT-10247` twice and `RL-PO-000001` twice. The original seed-42 shortage depended on random rows sharing the canonical demo part. Milestone 1 therefore normalizes those identifiers and makes every RL-001 inventory, BOM, production-order, and customer-order input explicit before committing a known-answer result.
+
 ## Approaches considered
 
 ### 1. Merge the unrelated histories
@@ -65,6 +67,8 @@ Deliverables:
 
 - Preserve the GitHub project brief as project documentation.
 - Add executable evaluation-case metadata and a local 2026 known-answer result.
+- Guarantee unique synthetic part and purchase-order identifiers.
+- Isolate the canonical RL-001 calculation from randomly generated BOM and customer-order relationships.
 - Add `plant_id` to the disruption contract so analysis no longer hardcodes Chicago.
 - Add richer qualification evidence and scenario approval metadata only where required by the evaluation cases.
 - Preserve existing model names where possible and add compatibility through explicit fields rather than parallel model hierarchies.
@@ -155,7 +159,7 @@ Scenario approval metadata is represented as immutable values on `ResponseScenar
 
 `evaluations/datasets/evaluation_cases.json` lists the ten brief cases with stable IDs, input descriptions, expected behavior, and the test node that enforces each behavior. A JSON integrity test verifies unique IDs, required keys, referenced test existence, and the `RL-` naming rule.
 
-The first known-answer file records the existing 2026 local baseline. It serializes decimal values as strings to preserve exactness. Later milestones expand this file with scenario rankings rather than changing existing baseline meanings silently.
+The first known-answer file records the normalized 2026 RL-001 baseline. It serializes decimal values as strings to preserve exactness. The baseline uses explicit demo rows and cannot depend on random rows sharing a demo business key. Later milestones expand this file with scenario rankings rather than changing existing baseline meanings silently.
 
 ### Data flow
 
@@ -175,13 +179,14 @@ Qualification evidence flows from synthetic data into scenario evaluation. A mis
 
 Milestone 1 uses test-driven changes:
 
-1. Add failing schema and API tests for plant-aware disruptions.
-2. Add failing scenario tests for stable qualification evidence metadata.
-3. Add failing JSON integrity tests and the 2026 known-answer fixture.
-4. Implement the smallest contract and generator changes that satisfy them.
-5. Run all Python tests.
-6. Run frontend tests and production build to detect contract drift.
-7. Verify `git diff --check` and review the milestone diff before commit.
+1. Add failing generator tests for unique IDs and isolated demo relationships.
+2. Add failing schema and API tests for plant-aware disruptions.
+3. Add failing scenario tests for stable qualification evidence metadata.
+4. Add failing JSON integrity tests and the 2026 known-answer fixture.
+5. Implement the smallest contract and generator changes that satisfy them.
+6. Run all Python tests.
+7. Run frontend tests and production build to detect contract drift.
+8. Verify `git diff --check` and review the milestone diff before commit.
 
 ## Explicit exclusions
 

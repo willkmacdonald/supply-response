@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Import the GitHub brief and evaluation contracts, make disruptions plant-aware, attach stable qualification and approval metadata to scenarios, and commit an exact 2026 baseline result without importing the donor branch's persistence, UI, Fabric, or agent architecture.
+**Goal:** Import the GitHub brief and evaluation contracts, normalize the canonical RL-001 synthetic fixture, make disruptions plant-aware, attach stable qualification and approval metadata to scenarios, and commit an exact 2026 baseline result without importing the donor branch's persistence, UI, Fabric, or agent architecture.
 
 **Architecture:** Local `main` contracts remain authoritative. Donor artifacts are copied or adapted into focused local files, with Pydantic models carrying immutable domain state and deterministic services remaining independent of FastAPI and persistence. Every behavior change starts with a failing test and ends with a focused commit.
 
@@ -33,6 +33,7 @@
 - `apps/api/app/main.py`: plant-aware analysis orchestration.
 - `apps/web/src/types.ts`: browser-visible disruption contract.
 - `tests/test_api.py`: API-level plant propagation tests.
+- `tests/test_generator.py`: unique-key and isolated-demo fixture tests.
 - `tests/test_evaluation_cases.py`: qualification and approval metadata tests.
 - `docs/architecture/portable-core.md`: links and Milestone 1 architecture decisions.
 
@@ -209,7 +210,191 @@ git commit -m "docs: import project brief and evaluation catalog"
 
 ---
 
-### Task 2: Make disruption analysis plant-aware
+### Task 2: Normalize and isolate the canonical RL-001 fixture
+
+**Files:**
+- Modify: `data/synthetic/generator.py`
+- Modify: `tests/test_generator.py`
+
+**Interfaces:**
+- Consumes: `generate_dataset(seed=42)` and the canonical RL-001 business keys.
+- Produces: unique part and purchase-order keys plus explicit RL-001 inventory, BOM, production, and customer-order rows that do not depend on random relationships.
+
+- [ ] **Step 1: Add failing uniqueness and fixture-isolation tests**
+
+Append to `tests/test_generator.py`:
+
+```python
+def test_generator_uses_unique_business_keys():
+    dataset = generate_dataset(seed=42)
+    part_ids = [part.part_id for part in dataset.parts]
+    po_line_ids = [order.po_line_id for order in dataset.purchase_orders]
+    assert len(part_ids) == len(set(part_ids))
+    assert len(po_line_ids) == len(set(po_line_ids))
+
+
+def test_demo_calculation_rows_are_explicit():
+    dataset = generate_dataset(seed=42)
+    critical_boms = [
+        bom
+        for bom in dataset.bom_components
+        if bom.component_part_id == "RL-MAT-10247"
+    ]
+    demo_production_ids = {"RL-MO-DEMO-1", "RL-MO-DEMO-2"}
+    linked_customer_ids = {
+        order.customer_order_line_id
+        for order in dataset.customer_orders
+        if order.production_order_id in demo_production_ids
+    }
+    chicago = next(
+        position
+        for position in dataset.inventory_positions
+        if position.inventory_id == "RL-INV-DEMO-CHI"
+    )
+
+    assert [(bom.product_id, bom.quantity_per) for bom in critical_boms] == [
+        ("RL-PROD-00000", 2)
+    ]
+    assert linked_customer_ids == {"RL-CO-DEMO-1", "RL-CO-DEMO-2"}
+    assert chicago.on_hand - chicago.quality_hold - chicago.protected_allocation == 4000
+```
+
+- [ ] **Step 2: Run the tests to verify the current collisions**
+
+Run:
+
+```bash
+.venv/bin/pytest tests/test_generator.py::test_generator_uses_unique_business_keys tests/test_generator.py::test_demo_calculation_rows_are_explicit -q
+```
+
+Expected: both tests fail because `RL-MAT-10247` and `RL-PO-000001` are duplicated, random BOM rows reference the demo part, generic customer rows reference the demo production orders, and Chicago has only 2,000 explicitly usable units.
+
+- [ ] **Step 3: Reserve the canonical part and purchase-order IDs**
+
+In `data/synthetic/generator.py`, replace the part construction with:
+
+```python
+part_numbers = [
+    number
+    for number in range(10000, 10000 + part_count + 1)
+    if number != 10247
+][:part_count]
+parts = [
+    Part(
+        part_id=f"RL-MAT-{number}",
+        description=f"RL-Part {index}",
+        unit_cost=Decimal(rng.randint(5, 80)),
+    )
+    for index, number in enumerate(part_numbers)
+]
+if parts:
+    parts[0] = Part(
+        part_id="RL-MAT-10247",
+        description="RL-Critical component",
+        unit_cost=Decimal("18"),
+    )
+```
+
+Change generated purchase-order IDs from `i` to `i + 2`:
+
+```python
+po_line_id=f"RL-PO-{i + 2:06d}"
+```
+
+The canonical replacement remains `RL-PO-000001`, leaving every PO line unique.
+
+- [ ] **Step 4: Isolate the critical part from random BOM generation**
+
+Before constructing `bom_components`, add:
+
+```python
+bom_source_parts = [part for part in parts if part.part_id != "RL-MAT-10247"]
+if not bom_source_parts:
+    bom_source_parts = parts
+```
+
+Use this expression for generated BOM component IDs:
+
+```python
+component_part_id=bom_source_parts[rng.randrange(len(bom_source_parts))].part_id
+```
+
+Keep the existing first-row override as the only critical-part BOM:
+
+```python
+BomComponent(
+    bom_id="RL-BOM-DEMO",
+    product_id="RL-PROD-00000",
+    component_part_id="RL-MAT-10247",
+    quantity_per=2,
+)
+```
+
+- [ ] **Step 5: Set explicit RL-001 inventory and production quantities**
+
+Set the Chicago demo inventory to:
+
+```python
+InventoryPosition(
+    inventory_id="RL-INV-DEMO-CHI",
+    part_id="RL-MAT-10247",
+    plant_id="RL-PLANT-CHI",
+    on_hand=4500,
+    quality_hold=200,
+    protected_allocation=300,
+)
+```
+
+Set the two demo production orders to quantities `2500` and `2900` while retaining their current IDs, product, plant, and 2026 due dates.
+
+- [ ] **Step 6: Keep generic customer orders away from demo production orders**
+
+Before constructing `customer_orders`, add:
+
+```python
+customer_order_production_orders = production_orders[2:] or production_orders
+```
+
+Within the customer-order comprehension, use `customer_order_production_orders` for every indexed production-order field:
+
+```python
+product_id=customer_order_production_orders[
+    i % len(customer_order_production_orders)
+].product_id,
+plant_id=customer_order_production_orders[
+    i % len(customer_order_production_orders)
+].plant_id,
+production_order_id=customer_order_production_orders[
+    i % len(customer_order_production_orders)
+].production_order_id,
+due_date=customer_order_production_orders[
+    i % len(customer_order_production_orders)
+].due_date,
+```
+
+Set `RL-CO-DEMO-1` to quantity `2500`, unit revenue `Decimal("150")`, and unit margin `Decimal("50")`. Set `RL-CO-DEMO-2` to quantity `2900`, unit revenue `Decimal("200")`, and unit margin `Decimal("70")`.
+
+- [ ] **Step 7: Run generator and full regression tests**
+
+Run:
+
+```bash
+.venv/bin/pytest tests/test_generator.py -q
+.venv/bin/pytest -q
+```
+
+Expected: three generator tests and 22 total Python tests pass.
+
+- [ ] **Step 8: Commit the normalized fixture**
+
+```bash
+git add data/synthetic/generator.py tests/test_generator.py
+git commit -m "fix: normalize RL-001 synthetic fixture"
+```
+
+---
+
+### Task 3: Make disruption analysis plant-aware
 
 **Files:**
 - Modify: `data/schemas/models.py:118-129`
@@ -324,7 +509,7 @@ npm --prefix apps/web test
 npm --prefix apps/web run build
 ```
 
-Expected: 21 Python tests pass, one frontend test passes, and Vite completes a production build.
+Expected: 23 Python tests pass, one frontend test passes, and Vite completes a production build.
 
 - [ ] **Step 6: Commit plant-aware analysis**
 
@@ -335,7 +520,7 @@ git commit -m "feat: make disruption analysis plant-aware"
 
 ---
 
-### Task 3: Add qualification evidence and scenario approval metadata
+### Task 4: Add qualification evidence and scenario approval metadata
 
 **Files:**
 - Modify: `data/schemas/models.py:109-139`
@@ -462,7 +647,7 @@ Run:
 .venv/bin/pytest -q
 ```
 
-Expected: 23 Python tests pass and blocked-scenario approval still returns HTTP 409 without an action-ledger entry.
+Expected: 25 Python tests pass and blocked-scenario approval still returns HTTP 409 without an action-ledger entry.
 
 - [ ] **Step 7: Commit evidence and approval metadata**
 
@@ -473,7 +658,7 @@ git commit -m "feat: add scenario evidence and approval metadata"
 
 ---
 
-### Task 4: Commit the exact 2026 RL-001 baseline
+### Task 5: Commit the exact 2026 RL-001 baseline
 
 **Files:**
 - Create: `evaluations/expected-results/rl-001.json`
@@ -575,25 +760,22 @@ Create `evaluations/expected-results/rl-001.json` with:
   "disruption_id": "RL-DISRUPTION-001",
   "plant_id": "RL-PLANT-CHI",
   "calculation_version": "exposure-v1",
-  "usable_inventory": 2107,
+  "usable_inventory": 4000,
   "projected_balances": [
-    {"date": "2026-09-05", "balance": 107},
-    {"date": "2026-09-06", "balance": 3107},
-    {"date": "2026-09-08", "balance": 707},
-    {"date": "2026-09-23", "balance": -3429}
+    {"date": "2026-09-05", "balance": -1000},
+    {"date": "2026-09-06", "balance": 2000},
+    {"date": "2026-09-08", "balance": -3800}
   ],
-  "first_stockout_date": "2026-09-23",
-  "maximum_shortage_quantity": 3429,
-  "affected_production_order_ids": ["RL-MO-000072"],
+  "first_stockout_date": "2026-09-05",
+  "maximum_shortage_quantity": 3800,
+  "affected_production_order_ids": ["RL-MO-DEMO-1", "RL-MO-DEMO-2"],
   "affected_customer_order_line_ids": [
-    "RL-CO-0000072",
-    "RL-CO-0000197",
-    "RL-CO-0000322",
-    "RL-CO-0000447"
+    "RL-CO-DEMO-1",
+    "RL-CO-DEMO-2"
   ],
-  "revenue_at_risk": "89691",
-  "margin_at_risk": "52290",
-  "otif_lines_at_risk": 4,
+  "revenue_at_risk": "955000",
+  "margin_at_risk": "328000",
+  "otif_lines_at_risk": 2,
   "response_cost": "0",
   "revenue_protected": "0",
   "remaining_uncertainty": [
@@ -601,9 +783,7 @@ Create `evaluations/expected-results/rl-001.json` with:
   ],
   "source_data_lineage": [
     "RL-001",
-    "RL-INV-000247",
     "RL-INV-DEMO-CHI",
-    "RL-MO-000072",
     "RL-MO-DEMO-1",
     "RL-MO-DEMO-2"
   ]
@@ -619,7 +799,7 @@ Run:
 .venv/bin/pytest -q
 ```
 
-Expected: 24 Python tests pass. The timestamp is intentionally excluded from the committed known-answer contract.
+Expected: 26 Python tests pass. The timestamp is intentionally excluded from the committed known-answer contract.
 
 - [ ] **Step 5: Commit the known-answer contract**
 
@@ -630,7 +810,7 @@ git commit -m "test: add exact RL-001 baseline"
 
 ---
 
-### Task 5: Document Milestone 1 and run all gates
+### Task 6: Document Milestone 1 and run all gates
 
 **Files:**
 - Modify: `docs/architecture/portable-core.md`
@@ -653,7 +833,7 @@ Append to `docs/architecture/portable-core.md`:
 - The ten evaluation cases are cataloged in `evaluations/datasets/evaluation_cases.json` and linked to executable pytest nodes.
 - The timestamp-independent 2026 RL-001 result is guarded by `evaluations/expected-results/rl-001.json`.
 - Financial values remain `Decimal` in Python and exact strings in committed JSON results.
-- The baseline freezes the current seed-42 behavior; any later fixture normalization must update the known-answer contract explicitly.
+- The baseline freezes the normalized seed-42 behavior; any later fixture change must update the known-answer contract explicitly.
 
 The complete product requirements are preserved in `Supply-Response-Project-Brief.md`.
 ```
@@ -685,7 +865,7 @@ git status --short
 
 Expected:
 
-- 24 Python tests pass with only the known Starlette deprecation warning.
+- 26 Python tests pass with only the known Starlette deprecation warning.
 - One Vitest test passes.
 - TypeScript and Vite production build succeeds.
 - `git diff --check` exits zero.
