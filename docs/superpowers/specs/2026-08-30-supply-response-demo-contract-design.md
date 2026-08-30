@@ -29,7 +29,7 @@ The completed demonstration shall:
 
 1. Detect and structure a supplier disruption without inventing facts.
 2. Retrieve current collaboration evidence through Work IQ.
-3. retrieve governed operational data and persist shared state through Fabric.
+3. Retrieve governed operational data and persist shared state through Fabric.
 4. Calculate supply, production, customer, revenue, margin, and OTIF exposure deterministically.
 5. Compare feasible response scenarios and recommend one through an auditable ordered policy.
 6. Show evidence, assumptions, constraints, and approval requirements for every scenario.
@@ -201,11 +201,11 @@ Executable scenarios are compared using this deterministic lexicographic order:
 2. Lowest projected OTIF-loss percentage.
 3. Lowest revenue at risk.
 4. Lowest response cost.
-5. Lowest approval-burden rank.
-6. Lowest execution-risk rank.
+5. Lowest approval-burden rank, defined as the count of distinct required approval roles.
+6. Lowest execution-risk rank, defined as the sum of deterministic risk factors.
 7. Stable scenario ID as the final tie-breaker.
 
-Approval-burden rank is an explicit integer produced from typed approval requirements. Execution-risk rank is an explicit `low`, `medium`, or `high` value mapped to `0`, `1`, or `2`. The API returns every comparator value so the ordering is reproducible and inspectable.
+Execution-risk factors are versioned policy outputs: add `2` for each unconfirmed external supply or recovery commitment, `1` for a cross-plant movement, `1` for a production-schedule change, and `1` for each coordinated action after the first. A conditional or unapproved supply source and stale required evidence are feasibility failures rather than ranking penalties. The API returns every comparator value and triggered risk factor so the ordering is reproducible and inspectable.
 
 If no scenario is feasible, the system produces an escalation package rather than a recommendation. It contains every blocked scenario, blocking reasons, evidence, and the human decisions required to proceed.
 
@@ -253,7 +253,7 @@ The demonstration creates:
 - Owners, due dates, status, and retry history.
 - A disruption-case status update.
 
-These artifacts are real records in the demo environment. Drafts remain unsent. No adapter can create a purchase order, transmit an external supplier message, or make a financial commitment.
+These artifacts are real Fabric records in live mode and SQLite records in fallback mode. They are displayed and managed inside the web decision console; no external task-system integration is required by this specification. Drafts remain unsent. No adapter can create a purchase order, transmit an external supplier message, or make a financial commitment.
 
 Partial execution failure does not change the original decision. Each task or draft records its own status, error, and retry history.
 
@@ -362,10 +362,10 @@ Evaluation cases that currently test only isolated helpers must be promoted to i
 
 ### Timing and rehearsal gates
 
-- The live analysis package is ready within 90 seconds.
-- The core operator workflow completes within three to five minutes.
-- The full narrated demonstration targets seven to ten minutes.
-- Five consecutive live rehearsals complete the core workflow within five minutes.
+- The live-analysis timer starts when Alex requests analysis for the pre-seeded disruption and stops when the versioned recommendation is persisted and rendered; the limit is 90 seconds.
+- The core-operator timer starts when Alex opens the pre-seeded disruption and stops when the decision is durably recorded and its bounded actions are visible in the web console; the target is three minutes and the hard limit is five minutes.
+- The full-narration timer starts with the business-problem introduction and stops after the outcome recap in both surfaces; its target range is seven to ten minutes.
+- Five consecutive live rehearsals must satisfy the five-minute core-operator limit.
 - Bounded action records appear within 15 seconds of approval.
 - Power BI reflects the ledger decision within 60 seconds and displays its refresh timestamp.
 
