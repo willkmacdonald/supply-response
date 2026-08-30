@@ -6,6 +6,7 @@ __pycache__/
 node_modules/
 dist/
 *.tsbuildinfo
+.superpowers/
 coverage/
 .DS_Store
 *.db
