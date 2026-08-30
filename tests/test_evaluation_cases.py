@@ -101,3 +101,23 @@ def test_expedite_above_threshold_names_finance_approver():
         "material_planner",
         "finance_approver",
     )
+
+
+def test_combined_response_above_threshold_carries_expedite_cost_and_finance_role():
+    combined = build_initial_scenarios(
+        disruption(), [qualification(QualificationStatus.NOT_APPROVED)]
+    )[5]
+    assert combined.response_cost == Decimal("22500.00")
+    assert combined.required_approver_roles == (
+        "material_planner",
+        "finance_approver",
+    )
+
+
+def test_combined_response_below_threshold_carries_cost_without_finance_role():
+    combined = build_initial_scenarios(
+        disruption(partial_quantity=2000),
+        [qualification(QualificationStatus.NOT_APPROVED)],
+    )[5]
+    assert combined.response_cost == Decimal("15000.00")
+    assert combined.required_approver_roles == ("material_planner",)

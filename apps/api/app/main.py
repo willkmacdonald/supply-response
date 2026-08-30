@@ -107,6 +107,10 @@ def _decide(
         )
     if decision == "approved" and not scenario.executable:
         raise HTTPException(status_code=409, detail="Scenario is not executable")
+    if case.exposure is None:
+        raise HTTPException(
+            status_code=409, detail="Case has no authoritative analysis"
+        )
     case.selected_scenario_id = scenario.scenario_id
     case.status = CaseStatus.APPROVED if decision == "approved" else CaseStatus.REJECTED
     ACTION_LEDGER.append(
@@ -116,7 +120,10 @@ def _decide(
             scenario_id=scenario.scenario_id,
             decision=decision,
             decided_at=datetime.now(timezone.utc),
-            evidence_refs=tuple(request.evidence_refs),
+            scenario_evidence_refs=scenario.evidence_refs,
+            approval_evidence_refs=tuple(request.evidence_refs),
+            calculation_version=case.exposure.metadata.calculation_version,
+            source_data_lineage=case.exposure.metadata.source_data_lineage,
         )
     )
     return case

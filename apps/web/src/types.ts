@@ -20,6 +20,9 @@ export interface ResponseScenario {
   name: string;
   executable: boolean;
   constraint_violations: string[];
+  constraint_codes: string[];
+  evidence_refs: string[];
+  required_approver_roles: string[];
   response_cost: string;
   revenue_protected: string;
   remaining_uncertainty: string[];

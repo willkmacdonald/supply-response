@@ -90,7 +90,8 @@ def build_initial_scenarios(
             disruption_id=disruption.disruption_id,
             name="Combine expedite, transfer, and resequencing",
             executable=disruption.partial_quantity > 0,
-            required_approver_roles=_approval_roles(),
+            required_approver_roles=_approval_roles(expedite_cost),
+            response_cost=expedite_cost,
         ),
     ]
 

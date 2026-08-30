@@ -152,7 +152,10 @@ class ActionLedgerRecord(FrozenModel):
     scenario_id: str
     decision: Literal["approved", "rejected"]
     decided_at: datetime
-    evidence_refs: tuple[str, ...]
+    scenario_evidence_refs: tuple[str, ...]
+    approval_evidence_refs: tuple[str, ...]
+    calculation_version: str
+    source_data_lineage: tuple[str, ...]
 
 
 class OutcomeHistory(FrozenModel):

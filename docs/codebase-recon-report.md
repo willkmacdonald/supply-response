@@ -2,6 +2,18 @@
 
 Generated: 2026-08-30
 
+> **Historical snapshot:** This report describes base commit `83bf7f6` before the
+> local-first GitHub integration work. Statements below are retained as the original
+> reconnaissance record and must not be read as the current branch state.
+
+## Current branch status
+
+The integration branch now includes the project brief and evaluation catalog,
+normalized RL-001 synthetic fixtures, plant-aware analysis, stable scenario evidence
+and approval metadata, and an executable RL-001 known-answer fixture. The README and
+current test results are authoritative for the branch; the remainder of this report
+is historical context only.
+
 ## Project summary
 
 Supply Response is an early portable prototype for evaluating supply disruptions and response scenarios without external Microsoft, Azure, Fabric, Foundry, Work IQ, or Fabric IQ integrations.

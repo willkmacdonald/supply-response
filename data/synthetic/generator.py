@@ -132,9 +132,10 @@ def generate_dataset(
         due_date=date(2026, 9, 3),
     )
 
+    inventory_plant_count = min(2, len(plants))
     inventory_positions = [
         InventoryPosition(
-            inventory_id=f"RL-INV-{i:06d}",
+            inventory_id=f"RL-INV-{i * inventory_plant_count + j:06d}",
             part_id=p.part_id,
             plant_id=plants[j],
             on_hand=rng.randint(0, 5000),
@@ -142,7 +143,7 @@ def generate_dataset(
             protected_allocation=rng.randint(0, 300),
         )
         for i, p in enumerate(parts)
-        for j in range(min(2, len(plants)))
+        for j in range(inventory_plant_count)
     ]
     inventory_positions[0] = InventoryPosition(
         inventory_id="RL-INV-DEMO-CHI",
@@ -186,10 +187,11 @@ def generate_dataset(
             quantity_per=2,
         )
 
+    generic_products = products[1:]
     production_orders = [
         ProductionOrder(
             production_order_id=f"RL-MO-{i:06d}",
-            product_id=products[i % product_count],
+            product_id=generic_products[i % len(generic_products)],
             plant_id=plants[i % len(plants)],
             quantity=rng.randint(100, 1500),
             due_date=base + timedelta(days=rng.randint(1, 45)),

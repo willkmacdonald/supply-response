@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.app.main import ACTION_LEDGER, CASES, DATASET, app
@@ -65,6 +66,41 @@ def test_approval_writes_action_ledger():
     assert r.json()["status"] == "approved"
     assert len(ACTION_LEDGER) == 1
     assert ACTION_LEDGER[0].scenario_id == "RL-SCENARIO-2"
+
+
+@pytest.mark.parametrize("caller_evidence", [[], ["RL-SPOOFED-CALLER-EVIDENCE"]])
+def test_action_ledger_preserves_server_owned_scenario_and_calculation_evidence(
+    caller_evidence,
+):
+    case_id, analysis = create_and_analyze()
+    selected_scenario = next(
+        scenario
+        for scenario in analysis["scenarios"]
+        if scenario["scenario_id"] == "RL-SCENARIO-5"
+    )
+
+    response = client.post(
+        f"/api/cases/{case_id}/reject",
+        json={
+            "scenario_id": selected_scenario["scenario_id"],
+            "evidence_refs": caller_evidence,
+        },
+    )
+
+    assert response.status_code == 200
+    record = ACTION_LEDGER[0]
+    assert record.scenario_evidence_refs == tuple(selected_scenario["evidence_refs"])
+    assert record.scenario_evidence_refs == ("RL-QUALITY-001",)
+    assert record.approval_evidence_refs == tuple(caller_evidence)
+    assert (
+        record.calculation_version
+        == analysis["exposure"]["metadata"]["calculation_version"]
+    )
+    assert record.source_data_lineage == tuple(
+        analysis["exposure"]["metadata"]["source_data_lineage"]
+    )
+    assert record.source_data_lineage
+    assert "RL-SPOOFED-CALLER-EVIDENCE" not in record.source_data_lineage
 
 
 def test_dashboard_summary_contract():
