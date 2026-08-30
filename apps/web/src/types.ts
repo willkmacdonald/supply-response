@@ -5,6 +5,7 @@ export interface Disruption {
   supplier_id: string;
   po_line_id: string;
   part_id: string;
+  plant_id: string;
   original_quantity: number;
   original_due_date: string;
   partial_quantity: number;

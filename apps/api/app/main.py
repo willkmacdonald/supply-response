@@ -6,8 +6,19 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
 
-from apps.api.app.contracts import AnalyzeCaseResponse, CreateCaseRequest, DashboardSummary, DecisionRequest
-from data.schemas.models import ActionLedgerRecord, CaseStatus, ResponseScenario, SupplyResponseCase, TimedQuantity
+from apps.api.app.contracts import (
+    AnalyzeCaseResponse,
+    CreateCaseRequest,
+    DashboardSummary,
+    DecisionRequest,
+)
+from data.schemas.models import (
+    ActionLedgerRecord,
+    CaseStatus,
+    ResponseScenario,
+    SupplyResponseCase,
+    TimedQuantity,
+)
 from data.synthetic.generator import generate_dataset
 from services.exposure.calculator import calculate_exposure
 from services.scenarios.evaluator import build_initial_scenarios
@@ -49,14 +60,27 @@ def analyze_case(case_id: str) -> AnalyzeCaseResponse:
     d = case.disruption
     receipts = []
     if d.partial_quantity and d.partial_due_date:
-        receipts.append(TimedQuantity(date=d.partial_due_date, quantity=d.partial_quantity, source_id=d.source_ref))
+        receipts.append(
+            TimedQuantity(
+                date=d.partial_due_date,
+                quantity=d.partial_quantity,
+                source_id=d.source_ref,
+            )
+        )
     exposure = calculate_exposure(
-        scenario_id="RL-SCENARIO-BASELINE", part_id=d.part_id, plant_id="RL-PLANT-CHI",
-        inventory_positions=DATASET.inventory_positions, receipts=receipts, transfers=[],
-        bom_components=DATASET.bom_components, production_orders=DATASET.production_orders,
+        scenario_id="RL-SCENARIO-BASELINE",
+        part_id=d.part_id,
+        plant_id=d.plant_id,
+        inventory_positions=DATASET.inventory_positions,
+        receipts=receipts,
+        transfers=[],
+        bom_components=DATASET.bom_components,
+        production_orders=DATASET.production_orders,
         customer_orders=DATASET.customer_orders,
         assumptions=("Only confirmed receipts are included",),
-        remaining_uncertainty=("Remaining supplier recovery date is unconfirmed",) if d.recovery_date is None else (),
+        remaining_uncertainty=("Remaining supplier recovery date is unconfirmed",)
+        if d.recovery_date is None
+        else (),
     )
     scenarios = build_initial_scenarios(d, DATASET.quality_qualifications)
     case.exposure = exposure
@@ -70,16 +94,31 @@ def get_scenarios(case_id: str):
     return _case(case_id).scenarios
 
 
-def _decide(case_id: str, request: DecisionRequest, decision: str) -> SupplyResponseCase:
+def _decide(
+    case_id: str, request: DecisionRequest, decision: str
+) -> SupplyResponseCase:
     case = _case(case_id)
-    scenario = next((s for s in case.scenarios if s.scenario_id == request.scenario_id), None)
+    scenario = next(
+        (s for s in case.scenarios if s.scenario_id == request.scenario_id), None
+    )
     if scenario is None:
-        raise HTTPException(status_code=400, detail="Scenario has not been analyzed for this case")
+        raise HTTPException(
+            status_code=400, detail="Scenario has not been analyzed for this case"
+        )
     if decision == "approved" and not scenario.executable:
         raise HTTPException(status_code=409, detail="Scenario is not executable")
     case.selected_scenario_id = scenario.scenario_id
     case.status = CaseStatus.APPROVED if decision == "approved" else CaseStatus.REJECTED
-    ACTION_LEDGER.append(ActionLedgerRecord(action_id=f"RL-ACTION-{uuid4().hex[:8].upper()}", case_id=case_id, scenario_id=scenario.scenario_id, decision=decision, decided_at=datetime.now(timezone.utc), evidence_refs=tuple(request.evidence_refs)))
+    ACTION_LEDGER.append(
+        ActionLedgerRecord(
+            action_id=f"RL-ACTION-{uuid4().hex[:8].upper()}",
+            case_id=case_id,
+            scenario_id=scenario.scenario_id,
+            decision=decision,
+            decided_at=datetime.now(timezone.utc),
+            evidence_refs=tuple(request.evidence_refs),
+        )
+    )
     return case
 
 
@@ -97,7 +136,9 @@ def reject_case(case_id: str, request: DecisionRequest) -> SupplyResponseCase:
 def dashboard_summary() -> DashboardSummary:
     exposures = [c.exposure for c in CASES.values() if c.exposure]
     return DashboardSummary(
-        active_disruptions=sum(c.status in {CaseStatus.OPEN, CaseStatus.ANALYZED} for c in CASES.values()),
+        active_disruptions=sum(
+            c.status in {CaseStatus.OPEN, CaseStatus.ANALYZED} for c in CASES.values()
+        ),
         analyzed_cases=sum(c.status == CaseStatus.ANALYZED for c in CASES.values()),
         approved_cases=sum(c.status == CaseStatus.APPROVED for c in CASES.values()),
         rejected_cases=sum(c.status == CaseStatus.REJECTED for c in CASES.values()),

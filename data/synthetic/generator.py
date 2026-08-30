@@ -301,6 +301,7 @@ def generate_dataset(
             supplier_id="RL-SUP-ALPHA",
             po_line_id="RL-PO-000001",
             part_id="RL-MAT-10247",
+            plant_id="RL-PLANT-CHI",
             original_quantity=8000,
             original_due_date=date(2026, 9, 3),
             partial_quantity=3000,

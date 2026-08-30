@@ -120,6 +120,7 @@ class Disruption(FrozenModel):
     supplier_id: str
     po_line_id: str
     part_id: str
+    plant_id: str
     original_quantity: int = Field(gt=0)
     original_due_date: date
     partial_quantity: int = Field(ge=0)

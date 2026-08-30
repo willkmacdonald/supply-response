@@ -30,6 +30,21 @@ def test_api_contract_create_get_analyze_and_scenarios():
     assert client.get(f"/api/cases/{case_id}/scenarios").status_code == 200
 
 
+def test_analysis_uses_the_disruption_plant():
+    disruption = DATASET.disruptions[0].model_copy(update={"plant_id": "RL-PLANT-DAL"})
+    response = client.post(
+        "/api/cases",
+        json={"disruption": disruption.model_dump(mode="json")},
+    )
+    case_id = response.json()["case_id"]
+
+    analysis = client.post(f"/api/cases/{case_id}/analyze")
+
+    assert response.status_code == 201
+    assert analysis.status_code == 200
+    assert analysis.json()["exposure"]["usable_inventory"] == 1500
+
+
 def test_cannot_approve_non_executable_beta_scenario():
     case_id, _ = create_and_analyze()
     r = client.post(
