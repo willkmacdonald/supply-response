@@ -53,6 +53,13 @@ supply-response/
   README.md
 ```
 
+## Project references
+
+- [Project brief](Supply-Response-Project-Brief.md)
+- [Portable-core architecture](docs/architecture/portable-core.md)
+- [Evaluation catalog](evaluations/datasets/evaluation_cases.json)
+- [RL-001 known-answer result](evaluations/expected-results/rl-001.json)
+
 ## Local setup
 
 ### Prerequisites
