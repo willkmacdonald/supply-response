@@ -32,6 +32,8 @@ def test_manifests_define_only_two_single_tenant_apps_and_exact_permissions():
     assert api["displayName"] == "Supply Response API"
     assert web["displayName"] == "Supply Response Web"
     assert api["signInAudience"] == web["signInAudience"] == "AzureADMyOrg"
+    assert api["api"]["knownClientApplications"] == []
+    assert api["api"]["preAuthorizedApplications"] == []
     scope = api["api"]["oauth2PermissionScopes"]
     assert [(item["value"], item["type"], item["isEnabled"]) for item in scope] == [
         ("access_as_user", "User", True)
@@ -148,6 +150,22 @@ def test_configure_normalizes_a_single_trailing_slash():
     ],
 )
 def test_configure_rejects_redirect_authorities_the_spa_would_canonicalize(redirect):
+    env = _env()
+    env["SUPPLY_RESPONSE_REDIRECT_URI"] = redirect
+    result = run("configure.sh", "configure.json", env=env)
+    assert result.returncode != 0
+    assert "canonical" in result.stderr.lower()
+
+
+@pytest.mark.parametrize(
+    "redirect",
+    [
+        "https://example.com/a/../auth/callback",
+        "https://example.com/./auth/callback",
+        "https://example.com/a/%2e%2e/auth/callback",
+    ],
+)
+def test_configure_rejects_redirect_paths_the_spa_would_canonicalize(redirect):
     env = _env()
     env["SUPPLY_RESPONSE_REDIRECT_URI"] = redirect
     result = run("configure.sh", "configure.json", env=env)
@@ -277,6 +295,9 @@ def test_configure_apply_persists_progress_and_reuses_apps_after_each_failure(
     assert second.returncode == 0, second.stderr
     assert "SUPPLY_RESPONSE_ENTRA_STATE=COMPLETE" in state_file.read_text()
     assert (state / "creates").read_text() == "2"
+    stored_api = json.loads((state / f"app-{API_ID}.json").read_text())
+    assert stored_api["api"]["knownClientApplications"] == []
+    assert stored_api["api"]["preAuthorizedApplications"] == []
 
 
 def test_apply_test_controls_require_the_exact_fake_adapter(tmp_path):
@@ -413,6 +434,58 @@ def test_configure_check_rejects_permission_or_role_drift(tmp_path, drift):
 def test_configure_check_accepts_graph_response_only_role_origin(tmp_path):
     path, env = _check_fixture(tmp_path)
     fixture = json.loads(path.read_text())
+    for role in fixture["apiApplication"]["appRoles"]:
+        role["origin"] = "Application"
+    path.write_text(json.dumps(fixture))
+    result = subprocess.run(
+        [str(ENTRA / "configure.sh"), "--check", "--fixture", str(path)],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "CHECK_VALID" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("knownClientApplications", ["99999999-9999-4999-8999-999999999999"]),
+        (
+            "preAuthorizedApplications",
+            [
+                {
+                    "appId": "99999999-9999-4999-8999-999999999999",
+                    "delegatedPermissionIds": ["98888888-8888-4888-8888-888888888888"],
+                }
+            ],
+        ),
+    ],
+)
+def test_configure_check_rejects_client_preauthorization_drift(tmp_path, field, value):
+    path, env = _check_fixture(tmp_path)
+    fixture = json.loads(path.read_text())
+    fixture["apiApplication"]["api"][field] = value
+    path.write_text(json.dumps(fixture))
+    result = subprocess.run(
+        [str(ENTRA / "configure.sh"), "--check", "--fixture", str(path)],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "exactly match" in result.stderr
+
+
+def test_configure_check_accepts_empty_client_preauthorization_collections(tmp_path):
+    path, env = _check_fixture(tmp_path)
+    fixture = json.loads(path.read_text())
+    assert fixture["apiApplication"]["api"]["knownClientApplications"] == []
+    assert fixture["apiApplication"]["api"]["preAuthorizedApplications"] == []
     for role in fixture["apiApplication"]["appRoles"]:
         role["origin"] = "Application"
     path.write_text(json.dumps(fixture))

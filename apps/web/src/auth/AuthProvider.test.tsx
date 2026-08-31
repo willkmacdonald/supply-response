@@ -99,6 +99,19 @@ describe("Entra configuration", () => {
     })).toThrow(/canonical/);
   });
 
+  it.each([
+    "https://example.com/a/../auth/callback",
+    "https://example.com/./auth/callback",
+    "https://example.com/a/%2e%2e/auth/callback",
+  ])("rejects a redirect path that URL would canonicalize: %s", (redirectUri) => {
+    expect(() => readEntraConfig({
+      VITE_ENTRA_TENANT_ID: entraConfig.tenantId,
+      VITE_ENTRA_WEB_CLIENT_ID: entraConfig.webClientId,
+      VITE_ENTRA_API_SCOPE: entraConfig.apiScope,
+      VITE_ENTRA_REDIRECT_URI: redirectUri,
+    })).toThrow(/canonical/);
+  });
+
   it("uses the tenant-specific authority and never localStorage", () => {
     const config = createMsalConfig(entraConfig);
     expect(config.auth).toMatchObject({

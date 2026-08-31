@@ -31,6 +31,13 @@ elif [[ "$redirect_uri" =~ ^http://(localhost|127\.0\.0\.1)(:([0-9]+))?(/[^[:spa
 else
   die "SUPPLY_RESPONSE_REDIRECT_URI must use canonical lowercase HTTPS or loopback HTTP"
 fi
+uri_after_scheme="${redirect_uri#*://}"
+redirect_path=""
+if [[ "$uri_after_scheme" == */* ]]; then redirect_path="/${uri_after_scheme#*/}"; fi
+IFS='/' read -r -a redirect_path_segments <<<"${redirect_path,,}"
+for segment in "${redirect_path_segments[@]}"; do
+  [[ ! "$segment" =~ ^(\.|%2e)(\.|%2e)?$ ]] || die "SUPPLY_RESPONSE_REDIRECT_URI must use a canonical path without dot segments"
+done
 redirect_uri="${redirect_uri%/}"
 [[ -n "$redirect_uri" ]] || die "SUPPLY_RESPONSE_REDIRECT_URI is invalid"
 require jq
@@ -115,7 +122,7 @@ make_payloads() {
   jq -e '[.. | objects | keys[]] | any(. == "origin" or . == "publisherDomain" or . == "verifiedPublisher" or . == "createdDateTime") | not' "$api_payload" >/dev/null || die "API PATCH payload contains a Graph read-only field"
 }
 canonical_api_contract() {
-  jq -Sc '{signInAudience,identifierUris,api:{acceptMappedClaims:(.api.acceptMappedClaims // null),requestedAccessTokenVersion:.api.requestedAccessTokenVersion,oauth2PermissionScopes:(.api.oauth2PermissionScopes|map({adminConsentDescription,adminConsentDisplayName,id,isEnabled,type,userConsentDescription,userConsentDisplayName,value})|sort_by(.id))},appRoles:(.appRoles|map({allowedMemberTypes,description,displayName,id,isEnabled,value})|sort_by(.id)),requiredResourceAccess:(.requiredResourceAccess|map(.resourceAccess|=sort_by(.id))|sort_by(.resourceAppId)),isFallbackPublicClient,web:{redirectUris:.web.redirectUris}}'
+  jq -Sc '{signInAudience,identifierUris,api:{acceptMappedClaims:(.api.acceptMappedClaims // null),knownClientApplications:(.api.knownClientApplications|sort),preAuthorizedApplications:(.api.preAuthorizedApplications|map({appId,delegatedPermissionIds:(.delegatedPermissionIds|sort)})|sort_by(.appId)),requestedAccessTokenVersion:.api.requestedAccessTokenVersion,oauth2PermissionScopes:(.api.oauth2PermissionScopes|map({adminConsentDescription,adminConsentDisplayName,id,isEnabled,type,userConsentDescription,userConsentDisplayName,value})|sort_by(.id))},appRoles:(.appRoles|map({allowedMemberTypes,description,displayName,id,isEnabled,value})|sort_by(.id)),requiredResourceAccess:(.requiredResourceAccess|map(.resourceAccess|=sort_by(.id))|sort_by(.resourceAppId)),isFallbackPublicClient,web:{redirectUris:.web.redirectUris}}'
 }
 canonical_web_contract() {
   jq -Sc '{signInAudience,spa:{redirectUris:.spa.redirectUris},requiredResourceAccess:(.requiredResourceAccess|map(.resourceAccess|=sort_by(.id))|sort_by(.resourceAppId)),isFallbackPublicClient}'

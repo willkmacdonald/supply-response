@@ -4,6 +4,8 @@
   "identifierUris": ["api://{{API_APP_ID}}"],
   "api": {
     "acceptMappedClaims": null,
+    "knownClientApplications": [],
+    "preAuthorizedApplications": [],
     "requestedAccessTokenVersion": 2,
     "oauth2PermissionScopes": [
       {

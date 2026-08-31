@@ -46,11 +46,18 @@ The three remaining Important findings and Minor redirect-contract finding were 
 - Apply tests can select only an absolute executable named `supply-response-fake-az` that passes an exact adapter handshake. State override and fault injection require fixture mode or that validated adapter, every Azure command is dispatched through it, the final validation bypass was removed, and realistic persisted Graph responses must validate before state becomes `COMPLETE`.
 - Provisioning and SPA configuration both reject authorities that URL parsing would rewrite, including uppercase hosts and default ports, while preserving their shared single-trailing-slash normalization.
 
+## Final independent-review corrections
+
+The final Important preauthorization-drift finding and Minor path-contract finding were closed test-first:
+
+- The API write manifest now explicitly sets Graph's writable `api.knownClientApplications` and `api.preAuthorizedApplications` collections to `[]`, so applying the manifest clears stale client authorization instead of retaining it. The exact canonical API projection includes both collections, normalizes only collection ordering, and rejects Graph-shaped responses containing any unexpected known or preauthorized client. Fake-Graph recovery tests confirm the empty collections are persisted and validated before state becomes `COMPLETE`.
+- Provisioning now rejects literal and percent-encoded `.`/`..` URL path segments. Cross-contract shell and SPA tests cover the same dot-segment inputs, so provisioning cannot accept a redirect path that the browser canonicalizes and the SPA rejects.
+
 ## Verification
 
-- Auth/artifact suite: **63 passed** after the second correction pass.
+- Auth/artifact suite: **69 passed** after the final correction pass.
 - Full non-live Python suite: **442 passed, 12 skipped**. Its locked TMDL validator required approved access to public NuGet. One pre-existing Starlette/httpx deprecation warning remains.
-- Frontend focused suite: **3 files, 33 tests passed** after the second correction pass; production TypeScript/Vite build passed.
+- Frontend suite: **3 files, 36 tests passed** after the final correction pass; production TypeScript/Vite build passed.
 - Changed Python scope: Ruff check/format passed; Pyright **0 errors, 0 warnings**.
 - Bash: `bash -n` passed; `shellcheck` was unavailable. JSON parsed with `jq`; fixture dry-run/check and fake-Azure apply/retry tests passed.
 - `uv lock --check` passed; Python sdist/wheel build passed.
