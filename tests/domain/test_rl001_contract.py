@@ -17,6 +17,10 @@ def test_rl001_template_freezes_the_approved_business_facts():
     )
 
     assert template.template_id == "RL-001"
+    assert template.scenario_effective_time == datetime.fromisoformat(
+        "2026-09-01T09:00:00-05:00"
+    )
+    assert template.scenario_timezone == "America/Chicago"
     assert case.scenario_effective_time == datetime.fromisoformat(
         "2026-09-01T09:00:00-05:00"
     )
@@ -74,10 +78,18 @@ def test_runtime_mode_is_immutable_on_a_case_instance():
     with pytest.raises(ValueError, match="different case_id"):
         case.model_copy(update={"runtime_mode": RuntimeMode.FALLBACK})
 
+    with pytest.raises(ValidationError):
+        case.model_copy(
+            update={
+                "case_id": "RL-CASE-TEST-INVALID",
+                "runtime_mode": "invalid",
+            }
+        )
+
     changed = case.model_copy(
         update={
             "case_id": "RL-CASE-TEST-003",
-            "runtime_mode": RuntimeMode.FALLBACK,
+            "runtime_mode": "fallback",
         }
     )
     assert changed.runtime_mode is RuntimeMode.FALLBACK

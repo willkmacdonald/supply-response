@@ -38,11 +38,13 @@ class CaseInstance(FrozenModel):
         update: Mapping[str, Any] | None = None,
         deep: bool = False,
     ) -> Self:
-        """Prevent a runtime-mode change from reusing a Case Instance ID."""
-        update = update or {}
+        """Return a validated copy without reusing an ID across runtime modes."""
+        values = self.model_dump(mode="python")
+        values.update(update or {})
+        changed = type(self).model_validate(values)
         if (
-            update.get("runtime_mode", self.runtime_mode) != self.runtime_mode
-            and update.get("case_id", self.case_id) == self.case_id
+            changed.runtime_mode != self.runtime_mode
+            and changed.case_id == self.case_id
         ):
             raise ValueError("runtime_mode changes require a different case_id")
-        return super().model_copy(update=update, deep=deep)
+        return changed
