@@ -1,0 +1,136 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from apps.api.app.contracts import (
+    ActionResponse,
+    DraftResponse,
+    ObservationResponse,
+    PlaybackResponse,
+)
+from apps.api.app.dependencies import (
+    ApplicationServices,
+    get_server_identity,
+    get_services,
+)
+from apps.api.app.routes.decisions import _decision
+from data.domain.decisions import IdentitySnapshot
+from services.execution.playback import (
+    PlaybackAuthorizationError,
+    PlaybackStateError,
+)
+
+
+router = APIRouter(prefix="/api/decisions", tags=["execution"])
+
+
+def _action_response(services, decision, action) -> ActionResponse:
+    return ActionResponse(
+        **action.model_dump(),
+        runtime_mode=decision.runtime_mode,
+        scenario_effective_time=decision.scenario_effective_time,
+        projection_updated_at=services.action_projection_updated_at(action.action_id),
+    )
+
+
+@router.get("/{decision_id}/actions", response_model=list[ActionResponse])
+def list_actions(
+    decision_id: str,
+    services: ApplicationServices = Depends(get_services),
+) -> list[ActionResponse]:
+    decision = _decision(services, decision_id)
+    with services.uow_factory() as uow:
+        actions = uow.execution.list_actions(decision_id=decision_id)
+    return [_action_response(services, decision, action) for action in actions]
+
+
+@router.get("/{decision_id}/drafts", response_model=list[DraftResponse])
+def list_drafts(
+    decision_id: str,
+    services: ApplicationServices = Depends(get_services),
+) -> list[DraftResponse]:
+    decision = _decision(services, decision_id)
+    drafts = []
+    with services.uow_factory() as uow:
+        actions = uow.execution.list_actions(decision_id=decision_id)
+        for action in actions:
+            if action.draft_artifact_id is not None:
+                drafts.append(uow.execution.get_draft_artifact(action.action_id))
+    return [
+        DraftResponse(
+            **draft.model_dump(),
+            runtime_mode=decision.runtime_mode,
+            scenario_effective_time=decision.scenario_effective_time,
+        )
+        for draft in drafts
+    ]
+
+
+@router.post(
+    "/{decision_id}/playback",
+    response_model=PlaybackResponse,
+    status_code=201,
+)
+def start_playback(
+    decision_id: str,
+    services: ApplicationServices = Depends(get_services),
+    actor: IdentitySnapshot = Depends(get_server_identity),
+) -> PlaybackResponse:
+    decision = _decision(services, decision_id)
+    try:
+        playback = services.playback_service.start(decision_id, actor)
+    except PlaybackAuthorizationError:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "ROLE_REQUIRED", "role": "response_approver"},
+        ) from None
+    except PlaybackStateError as error:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "PLAYBACK_NOT_AVAILABLE", "message": str(error)},
+        ) from None
+    return PlaybackResponse(
+        **playback.model_dump(exclude={"actor"}),
+        runtime_mode=decision.runtime_mode,
+        scenario_effective_time=decision.scenario_effective_time,
+    )
+
+
+@router.get(
+    "/{decision_id}/playback",
+    response_model=PlaybackResponse,
+)
+def get_playback(
+    decision_id: str,
+    services: ApplicationServices = Depends(get_services),
+) -> PlaybackResponse:
+    decision = _decision(services, decision_id)
+    with services.uow_factory() as uow:
+        playback = uow.execution.get_playback_for_decision(decision_id)
+    if playback is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "PLAYBACK_NOT_FOUND"},
+        )
+    return PlaybackResponse(
+        **playback.model_dump(exclude={"actor"}),
+        runtime_mode=decision.runtime_mode,
+        scenario_effective_time=decision.scenario_effective_time,
+    )
+
+
+@router.get("/{decision_id}/observations", response_model=list[ObservationResponse])
+def list_observations(
+    decision_id: str,
+    services: ApplicationServices = Depends(get_services),
+) -> list[ObservationResponse]:
+    decision = _decision(services, decision_id)
+    observations = services.playback_service.observations(decision_id)
+    return [
+        ObservationResponse(
+            **observation.model_dump(),
+            display_label=observation.display_label,
+            runtime_mode=decision.runtime_mode,
+        )
+        for observation in observations
+    ]
