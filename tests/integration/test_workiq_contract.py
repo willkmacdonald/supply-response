@@ -83,7 +83,7 @@ def _authenticated_alex():
         algorithm="RS256",
         headers={"kid": "fixture-key", "typ": "JWT"},
     )
-    return service.authenticate(assertion)
+    return service, service.authenticate(assertion)
 
 
 def test_obo_requests_only_explicit_delegated_scope_and_redacts_secrets() -> None:
@@ -97,9 +97,9 @@ def test_obo_requests_only_explicit_delegated_scope_and_redacts_secrets() -> Non
         }
     )
 
-    actor = _authenticated_alex()
+    service, actor = _authenticated_alex()
     raw_assertion = actor.downstream_user_assertion.reveal()
-    token = WorkIQOboExchange(confidential, tenant_id=TENANT_ID).exchange(actor)
+    token = WorkIQOboExchange(confidential, auth_service=service).exchange(actor)
 
     assert token.reveal() == downstream
     assert confidential.calls == [
@@ -134,9 +134,10 @@ def test_obo_rejects_missing_error_or_application_only_results(
     result: dict[str, Any],
 ) -> None:
     with pytest.raises(WorkIQAuthenticationError) as error:
+        service, actor = _authenticated_alex()
         WorkIQOboExchange(
-            ConfidentialClientFixture(result), tenant_id=TENANT_ID
-        ).exchange(_authenticated_alex())
+            ConfidentialClientFixture(result), auth_service=service
+        ).exchange(actor)
 
     message = str(error.value)
     assert "api-secret" not in message

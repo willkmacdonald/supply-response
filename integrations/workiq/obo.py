@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Final, NoReturn, Protocol, SupportsIndex
-from uuid import UUID
-
-from apps.api.app.auth import AuthenticatedActor
+from apps.api.app.auth import AuthService, AuthenticatedActor, AuthorizationError
 
 WORK_IQ_SCOPE: Final = "api://workiq.svc.cloud.microsoft/WorkIQAgent.Ask"
 
@@ -42,18 +40,16 @@ class WorkIQAccessToken:
 
 class WorkIQOboExchange:
     def __init__(
-        self, confidential_client: ConfidentialClient, *, tenant_id: str
+        self, confidential_client: ConfidentialClient, *, auth_service: AuthService
     ) -> None:
         self._client = confidential_client
-        try:
-            self._tenant_id = str(UUID(tenant_id))
-        except (TypeError, ValueError, AttributeError) as error:
-            raise ValueError("Work IQ OBO tenant ID must be a UUID") from error
+        if not isinstance(auth_service, AuthService):
+            raise TypeError("Work IQ OBO requires an AuthService instance")
+        self._auth_service = auth_service
 
     def exchange(self, actor: AuthenticatedActor) -> WorkIQAccessToken:
         if (
             not isinstance(actor, AuthenticatedActor)
-            or actor.tenant_id != self._tenant_id
             or actor.persona_id != "RL-PERSONA-ALEX"
             or actor.source_id != "RL-ENTRA-ALEX"
             or actor.effective_roles != ("material_planner", "response_approver")
@@ -62,8 +58,14 @@ class WorkIQOboExchange:
             raise WorkIQAuthenticationError(
                 "Work IQ requires the validated delegated Alex actor"
             )
+        try:
+            assertion = self._auth_service._validated_user_assertion(actor)
+        except AuthorizationError as error:
+            raise WorkIQAuthenticationError(
+                "Work IQ requires an actor from the configured AuthService"
+            ) from error
         result = self._client.acquire_token_on_behalf_of(
-            user_assertion=actor.downstream_user_assertion.reveal(),
+            user_assertion=assertion.reveal(),
             scopes=[WORK_IQ_SCOPE],
         )
         if not isinstance(result, dict):
@@ -91,7 +93,11 @@ class WorkIQOboExchange:
 
 
 def build_obo_exchange(
-    *, client_id: str, client_secret: str, tenant_id: str
+    *,
+    client_id: str,
+    client_secret: str,
+    tenant_id: str,
+    auth_service: AuthService,
 ) -> WorkIQOboExchange:
     """Build the production MSAL seam without exposing credentials elsewhere."""
     import msal
@@ -102,4 +108,4 @@ def build_obo_exchange(
         client_credential=client_secret,
         authority=authority,
     )
-    return WorkIQOboExchange(client, tenant_id=tenant_id)
+    return WorkIQOboExchange(client, auth_service=auth_service)

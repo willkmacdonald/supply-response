@@ -26,7 +26,6 @@ _KNOWN_ROLES: Final = frozenset(
         "finance_approver",
     }
 )
-_AUTHENTICATION_PROOF = object()
 
 
 class AuthenticationError(ValueError):
@@ -91,12 +90,23 @@ class PersonaBinding:
 class UserAssertion:
     """Opaque bearer assertion for downstream OBO; never serializes or displays."""
 
-    __slots__ = ("__token",)
+    __slots__ = ("__token", "__auth_service_capability")
 
-    def __init__(self, token: str, *, _proof: object | None = None) -> None:
-        if _proof is not _AUTHENTICATION_PROOF:
-            raise TypeError("UserAssertion can only be created by AuthService")
-        self.__token = token
+    def __init__(self, token: str, **kwargs: Any) -> None:
+        del token, kwargs
+        raise TypeError("UserAssertion can only be created by AuthService")
+
+    @classmethod
+    def _from_auth_service(
+        cls, token: str, auth_service_capability: object
+    ) -> UserAssertion:
+        assertion = object.__new__(cls)
+        assertion.__token = token
+        assertion.__auth_service_capability = auth_service_capability
+        return assertion
+
+    def _belongs_to(self, auth_service_capability: object) -> bool:
+        return self.__auth_service_capability is auth_service_capability
 
     def reveal(self) -> str:
         """Return the assertion only at the downstream OBO call boundary."""
@@ -124,6 +134,7 @@ class AuthenticatedActor:
         "source_id",
         "delegated_scopes",
         "downstream_user_assertion",
+        "__auth_service_capability",
         "_sealed",
     )
 
@@ -138,22 +149,54 @@ class AuthenticatedActor:
         user_principal_name: str | None,
         source_id: str,
         bearer_assertion: str,
-        _proof: object | None = None,
+        **kwargs: Any,
     ) -> None:
-        if _proof is not _AUTHENTICATION_PROOF:
-            raise TypeError("AuthenticatedActor can only be created by AuthService")
-        self.tenant_id = tenant_id
-        self.object_id = object_id
-        self.persona_id = persona_id
-        self.effective_roles = tuple(sorted(effective_roles))
-        self.display_name = display_name
-        self.user_principal_name = user_principal_name
-        self.source_id = source_id
-        self.delegated_scopes = ("access_as_user",)
-        self.downstream_user_assertion = UserAssertion(
-            bearer_assertion, _proof=_AUTHENTICATION_PROOF
+        del (
+            tenant_id,
+            object_id,
+            persona_id,
+            effective_roles,
+            display_name,
+            user_principal_name,
+            source_id,
+            bearer_assertion,
+            kwargs,
         )
-        self._sealed = True
+        raise TypeError("AuthenticatedActor can only be created by AuthService")
+
+    @classmethod
+    def _from_auth_service(
+        cls,
+        *,
+        tenant_id: str,
+        object_id: str,
+        persona_id: str,
+        effective_roles: Sequence[str],
+        display_name: str | None,
+        user_principal_name: str | None,
+        source_id: str,
+        bearer_assertion: str,
+        auth_service_capability: object,
+    ) -> AuthenticatedActor:
+        actor = object.__new__(cls)
+        actor._sealed = False
+        actor.__auth_service_capability = auth_service_capability
+        actor.tenant_id = tenant_id
+        actor.object_id = object_id
+        actor.persona_id = persona_id
+        actor.effective_roles = tuple(sorted(effective_roles))
+        actor.display_name = display_name
+        actor.user_principal_name = user_principal_name
+        actor.source_id = source_id
+        actor.delegated_scopes = ("access_as_user",)
+        actor.downstream_user_assertion = UserAssertion._from_auth_service(
+            bearer_assertion, auth_service_capability
+        )
+        actor._sealed = True
+        return actor
+
+    def _belongs_to(self, auth_service_capability: object) -> bool:
+        return self.__auth_service_capability is auth_service_capability
 
     def __setattr__(self, name: str, value: Any) -> None:
         if getattr(self, "_sealed", False):
@@ -242,6 +285,49 @@ class AuthService:
         self._cache_ttl = cache_ttl_seconds
         self._keys: Mapping[str, Mapping[str, Any]] = MappingProxyType({})
         self._cache_expires_at = 0.0
+        self.__actor_capability = object()
+        self.__authenticated_actors: dict[
+            AuthenticatedActor,
+            tuple[
+                str,
+                str,
+                str,
+                tuple[str, ...],
+                str,
+                tuple[str, ...],
+                UserAssertion,
+            ],
+        ] = {}
+
+    def _validated_user_assertion(self, actor: AuthenticatedActor) -> UserAssertion:
+        record = (
+            self.__authenticated_actors.get(actor)
+            if isinstance(actor, AuthenticatedActor)
+            else None
+        )
+        actual = (
+            (
+                actor.tenant_id,
+                actor.object_id,
+                actor.persona_id,
+                actor.effective_roles,
+                actor.source_id,
+                actor.delegated_scopes,
+                actor.downstream_user_assertion,
+            )
+            if isinstance(actor, AuthenticatedActor)
+            else None
+        )
+        if (
+            record is None
+            or actual != record
+            or not actor._belongs_to(self.__actor_capability)
+            or not actor.downstream_user_assertion._belongs_to(self.__actor_capability)
+        ):
+            raise AuthorizationError(
+                "actor was not authenticated by this AuthService instance"
+            )
+        return actor.downstream_user_assertion
 
     def authenticate(
         self,
@@ -352,7 +438,7 @@ class AuthService:
             raise AuthorizationError("token scope must be exactly access_as_user")
         display_name = self._optional_string(claims, "name")
         upn = self._optional_string(claims, "preferred_username")
-        return AuthenticatedActor(
+        actor = AuthenticatedActor._from_auth_service(
             tenant_id=tenant_id,
             object_id=object_id,
             persona_id=binding.persona_id,
@@ -361,8 +447,18 @@ class AuthService:
             user_principal_name=upn,
             source_id=binding.source_id,
             bearer_assertion=bearer_assertion,
-            _proof=_AUTHENTICATION_PROOF,
+            auth_service_capability=self.__actor_capability,
         )
+        self.__authenticated_actors[actor] = (
+            actor.tenant_id,
+            actor.object_id,
+            actor.persona_id,
+            actor.effective_roles,
+            actor.source_id,
+            actor.delegated_scopes,
+            actor.downstream_user_assertion,
+        )
+        return actor
 
     @staticmethod
     def _optional_string(claims: Mapping[str, Any], name: str) -> str | None:

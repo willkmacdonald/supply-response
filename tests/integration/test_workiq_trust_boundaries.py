@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ from apps.api.app.auth import (
 )
 from data.domain.evidence import AuthorityScope, EvidenceRequirement, UncertaintyState
 from integrations.workiq.citations import (
+    CitationExpectation,
     CitationNavigationError,
     PlaywrightCitationVerifier,
 )
@@ -54,6 +56,13 @@ class ConfidentialClientFixture:
 
 
 def _actor(*, persona: str = "alex", **claims: Any) -> AuthenticatedActor:
+    _, actor = _actor_and_service(persona=persona, **claims)
+    return actor
+
+
+def _actor_and_service(
+    *, persona: str = "alex", **claims: Any
+) -> tuple[AuthService, AuthenticatedActor]:
     fixture_http = FixtureHttp()
     bindings = (
         PersonaBinding.alex(TENANT_ID, ALEX_OID),
@@ -107,7 +116,7 @@ def _actor(*, persona: str = "alex", **claims: Any) -> AuthenticatedActor:
         algorithm="RS256",
         headers={"kid": "fixture-key", "typ": "JWT"},
     )
-    return service.authenticate(token)
+    return service, service.authenticate(token)
 
 
 def _fixture(name: str) -> dict[str, Any]:
@@ -194,10 +203,23 @@ def test_user_assertion_cannot_be_constructed_outside_authentication() -> None:
     with pytest.raises(TypeError):
         UserAssertion("forged")
 
+    with pytest.raises(TypeError):
+        AuthenticatedActor(
+            tenant_id=TENANT_ID,
+            object_id=ALEX_OID,
+            persona_id="RL-PERSONA-ALEX",
+            effective_roles=("material_planner", "response_approver"),
+            display_name="Alex",
+            user_principal_name="alex@example.invalid",
+            source_id="RL-ENTRA-ALEX",
+            bearer_assertion="forged",
+        )
+
 
 def test_obo_accepts_only_authenticated_alex_with_exact_lineage() -> None:
     client = ConfidentialClientFixture()
-    token = WorkIQOboExchange(client, tenant_id=TENANT_ID).exchange(_actor())
+    service, alex = _actor_and_service()
+    token = WorkIQOboExchange(client, auth_service=service).exchange(alex)
 
     assert token.reveal() == "downstream-secret"
     assert len(client.calls) == 1
@@ -208,8 +230,56 @@ def test_obo_accepts_only_authenticated_alex_with_exact_lineage() -> None:
         object(),
     ):
         with pytest.raises(WorkIQAuthenticationError):
-            WorkIQOboExchange(client, tenant_id=TENANT_ID).exchange(actor)  # type: ignore[arg-type]
+            WorkIQOboExchange(client, auth_service=service).exchange(actor)  # type: ignore[arg-type]
     assert len(client.calls) == 1
+
+
+def test_obo_rejects_actor_authenticated_by_a_different_auth_service() -> None:
+    client = ConfidentialClientFixture()
+    expected_service, _ = _actor_and_service()
+    _, other_actor = _actor_and_service()
+
+    with pytest.raises(WorkIQAuthenticationError):
+        WorkIQOboExchange(client, auth_service=expected_service).exchange(other_actor)
+
+    assert client.calls == []
+
+
+def test_imported_or_caller_supplied_proofs_cannot_fabricate_obo_actor() -> None:
+    import apps.api.app.auth as auth_module
+
+    client = ConfidentialClientFixture()
+    service, _ = _actor_and_service()
+    assert not hasattr(auth_module, "_AUTHENTICATION_PROOF")
+
+    with pytest.raises(TypeError):
+        AuthenticatedActor(
+            tenant_id=TENANT_ID,
+            object_id=ALEX_OID,
+            persona_id="RL-PERSONA-ALEX",
+            effective_roles=("material_planner", "response_approver"),
+            display_name="Alex",
+            user_principal_name="alex@example.invalid",
+            source_id="RL-ENTRA-ALEX",
+            bearer_assertion="forged",
+            _proof=object(),
+        )
+
+    fabricated = AuthenticatedActor._from_auth_service(
+        tenant_id=TENANT_ID,
+        object_id=ALEX_OID,
+        persona_id="RL-PERSONA-ALEX",
+        effective_roles=("material_planner", "response_approver"),
+        display_name="Alex",
+        user_principal_name="alex@example.invalid",
+        source_id="RL-ENTRA-ALEX",
+        bearer_assertion="forged",
+        auth_service_capability=object(),
+    )
+    with pytest.raises(WorkIQAuthenticationError):
+        WorkIQOboExchange(client, auth_service=service).exchange(fabricated)
+
+    assert client.calls == []
 
 
 @pytest.mark.parametrize("bad_claims", [{"tid": "wrong"}, {"scp": None}])
@@ -226,12 +296,30 @@ def test_authenticated_actor_cannot_be_mutated_into_alex() -> None:
         jordan.persona_id = "RL-PERSONA-ALEX"
 
 
+def test_actor_fields_cannot_replace_auth_service_bound_authorization() -> None:
+    client = ConfidentialClientFixture()
+    service, jordan = _actor_and_service(persona="jordan")
+    object.__setattr__(jordan, "persona_id", "RL-PERSONA-ALEX")
+    object.__setattr__(jordan, "source_id", "RL-ENTRA-ALEX")
+    object.__setattr__(
+        jordan,
+        "effective_roles",
+        ("material_planner", "response_approver"),
+    )
+
+    with pytest.raises(WorkIQAuthenticationError):
+        WorkIQOboExchange(client, auth_service=service).exchange(jordan)
+
+    assert client.calls == []
+
+
 def test_obo_rejects_authenticated_actor_from_another_tenant() -> None:
     client = ConfidentialClientFixture()
+    service, _ = _actor_and_service()
     with pytest.raises(WorkIQAuthenticationError):
         WorkIQOboExchange(
             client,
-            tenant_id="33333333-3333-4333-8333-333333333333",
+            auth_service=service,
         ).exchange(_actor())
     assert client.calls == []
 
@@ -275,7 +363,7 @@ def test_live_style_authentication_gate_blocks_untrusted_tokens_before_obo(
         header, payload, signature = token.split(".")
         token = ".".join((header, payload, f"A{signature[1:]}"))
     client = ConfidentialClientFixture()
-    obo = WorkIQOboExchange(client, tenant_id=TENANT_ID)
+    obo = WorkIQOboExchange(client, auth_service=service)
 
     with pytest.raises(Exception):
         obo.exchange(service.authenticate(token))
@@ -358,4 +446,38 @@ async def test_playwright_verifier_rejects_broken_login_and_off_host_results() -
         "https://tenant.sharepoint.com/sites/x",
     ):
         with pytest.raises(CitationNavigationError):
-            await verifier.verify((url,))
+            await verifier.verify(
+                (
+                    CitationExpectation(
+                        url=url,
+                        expected_excerpt=(
+                            "Qualification remains pending and the audit is incomplete."
+                        ),
+                        source_identity="fixture-source",
+                    ),
+                )
+            )
+
+
+def test_javascript_citation_policy_exercises_real_security_and_content_checks() -> (
+    None
+):
+    result = subprocess.run(
+        [
+            "node",
+            "--test",
+            str(
+                ROOT
+                / "apps"
+                / "web"
+                / "scripts"
+                / "citation-verification-policy.test.mjs"
+            ),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr

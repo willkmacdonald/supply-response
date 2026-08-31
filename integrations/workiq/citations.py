@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -11,8 +12,15 @@ class CitationNavigationError(RuntimeError):
     """An authenticated citation did not resolve to a trusted artifact view."""
 
 
+@dataclass(frozen=True)
+class CitationExpectation:
+    url: str
+    expected_excerpt: str
+    source_identity: str
+
+
 class AuthenticatedCitationVerifier(Protocol):
-    async def verify(self, urls: Sequence[str]) -> None: ...
+    async def verify(self, citations: Sequence[CitationExpectation]) -> None: ...
 
 
 Runner = Callable[..., Awaitable[str]]
@@ -55,16 +63,31 @@ class PlaywrightCitationVerifier:
             / "verify-workiq-citations.mjs"
         )
 
-    async def verify(self, urls: Sequence[str]) -> None:
-        if not urls:
+    async def verify(self, citations: Sequence[CitationExpectation]) -> None:
+        if not citations:
             raise CitationNavigationError("at least one citation URL is required")
-        for url in urls:
+        for citation in citations:
+            if (
+                not isinstance(citation, CitationExpectation)
+                or not citation.url.strip()
+                or len(citation.expected_excerpt.strip()) < 24
+                or not citation.source_identity.strip()
+            ):
+                raise CitationNavigationError(
+                    "citation expectation is incomplete or ambiguous"
+                )
             output = await self._runner(
                 "node",
                 str(self._script),
                 str(self._storage_state_path),
                 self._tenant_sharepoint_host,
-                input_text=json.dumps({"url": url}),
+                input_text=json.dumps(
+                    {
+                        "url": citation.url,
+                        "expectedExcerpt": citation.expected_excerpt,
+                        "sourceIdentity": citation.source_identity,
+                    }
+                ),
             )
             try:
                 result = json.loads(output)
@@ -72,7 +95,11 @@ class PlaywrightCitationVerifier:
                 raise CitationNavigationError(
                     "authenticated citation verifier returned malformed output"
                 ) from error
-            if not isinstance(result, dict) or result.get("ok") is not True:
+            if (
+                not isinstance(result, dict)
+                or result.get("ok") is not True
+                or result.get("sourceIdentity") != citation.source_identity
+            ):
                 raise CitationNavigationError(
                     "citation did not resolve to an authenticated trusted artifact"
                 )
