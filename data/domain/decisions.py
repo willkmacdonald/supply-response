@@ -245,7 +245,59 @@ class Decision(FrozenModel):
         # Preserve numeric comparator values across JSON persistence.  The
         # ``Decimal | str`` trace value needs JSON-mode validation to distinguish
         # numeric strings from option identifiers.
-        return RankingResult.model_validate_json(json.dumps(value))
+        return RankingResult.model_validate_json(json.dumps(value, default=str))
+
+    @model_validator(mode="after")
+    def validate_immutable_shape(self) -> Decision:
+        if self.kind is DecisionKind.REJECTED:
+            if (
+                self.selected_option_id is not None
+                or self.selected_option is not None
+                or self.approval_satisfactions
+                or self.rejection_reason is None
+                or not self.rejection_reason.strip()
+            ):
+                raise ValueError("rejection Decision cannot contain approval material")
+            return self
+
+        option = self.selected_option
+        if (
+            self.selected_option_id is None
+            or option is None
+            or option.option_id != self.selected_option_id
+            or self.rejection_reason is not None
+            or not self.approval_satisfactions
+        ):
+            raise ValueError(
+                "approved Decision requires a selected option and approvals"
+            )
+        if (
+            self.evidence_ids != option.evidence_ids
+            or self.assumptions != option.assumptions
+            or self.constraints != option.blocking_codes
+            or self.prerequisite_roles != option.prerequisite_roles
+        ):
+            raise ValueError("Decision option snapshot fields are inconsistent")
+        seen_roles: set[str] = set()
+        for satisfaction in self.approval_satisfactions:
+            if (
+                not satisfaction.satisfied
+                or satisfaction.analysis_id != self.analysis_id
+                or satisfaction.option_id != self.selected_option_id
+                or satisfaction.role in seen_roles
+                or satisfaction.target.case.case_id != self.case_id
+                or satisfaction.target.case.runtime_mode is not self.runtime_mode
+                or satisfaction.target.scenario_effective_time
+                != self.scenario_effective_time
+                or satisfaction.target.requested_side_effects
+                != option.requested_side_effects
+                or option.predicted is None
+                or satisfaction.target.total_response_cost
+                != option.predicted.response_cost
+            ):
+                raise ValueError("Decision Approval Satisfaction is inconsistent")
+            seen_roles.add(satisfaction.role)
+        return self
 
     @classmethod
     def from_command(

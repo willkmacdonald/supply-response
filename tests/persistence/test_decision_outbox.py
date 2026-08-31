@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 
 import pytest
-from sqlalchemy import func, select
+from pydantic import ValidationError
+from sqlalchemy import delete, func, select, update
 
 from services.decisions.service import (
     DecisionPolicyViolation,
@@ -26,7 +29,7 @@ from data.domain.evidence import IdentitySource
 from data.synthetic.rl001 import build_rl001_evidence, instantiate_rl001
 from services.analysis.service import AnalyzeCaseCommand, analyze_case
 from services.persistence.sqlite import sqlite_store
-from services.persistence.store import serialize_model
+from services.persistence.store import PersistenceIntegrityError, serialize_model
 from services.persistence.tables import (
     approval_satisfactions,
     decisions,
@@ -464,3 +467,317 @@ def test_later_approval_becomes_current_without_rewriting_history(decision_conte
             == original_payload
             == serialize_model(first)
         )
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"selected_option_id": None},
+        {"selected_option": None},
+        {"rejection_reason": "not a rejection"},
+    ],
+)
+def test_decision_model_rejects_incoherent_approval_shape(sqlite_uow, changes):
+    decision = DecisionService(sqlite_uow).record(
+        approved_combined_command("RL-IDEMPOTENCY-MODEL-APPROVED"),
+        alex_identity(),
+    )
+
+    with pytest.raises(ValidationError):
+        decision.__class__.model_validate({**decision.model_dump(), **changes})
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"selected_option_id": "RL-OPTION-COMBINED"},
+        {"selected_option": {"option_id": "RL-OPTION-COMBINED"}},
+        {"approval_satisfactions": (object(),)},
+        {"rejection_reason": None},
+    ],
+)
+def test_decision_model_rejects_incoherent_rejection_shape(sqlite_uow, changes):
+    decision = DecisionService(sqlite_uow).record(
+        rejection_command("RL-IDEMPOTENCY-MODEL-REJECT"),
+        alex_identity(effective_roles=("response_approver",)),
+    )
+
+    with pytest.raises(ValidationError):
+        decision.__class__.model_validate({**decision.model_dump(), **changes})
+
+
+def test_decision_read_rejects_valid_json_with_forged_analysis_lineage(
+    decision_context,
+):
+    decision = DecisionService(decision_context.uow_factory).record(
+        approved_combined_command("RL-IDEMPOTENCY-FORGED-LINEAGE"),
+        alex_identity(),
+    )
+    forged = decision.model_copy(update={"calculation_version": "forged-v999"})
+
+    with decision_context.store.engine.begin() as connection:
+        connection.execute(
+            update(decisions)
+            .where(decisions.c.decision_id == decision.decision_id)
+            .values(payload_json=serialize_model(forged))
+        )
+
+    with decision_context.uow_factory() as uow:
+        with pytest.raises(PersistenceIntegrityError, match="Analysis Version"):
+            uow.decisions.get(decision.decision_id)
+
+
+def test_decision_read_rejects_missing_bound_satisfaction(decision_context):
+    decision = DecisionService(decision_context.uow_factory).record(
+        approved_combined_command("RL-IDEMPOTENCY-SATISFACTION-READ"),
+        alex_identity(),
+    )
+    with decision_context.store.engine.begin() as connection:
+        connection.execute(
+            delete(approval_satisfactions).where(
+                approval_satisfactions.c.decision_id == decision.decision_id,
+                approval_satisfactions.c.role == "finance_approver",
+            )
+        )
+
+    with decision_context.uow_factory() as uow:
+        with pytest.raises(PersistenceIntegrityError, match="Satisfaction"):
+            uow.decisions.get(decision.decision_id)
+
+
+def test_decision_read_rejects_reassigned_bound_satisfaction(decision_context):
+    service = DecisionService(decision_context.uow_factory)
+    first = service.record(
+        approved_combined_command("RL-IDEMPOTENCY-SATISFACTION-FIRST"),
+        alex_identity(),
+    )
+    changed = build_analysis(
+        decision_context.case,
+        decision_context.snapshot,
+        analysis_id="RL-ANALYSIS-SATISFACTION-REASSIGNED",
+        calculation_version="rl001-options-v2",
+    )
+    decision_context.store.save_analysis(changed)
+    second = service.record(
+        approved_combined_command(
+            "RL-IDEMPOTENCY-SATISFACTION-SECOND",
+            analysis_id=changed.analysis_id,
+        ),
+        alex_identity(),
+    )
+    with decision_context.store.engine.begin() as connection:
+        connection.execute(
+            update(approval_satisfactions)
+            .where(
+                approval_satisfactions.c.decision_id == first.decision_id,
+                approval_satisfactions.c.role == "finance_approver",
+            )
+            .values(decision_id=second.decision_id)
+        )
+
+    with decision_context.uow_factory() as uow:
+        with pytest.raises(PersistenceIntegrityError, match="Satisfaction"):
+            uow.decisions.get(first.decision_id)
+        with pytest.raises(PersistenceIntegrityError, match="Satisfaction"):
+            uow.decisions.get(second.decision_id)
+
+
+def test_decision_read_rejects_extra_duplicate_or_altered_satisfaction(
+    decision_context,
+):
+    decision = DecisionService(decision_context.uow_factory).record(
+        approved_combined_command("RL-IDEMPOTENCY-SATISFACTION-ALTERED"),
+        alex_identity(),
+    )
+    taylor = next(
+        item
+        for item in decision.approval_satisfactions
+        if item.role == "finance_approver"
+    )
+    altered_target = taylor.target.model_copy(
+        update={"total_response_cost": Decimal("0")}
+    )
+    altered = taylor.model_copy(update={"target": altered_target})
+    duplicate = taylor.model_copy(
+        update={"authorization_id": "RL-AUTH-TAYLOR-DUPLICATE"}
+    )
+    with decision_context.store.engine.begin() as connection:
+        connection.execute(
+            update(approval_satisfactions)
+            .where(
+                approval_satisfactions.c.decision_id == decision.decision_id,
+                approval_satisfactions.c.role == "finance_approver",
+            )
+            .values(payload_json=serialize_model(altered))
+        )
+        connection.execute(
+            approval_satisfactions.insert().values(
+                analysis_id=duplicate.analysis_id,
+                decision_id=decision.decision_id,
+                option_id=duplicate.option_id,
+                authorization_id=duplicate.authorization_id,
+                persona_id=duplicate.persona_id,
+                role=duplicate.role,
+                satisfied=duplicate.satisfied,
+                payload_json=serialize_model(duplicate),
+            )
+        )
+
+    with decision_context.uow_factory() as uow:
+        with pytest.raises(PersistenceIntegrityError, match="Satisfaction"):
+            uow.decisions.list_for_case(decision.case_id)
+
+
+def test_decision_model_rejects_duplicate_approval_roles(sqlite_uow):
+    decision = DecisionService(sqlite_uow).record(
+        approved_combined_command("RL-IDEMPOTENCY-MODEL-DUPLICATE"),
+        alex_identity(),
+    )
+
+    with pytest.raises(ValidationError, match="Satisfaction"):
+        decision.__class__.model_validate(
+            {
+                **decision.model_dump(),
+                "approval_satisfactions": (
+                    *decision.approval_satisfactions,
+                    decision.approval_satisfactions[0],
+                ),
+            }
+        )
+
+
+def test_outbox_read_rejects_event_for_rejected_decision(decision_context):
+    service = DecisionService(decision_context.uow_factory)
+    approved = service.record(
+        approved_combined_command("RL-IDEMPOTENCY-OUTBOX-APPROVED"),
+        alex_identity(),
+    )
+    rejected = service.record(
+        rejection_command("RL-IDEMPOTENCY-OUTBOX-REJECTED"),
+        alex_identity(effective_roles=("response_approver",)),
+    )
+    with decision_context.uow_factory() as uow:
+        event = uow.execution.list_outbox(decision_id=approved.decision_id)[0]
+    forged = event.model_copy(
+        update={
+            "decision_id": rejected.decision_id,
+            "case_id": rejected.case_id,
+            "analysis_id": rejected.analysis_id,
+        }
+    )
+    with decision_context.store.engine.begin() as connection:
+        connection.execute(
+            update(outbox_events)
+            .where(outbox_events.c.event_id == event.event_id)
+            .values(
+                decision_id=rejected.decision_id, payload_json=serialize_model(forged)
+            )
+        )
+
+    with decision_context.uow_factory() as uow:
+        with pytest.raises(PersistenceIntegrityError, match="approved"):
+            uow.execution.list_outbox(decision_id=rejected.decision_id)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("case_id", "RL-CASE-FORGED"),
+        ("analysis_id", "RL-ANALYSIS-FORGED"),
+        ("event_type", "ForgedEvent"),
+    ],
+)
+def test_outbox_read_rejects_forged_case_analysis_or_type(
+    decision_context,
+    field,
+    value,
+):
+    decision = DecisionService(decision_context.uow_factory).record(
+        approved_combined_command("RL-IDEMPOTENCY-OUTBOX-FORGED"),
+        alex_identity(),
+    )
+    with decision_context.uow_factory() as uow:
+        event = uow.execution.list_outbox(decision_id=decision.decision_id)[0]
+    payload = json.loads(serialize_model(event))
+    payload[field] = value
+    with decision_context.store.engine.begin() as connection:
+        connection.execute(
+            update(outbox_events)
+            .where(outbox_events.c.event_id == event.event_id)
+            .values(payload_json=json.dumps(payload))
+        )
+
+    with decision_context.uow_factory() as uow:
+        with pytest.raises(PersistenceIntegrityError):
+            uow.execution.list_outbox(decision_id=decision.decision_id)
+
+
+def test_beta_approval_fails_without_current_jordan_quality_satisfaction(
+    sqlite_uow,
+):
+    command = RecordDecisionCommand(
+        case_id="RL-CASE-DECISION-1",
+        analysis_id="RL-ANALYSIS-DECISION-1",
+        selected_option_id="RL-OPTION-BETA",
+        kind=DecisionKind.APPROVED,
+        idempotency_key="RL-IDEMPOTENCY-BETA-NO-JORDAN",
+    )
+
+    with pytest.raises(DecisionPolicyViolation, match="executable"):
+        DecisionService(sqlite_uow).record(command, alex_identity())
+
+
+def test_rejection_reanalysis_keeps_history_and_allows_later_approval(
+    decision_context,
+):
+    service = DecisionService(decision_context.uow_factory)
+    rejected = service.record(
+        rejection_command("RL-IDEMPOTENCY-REJECT-REANALYSIS"),
+        alex_identity(effective_roles=("response_approver",)),
+    )
+    changed = build_analysis(
+        decision_context.case,
+        decision_context.snapshot,
+        analysis_id="RL-ANALYSIS-REJECT-REANALYSIS",
+        calculation_version="rl001-options-v2",
+    )
+    decision_context.store.save_analysis(changed)
+
+    approved = service.record(
+        approved_combined_command(
+            "RL-IDEMPOTENCY-REJECT-REANALYSIS-APPROVED",
+            analysis_id=changed.analysis_id,
+        ),
+        alex_identity(),
+    )
+
+    with decision_context.uow_factory() as uow:
+        assert uow.decisions.get(rejected.decision_id) == rejected
+        assert uow.cases.get_projection(rejected.case_id).current_decision_id == (
+            approved.decision_id
+        )
+
+
+def test_idempotency_race_after_both_requests_observe_no_existing_row(
+    decision_context,
+):
+    before_insert = Barrier(2)
+    factory = partial(
+        decision_context.store.uow_factory,
+        before_decision_insert=before_insert.wait,
+    )
+    command = approved_combined_command("RL-IDEMPOTENCY-PREINSERT-RACE")
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        returned = tuple(
+            executor.map(
+                lambda _: DecisionService(factory).record(command, alex_identity()),
+                range(2),
+            )
+        )
+
+    assert returned[0] == returned[1]
+    with decision_context.uow_factory() as uow:
+        stored = uow.decisions.list_for_case(command.case_id)
+        assert stored == (returned[0],)
+        assert len(uow.execution.list_outbox(decision_id=stored[0].decision_id)) == 1

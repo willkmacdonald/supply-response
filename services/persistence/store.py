@@ -609,10 +609,12 @@ class SqlAlchemyStore:
     def uow_factory(
         self,
         *,
+        before_decision_insert: Callable[[], None] | None = None,
         before_outbox_insert: Callable[[], None] | None = None,
     ) -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(
             self,
+            before_decision_insert=before_decision_insert,
             before_outbox_insert=before_outbox_insert,
         )
 
@@ -725,9 +727,16 @@ class SqlAlchemyCaseRepository:
 
 
 class SqlAlchemyDecisionRepository:
-    def __init__(self, store: SqlAlchemyStore, connection: Connection) -> None:
+    def __init__(
+        self,
+        store: SqlAlchemyStore,
+        connection: Connection,
+        *,
+        before_decision_insert: Callable[[], None] | None = None,
+    ) -> None:
         self._store = store
         self._connection = connection
+        self._before_decision_insert = before_decision_insert
 
     @staticmethod
     def _decode_decision(payload: str) -> Decision:
@@ -753,7 +762,71 @@ class SqlAlchemyDecisionRepository:
                 "decision columns conflict with canonical Decision JSON"
             )
         self._store._require_configured_mode(decision.runtime_mode)
+        self._require_analysis_lineage(decision)
+        self._require_bound_satisfactions(decision)
         return decision
+
+    def _require_analysis_lineage(self, decision: Decision) -> None:
+        analysis = SqlAlchemyCaseRepository(self._store, self._connection).get_analysis(
+            decision.analysis_id
+        )
+        if (
+            analysis.case_id != decision.case_id
+            or analysis.material_hash != decision.analysis_material_hash
+            or analysis.material.runtime_mode is not decision.runtime_mode
+            or analysis.material.scenario_effective_time
+            != decision.scenario_effective_time
+            or analysis.ranking != decision.comparator_trace
+            or analysis.material.calculation_version != decision.calculation_version
+            or analysis.material.evidence_policy_version
+            != decision.evidence_policy_version
+            or analysis.material.approval_policy_version
+            != decision.approval_policy_version
+            or analysis.ranking.policy_version != decision.ranking_policy_version
+        ):
+            raise PersistenceIntegrityError(
+                "Decision analysis lineage conflicts with its immutable Analysis Version"
+            )
+        if decision.kind.value == "rejected":
+            return
+        option = next(
+            (
+                item
+                for item in analysis.response_options
+                if item.option_id == decision.selected_option_id
+            ),
+            None,
+        )
+        if (
+            option is None
+            or option != decision.selected_option
+            or option.evidence_ids != decision.evidence_ids
+            or option.assumptions != decision.assumptions
+            or option.blocking_codes != decision.constraints
+            or option.prerequisite_roles != decision.prerequisite_roles
+        ):
+            raise PersistenceIntegrityError(
+                "Decision selected option conflicts with its immutable Analysis Version"
+            )
+
+    def _require_bound_satisfactions(self, decision: Decision) -> None:
+        rows = self._list_approval_satisfactions(decision.decision_id)
+        expected = tuple(
+            sorted(
+                decision.approval_satisfactions,
+                key=lambda item: (item.role, item.persona_id, item.authorization_id),
+            )
+        )
+        actual = tuple(
+            sorted(
+                rows,
+                key=lambda item: (item.role, item.persona_id, item.authorization_id),
+            )
+        )
+        if actual != expected:
+            raise PersistenceIntegrityError(
+                "Decision Approval Satisfaction rows conflict with canonical JSON"
+            )
 
     def get(self, decision_id: str) -> Decision:
         row = (
@@ -790,6 +863,8 @@ class SqlAlchemyDecisionRepository:
         return tuple(self._decision_from_row(row) for row in rows)
 
     def insert(self, decision: Decision) -> None:
+        if self._before_decision_insert is not None:
+            self._before_decision_insert()
         self._store._require_configured_mode(decision.runtime_mode)
         stored_case = self._store._stored_case(self._connection, decision.case_id)
         if stored_case.runtime_mode is not decision.runtime_mode:
@@ -825,7 +900,18 @@ class SqlAlchemyDecisionRepository:
         decision_id: str,
         satisfactions: tuple[ApprovalSatisfaction, ...],
     ) -> None:
-        decision = self.get(decision_id)
+        row = (
+            self._connection.execute(
+                select(decisions.c.payload_json).where(
+                    decisions.c.decision_id == decision_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RecordNotFound(f"decision does not exist: {decision_id}")
+        decision = self._decode_decision(row["payload_json"])
         if not satisfactions:
             return
         for item in satisfactions:
@@ -854,6 +940,12 @@ class SqlAlchemyDecisionRepository:
         )
 
     def list_approval_satisfactions(
+        self,
+        decision_id: str,
+    ) -> tuple[ApprovalSatisfaction, ...]:
+        return self._list_approval_satisfactions(decision_id)
+
+    def _list_approval_satisfactions(
         self,
         decision_id: str,
     ) -> tuple[ApprovalSatisfaction, ...]:
@@ -956,6 +1048,23 @@ class SqlAlchemyExecutionRepository:
                 raise PersistenceIntegrityError(
                     "outbox columns conflict with canonical event JSON"
                 )
+            decision = SqlAlchemyDecisionRepository(self._store, self._connection).get(
+                event.decision_id
+            )
+            if event.case_id != decision.case_id:
+                raise PersistenceIntegrityError(
+                    "outbox case_id conflicts with its Decision"
+                )
+            if event.analysis_id != decision.analysis_id:
+                raise PersistenceIntegrityError(
+                    "outbox analysis_id conflicts with its Decision"
+                )
+            if event.event_type != "ActionPlanningRequested":
+                raise PersistenceIntegrityError("outbox event_type is invalid")
+            if decision.kind.value != "approved":
+                raise PersistenceIntegrityError(
+                    "outbox event requires an approved Decision"
+                )
             events.append(event)
         return tuple(events)
 
@@ -965,9 +1074,11 @@ class SqlAlchemyUnitOfWork:
         self,
         store: SqlAlchemyStore,
         *,
+        before_decision_insert: Callable[[], None] | None = None,
         before_outbox_insert: Callable[[], None] | None = None,
     ) -> None:
         self._store = store
+        self._before_decision_insert = before_decision_insert
         self._before_outbox_insert = before_outbox_insert
         self._connection: Connection | None = None
         self._transaction = None
@@ -976,7 +1087,11 @@ class SqlAlchemyUnitOfWork:
         self._connection = self._store.engine.connect()
         self._transaction = self._connection.begin()
         self.cases = SqlAlchemyCaseRepository(self._store, self._connection)
-        self.decisions = SqlAlchemyDecisionRepository(self._store, self._connection)
+        self.decisions = SqlAlchemyDecisionRepository(
+            self._store,
+            self._connection,
+            before_decision_insert=self._before_decision_insert,
+        )
         self.execution = SqlAlchemyExecutionRepository(
             self._store,
             self._connection,
