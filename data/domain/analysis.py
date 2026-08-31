@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from pydantic import Field
 
-from .common import FrozenModel
+from .common import FrozenModel, Money
 
 
 class TimedQuantity(FrozenModel):
@@ -36,9 +36,9 @@ class ExposureResult(FrozenModel):
     maximum_shortage_quantity: int
     affected_production_order_ids: tuple[str, ...]
     affected_customer_order_line_ids: tuple[str, ...]
-    revenue_at_risk: Decimal
-    margin_at_risk: Decimal
+    revenue_at_risk: Money
+    margin_at_risk: Money
     otif_lines_at_risk: int
-    response_cost: Decimal = Decimal("0")
-    revenue_protected: Decimal = Decimal("0")
+    response_cost: Money = Decimal("0")
+    revenue_protected: Money = Decimal("0")
     remaining_uncertainty: tuple[str, ...] = ()

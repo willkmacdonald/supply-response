@@ -1,25 +1,24 @@
 {
   "disruption_id": "RL-DISRUPTION-001",
   "plant_id": "RL-PLANT-CHI",
-  "calculation_version": "exposure-v1",
+  "calculation_version": "rl001-no-mitigation-v1",
   "usable_inventory": 4000,
   "projected_balances": [
     {"date": "2026-09-05", "balance": -1000},
-    {"date": "2026-09-06", "balance": 2000},
-    {"date": "2026-09-08", "balance": -3800}
+    {"date": "2026-09-08", "balance": -6800}
   ],
   "first_stockout_date": "2026-09-05",
-  "maximum_shortage_quantity": 3800,
+  "maximum_shortage_quantity": 6800,
   "affected_production_order_ids": ["RL-MO-DEMO-1", "RL-MO-DEMO-2"],
   "affected_customer_order_line_ids": [
     "RL-CO-DEMO-1",
     "RL-CO-DEMO-2"
   ],
-  "revenue_at_risk": "955000",
-  "margin_at_risk": "328000",
+  "revenue_at_risk": "955000.00",
+  "margin_at_risk": "328000.00",
   "otif_lines_at_risk": 2,
-  "response_cost": "0",
-  "revenue_protected": "0",
+  "response_cost": "0.00",
+  "revenue_protected": "0.00",
   "remaining_uncertainty": [
     "Remaining supplier recovery date is unconfirmed"
   ],

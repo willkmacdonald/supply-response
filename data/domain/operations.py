@@ -1,11 +1,10 @@
 from datetime import date
-from decimal import Decimal
 from enum import StrEnum
 from typing import Literal
 
 from pydantic import Field
 
-from .common import FrozenModel
+from .common import FrozenModel, Money
 
 
 class QualificationStatus(StrEnum):
@@ -23,7 +22,7 @@ class Supplier(FrozenModel):
 class Part(FrozenModel):
     part_id: str
     description: str
-    unit_cost: Decimal = Field(ge=0)
+    unit_cost: Money = Field(ge=0)
 
 
 class SupplierPart(FrozenModel):
@@ -69,8 +68,8 @@ class ProductionOrder(FrozenModel):
     component_demand: int | None = Field(default=None, gt=0)
     customer_order_id: str | None = None
     customer_priority: int | None = Field(default=None, ge=1, le=5)
-    customer_revenue: Decimal | None = Field(default=None, ge=0)
-    customer_margin: Decimal | None = Field(default=None, ge=0)
+    customer_revenue: Money | None = Field(default=None, ge=0)
+    customer_margin: Money | None = Field(default=None, ge=0)
 
 
 class Customer(FrozenModel):
@@ -87,8 +86,8 @@ class CustomerOrder(FrozenModel):
     production_order_id: str | None = None
     quantity: int = Field(gt=0)
     due_date: date
-    unit_revenue: Decimal = Field(ge=0)
-    unit_margin: Decimal = Field(ge=0)
+    unit_revenue: Money = Field(ge=0)
+    unit_margin: Money = Field(ge=0)
 
 
 class TransportOption(FrozenModel):
@@ -97,7 +96,7 @@ class TransportOption(FrozenModel):
     plant_id: str
     mode: str
     max_quantity: int = Field(gt=0)
-    incremental_cost_per_unit: Decimal = Field(ge=0)
+    incremental_cost_per_unit: Money = Field(ge=0)
     transit_days: int = Field(ge=0)
 
 
@@ -108,7 +107,7 @@ class SupplyReceiptOption(FrozenModel):
     plant_id: str
     quantity: int = Field(gt=0)
     due_date: date
-    incremental_cost_per_unit: Decimal = Field(ge=0)
+    incremental_cost_per_unit: Money = Field(ge=0)
 
 
 class InventoryTransfer(FrozenModel):
@@ -119,7 +118,7 @@ class InventoryTransfer(FrozenModel):
     quantity: int = Field(gt=0)
     dispatch_date: date
     arrival_date: date
-    incremental_cost_per_unit: Decimal = Field(ge=0)
+    incremental_cost_per_unit: Money = Field(ge=0)
 
 
 class QualityQualification(FrozenModel):

@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal, Mapping, Self
 
 from .common import CasePurpose, FrozenModel, RuntimeMode
 
@@ -31,3 +31,18 @@ class CaseInstance(FrozenModel):
     scenario_effective_time: datetime
     scenario_timezone: Literal["America/Chicago"] = "America/Chicago"
     status: CaseStatus = CaseStatus.OPEN
+
+    def model_copy(
+        self,
+        *,
+        update: Mapping[str, Any] | None = None,
+        deep: bool = False,
+    ) -> Self:
+        """Prevent a runtime-mode change from reusing a Case Instance ID."""
+        update = update or {}
+        if (
+            update.get("runtime_mode", self.runtime_mode) != self.runtime_mode
+            and update.get("case_id", self.case_id) == self.case_id
+        ):
+            raise ValueError("runtime_mode changes require a different case_id")
+        return super().model_copy(update=update, deep=deep)

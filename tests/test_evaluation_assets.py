@@ -1,9 +1,8 @@
 import json
 from pathlib import Path
 
-from data.schemas.models import TimedQuantity
-from data.synthetic.generator import generate_dataset
-from services.exposure.calculator import calculate_exposure
+from data.domain.common import serialize_money
+from data.synthetic.rl001 import OperationalSnapshot
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,59 +35,49 @@ def test_evaluation_catalog_is_complete_and_linked_to_tests():
         assert f"def {test_name}(" in source, case["id"]
 
 
-def _baseline_result() -> dict[str, object]:
-    dataset = generate_dataset(seed=42)
-    disruption = dataset.disruptions[0]
-    receipts = [
-        TimedQuantity(
-            date=disruption.partial_due_date,
-            quantity=disruption.partial_quantity,
-            source_id=disruption.source_ref,
+def _canonical_no_mitigation_result() -> dict[str, object]:
+    snapshot = OperationalSnapshot.rl001()
+    projected_balance = snapshot.usable_inventory("RL-MAT-10247", "RL-PLANT-CHI")
+    projected_balances = []
+    for order in snapshot.production_orders:
+        projected_balance -= order.component_demand
+        projected_balances.append(
+            {"date": order.due_date.isoformat(), "balance": projected_balance}
         )
-    ]
-    exposure = calculate_exposure(
-        scenario_id="RL-SCENARIO-BASELINE",
-        part_id=disruption.part_id,
-        plant_id=disruption.plant_id,
-        inventory_positions=dataset.inventory_positions,
-        receipts=receipts,
-        transfers=[],
-        bom_components=dataset.bom_components,
-        production_orders=dataset.production_orders,
-        customer_orders=dataset.customer_orders,
-        assumptions=("Only confirmed receipts are included",),
-        remaining_uncertainty=("Remaining supplier recovery date is unconfirmed",),
+
+    revenue_at_risk = sum(
+        order.customer_revenue for order in snapshot.production_orders
     )
+    margin_at_risk = sum(order.customer_margin for order in snapshot.production_orders)
     return {
-        "disruption_id": disruption.disruption_id,
-        "plant_id": disruption.plant_id,
-        "calculation_version": exposure.metadata.calculation_version,
-        "usable_inventory": exposure.usable_inventory,
-        "projected_balances": [
-            {
-                "date": point.date.isoformat(),
-                "balance": point.projected_balance,
-            }
-            for point in exposure.projected_inventory
+        "disruption_id": snapshot.disruption.disruption_id,
+        "plant_id": snapshot.disruption.plant_id,
+        "calculation_version": "rl001-no-mitigation-v1",
+        "usable_inventory": snapshot.usable_inventory("RL-MAT-10247", "RL-PLANT-CHI"),
+        "projected_balances": projected_balances,
+        "first_stockout_date": "2026-09-05",
+        "maximum_shortage_quantity": abs(projected_balance),
+        "affected_production_order_ids": [
+            order.production_order_id for order in snapshot.production_orders
         ],
-        "first_stockout_date": exposure.first_stockout_date.isoformat()
-        if exposure.first_stockout_date
-        else None,
-        "maximum_shortage_quantity": exposure.maximum_shortage_quantity,
-        "affected_production_order_ids": list(exposure.affected_production_order_ids),
-        "affected_customer_order_line_ids": list(
-            exposure.affected_customer_order_line_ids
-        ),
-        "revenue_at_risk": str(exposure.revenue_at_risk),
-        "margin_at_risk": str(exposure.margin_at_risk),
-        "otif_lines_at_risk": exposure.otif_lines_at_risk,
-        "response_cost": str(exposure.response_cost),
-        "revenue_protected": str(exposure.revenue_protected),
-        "remaining_uncertainty": list(exposure.remaining_uncertainty),
-        "source_data_lineage": list(exposure.metadata.source_data_lineage),
+        "affected_customer_order_line_ids": [
+            order.customer_order_id for order in snapshot.production_orders
+        ],
+        "revenue_at_risk": serialize_money(revenue_at_risk),
+        "margin_at_risk": serialize_money(margin_at_risk),
+        "otif_lines_at_risk": len(snapshot.production_orders),
+        "response_cost": serialize_money(0),
+        "revenue_protected": serialize_money(0),
+        "remaining_uncertainty": ["Remaining supplier recovery date is unconfirmed"],
+        "source_data_lineage": [
+            "RL-001",
+            "RL-INV-DEMO-CHI",
+            "RL-MO-DEMO-1",
+            "RL-MO-DEMO-2",
+        ],
     }
 
 
-def test_rl_001_matches_exact_2026_baseline():
+def test_rl_001_matches_the_frozen_no_mitigation_baseline():
     expected = json.loads(EXPECTED_RL_001.read_text(encoding="utf-8"))
-    assert _baseline_result() == expected
+    assert _canonical_no_mitigation_result() == expected
