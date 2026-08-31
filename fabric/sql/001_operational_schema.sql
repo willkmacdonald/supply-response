@@ -5,6 +5,8 @@ IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'app')
     EXEC(N'CREATE SCHEMA app');
 GO
 
+IF OBJECT_ID(N'app.schema_version', N'U') IS NULL
+BEGIN
 CREATE TABLE app.schema_version (
     component nvarchar(64) NOT NULL,
     schema_version int NOT NULL,
@@ -12,8 +14,11 @@ CREATE TABLE app.schema_version (
         CONSTRAINT df_schema_version_applied_at DEFAULT SYSDATETIMEOFFSET(),
     CONSTRAINT pk_schema_version PRIMARY KEY (component)
 );
+END;
 GO
 
+IF OBJECT_ID(N'app.case_instances', N'U') IS NULL
+BEGIN
 CREATE TABLE app.case_instances (
     case_id nvarchar(128) NOT NULL,
     template_id nvarchar(128) NOT NULL,
@@ -27,16 +32,24 @@ CREATE TABLE app.case_instances (
     CONSTRAINT pk_case_instances PRIMARY KEY (case_id),
     CONSTRAINT ck_case_instances_payload_json CHECK (ISJSON(payload_json) = 1)
 );
+END;
 GO
 
-CREATE INDEX ix_case_instances_template_id ON app.case_instances (template_id);
-CREATE INDEX ix_case_instances_purpose ON app.case_instances (purpose);
-CREATE INDEX ix_case_instances_runtime_mode ON app.case_instances (runtime_mode);
-CREATE INDEX ix_case_instances_status ON app.case_instances (status);
-CREATE INDEX ix_case_instances_scenario_time
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.case_instances') AND name = N'ix_case_instances_template_id')
+    CREATE INDEX ix_case_instances_template_id ON app.case_instances (template_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.case_instances') AND name = N'ix_case_instances_purpose')
+    CREATE INDEX ix_case_instances_purpose ON app.case_instances (purpose);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.case_instances') AND name = N'ix_case_instances_runtime_mode')
+    CREATE INDEX ix_case_instances_runtime_mode ON app.case_instances (runtime_mode);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.case_instances') AND name = N'ix_case_instances_status')
+    CREATE INDEX ix_case_instances_status ON app.case_instances (status);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.case_instances') AND name = N'ix_case_instances_scenario_time')
+    CREATE INDEX ix_case_instances_scenario_time
     ON app.case_instances (scenario_effective_time);
 GO
 
+IF OBJECT_ID(N'app.operational_snapshots', N'U') IS NULL
+BEGIN
 CREATE TABLE app.operational_snapshots (
     case_id nvarchar(128) NOT NULL,
     runtime_mode nvarchar(16) NOT NULL,
@@ -49,8 +62,11 @@ CREATE TABLE app.operational_snapshots (
         REFERENCES app.case_instances (case_id),
     CONSTRAINT ck_operational_snapshots_payload_json CHECK (ISJSON(payload_json) = 1)
 );
+END;
 GO
 
+IF OBJECT_ID(N'app.analysis_versions', N'U') IS NULL
+BEGIN
 CREATE TABLE app.analysis_versions (
     analysis_id nvarchar(128) NOT NULL,
     case_id nvarchar(128) NOT NULL,
@@ -65,13 +81,19 @@ CREATE TABLE app.analysis_versions (
         REFERENCES app.case_instances (case_id),
     CONSTRAINT ck_analysis_versions_payload_json CHECK (ISJSON(payload_json) = 1)
 );
+END;
 GO
 
-CREATE INDEX ix_analysis_versions_case_id ON app.analysis_versions (case_id);
-CREATE INDEX ix_analysis_versions_material_hash ON app.analysis_versions (material_hash);
-CREATE INDEX ix_analysis_versions_created_at ON app.analysis_versions (created_at);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.analysis_versions') AND name = N'ix_analysis_versions_case_id')
+    CREATE INDEX ix_analysis_versions_case_id ON app.analysis_versions (case_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.analysis_versions') AND name = N'ix_analysis_versions_material_hash')
+    CREATE INDEX ix_analysis_versions_material_hash ON app.analysis_versions (material_hash);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.analysis_versions') AND name = N'ix_analysis_versions_created_at')
+    CREATE INDEX ix_analysis_versions_created_at ON app.analysis_versions (created_at);
 GO
 
+IF OBJECT_ID(N'app.evidence_items', N'U') IS NULL
+BEGIN
 CREATE TABLE app.evidence_items (
     evidence_id nvarchar(128) NOT NULL,
     analysis_id nvarchar(128) NOT NULL,
@@ -91,12 +113,17 @@ CREATE TABLE app.evidence_items (
         REFERENCES app.case_instances (case_id),
     CONSTRAINT ck_evidence_items_payload_json CHECK (ISJSON(payload_json) = 1)
 );
+END;
 GO
 
-CREATE INDEX ix_evidence_items_analysis_id ON app.evidence_items (analysis_id);
-CREATE INDEX ix_evidence_items_case_id ON app.evidence_items (case_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.evidence_items') AND name = N'ix_evidence_items_analysis_id')
+    CREATE INDEX ix_evidence_items_analysis_id ON app.evidence_items (analysis_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.evidence_items') AND name = N'ix_evidence_items_case_id')
+    CREATE INDEX ix_evidence_items_case_id ON app.evidence_items (case_id);
 GO
 
+IF OBJECT_ID(N'app.decisions', N'U') IS NULL
+BEGIN
 CREATE TABLE app.decisions (
     decision_id nvarchar(128) NOT NULL,
     case_id nvarchar(128) NOT NULL,
@@ -114,13 +141,19 @@ CREATE TABLE app.decisions (
         REFERENCES app.analysis_versions (analysis_id),
     CONSTRAINT ck_decisions_payload_json CHECK (ISJSON(payload_json) = 1)
 );
+END;
 GO
 
-CREATE INDEX ix_decisions_case_id ON app.decisions (case_id);
-CREATE INDEX ix_decisions_analysis_id ON app.decisions (analysis_id);
-CREATE INDEX ix_decisions_decided_at ON app.decisions (decided_at);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.decisions') AND name = N'ix_decisions_case_id')
+    CREATE INDEX ix_decisions_case_id ON app.decisions (case_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.decisions') AND name = N'ix_decisions_analysis_id')
+    CREATE INDEX ix_decisions_analysis_id ON app.decisions (analysis_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.decisions') AND name = N'ix_decisions_decided_at')
+    CREATE INDEX ix_decisions_decided_at ON app.decisions (decided_at);
 GO
 
+IF OBJECT_ID(N'app.approval_satisfactions', N'U') IS NULL
+BEGIN
 CREATE TABLE app.approval_satisfactions (
     approval_satisfaction_id bigint IDENTITY(1,1) NOT NULL,
     analysis_id nvarchar(128) NOT NULL,
@@ -141,12 +174,16 @@ CREATE TABLE app.approval_satisfactions (
     ),
     CONSTRAINT ck_approval_satisfactions_payload_json CHECK (ISJSON(payload_json) = 1)
 );
+END;
 GO
 
-CREATE INDEX ix_approval_satisfactions_decision_id
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.approval_satisfactions') AND name = N'ix_approval_satisfactions_decision_id')
+    CREATE INDEX ix_approval_satisfactions_decision_id
     ON app.approval_satisfactions (decision_id);
 GO
 
+IF OBJECT_ID(N'app.outbox_events', N'U') IS NULL
+BEGIN
 CREATE TABLE app.outbox_events (
     event_id nvarchar(128) NOT NULL,
     decision_id nvarchar(128) NOT NULL,
@@ -167,12 +204,16 @@ CREATE TABLE app.outbox_events (
         REFERENCES app.decisions (decision_id),
     CONSTRAINT ck_outbox_events_payload_json CHECK (ISJSON(payload_json) = 1)
 );
+END;
 GO
 
-CREATE INDEX ix_outbox_claim_ready
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.outbox_events') AND name = N'ix_outbox_claim_ready')
+    CREATE INDEX ix_outbox_claim_ready
     ON app.outbox_events (claim_status, available_at);
 GO
 
+IF OBJECT_ID(N'app.execution_actions', N'U') IS NULL
+BEGIN
 CREATE TABLE app.execution_actions (
     action_id nvarchar(128) NOT NULL,
     case_id nvarchar(128) NOT NULL,
@@ -188,12 +229,16 @@ CREATE TABLE app.execution_actions (
         REFERENCES app.decisions (decision_id),
     CONSTRAINT ck_execution_actions_payload_json CHECK (ISJSON(payload_json) = 1)
 );
+END;
 GO
 
-CREATE INDEX ix_execution_actions_decision_id
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.execution_actions') AND name = N'ix_execution_actions_decision_id')
+    CREATE INDEX ix_execution_actions_decision_id
     ON app.execution_actions (decision_id);
 GO
 
+IF OBJECT_ID(N'app.action_projection', N'U') IS NULL
+BEGIN
 CREATE TABLE app.action_projection (
     action_id nvarchar(128) NOT NULL,
     case_id nvarchar(128) NOT NULL,
@@ -210,12 +255,17 @@ CREATE TABLE app.action_projection (
         REFERENCES app.decisions (decision_id),
     CONSTRAINT ck_action_projection_payload_json CHECK (ISJSON(payload_json) = 1)
 );
+END;
 GO
 
-CREATE INDEX ix_action_projection_decision_id ON app.action_projection (decision_id);
-CREATE INDEX ix_action_projection_status ON app.action_projection (status);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.action_projection') AND name = N'ix_action_projection_decision_id')
+    CREATE INDEX ix_action_projection_decision_id ON app.action_projection (decision_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.action_projection') AND name = N'ix_action_projection_status')
+    CREATE INDEX ix_action_projection_status ON app.action_projection (status);
 GO
 
+IF OBJECT_ID(N'app.draft_artifacts', N'U') IS NULL
+BEGIN
 CREATE TABLE app.draft_artifacts (
     artifact_id nvarchar(128) NOT NULL,
     action_id nvarchar(128) NOT NULL,
@@ -230,8 +280,11 @@ CREATE TABLE app.draft_artifacts (
         REFERENCES app.decisions (decision_id),
     CONSTRAINT ck_draft_artifacts_payload_json CHECK (ISJSON(payload_json) = 1)
 );
+END;
 GO
 
+IF OBJECT_ID(N'app.execution_attempts', N'U') IS NULL
+BEGIN
 CREATE TABLE app.execution_attempts (
     attempt_id nvarchar(128) NOT NULL,
     action_id nvarchar(128) NOT NULL,
@@ -249,8 +302,11 @@ CREATE TABLE app.execution_attempts (
         REFERENCES app.decisions (decision_id),
     CONSTRAINT ck_execution_attempts_payload_json CHECK (ISJSON(payload_json) = 1)
 );
+END;
 GO
 
+IF OBJECT_ID(N'app.execution_events', N'U') IS NULL
+BEGIN
 CREATE TABLE app.execution_events (
     execution_event_id nvarchar(128) NOT NULL,
     action_id nvarchar(128) NOT NULL,
@@ -265,8 +321,11 @@ CREATE TABLE app.execution_events (
         REFERENCES app.decisions (decision_id),
     CONSTRAINT ck_execution_events_payload_json CHECK (ISJSON(payload_json) = 1)
 );
+END;
 GO
 
+IF OBJECT_ID(N'app.playbacks', N'U') IS NULL
+BEGIN
 CREATE TABLE app.playbacks (
     playback_id nvarchar(128) NOT NULL,
     case_id nvarchar(128) NOT NULL,
@@ -283,8 +342,11 @@ CREATE TABLE app.playbacks (
         REFERENCES app.decisions (decision_id),
     CONSTRAINT ck_playbacks_payload_json CHECK (ISJSON(payload_json) = 1)
 );
+END;
 GO
 
+IF OBJECT_ID(N'app.outcome_observations', N'U') IS NULL
+BEGIN
 CREATE TABLE app.outcome_observations (
     observation_id nvarchar(128) NOT NULL,
     case_id nvarchar(128) NOT NULL,
@@ -317,16 +379,22 @@ CREATE TABLE app.outcome_observations (
     ),
     CONSTRAINT ck_outcome_observations_payload_json CHECK (ISJSON(payload_json) = 1)
 );
+END;
 GO
 
-CREATE INDEX ix_outcome_observations_decision_id
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.outcome_observations') AND name = N'ix_outcome_observations_decision_id')
+    CREATE INDEX ix_outcome_observations_decision_id
     ON app.outcome_observations (decision_id);
-CREATE INDEX ix_outcome_observations_action_id
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.outcome_observations') AND name = N'ix_outcome_observations_action_id')
+    CREATE INDEX ix_outcome_observations_action_id
     ON app.outcome_observations (action_id);
-CREATE INDEX ix_outcome_observations_metric
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.outcome_observations') AND name = N'ix_outcome_observations_metric')
+    CREATE INDEX ix_outcome_observations_metric
     ON app.outcome_observations (metric);
 GO
 
+IF OBJECT_ID(N'app.case_projection', N'U') IS NULL
+BEGIN
 CREATE TABLE app.case_projection (
     case_id nvarchar(128) NOT NULL,
     purpose nvarchar(32) NOT NULL,
@@ -348,16 +416,30 @@ CREATE TABLE app.case_projection (
         REFERENCES app.decisions (decision_id),
     CONSTRAINT ck_case_projection_payload_json CHECK (ISJSON(payload_json) = 1)
 );
+END;
 GO
 
-CREATE INDEX ix_case_projection_purpose_status
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.case_projection') AND name = N'ix_case_projection_purpose_status')
+    CREATE INDEX ix_case_projection_purpose_status
     ON app.case_projection (purpose, status);
-CREATE INDEX ix_case_projection_current_analysis_id
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.case_projection') AND name = N'ix_case_projection_current_analysis_id')
+    CREATE INDEX ix_case_projection_current_analysis_id
     ON app.case_projection (current_analysis_id);
-CREATE INDEX ix_case_projection_current_decision_id
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.case_projection') AND name = N'ix_case_projection_current_decision_id')
+    CREATE INDEX ix_case_projection_current_decision_id
     ON app.case_projection (current_decision_id);
 GO
 
-INSERT INTO app.schema_version (component, schema_version)
-VALUES (N'operational', 11);
+MERGE app.schema_version WITH (HOLDLOCK) AS target
+USING (
+    SELECT N'operational' AS component, 11 AS schema_version
+) AS source
+ON target.component = source.component
+WHEN MATCHED AND target.schema_version < source.schema_version THEN
+    UPDATE SET
+        schema_version = source.schema_version,
+        applied_at = SYSDATETIMEOFFSET()
+WHEN NOT MATCHED THEN
+    INSERT (component, schema_version)
+    VALUES (source.component, source.schema_version);
 GO

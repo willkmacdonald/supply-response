@@ -109,8 +109,12 @@ GO
 UPDATE app.schema_version
 SET schema_version = 12,
     applied_at = SYSDATETIMEOFFSET()
-WHERE component = N'operational';
+WHERE component = N'operational'
+  AND schema_version < 12;
 
-IF @@ROWCOUNT <> 1
+IF NOT EXISTS (
+    SELECT 1 FROM app.schema_version
+    WHERE component = N'operational' AND schema_version >= 12
+)
     THROW 51000, 'Operational schema version row is missing.', 1;
 GO
