@@ -45,10 +45,33 @@ def _references(value: object) -> list[str]:
     return []
 
 
+def _validate_schema_url(url: str) -> None:
+    try:
+        parsed = urlparse(url)
+        port = parsed.port
+    except ValueError as error:
+        raise ValueError(f"invalid Microsoft HTTPS schema URL: {url}") from error
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "developer.microsoft.com"
+        or port not in (None, 443)
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError(f"invalid Microsoft HTTPS schema URL: {url}")
+
+
 def _fetch(url: str) -> dict[str, Any]:
-    if urlparse(url).hostname != "developer.microsoft.com":
-        raise ValueError(f"refusing non-Microsoft schema URL: {url}")
+    _validate_schema_url(url)
     with urlopen(url, timeout=30) as response:  # noqa: S310 - host is allowlisted above
+        final_url = response.geturl()
+        _validate_schema_url(final_url)
+        if final_url != url:
+            raise ValueError(
+                f"Microsoft schema final URL does not match request: {final_url}"
+            )
         value = json.loads(response.read())
     if not isinstance(value, dict):
         raise TypeError(f"schema root must be an object: {url}")
@@ -67,6 +90,7 @@ def main() -> None:
         for reference in _references(schema):
             referenced_url = urldefrag(urljoin(url, reference)).url
             if referenced_url and referenced_url not in schemas:
+                _validate_schema_url(referenced_url)
                 queue.append(referenced_url)
 
     OUTPUT.mkdir(parents=True, exist_ok=True)

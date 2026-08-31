@@ -127,6 +127,7 @@ UNION(
       ActionOutcomes[Observed Variance],
       ActionOutcomes[decision_id] = "{decision["decision_id"]}",
       ActionOutcomes[record_type] = "observation",
+      ActionOutcomes[observation_kind] = "simulated",
       ActionOutcomes[metric] = "response_cost"
     )
   ),
@@ -136,6 +137,7 @@ UNION(
       ActionOutcomes[Observed Variance],
       ActionOutcomes[decision_id] = "{decision["decision_id"]}",
       ActionOutcomes[record_type] = "observation",
+      ActionOutcomes[observation_kind] = "simulated",
       ActionOutcomes[metric] = "remaining_alpha_recovery_date"
     )
   )

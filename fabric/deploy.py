@@ -12,11 +12,24 @@ import subprocess
 import sys
 import tempfile
 from typing import Any, NoReturn
+from urllib.parse import urldefrag, urljoin, urlparse
 from uuid import UUID
 
 
 POWER_BI = Path(__file__).resolve().parent / "power-bi"
 SCHEMA_CATALOG = Path(__file__).resolve().parent / "schemas" / "microsoft"
+MICROSOFT_SCHEMA_SOURCE = "https://developer.microsoft.com/json-schemas/fabric/"
+MICROSOFT_SCHEMA_ROOTS = (
+    "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+    "https://developer.microsoft.com/json-schemas/fabric/pbip/pbipProperties/1.0.0/schema.json",
+    "https://developer.microsoft.com/json-schemas/fabric/item/semanticModel/definitionProperties/1.0.0/schema.json",
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/definitionProperties/2.0.0/schema.json",
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/versionMetadata/1.0.0/schema.json",
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/report/1.0.0/schema.json",
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/pagesMetadata/1.1.0/schema.json",
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.0.0/schema.json",
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+)
 TMDL_VALIDATOR = (
     Path(__file__).resolve().parents[1]
     / "tests"
@@ -65,6 +78,132 @@ EXPECTED_QUERY_REFS = {
         "ActionOutcomes.Observed Variance",
         "ActionOutcomes.Projection Refresh Time",
         "ActionOutcomes.Scenario Effective Time",
+    },
+}
+EXPECTED_VISUALS = {
+    "command-center": {
+        "active-cases": (
+            "card",
+            {"Data": ("CaseCommandCenter.case_id",)},
+            (("FilterActiveCases", "CaseCommandCenter", "status", "not-in", "closed"),),
+        ),
+        "current-decision": (
+            "multiRowCard",
+            {
+                "Values": (
+                    "CaseCommandCenter.Current Decision ID",
+                    "CaseCommandCenter.status",
+                )
+            },
+            (
+                (
+                    "FilterCurrentDecisionLatestCase",
+                    "CaseCommandCenter",
+                    "case_id",
+                    "equals-measure",
+                    "Latest Showcase Case",
+                ),
+            ),
+        ),
+        "otif-loss": ("card", {"Data": ("CaseCommandCenter.OTIF Loss %",)}, ()),
+        "revenue-at-risk": (
+            "card",
+            {"Data": ("CaseCommandCenter.Revenue At Risk",)},
+            (),
+        ),
+        "scenario-effective-time": (
+            "card",
+            {"Data": ("CaseCommandCenter.Scenario Effective Time",)},
+            (),
+        ),
+        "showcase-cases": (
+            "tableEx",
+            {
+                "Values": (
+                    "CaseCommandCenter.case_id",
+                    "CaseCommandCenter.purpose",
+                    "CaseCommandCenter.Latest Showcase Case",
+                    "CaseCommandCenter.status",
+                )
+            },
+            (
+                (
+                    "FilterShowcasePurpose",
+                    "CaseCommandCenter",
+                    "purpose",
+                    "in",
+                    "showcase",
+                ),
+                (
+                    "FilterLatestShowcaseCase",
+                    "CaseCommandCenter",
+                    "case_id",
+                    "equals-measure",
+                    "Latest Showcase Case",
+                ),
+            ),
+        ),
+    },
+    "actions-outcomes": {
+        "action-status": (
+            "tableEx",
+            {
+                "Values": (
+                    "ActionOutcomes.action_kind",
+                    "ActionOutcomes.action_status",
+                )
+            },
+            (
+                (
+                    "FilterActionStatusRecordType",
+                    "ActionOutcomes",
+                    "record_type",
+                    "in",
+                    "action",
+                ),
+            ),
+        ),
+        "decision-id": ("card", {"Data": ("ActionOutcomes.decision_id",)}, ()),
+        "observation-kind": (
+            "card",
+            {"Data": ("ActionOutcomes.observation_kind",)},
+            (
+                (
+                    "FilterObservationKindRecordType",
+                    "ActionOutcomes",
+                    "record_type",
+                    "in",
+                    "observation",
+                ),
+            ),
+        ),
+        "predicted-observed-variance": (
+            "clusteredColumnChart",
+            {
+                "Category": ("ActionOutcomes.metric",),
+                "Series": ("ActionOutcomes.observation_kind",),
+                "Y": ("ActionOutcomes.Observed Variance",),
+            },
+            (
+                (
+                    "FilterPredictedObservedVarianceRecordType",
+                    "ActionOutcomes",
+                    "record_type",
+                    "in",
+                    "observation",
+                ),
+            ),
+        ),
+        "projection-refresh": (
+            "card",
+            {"Data": ("ActionOutcomes.Projection Refresh Time",)},
+            (),
+        ),
+        "scenario-effective-time": (
+            "card",
+            {"Data": ("ActionOutcomes.Scenario Effective Time",)},
+            (),
+        ),
     },
 }
 
@@ -125,7 +264,38 @@ def _query_refs(value: object) -> list[str]:
     return []
 
 
-def _validate_offline_json_schemas(repository: Path) -> None:
+def _schema_references(value: object) -> list[str]:
+    if isinstance(value, dict):
+        result = [value["$ref"]] if isinstance(value.get("$ref"), str) else []
+        for child in value.values():
+            result.extend(_schema_references(child))
+        return result
+    if isinstance(value, list):
+        return [match for child in value for match in _schema_references(child)]
+    return []
+
+
+def _validate_microsoft_schema_url(url: str) -> None:
+    try:
+        parsed = urlparse(url)
+        port = parsed.port
+    except ValueError as error:
+        raise PreflightError(f"invalid Microsoft schema origin: {url}") from error
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "developer.microsoft.com"
+        or port not in (None, 443)
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise PreflightError(f"invalid Microsoft schema origin: {url}")
+
+
+def _validate_offline_json_schemas(
+    repository: Path, *, schema_catalog: Path = SCHEMA_CATALOG
+) -> None:
     try:
         from jsonschema import Draft7Validator
         from referencing import Registry, Resource
@@ -135,8 +305,17 @@ def _validate_offline_json_schemas(repository: Path) -> None:
             "offline schema validation requires the fabric-deploy dependency group"
         ) from error
 
-    manifest_path = SCHEMA_CATALOG / "manifest.json"
+    manifest_path = schema_catalog / "manifest.json"
     manifest = _load_json(manifest_path)
+    if manifest.get("source") != MICROSOFT_SCHEMA_SOURCE:
+        raise PreflightError("Microsoft schema manifest source is not approved")
+    roots = manifest.get("roots")
+    if not isinstance(roots, list) or tuple(roots) != MICROSOFT_SCHEMA_ROOTS:
+        raise PreflightError("Microsoft schema manifest roots do not match approval")
+    _validate_microsoft_schema_url(MICROSOFT_SCHEMA_SOURCE)
+    for root in roots:
+        _validate_microsoft_schema_url(root)
+
     entries = manifest.get("schemas")
     if not isinstance(entries, dict) or not entries:
         raise PreflightError("Microsoft schema manifest is empty or invalid")
@@ -144,9 +323,11 @@ def _validate_offline_json_schemas(repository: Path) -> None:
     registry = Registry()
     schemas: dict[str, dict[str, Any]] = {}
     expected_files: set[str] = set()
+    expected_digests: set[str] = set()
     for url, entry in entries.items():
         if not isinstance(url, str) or not isinstance(entry, dict):
             raise PreflightError("Microsoft schema manifest entry is invalid")
+        _validate_microsoft_schema_url(url)
         filename = entry.get("file")
         expected_digest = entry.get("sha256")
         if not isinstance(filename, str) or not isinstance(expected_digest, str):
@@ -155,27 +336,73 @@ def _validate_offline_json_schemas(repository: Path) -> None:
             )
         if Path(filename).name != filename:
             raise PreflightError(f"Microsoft schema manifest path is invalid: {url}")
+        if filename in expected_files:
+            raise PreflightError(
+                f"Microsoft schema manifest contains a duplicate file: {filename}"
+            )
+        if expected_digest in expected_digests:
+            raise PreflightError(
+                f"Microsoft schema manifest contains a duplicate hash: {expected_digest}"
+            )
         expected_files.add(filename)
-        schema_path = SCHEMA_CATALOG / filename
+        expected_digests.add(expected_digest)
+        schema_path = schema_catalog / filename
         try:
             content = schema_path.read_bytes()
         except OSError as error:
             raise PreflightError(
                 f"vendored Microsoft schema is missing: {url}"
             ) from error
-        if hashlib.sha256(content).hexdigest() != expected_digest:
+        actual_digest = hashlib.sha256(content).hexdigest()
+        if actual_digest != expected_digest:
             raise PreflightError(f"vendored Microsoft schema integrity failed: {url}")
+        if filename != f"{actual_digest[:20]}.json":
+            raise PreflightError(
+                f"Microsoft schema manifest file is not content-addressed: {url}"
+            )
         schema = _load_json(schema_path)
         schemas[url] = schema
         resource = Resource.from_contents(schema, default_specification=DRAFT7)
         registry = registry.with_resource(url, resource)
         schema_id = schema.get("$id")
         if isinstance(schema_id, str):
+            _validate_microsoft_schema_url(schema_id)
             registry = registry.with_resource(schema_id, resource)
+
+    reachable: set[str] = set()
+    pending: list[str] = list(reversed(MICROSOFT_SCHEMA_ROOTS))
+    while pending:
+        url = pending.pop()
+        if url in reachable:
+            continue
+        schema = schemas.get(url)
+        if schema is None:
+            raise PreflightError(
+                f"Microsoft schema transitive reference is missing: {url}"
+            )
+        reachable.add(url)
+        for reference in _schema_references(schema):
+            referenced_url = urldefrag(urljoin(url, reference)).url
+            if not referenced_url or referenced_url == url:
+                continue
+            _validate_microsoft_schema_url(referenced_url)
+            if referenced_url not in schemas:
+                raise PreflightError(
+                    "Microsoft schema transitive reference is missing: "
+                    + referenced_url
+                )
+            if referenced_url not in reachable:
+                pending.append(referenced_url)
+    if set(schemas) != reachable:
+        unused = sorted(set(schemas) - reachable)
+        raise PreflightError(
+            "Microsoft schema manifest does not equal the reachable reference closure: "
+            + ", ".join(unused)
+        )
 
     actual_files = {
         path.name
-        for path in SCHEMA_CATALOG.glob("*.json")
+        for path in schema_catalog.glob("*.json")
         if path.name != "manifest.json"
     }
     if actual_files != expected_files:
@@ -259,6 +486,138 @@ def _validate_item_references(repository: Path) -> None:
             raise PreflightError(f"invalid stable .platform metadata: {directory}")
 
 
+def _visual_filter_signatures(value: dict[str, Any]) -> tuple[tuple[str, ...], ...]:
+    try:
+        filters = value.get("filterConfig", {}).get("filters", [])
+        if not isinstance(filters, list):
+            raise TypeError
+        signatures: list[tuple[str, ...]] = []
+        for item in filters:
+            if (
+                not isinstance(item, dict)
+                or item.get("isHiddenInViewMode") is not True
+                or item.get("isLockedInViewMode") is not True
+            ):
+                raise TypeError
+            name = item["name"]
+            field = item["field"]["Column"]
+            entity = field["Expression"]["SourceRef"]["Entity"]
+            property_name = field["Property"]
+            definition = item["filter"]
+            sources = definition["From"]
+            conditions = definition["Where"]
+            if definition["Version"] != 2 or len(sources) != 1 or len(conditions) != 1:
+                raise TypeError
+            source = sources[0]
+            if source["Entity"] != entity or source["Type"] != 0:
+                raise TypeError
+            alias = source["Name"]
+            condition = conditions[0]["Condition"]
+            operator: str
+            if "In" in condition:
+                operator = "in"
+                selection = condition["In"]
+            elif "Not" in condition:
+                operator = "not-in"
+                selection = condition["Not"]["Expression"]["In"]
+            elif "Comparison" in condition:
+                operator = "equals-measure"
+                comparison = condition["Comparison"]
+                left = comparison["Left"]["Column"]
+                right = comparison["Right"]["Measure"]
+                if (
+                    comparison["ComparisonKind"] != 0
+                    or left["Expression"]["SourceRef"]["Source"] != alias
+                    or left["Property"] != property_name
+                    or right["Expression"]["SourceRef"]["Source"] != alias
+                ):
+                    raise TypeError
+                signatures.append(
+                    (name, entity, property_name, operator, right["Property"])
+                )
+                continue
+            else:
+                raise TypeError
+            expressions = selection["Expressions"]
+            values = selection["Values"]
+            expression = expressions[0]["Column"]
+            literal = values[0][0]["Literal"]["Value"]
+            if (
+                len(expressions) != 1
+                or len(values) != 1
+                or len(values[0]) != 1
+                or expression["Expression"]["SourceRef"]["Source"] != alias
+                or expression["Property"] != property_name
+                or not isinstance(literal, str)
+                or len(literal) < 2
+                or literal[0] != "'"
+                or literal[-1] != "'"
+            ):
+                raise TypeError
+            signatures.append((name, entity, property_name, operator, literal[1:-1]))
+        return tuple(signatures)
+    except (KeyError, IndexError, TypeError) as error:
+        raise PreflightError("visual filter contract is malformed") from error
+
+
+def _validate_visual_inventory(report_definition: Path) -> None:
+    for page_name, expected_visuals in EXPECTED_VISUALS.items():
+        visuals_directory = report_definition / "pages" / page_name / "visuals"
+        actual_visuals = {
+            path.name for path in visuals_directory.iterdir() if path.is_dir()
+        }
+        if actual_visuals != set(expected_visuals):
+            raise PreflightError(
+                f"{page_name} visual inventory does not match the approved contract"
+            )
+        if any(
+            not (visuals_directory / visual_id / "visual.json").is_file()
+            for visual_id in expected_visuals
+        ):
+            raise PreflightError(
+                f"{page_name} visual inventory is missing a visual definition"
+            )
+        for visual_id, (
+            visual_type,
+            expected_roles,
+            expected_filters,
+        ) in expected_visuals.items():
+            container = _load_json(visuals_directory / visual_id / "visual.json")
+            visual = container.get("visual")
+            if not isinstance(visual, dict) or container.get("name") != visual_id:
+                raise PreflightError(
+                    f"{page_name}/{visual_id} visual contract is invalid"
+                )
+            query = visual.get("query")
+            query_state = query.get("queryState") if isinstance(query, dict) else None
+            if not isinstance(query_state, dict):
+                raise PreflightError(
+                    f"{page_name}/{visual_id} visual contract is invalid"
+                )
+            try:
+                actual_roles = {
+                    role: tuple(
+                        projection["queryRef"] for projection in state["projections"]
+                    )
+                    for role, state in query_state.items()
+                }
+            except (KeyError, TypeError) as error:
+                raise PreflightError(
+                    f"{page_name}/{visual_id} visual contract is invalid"
+                ) from error
+            if (
+                visual.get("visualType") != visual_type
+                or actual_roles != expected_roles
+            ):
+                raise PreflightError(
+                    f"{page_name}/{visual_id} visual contract is invalid"
+                )
+            if _visual_filter_signatures(container) != expected_filters:
+                raise PreflightError(
+                    f"{page_name}/{visual_id} visual filter contract is invalid"
+                )
+
+
 def _discover_publish_items(repository: Path) -> tuple[tuple[str, str], ...]:
     try:
         workspace_module = importlib.import_module("fabric_cicd.fabric_workspace")
@@ -286,9 +645,16 @@ def _discover_publish_items(repository: Path) -> tuple[tuple[str, str], ...]:
         ) from error
 
 
-def _validate_tmdl(semantic_definition: Path) -> None:
+def _validate_tmdl(
+    semantic_definition: Path, *, validator_project: Path = TMDL_VALIDATOR
+) -> None:
     if shutil.which("dotnet") is None:
-        raise PreflightError("dotnet is required for offline TOM/TMDL validation")
+        raise PreflightError("dotnet is required for locked TOM/TMDL validation")
+    lock_file = validator_project.parent / "packages.lock.json"
+    if not validator_project.is_file() or not lock_file.is_file():
+        raise PreflightError(
+            "locked TOM/TMDL validator sources or packages.lock.json are missing"
+        )
     with tempfile.TemporaryDirectory(
         prefix="supply-response-dotnet-preflight-"
     ) as dotnet_home:
@@ -296,28 +662,69 @@ def _validate_tmdl(semantic_definition: Path) -> None:
         environment["DOTNET_CLI_HOME"] = dotnet_home
         environment["DOTNET_NOLOGO"] = "1"
         environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1"
-        result = subprocess.run(
-            [
-                "dotnet",
+        environment["NUGET_XMLDOC_MODE"] = "skip"
+        commands = (
+            (
+                "locked restore",
+                [
+                    "dotnet",
+                    "restore",
+                    str(validator_project),
+                    "--locked-mode",
+                    "--source",
+                    "https://api.nuget.org/v3/index.json",
+                    "--ignore-failed-sources",
+                ],
+                120,
+            ),
+            (
+                "build",
+                [
+                    "dotnet",
+                    "build",
+                    str(validator_project),
+                    "--configuration",
+                    "Release",
+                    "--no-restore",
+                ],
+                60,
+            ),
+            (
                 "run",
-                "--no-restore",
-                "--project",
-                str(TMDL_VALIDATOR),
-                "--",
-                str(semantic_definition),
-            ],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            env=environment,
+                [
+                    "dotnet",
+                    "run",
+                    "--project",
+                    str(validator_project),
+                    "--configuration",
+                    "Release",
+                    "--no-build",
+                    "--",
+                    str(semantic_definition),
+                ],
+                60,
+            ),
         )
-    if result.returncode != 0:
-        detail = (result.stdout + result.stderr).strip()
-        raise PreflightError(
-            "TOM/TMDL validation failed; run dotnet restore for the validator first: "
-            + detail
-        )
+        for phase, command, timeout in commands:
+            try:
+                result = subprocess.run(
+                    command,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    env=environment,
+                )
+            except (OSError, subprocess.TimeoutExpired) as error:
+                raise PreflightError(
+                    f"TOM/TMDL validator {phase} could not run: {error}"
+                ) from error
+            if result.returncode != 0:
+                detail = (result.stdout + result.stderr).strip()
+                raise PreflightError(
+                    f"TOM/TMDL validator {phase} failed; locked public NuGet "
+                    f"restore or cache is required: {detail}"
+                )
 
 
 def _validate_project() -> None:
@@ -357,6 +764,7 @@ def _validate_project() -> None:
     }
     if actual_page_directories != set(EXPECTED_PAGE_ORDER):
         raise PreflightError("report must not contain unapproved page directories")
+    _validate_visual_inventory(report_definition)
 
     for page_name, expected_refs in EXPECTED_QUERY_REFS.items():
         page = _load_json(report_definition / "pages" / page_name / "page.json")
@@ -437,6 +845,7 @@ def _staged_repository(values: dict[str, str], target: Path) -> Path:
 def _validate_staged_repository(repository: Path, values: dict[str, str]) -> None:
     _validate_offline_json_schemas(repository)
     _validate_item_references(repository)
+    _validate_visual_inventory(repository / "SupplyResponse.Report" / "definition")
     discovered = _discover_publish_items(repository)
     if discovered != EXPECTED_PUBLISH_ITEMS:
         raise PreflightError(
@@ -509,7 +918,10 @@ def main() -> int:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="validate configuration and artifacts without authentication or network calls",
+        help=(
+            "validate configuration and artifacts without Azure/Fabric authentication "
+            "or workspace changes; locked TOM restore may use public NuGet"
+        ),
     )
     arguments = parser.parse_args()
     try:
@@ -520,7 +932,10 @@ def main() -> int:
         if arguments.dry_run:
             print("Task 13 Power BI deployment preflight passed.")
             print(
-                "Dry run only: no authentication, network calls, or workspace changes were made."
+                "Dry run only: no Azure/Fabric authentication or workspace changes were made."
+            )
+            print(
+                "TOM validation uses a locked restore and may access public NuGet when packages are not cached."
             )
             return 0
         _publish(values)

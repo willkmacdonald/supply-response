@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -21,10 +22,150 @@ PLATFORM_SCHEMA = (
     "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/"
     "platformProperties/2.0.0/schema.json"
 )
+SCHEMA_CATALOG = ROOT / "fabric" / "schemas" / "microsoft"
+MICROSOFT_SCHEMA_SOURCE = "https://developer.microsoft.com/json-schemas/fabric/"
+MICROSOFT_SCHEMA_ROOTS = (
+    PLATFORM_SCHEMA,
+    "https://developer.microsoft.com/json-schemas/fabric/pbip/pbipProperties/1.0.0/schema.json",
+    "https://developer.microsoft.com/json-schemas/fabric/item/semanticModel/definitionProperties/1.0.0/schema.json",
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/definitionProperties/2.0.0/schema.json",
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/versionMetadata/1.0.0/schema.json",
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/report/1.0.0/schema.json",
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/pagesMetadata/1.1.0/schema.json",
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.0.0/schema.json",
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+)
 
 PAGES = {
     "command-center": "Command Center",
     "actions-outcomes": "Actions and Outcomes",
+}
+
+VISUAL_CONTRACTS = {
+    "command-center": {
+        "active-cases": (
+            "card",
+            {"Data": ("CaseCommandCenter.case_id",)},
+            (("FilterActiveCases", "CaseCommandCenter", "status", "not-in", "closed"),),
+        ),
+        "current-decision": (
+            "multiRowCard",
+            {
+                "Values": (
+                    "CaseCommandCenter.Current Decision ID",
+                    "CaseCommandCenter.status",
+                )
+            },
+            (
+                (
+                    "FilterCurrentDecisionLatestCase",
+                    "CaseCommandCenter",
+                    "case_id",
+                    "equals-measure",
+                    "Latest Showcase Case",
+                ),
+            ),
+        ),
+        "otif-loss": ("card", {"Data": ("CaseCommandCenter.OTIF Loss %",)}, ()),
+        "revenue-at-risk": (
+            "card",
+            {"Data": ("CaseCommandCenter.Revenue At Risk",)},
+            (),
+        ),
+        "scenario-effective-time": (
+            "card",
+            {"Data": ("CaseCommandCenter.Scenario Effective Time",)},
+            (),
+        ),
+        "showcase-cases": (
+            "tableEx",
+            {
+                "Values": (
+                    "CaseCommandCenter.case_id",
+                    "CaseCommandCenter.purpose",
+                    "CaseCommandCenter.Latest Showcase Case",
+                    "CaseCommandCenter.status",
+                )
+            },
+            (
+                (
+                    "FilterShowcasePurpose",
+                    "CaseCommandCenter",
+                    "purpose",
+                    "in",
+                    "showcase",
+                ),
+                (
+                    "FilterLatestShowcaseCase",
+                    "CaseCommandCenter",
+                    "case_id",
+                    "equals-measure",
+                    "Latest Showcase Case",
+                ),
+            ),
+        ),
+    },
+    "actions-outcomes": {
+        "action-status": (
+            "tableEx",
+            {
+                "Values": (
+                    "ActionOutcomes.action_kind",
+                    "ActionOutcomes.action_status",
+                )
+            },
+            (
+                (
+                    "FilterActionStatusRecordType",
+                    "ActionOutcomes",
+                    "record_type",
+                    "in",
+                    "action",
+                ),
+            ),
+        ),
+        "decision-id": ("card", {"Data": ("ActionOutcomes.decision_id",)}, ()),
+        "observation-kind": (
+            "card",
+            {"Data": ("ActionOutcomes.observation_kind",)},
+            (
+                (
+                    "FilterObservationKindRecordType",
+                    "ActionOutcomes",
+                    "record_type",
+                    "in",
+                    "observation",
+                ),
+            ),
+        ),
+        "predicted-observed-variance": (
+            "clusteredColumnChart",
+            {
+                "Category": ("ActionOutcomes.metric",),
+                "Series": ("ActionOutcomes.observation_kind",),
+                "Y": ("ActionOutcomes.Observed Variance",),
+            },
+            (
+                (
+                    "FilterPredictedObservedVarianceRecordType",
+                    "ActionOutcomes",
+                    "record_type",
+                    "in",
+                    "observation",
+                ),
+            ),
+        ),
+        "projection-refresh": (
+            "card",
+            {"Data": ("ActionOutcomes.Projection Refresh Time",)},
+            (),
+        ),
+        "scenario-effective-time": (
+            "card",
+            {"Data": ("ActionOutcomes.Scenario Effective Time",)},
+            (),
+        ),
+    },
 }
 
 QUERY_REF_ALLOWLIST = {
@@ -179,6 +320,99 @@ def test_all_project_json_validates_offline_against_vendored_microsoft_schemas()
     deploy._validate_offline_json_schemas(POWER_BI)
 
 
+def _copy_schema_catalog(tmp_path: Path) -> Path:
+    catalog = tmp_path / "microsoft"
+    shutil.copytree(SCHEMA_CATALOG, catalog)
+    return catalog
+
+
+def _mutate_manifest(catalog: Path, mutation) -> None:
+    manifest_path = catalog / "manifest.json"
+    manifest = _load(manifest_path)
+    mutation(manifest)
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+
+def test_schema_manifest_has_exact_approved_source_roots_and_reference_closure() -> (
+    None
+):
+    from fabric import deploy
+
+    manifest = _load(SCHEMA_CATALOG / "manifest.json")
+    assert deploy.MICROSOFT_SCHEMA_SOURCE == MICROSOFT_SCHEMA_SOURCE
+    assert deploy.MICROSOFT_SCHEMA_ROOTS == MICROSOFT_SCHEMA_ROOTS
+    assert manifest["source"] == MICROSOFT_SCHEMA_SOURCE
+    assert tuple(manifest["roots"]) == MICROSOFT_SCHEMA_ROOTS
+    deploy._validate_offline_json_schemas(POWER_BI)
+
+
+@pytest.mark.parametrize(
+    ("case", "message"),
+    (
+        ("off-host", "origin"),
+        ("unused", "closure"),
+        ("missing-transitive", "transitive|missing"),
+        ("extra-root", "roots"),
+        ("wrong-source", "source"),
+        ("bad-hash", "integrity"),
+        ("path-traversal", "path"),
+        ("duplicate-file", "duplicate"),
+        ("duplicate-hash", "duplicate"),
+    ),
+)
+def test_schema_manifest_rejects_untrusted_or_nonclosed_catalogs(
+    tmp_path: Path, case: str, message: str
+) -> None:
+    from fabric import deploy
+
+    catalog = _copy_schema_catalog(tmp_path)
+
+    def mutate(manifest: dict[str, Any]) -> None:
+        schemas = manifest["schemas"]
+        assert isinstance(schemas, dict)
+        if case == "off-host":
+            first = next(iter(schemas.values()))
+            schemas["https://example.com/foreign-schema.json"] = dict(first)
+        elif case == "unused":
+            content = b'{"$schema":"http://json-schema.org/draft-07/schema#","type":"object"}\n'
+            digest = hashlib.sha256(content).hexdigest()
+            filename = f"{digest[:20]}.json"
+            (catalog / filename).write_bytes(content)
+            schemas[
+                "https://developer.microsoft.com/json-schemas/fabric/unused/schema.json"
+            ] = {
+                "file": filename,
+                "sha256": digest,
+            }
+        elif case == "missing-transitive":
+            url = next(url for url in schemas if "filterConfiguration" in url)
+            filename = schemas.pop(url)["file"]
+            (catalog / filename).unlink()
+        elif case == "extra-root":
+            manifest["roots"].append(
+                "https://developer.microsoft.com/json-schemas/fabric/extra/schema.json"
+            )
+        elif case == "wrong-source":
+            manifest["source"] = "https://developer.microsoft.com/json-schemas/"
+        elif case == "bad-hash":
+            next(iter(schemas.values()))["sha256"] = "0" * 64
+        elif case == "path-traversal":
+            next(iter(schemas.values()))["file"] = "../manifest.json"
+        elif case == "duplicate-file":
+            first, second = list(schemas.values())[:2]
+            second["file"] = first["file"]
+            second["sha256"] = first["sha256"]
+        elif case == "duplicate-hash":
+            first, second = list(schemas.values())[:2]
+            second["sha256"] = first["sha256"]
+        else:  # pragma: no cover - parametrization is exhaustive
+            raise AssertionError(case)
+
+    _mutate_manifest(catalog, mutate)
+    with pytest.raises(deploy.PreflightError, match=message):
+        deploy._validate_offline_json_schemas(POWER_BI, schema_catalog=catalog)
+
+
 def test_project_json_files_declare_current_official_schemas() -> None:
     for relative_path, schema in JSON_SCHEMAS.items():
         assert _load(POWER_BI / relative_path)["$schema"] == schema
@@ -294,6 +528,129 @@ def test_visual_query_refs_exactly_match_each_page_allowlist() -> None:
             query_refs.extend(_query_refs(_load(visual_file)))
         assert set(query_refs) == expected
         assert all(query_ref in expected for query_ref in query_refs)
+
+
+def _copy_power_bi(tmp_path: Path, name: str) -> Path:
+    repository = tmp_path / name
+    shutil.copytree(POWER_BI, repository)
+    return repository
+
+
+def test_preflight_has_exact_visual_inventory_and_per_visual_contracts() -> None:
+    from fabric import deploy
+
+    assert deploy.EXPECTED_VISUALS == VISUAL_CONTRACTS
+    deploy._validate_visual_inventory(POWER_BI / "SupplyResponse.Report" / "definition")
+
+
+def test_visual_inventory_rejects_schema_valid_thirteenth_reused_queryref(
+    tmp_path: Path,
+) -> None:
+    from fabric import deploy
+
+    repository = _copy_power_bi(tmp_path, "extra")
+    source = (
+        repository
+        / "SupplyResponse.Report"
+        / "definition"
+        / "pages"
+        / "actions-outcomes"
+        / "visuals"
+        / "decision-id"
+        / "visual.json"
+    )
+    extra = source.parents[1] / "extra-decision-id" / "visual.json"
+    extra.parent.mkdir()
+    visual = _load(source)
+    visual["name"] = "extra-decision-id"
+    extra.write_text(json.dumps(visual), encoding="utf-8")
+    deploy._validate_offline_json_schemas(repository)
+
+    with pytest.raises(deploy.PreflightError, match="visual inventory"):
+        deploy._validate_visual_inventory(
+            repository / "SupplyResponse.Report" / "definition"
+        )
+
+
+def test_visual_inventory_rejects_swapped_or_missing_visuals(tmp_path: Path) -> None:
+    from fabric import deploy
+
+    repository = _copy_power_bi(tmp_path, "swapped")
+    visuals = (
+        repository
+        / "SupplyResponse.Report"
+        / "definition"
+        / "pages"
+        / "actions-outcomes"
+        / "visuals"
+    )
+    action_path = visuals / "action-status" / "visual.json"
+    decision_path = visuals / "decision-id" / "visual.json"
+    action = _load(action_path)
+    decision = _load(decision_path)
+    action["name"] = "decision-id"
+    decision["name"] = "action-status"
+    action_path.write_text(json.dumps(decision), encoding="utf-8")
+    decision_path.write_text(json.dumps(action), encoding="utf-8")
+    with pytest.raises(deploy.PreflightError, match="visual contract"):
+        deploy._validate_visual_inventory(
+            repository / "SupplyResponse.Report" / "definition"
+        )
+
+    repository = _copy_power_bi(tmp_path, "missing")
+    missing = (
+        repository
+        / "SupplyResponse.Report"
+        / "definition"
+        / "pages"
+        / "command-center"
+        / "visuals"
+        / "otif-loss"
+        / "visual.json"
+    )
+    missing.unlink()
+    with pytest.raises(deploy.PreflightError, match="visual inventory"):
+        deploy._validate_visual_inventory(
+            repository / "SupplyResponse.Report" / "definition"
+        )
+
+
+def test_visual_inventory_rejects_wrong_page_and_altered_locked_filter(
+    tmp_path: Path,
+) -> None:
+    from fabric import deploy
+
+    repository = _copy_power_bi(tmp_path, "wrong-page")
+    pages = repository / "SupplyResponse.Report" / "definition" / "pages"
+    source = pages / "command-center" / "visuals" / "otif-loss"
+    destination = pages / "actions-outcomes" / "visuals" / "otif-loss"
+    shutil.move(source, destination)
+    with pytest.raises(deploy.PreflightError, match="visual inventory"):
+        deploy._validate_visual_inventory(
+            repository / "SupplyResponse.Report" / "definition"
+        )
+
+    repository = _copy_power_bi(tmp_path, "altered-filter")
+    action = (
+        repository
+        / "SupplyResponse.Report"
+        / "definition"
+        / "pages"
+        / "actions-outcomes"
+        / "visuals"
+        / "action-status"
+        / "visual.json"
+    )
+    visual = _load(action)
+    values = visual["filterConfig"]["filters"][0]["filter"]["Where"][0]["Condition"][
+        "In"
+    ]["Values"]
+    values[0][0]["Literal"]["Value"] = "'observation'"
+    action.write_text(json.dumps(visual), encoding="utf-8")
+    with pytest.raises(deploy.PreflightError, match="visual filter"):
+        deploy._validate_visual_inventory(
+            repository / "SupplyResponse.Report" / "definition"
+        )
 
 
 def test_showcase_table_binds_latest_case_and_showcase_filters() -> None:
@@ -658,6 +1015,43 @@ def test_tmdl_deserializes_with_microsoft_tom_parser() -> None:
     assert "TMDL deserialized successfully" in result.stdout
 
 
+def test_tmdl_validator_has_committed_locked_restore_configuration() -> None:
+    validator = ROOT / "tests" / "fabric" / "tmdl-validator"
+    project = (validator / "TmdlValidator.csproj").read_text(encoding="utf-8")
+    lock = _load(validator / "packages.lock.json")
+    assert "<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>" in project
+    assert "<RestoreLockedMode>true</RestoreLockedMode>" in project
+    assert lock["version"] == 1
+    assert "net10.0" in lock["dependencies"]
+    analysis_services = lock["dependencies"]["net10.0"]["Microsoft.AnalysisServices"]
+    assert analysis_services["requested"] == "[19.114.8, 19.114.8]"
+    assert analysis_services["resolved"] == "19.114.8"
+    assert analysis_services["contentHash"]
+
+
+def test_tmdl_validation_restores_builds_and_runs_from_clean_tracked_copy(
+    tmp_path: Path,
+) -> None:
+    from fabric import deploy
+
+    source = ROOT / "tests" / "fabric" / "tmdl-validator"
+    validator = tmp_path / "tmdl-validator"
+    validator.mkdir()
+    tracked = ("TmdlValidator.csproj", "Program.cs", "packages.lock.json")
+    for filename in tracked:
+        shutil.copy2(source / filename, validator / filename)
+    assert {path.name for path in validator.iterdir()} == set(tracked)
+    assert not (validator / "bin").exists()
+    assert not (validator / "obj").exists()
+
+    deploy._validate_tmdl(
+        SEMANTIC_MODEL,
+        validator_project=validator / "TmdlValidator.csproj",
+    )
+    assert (validator / "obj" / "project.assets.json").is_file()
+    assert (validator / "bin" / "Release" / "net10.0").is_dir()
+
+
 def test_deploy_dry_run_is_deterministic_and_does_not_authenticate() -> None:
     environment = {
         "PATH": os.environ["PATH"],
@@ -677,7 +1071,8 @@ def test_deploy_dry_run_is_deterministic_and_does_not_authenticate() -> None:
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == [
         "Task 13 Power BI deployment preflight passed.",
-        "Dry run only: no authentication, network calls, or workspace changes were made.",
+        "Dry run only: no Azure/Fabric authentication or workspace changes were made.",
+        "TOM validation uses a locked restore and may access public NuGet when packages are not cached.",
     ]
 
 
@@ -816,6 +1211,8 @@ def test_live_contract_queries_required_measures_and_variance_contexts() -> None
         'ActionOutcomes[metric] = "remaining_alpha_recovery_date"',
     ):
         assert required in live_test
+    variance_source = live_test.split("variance_dax =", maxsplit=1)[1]
+    assert variance_source.count('ActionOutcomes[observation_kind] = "simulated"') == 2
 
 
 def test_power_bi_live_collection_fails_closed_on_partial_configuration() -> None:
