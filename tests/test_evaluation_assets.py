@@ -1,8 +1,12 @@
 import json
+from datetime import timedelta
 from pathlib import Path
 
+from data.domain import CasePurpose, RuntimeMode
 from data.domain.common import serialize_money
-from data.synthetic.rl001 import OperationalSnapshot
+from data.domain.decisions import CorpusScope
+from data.synthetic.rl001 import OperationalSnapshot, instantiate_rl001
+from services.analysis.service import AnalyzeCaseCommand, analyze_case
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,9 +34,12 @@ def test_evaluation_catalog_is_complete_and_linked_to_tests():
     required_keys = {"id", "name", "input", "expected", "test"}
     for case in cases:
         assert set(case) == required_keys
-        test_path, test_name = case["test"].split("::", maxsplit=1)
+        test_path, node_id = case["test"].split("::", maxsplit=1)
+        test_name = node_id.split("[", maxsplit=1)[0]
         source = (ROOT / test_path).read_text(encoding="utf-8")
         assert f"def {test_name}(" in source, case["id"]
+        if "[" in node_id:
+            assert node_id.endswith(f"[{case['id']}]")
 
 
 def _canonical_no_mitigation_result() -> dict[str, object]:
@@ -80,4 +87,42 @@ def _canonical_no_mitigation_result() -> dict[str, object]:
 
 def test_rl_001_matches_the_frozen_no_mitigation_baseline():
     expected = json.loads(EXPECTED_RL_001.read_text(encoding="utf-8"))
-    assert _canonical_no_mitigation_result() == expected
+    baseline = _canonical_no_mitigation_result()
+    assert {key: expected[key] for key in baseline} == baseline
+
+
+def test_rl_001_expected_result_freezes_real_options_and_ranking():
+    case, snapshot = instantiate_rl001(
+        case_id="RL-CASE-1",
+        purpose=CasePurpose.AUTOMATED_TEST,
+        runtime_mode=RuntimeMode.FALLBACK,
+    )
+    analysis = analyze_case(
+        AnalyzeCaseCommand(
+            analysis_id="RL-ANALYSIS-RL-001",
+            case=case,
+            corpus=CorpusScope.DEMO_CORPUS,
+            operational_snapshot=snapshot,
+            analysis_started_at=case.scenario_effective_time,
+            created_at=case.scenario_effective_time + timedelta(minutes=2),
+            calculation_version="rl001-options-v1",
+        )
+    )
+    expected = json.loads(EXPECTED_RL_001.read_text(encoding="utf-8"))
+    actual_options = {
+        option.option_id: {
+            "executable": option.executable,
+            "blocking_codes": list(option.blocking_codes),
+            "approval_burden": option.approval_burden,
+            "execution_risk": option.execution_risk,
+            "predicted": (
+                option.predicted.model_dump(mode="json")
+                if option.predicted is not None
+                else None
+            ),
+        }
+        for option in analysis.response_options
+    }
+
+    assert expected["response_options"] == actual_options
+    assert expected["ranking"] == analysis.ranking.model_dump(mode="json")

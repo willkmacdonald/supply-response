@@ -47,7 +47,7 @@ class ProjectionPoint(FrozenModel):
 
 
 class CalculationMetadata(FrozenModel):
-    scenario_id: str
+    analysis_id: str
     calculation_version: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     assumptions: tuple[str, ...] = ()
@@ -94,6 +94,31 @@ class ResponseOption(FrozenModel):
     approval_burden: int = 0
     execution_risk: int = 0
     requested_side_effects: tuple[ExternalSideEffect, ...] = ()
+
+
+class ComparatorValue(FrozenModel):
+    option_id: str
+    value: Decimal | str
+
+
+class RankingStage(FrozenModel):
+    comparator: str
+    threshold: Decimal
+    lower_is_better: bool
+    input_option_ids: tuple[str, ...]
+    values: tuple[ComparatorValue, ...]
+    retained_option_ids: tuple[str, ...]
+    eliminated_option_ids: tuple[str, ...]
+
+
+class RankingResult(FrozenModel):
+    policy_version: str
+    eligible_option_ids: tuple[str, ...]
+    infeasible_option_ids: tuple[str, ...]
+    excluded_baseline_ids: tuple[str, ...]
+    stages: tuple[RankingStage, ...]
+    recommended_option_id: str | None
+    no_feasible_mitigation: bool
 
 
 class AnalysisEvidenceMaterial(FrozenModel):
@@ -360,6 +385,7 @@ class AnalysisMaterial(FrozenModel):
     response_options: tuple[AnalysisResponseOptionMaterial, ...]
     standing_authorizations: tuple[AnalysisStandingAuthorizationMaterial, ...]
     approval_satisfactions: tuple[AnalysisApprovalMaterial, ...]
+    ranking: RankingResult
     calculation_version: str
     evidence_policy_version: str
     approval_policy_version: str
@@ -377,3 +403,4 @@ class AnalysisVersion(FrozenModel):
     evidence_validation: EvidenceValidation
     response_options: tuple[ResponseOption, ...]
     approval_satisfactions: tuple[ApprovalSatisfaction, ...]
+    ranking: RankingResult

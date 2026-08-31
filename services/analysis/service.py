@@ -15,6 +15,7 @@ from data.domain.analysis import (
     AnalysisVersion,
     ResponseOption,
 )
+from data.domain.common import FrozenModel
 from data.domain.cases import CaseInstance
 from data.domain.decisions import (
     ApprovalSatisfaction,
@@ -27,8 +28,12 @@ from data.domain.evidence import (
     ConflictResolution,
     EvidenceConflict,
     EvidenceItem,
+    EvidenceValidation,
+    UncertaintyState,
 )
 from data.synthetic.rl001 import OperationalSnapshot
+from services.analysis.options import evaluate_response_options
+from services.analysis.ranking import rank_options
 from services.policy.approvals import evaluate_approval_satisfaction
 from services.policy.evidence import (
     EVIDENCE_RETRIEVAL_WINDOW,
@@ -47,6 +52,23 @@ _OPERATIONAL_COLLECTION_KEYS = {
 }
 
 _T = TypeVar("_T")
+
+
+class AnalyzeCaseCommand(FrozenModel):
+    analysis_id: str
+    case: CaseInstance
+    corpus: CorpusScope
+    operational_snapshot: OperationalSnapshot
+    evidence_items: tuple[EvidenceItem, ...] = ()
+    standing_authorizations: tuple[StandingAuthorization, ...] = ()
+    analysis_started_at: datetime
+    created_at: datetime
+    calculation_version: str
+    conflicts: tuple[EvidenceConflict, ...] = ()
+    conflict_resolutions: tuple[ConflictResolution, ...] = ()
+    required_authority_scope: tuple[AuthorityScope, ...] = ()
+    evidence_policy_version: str = EVIDENCE_POLICY_VERSION
+    approval_policy_version: str = APPROVAL_POLICY_VERSION
 
 
 def _reject_duplicate_ids(
@@ -176,6 +198,7 @@ def create_analysis_version(
     canonical_authorizations = tuple(
         sorted(standing_authorizations, key=lambda item: item.authorization_id)
     )
+    ranking = rank_options(canonical_options)
 
     evidence_validation = validate_required_evidence(
         canonical_evidence,
@@ -259,6 +282,7 @@ def create_analysis_version(
                 ),
             )
         ),
+        ranking=ranking,
         calculation_version=calculation_version,
         evidence_policy_version=EVIDENCE_POLICY_VERSION,
         approval_policy_version=APPROVAL_POLICY_VERSION,
@@ -277,4 +301,77 @@ def create_analysis_version(
         evidence_validation=evidence_validation,
         response_options=canonical_options,
         approval_satisfactions=approval_satisfactions,
+        ranking=ranking,
+    )
+
+
+def _apply_evidence_feasibility(
+    options: tuple[ResponseOption, ...],
+    *,
+    evidence_validation: EvidenceValidation,
+) -> tuple[ResponseOption, ...]:
+    validation_by_id = {
+        validation.evidence_id: validation
+        for validation in evidence_validation.item_results
+    }
+    adjusted: list[ResponseOption] = []
+    for option in options:
+        evidence_codes = tuple(
+            code.value
+            for evidence_id in option.evidence_ids
+            if evidence_id in validation_by_id
+            for code in validation_by_id[evidence_id].blocking_codes
+        )
+        if any(
+            evidence_id in validation_by_id
+            and validation_by_id[evidence_id].uncertainty_state
+            == UncertaintyState.CONFLICTED
+            for evidence_id in option.evidence_ids
+        ):
+            evidence_codes += ("EVIDENCE_CONFLICT_UNRESOLVED",)
+        blocking_codes = tuple(dict.fromkeys((*option.blocking_codes, *evidence_codes)))
+        adjusted.append(
+            option.model_copy(
+                update={
+                    "executable": option.executable and not blocking_codes,
+                    "blocking_codes": blocking_codes,
+                }
+            )
+        )
+    return tuple(adjusted)
+
+
+def analyze_case(command: AnalyzeCaseCommand) -> AnalysisVersion:
+    """Run the real deterministic option, evidence, approval, and ranking pipeline."""
+    evidence_validation = validate_required_evidence(
+        command.evidence_items,
+        analysis_id=command.analysis_id,
+        runtime_mode=command.case.runtime_mode,
+        scenario_effective_time=command.case.scenario_effective_time,
+        analysis_started_at=command.analysis_started_at,
+        analysis_recorded_at=command.created_at,
+        required_authority_scope=command.required_authority_scope,
+        conflicts=command.conflicts,
+        conflict_resolutions=command.conflict_resolutions,
+    )
+    response_options = _apply_evidence_feasibility(
+        evaluate_response_options(command.operational_snapshot),
+        evidence_validation=evidence_validation,
+    )
+    return create_analysis_version(
+        analysis_id=command.analysis_id,
+        case=command.case,
+        corpus=command.corpus,
+        operational_snapshot=command.operational_snapshot,
+        evidence_items=command.evidence_items,
+        response_options=response_options,
+        standing_authorizations=command.standing_authorizations,
+        analysis_started_at=command.analysis_started_at,
+        created_at=command.created_at,
+        calculation_version=command.calculation_version,
+        conflicts=command.conflicts,
+        conflict_resolutions=command.conflict_resolutions,
+        required_authority_scope=command.required_authority_scope,
+        evidence_policy_version=command.evidence_policy_version,
+        approval_policy_version=command.approval_policy_version,
     )

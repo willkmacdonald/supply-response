@@ -95,7 +95,9 @@ def _calculate_intervention_outcome(
     )
 
 
-def _alpha_receipt(snapshot: OperationalSnapshot) -> TimedQuantity:
+def _alpha_receipt(snapshot: OperationalSnapshot) -> TimedQuantity | None:
+    if snapshot.alpha_expedite is None:
+        return None
     return TimedQuantity(
         date=snapshot.alpha_expedite.due_date,
         quantity=snapshot.alpha_expedite.quantity,
@@ -124,6 +126,39 @@ def _option_roles(
 
 def _unconfirmed_recovery_commitments(snapshot: OperationalSnapshot) -> int:
     return int(snapshot.disruption.recovery_date is None)
+
+
+def _recovery_uncertainties(snapshot: OperationalSnapshot) -> tuple[str, ...]:
+    if snapshot.disruption.recovery_date is None:
+        return ("Remaining supplier recovery date is unconfirmed.",)
+    return ()
+
+
+def _transfer_available(snapshot: OperationalSnapshot) -> bool:
+    return (
+        snapshot.usable_inventory(
+            snapshot.transfer.part_id, snapshot.transfer.source_plant_id
+        )
+        >= snapshot.transfer.quantity
+    )
+
+
+def _resequence_available(snapshot: OperationalSnapshot) -> bool:
+    due_order = tuple(
+        item.production_order_id
+        for item in sorted(
+            snapshot.production_orders,
+            key=lambda item: (item.due_date, item.production_order_id),
+        )
+    )
+    priority_order = tuple(
+        item.production_order_id
+        for item in sorted(
+            snapshot.production_orders,
+            key=lambda item: (item.customer_priority, item.production_order_id),
+        )
+    )
+    return priority_order != due_order
 
 
 def _cross_plant_movements(snapshot: OperationalSnapshot) -> int:
@@ -157,7 +192,7 @@ def _lineage(
         and position.plant_id == snapshot.disruption.plant_id
     )
     lineage.extend(order.production_order_id for order in snapshot.production_orders)
-    if include_alpha:
+    if include_alpha and snapshot.alpha_expedite is not None:
         lineage.append(snapshot.alpha_expedite.receipt_id)
     if include_transfer:
         lineage.extend(
@@ -216,19 +251,21 @@ def _option_outcomes(snapshot: OperationalSnapshot) -> dict[str, PredictedOutcom
     alpha_receipt = _alpha_receipt(snapshot)
     dallas_transfer = _dallas_transfer(snapshot)
     expedite_cost = (
-        Decimal(snapshot.alpha_expedite.quantity)
+        Decimal(alpha_receipt.quantity)
         * snapshot.alpha_expedite.incremental_cost_per_unit
+        if alpha_receipt is not None and snapshot.alpha_expedite is not None
+        else Decimal("0")
     )
     transfer_cost = (
         Decimal(snapshot.transfer.quantity)
         * snapshot.transfer.incremental_cost_per_unit
     )
     combined_cost = expedite_cost + transfer_cost
-    assert combined_cost == Decimal("24750.00")
+    expedite_receipts = (alpha_receipt,) if alpha_receipt is not None else ()
     return {
         "RL-OPTION-NO-MITIGATION": _calculate_intervention_outcome(snapshot),
         "RL-OPTION-EXPEDITE": _calculate_intervention_outcome(
-            snapshot, receipts=(alpha_receipt,), response_cost=expedite_cost
+            snapshot, receipts=expedite_receipts, response_cost=expedite_cost
         ),
         "RL-OPTION-TRANSFER": _calculate_intervention_outcome(
             snapshot, transfers=(dallas_transfer,), response_cost=transfer_cost
@@ -238,7 +275,7 @@ def _option_outcomes(snapshot: OperationalSnapshot) -> dict[str, PredictedOutcom
         ),
         "RL-OPTION-COMBINED": _calculate_intervention_outcome(
             snapshot,
-            receipts=(alpha_receipt,),
+            receipts=expedite_receipts,
             transfers=(dallas_transfer,),
             resequence_by_priority=True,
             response_cost=combined_cost,
@@ -253,6 +290,9 @@ def evaluate_response_options(
     expedite_cost = outcomes["RL-OPTION-EXPEDITE"].response_cost
     combined_cost = outcomes["RL-OPTION-COMBINED"].response_cost
     beta_blocked = snapshot.beta_qualification.status != QualificationStatus.APPROVED
+    alpha_available = snapshot.alpha_expedite is not None
+    transfer_available = _transfer_available(snapshot)
+    resequence_available = _resequence_available(snapshot)
     return (
         _response_option(
             option_id="RL-OPTION-NO-MITIGATION",
@@ -268,14 +308,28 @@ def evaluate_response_options(
             option_id="RL-OPTION-EXPEDITE",
             option_kind=ResponseOptionKind.EXPEDITE,
             name="Expedite Alpha partial receipt",
-            executable=True,
+            executable=alpha_available,
             active_mitigation=True,
             predicted=outcomes["RL-OPTION-EXPEDITE"],
             prerequisite_roles=_option_roles(
                 finance_required=requires_finance_approval(expedite_cost)
             ),
-            assumptions=("Alpha receipt is confirmed for its offered due date.",),
-            evidence_ids=(snapshot.alpha_expedite.receipt_id,),
+            blocking_codes=("ALPHA_PARTIAL_SHIPMENT_UNAVAILABLE",)
+            if not alpha_available
+            else (),
+            assumptions=(
+                *(
+                    ("Alpha receipt is confirmed for its offered due date.",)
+                    if alpha_available
+                    else ("No positive Alpha partial-shipment offer is available.",)
+                ),
+                *_recovery_uncertainties(snapshot),
+            ),
+            evidence_ids=(
+                (snapshot.alpha_expedite.receipt_id,)
+                if snapshot.alpha_expedite is not None
+                else ()
+            ),
             source_data_lineage=_lineage(snapshot, include_alpha=True),
             unconfirmed_external_commitments=_unconfirmed_recovery_commitments(
                 snapshot
@@ -286,10 +340,13 @@ def evaluate_response_options(
             option_id="RL-OPTION-TRANSFER",
             option_kind=ResponseOptionKind.TRANSFER,
             name="Transfer inventory from Dallas",
-            executable=True,
+            executable=transfer_available,
             active_mitigation=True,
             predicted=outcomes["RL-OPTION-TRANSFER"],
             prerequisite_roles=_option_roles(),
+            blocking_codes=("TRANSFER_INVENTORY_UNAVAILABLE",)
+            if not transfer_available
+            else (),
             evidence_ids=(snapshot.transfer.transfer_id,),
             source_data_lineage=_lineage(snapshot, include_transfer=True),
             cross_plant_movements=_cross_plant_movements(snapshot),
@@ -299,10 +356,13 @@ def evaluate_response_options(
             option_id="RL-OPTION-RESEQUENCE",
             option_kind=ResponseOptionKind.RESEQUENCE,
             name="Resequence production toward priority customers",
-            executable=True,
+            executable=resequence_available,
             active_mitigation=True,
             predicted=outcomes["RL-OPTION-RESEQUENCE"],
             prerequisite_roles=_option_roles(),
+            blocking_codes=("RESEQUENCE_NOT_APPLICABLE",)
+            if not resequence_available
+            else (),
             source_data_lineage=_lineage(snapshot),
             schedule_changes=_schedule_changes(resequenced=True),
             coordinated_action_count=_coordinated_action_count(resequence=True),
@@ -313,9 +373,19 @@ def evaluate_response_options(
             name="Source from Supplier Beta",
             executable=not beta_blocked,
             active_mitigation=True,
-            predicted=None,
+            predicted=(
+                outcomes["RL-OPTION-NO-MITIGATION"] if not beta_blocked else None
+            ),
             prerequisite_roles=_option_roles(quality_required=True),
             blocking_codes=("QUALITY_QUALIFICATION_PENDING",) if beta_blocked else (),
+            assumptions=(
+                (
+                    "No confirmed Beta receipt quantity or date; conservative "
+                    "baseline exposure is retained."
+                ),
+            )
+            if not beta_blocked
+            else (),
             evidence_ids=(snapshot.beta_qualification.evidence_ref,),
             source_data_lineage=_lineage(snapshot, include_beta=True),
             unconfirmed_external_commitments=_unconfirmed_recovery_commitments(
@@ -327,14 +397,34 @@ def evaluate_response_options(
             option_id="RL-OPTION-COMBINED",
             option_kind=ResponseOptionKind.COMBINED,
             name="Combine expedite, transfer, and resequencing",
-            executable=True,
+            executable=alpha_available and transfer_available and resequence_available,
             active_mitigation=True,
             predicted=outcomes["RL-OPTION-COMBINED"],
             prerequisite_roles=_option_roles(
                 finance_required=requires_finance_approval(combined_cost)
             ),
+            assumptions=_recovery_uncertainties(snapshot),
+            blocking_codes=tuple(
+                code
+                for unavailable, code in (
+                    (
+                        not alpha_available,
+                        "ALPHA_PARTIAL_SHIPMENT_UNAVAILABLE",
+                    ),
+                    (
+                        not transfer_available,
+                        "TRANSFER_INVENTORY_UNAVAILABLE",
+                    ),
+                    (not resequence_available, "RESEQUENCE_NOT_APPLICABLE"),
+                )
+                if unavailable
+            ),
             evidence_ids=(
-                snapshot.alpha_expedite.receipt_id,
+                *(
+                    (snapshot.alpha_expedite.receipt_id,)
+                    if snapshot.alpha_expedite is not None
+                    else ()
+                ),
                 snapshot.transfer.transfer_id,
             ),
             source_data_lineage=_lineage(

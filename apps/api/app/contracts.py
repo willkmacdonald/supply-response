@@ -1,20 +1,37 @@
-from pydantic import BaseModel, Field
-from data.schemas.models import Disruption, ExposureResult, ResponseScenario, SupplyResponseCase
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel
+
+from data.domain import CaseInstance, Disruption
+from data.domain.analysis import AnalysisVersion, ResponseOption
+
+
+AnalyzeCaseResponse = AnalysisVersion
+ResponseOptionsResponse = tuple[ResponseOption, ...]
 
 
 class CreateCaseRequest(BaseModel):
     disruption: Disruption
 
 
-class AnalyzeCaseResponse(BaseModel):
-    case_id: str
-    exposure: ExposureResult
-    scenarios: list[ResponseScenario]
+class CaseResponse(BaseModel):
+    case: CaseInstance
+    disruption: Disruption
+    analysis: AnalysisVersion | None = None
+    selected_option_id: str | None = None
 
 
 class DecisionRequest(BaseModel):
-    scenario_id: str
-    evidence_refs: list[str] = Field(default_factory=list)
+    option_id: str
+
+
+class DecisionResponse(BaseModel):
+    case_id: str
+    analysis_id: str
+    option_id: str
+    decision: Literal["approved", "rejected"]
+    decided_at: datetime
 
 
 class DashboardSummary(BaseModel):

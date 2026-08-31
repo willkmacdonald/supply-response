@@ -3,6 +3,8 @@ from .analysis import (
     ExposureResult,
     PredictedOutcome,
     ProjectionPoint,
+    RankingResult,
+    RankingStage,
     ResponseOption,
     TimedQuantity,
 )
@@ -49,6 +51,8 @@ __all__ = [
     "QualificationStatus",
     "QualityQualification",
     "RuntimeMode",
+    "RankingResult",
+    "RankingStage",
     "ResponseOption",
     "serialize_money",
     "Supplier",

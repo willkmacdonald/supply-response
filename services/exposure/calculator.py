@@ -81,7 +81,7 @@ def component_demand_for_part(
 
 def calculate_exposure(
     *,
-    scenario_id: str,
+    analysis_id: str,
     part_id: str,
     plant_id: str,
     inventory_positions: list[InventoryPosition],
@@ -155,7 +155,7 @@ def calculate_exposure(
     )
     return ExposureResult(
         metadata=CalculationMetadata(
-            scenario_id=scenario_id,
+            analysis_id=analysis_id,
             calculation_version=CALCULATION_VERSION,
             assumptions=assumptions,
             source_data_lineage=source_ids,

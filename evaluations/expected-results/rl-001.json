@@ -27,5 +27,122 @@
     "RL-INV-DEMO-CHI",
     "RL-MO-DEMO-1",
     "RL-MO-DEMO-2"
-  ]
+  ],
+  "response_options": {
+    "RL-OPTION-BETA": {
+      "executable": false,
+      "blocking_codes": ["QUALITY_QUALIFICATION_PENDING"],
+      "approval_burden": 2,
+      "execution_risk": 2,
+      "predicted": null
+    },
+    "RL-OPTION-COMBINED": {
+      "executable": true,
+      "blocking_codes": [],
+      "approval_burden": 2,
+      "execution_risk": 6,
+      "predicted": {
+        "uncovered_part_demand": 2300,
+        "otif_loss_percentage": 50,
+        "revenue_at_risk": "375000.00",
+        "margin_at_risk": "125000.00",
+        "response_cost": "24750.00",
+        "protected_customer_order_ids": ["RL-CO-DEMO-2"]
+      }
+    },
+    "RL-OPTION-EXPEDITE": {
+      "executable": true,
+      "blocking_codes": [],
+      "approval_burden": 2,
+      "execution_risk": 2,
+      "predicted": {
+        "uncovered_part_demand": 3800,
+        "otif_loss_percentage": 100,
+        "revenue_at_risk": "955000.00",
+        "margin_at_risk": "328000.00",
+        "response_cost": "22500.00",
+        "protected_customer_order_ids": []
+      }
+    },
+    "RL-OPTION-NO-MITIGATION": {
+      "executable": false,
+      "blocking_codes": [],
+      "approval_burden": 0,
+      "execution_risk": 0,
+      "predicted": {
+        "uncovered_part_demand": 6800,
+        "otif_loss_percentage": 100,
+        "revenue_at_risk": "955000.00",
+        "margin_at_risk": "328000.00",
+        "response_cost": "0.00",
+        "protected_customer_order_ids": []
+      }
+    },
+    "RL-OPTION-RESEQUENCE": {
+      "executable": true,
+      "blocking_codes": [],
+      "approval_burden": 1,
+      "execution_risk": 1,
+      "predicted": {
+        "uncovered_part_demand": 6800,
+        "otif_loss_percentage": 100,
+        "revenue_at_risk": "955000.00",
+        "margin_at_risk": "328000.00",
+        "response_cost": "0.00",
+        "protected_customer_order_ids": []
+      }
+    },
+    "RL-OPTION-TRANSFER": {
+      "executable": true,
+      "blocking_codes": [],
+      "approval_burden": 1,
+      "execution_risk": 1,
+      "predicted": {
+        "uncovered_part_demand": 5300,
+        "otif_loss_percentage": 50,
+        "revenue_at_risk": "580000.00",
+        "margin_at_risk": "203000.00",
+        "response_cost": "2250.00",
+        "protected_customer_order_ids": ["RL-CO-DEMO-1"]
+      }
+    }
+  },
+  "ranking": {
+    "policy_version": "thresholded-lexicographic-v1",
+    "eligible_option_ids": [
+      "RL-OPTION-COMBINED",
+      "RL-OPTION-EXPEDITE",
+      "RL-OPTION-RESEQUENCE",
+      "RL-OPTION-TRANSFER"
+    ],
+    "infeasible_option_ids": ["RL-OPTION-BETA"],
+    "excluded_baseline_ids": ["RL-OPTION-NO-MITIGATION"],
+    "stages": [
+      {
+        "comparator": "uncovered_part_demand",
+        "threshold": "500",
+        "lower_is_better": true,
+        "input_option_ids": [
+          "RL-OPTION-COMBINED",
+          "RL-OPTION-EXPEDITE",
+          "RL-OPTION-RESEQUENCE",
+          "RL-OPTION-TRANSFER"
+        ],
+        "values": [
+          {"option_id": "RL-OPTION-COMBINED", "value": "2300"},
+          {"option_id": "RL-OPTION-EXPEDITE", "value": "3800"},
+          {"option_id": "RL-OPTION-RESEQUENCE", "value": "6800"},
+          {"option_id": "RL-OPTION-TRANSFER", "value": "5300"}
+        ],
+        "retained_option_ids": ["RL-OPTION-COMBINED"],
+        "eliminated_option_ids": [
+          "RL-OPTION-EXPEDITE",
+          "RL-OPTION-RESEQUENCE",
+          "RL-OPTION-TRANSFER"
+        ]
+      }
+    ],
+    "recommended_option_id": "RL-OPTION-COMBINED",
+    "no_feasible_mitigation": false
+  }
 }

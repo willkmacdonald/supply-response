@@ -33,7 +33,7 @@ class OperationalSnapshot(FrozenModel):
     production_orders: tuple[ProductionOrder, ...]
     customer_orders: tuple[CustomerOrder, ...]
     disruption: Disruption
-    alpha_expedite: SupplyReceiptOption
+    alpha_expedite: SupplyReceiptOption | None
     transfer: InventoryTransfer
     beta_qualification: QualityQualification
 

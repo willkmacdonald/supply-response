@@ -1,110 +1,92 @@
-import pytest
 from fastapi.testclient import TestClient
 
-from apps.api.app.main import ACTION_LEDGER, CASES, DATASET, app
+from apps.api.app.main import CASES, DECISIONS, app
+from data.synthetic.rl001 import OperationalSnapshot
+
 
 client = TestClient(app)
 
 
 def setup_function():
     CASES.clear()
-    ACTION_LEDGER.clear()
+    DECISIONS.clear()
 
 
-def create_and_analyze():  # allowed - shared API test fixture, not application logic
-    r = client.post(
-        "/api/cases",
-        json={"disruption": DATASET.disruptions[0].model_dump(mode="json")},
-    )
-    assert r.status_code == 201
-    case_id = r.json()["case_id"]
-    r = client.post(f"/api/cases/{case_id}/analyze")
-    assert r.status_code == 200
-    return case_id, r.json()
-
-
-def test_api_contract_create_get_analyze_and_scenarios():
-    case_id, analysis = create_and_analyze()
-    assert analysis["exposure"]["metadata"]["calculation_version"] == "exposure-v1"
-    assert len(analysis["scenarios"]) == 6
-    assert client.get(f"/api/cases/{case_id}").status_code == 200
-    assert client.get(f"/api/cases/{case_id}/scenarios").status_code == 200
-
-
-def test_analysis_uses_the_disruption_plant():
-    disruption = DATASET.disruptions[0].model_copy(update={"plant_id": "RL-PLANT-DAL"})
+def create_case() -> str:  # allowed - shared API test fixture
     response = client.post(
         "/api/cases",
-        json={"disruption": disruption.model_dump(mode="json")},
-    )
-    case_id = response.json()["case_id"]
-
-    analysis = client.post(f"/api/cases/{case_id}/analyze")
-
-    assert response.status_code == 201
-    assert analysis.status_code == 200
-    assert analysis.json()["exposure"]["usable_inventory"] == 1500
-
-
-def test_cannot_approve_non_executable_beta_scenario():
-    case_id, _ = create_and_analyze()
-    r = client.post(
-        f"/api/cases/{case_id}/approve",
-        json={"scenario_id": "RL-SCENARIO-5", "evidence_refs": ["RL-QUALITY-001"]},
-    )
-    assert r.status_code == 409
-    assert ACTION_LEDGER == []
-
-
-def test_approval_writes_action_ledger():
-    case_id, _ = create_and_analyze()
-    r = client.post(
-        f"/api/cases/{case_id}/approve",
-        json={"scenario_id": "RL-SCENARIO-2", "evidence_refs": ["RL-001"]},
-    )
-    assert r.status_code == 200
-    assert r.json()["status"] == "approved"
-    assert len(ACTION_LEDGER) == 1
-    assert ACTION_LEDGER[0].scenario_id == "RL-SCENARIO-2"
-
-
-@pytest.mark.parametrize("caller_evidence", [[], ["RL-SPOOFED-CALLER-EVIDENCE"]])
-def test_action_ledger_preserves_server_owned_scenario_and_calculation_evidence(
-    caller_evidence,
-):
-    case_id, analysis = create_and_analyze()
-    selected_scenario = next(
-        scenario
-        for scenario in analysis["scenarios"]
-        if scenario["scenario_id"] == "RL-SCENARIO-5"
-    )
-
-    response = client.post(
-        f"/api/cases/{case_id}/reject",
         json={
-            "scenario_id": selected_scenario["scenario_id"],
-            "evidence_refs": caller_evidence,
+            "disruption": OperationalSnapshot.rl001().disruption.model_dump(mode="json")
         },
+    )
+    assert response.status_code == 201
+    assert response.json()["case"]["status"] == "open"
+    return response.json()["case"]["case_id"]
+
+
+def analyze(case_id: str) -> dict:
+    response = client.post(f"/api/cases/{case_id}/analyze")
+    assert response.status_code == 200
+    return response.json()
+
+
+def test_api_returns_canonical_analysis_version_and_response_options():
+    case_id = create_case()
+
+    analysis = analyze(case_id)
+    options = client.get(f"/api/cases/{case_id}/options")
+
+    assert analysis["case_id"] == case_id
+    assert analysis["ranking"]["recommended_option_id"] == "RL-OPTION-COMBINED"
+    assert analysis["ranking"]["policy_version"] == "thresholded-lexicographic-v1"
+    assert options.status_code == 200
+    assert {option["option_id"] for option in options.json()} == {
+        "RL-OPTION-NO-MITIGATION",
+        "RL-OPTION-EXPEDITE",
+        "RL-OPTION-TRANSFER",
+        "RL-OPTION-RESEQUENCE",
+        "RL-OPTION-BETA",
+        "RL-OPTION-COMBINED",
+    }
+    assert client.get(f"/api/cases/{case_id}").json()["analysis"]["analysis_id"]
+
+
+def test_cannot_approve_an_infeasible_response_option():
+    case_id = create_case()
+    analyze(case_id)
+
+    response = client.post(
+        f"/api/cases/{case_id}/approve",
+        json={"option_id": "RL-OPTION-BETA"},
+    )
+
+    assert response.status_code == 409
+    assert DECISIONS == []
+
+
+def test_decision_references_the_immutable_analysis_and_option():
+    case_id = create_case()
+    analysis = analyze(case_id)
+
+    response = client.post(
+        f"/api/cases/{case_id}/approve",
+        json={"option_id": "RL-OPTION-COMBINED"},
     )
 
     assert response.status_code == 200
-    record = ACTION_LEDGER[0]
-    assert record.scenario_evidence_refs == tuple(selected_scenario["evidence_refs"])
-    assert record.scenario_evidence_refs == ("RL-QUALITY-001",)
-    assert record.approval_evidence_refs == tuple(caller_evidence)
-    assert (
-        record.calculation_version
-        == analysis["exposure"]["metadata"]["calculation_version"]
-    )
-    assert record.source_data_lineage == tuple(
-        analysis["exposure"]["metadata"]["source_data_lineage"]
-    )
-    assert record.source_data_lineage
-    assert "RL-SPOOFED-CALLER-EVIDENCE" not in record.source_data_lineage
+    assert response.json()["selected_option_id"] == "RL-OPTION-COMBINED"
+    assert response.json()["case"]["status"] == "action_planning"
+    assert len(DECISIONS) == 1
+    assert DECISIONS[0].analysis_id == analysis["analysis_id"]
+    assert DECISIONS[0].option_id == "RL-OPTION-COMBINED"
 
 
-def test_dashboard_summary_contract():
-    create_and_analyze()
-    r = client.get("/api/dashboard/summary")
-    assert r.status_code == 200
-    assert r.json()["active_disruptions"] == 1
+def test_dashboard_summary_uses_canonical_case_statuses():
+    case_id = create_case()
+    analyze(case_id)
+
+    response = client.get("/api/dashboard/summary")
+
+    assert response.status_code == 200
+    assert response.json()["active_disruptions"] == 1
+    assert response.json()["analyzed_cases"] == 1

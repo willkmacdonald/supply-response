@@ -6,70 +6,70 @@
       "name": "Confirmed supplier recovery date",
       "input": "The disruption has a confirmed recovery date.",
       "expected": "The expedite scenario removes the unconfirmed-recovery uncertainty.",
-      "test": "tests/test_evaluation_cases.py::test_confirmed_recovery_date_removes_that_uncertainty"
+      "test": "tests/analysis/test_integrated_evaluation_cases.py::test_integrated_evaluation_case[RL-EVAL-001]"
     },
     {
       "id": "RL-EVAL-002",
       "name": "Unconfirmed recovery date",
       "input": "The remaining supplier recovery date is missing.",
       "expected": "The uncertainty is preserved rather than inferred.",
-      "test": "tests/test_evaluation_cases.py::test_unconfirmed_recovery_date_is_preserved_as_uncertainty"
+      "test": "tests/analysis/test_integrated_evaluation_cases.py::test_integrated_evaluation_case[RL-EVAL-002]"
     },
     {
       "id": "RL-EVAL-003",
       "name": "Partial shipment",
       "input": "Supplier Alpha offers a positive partial shipment.",
       "expected": "The expedite scenario is executable only when the partial quantity is positive.",
-      "test": "tests/test_evaluation_cases.py::test_partial_shipment_controls_expedite_feasibility"
+      "test": "tests/analysis/test_integrated_evaluation_cases.py::test_integrated_evaluation_case[RL-EVAL-003]"
     },
     {
       "id": "RL-EVAL-004",
       "name": "Conflicting collaboration and operational dates",
       "input": "The communicated date differs from the operational date.",
       "expected": "The conflict is surfaced explicitly.",
-      "test": "tests/test_remaining_evaluation_cases.py::test_conflicting_email_and_operational_dates_are_detected"
+      "test": "tests/analysis/test_integrated_evaluation_cases.py::test_integrated_evaluation_case[RL-EVAL-004]"
     },
     {
       "id": "RL-EVAL-005",
       "name": "Alternate supplier approved",
       "input": "Supplier Beta has an approved qualification for the part.",
       "expected": "The alternate-source scenario is executable.",
-      "test": "tests/test_evaluation_cases.py::test_alternate_supplier_approved_is_executable"
+      "test": "tests/analysis/test_integrated_evaluation_cases.py::test_integrated_evaluation_case[RL-EVAL-005]"
     },
     {
       "id": "RL-EVAL-006",
       "name": "Alternate supplier not approved",
       "input": "Supplier Beta is not approved for the part.",
       "expected": "The alternate-source scenario is blocked with qualification evidence.",
-      "test": "tests/test_evaluation_cases.py::test_alternate_supplier_not_approved_is_not_executable"
+      "test": "tests/analysis/test_integrated_evaluation_cases.py::test_integrated_evaluation_case[RL-EVAL-006]"
     },
     {
       "id": "RL-EVAL-007",
       "name": "Inventory available at another plant",
       "input": "Another plant has sufficient usable inventory.",
       "expected": "The transfer feasibility check returns true.",
-      "test": "tests/test_remaining_evaluation_cases.py::test_inventory_available_at_another_plant"
+      "test": "tests/analysis/test_integrated_evaluation_cases.py::test_integrated_evaluation_case[RL-EVAL-007]"
     },
     {
       "id": "RL-EVAL-008",
       "name": "No feasible mitigation",
       "input": "Only backlog is executable.",
       "expected": "The scenario set reports no feasible mitigation.",
-      "test": "tests/test_remaining_evaluation_cases.py::test_no_feasible_mitigation"
+      "test": "tests/analysis/test_integrated_evaluation_cases.py::test_integrated_evaluation_case[RL-EVAL-008]"
     },
     {
       "id": "RL-EVAL-009",
       "name": "Premium freight above approval threshold",
       "input": "Premium freight exceeds the configured finance threshold.",
       "expected": "Finance approval is required.",
-      "test": "tests/test_evaluation_cases.py::test_premium_freight_above_threshold_requires_approval"
+      "test": "tests/analysis/test_integrated_evaluation_cases.py::test_integrated_evaluation_case[RL-EVAL-009]"
     },
     {
       "id": "RL-EVAL-010",
       "name": "Missing or stale collaboration evidence",
       "input": "Qualification evidence is missing or older than the accepted age.",
       "expected": "The evidence is classified as stale.",
-      "test": "tests/test_remaining_evaluation_cases.py::test_missing_or_stale_collaboration_evidence"
+      "test": "tests/analysis/test_integrated_evaluation_cases.py::test_integrated_evaluation_case[RL-EVAL-010]"
     }
   ]
 }
