@@ -563,6 +563,13 @@ def test_alembic_upgrade_and_downgrade_manage_shared_schema(tmp_path):
     assert {
         item["name"] for item in inspect(engine).get_unique_constraints("outbox_events")
     } >= {"uq_outbox_event_per_decision"}
+    assert {
+        item["name"] for item in inspect(engine).get_unique_constraints("playbacks")
+    } >= {"uq_playback_per_decision"}
+    assert {
+        item["name"]
+        for item in inspect(engine).get_check_constraints("outcome_observations")
+    } >= {"ck_outcome_observations_observation_kind_synthetic_provenance"}
 
     migrated_store = sqlite_store(database_url)
     case, snapshot = fallback_rl001_case("RL-CASE-MIGRATED-FOREIGN-KEYS")
@@ -617,7 +624,7 @@ def test_alembic_upgrade_path_adds_pointer_foreign_keys_after_original_0001(
             connection.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-            == "0003_outbox_one_planning_event"
+            == "0004_simulated_playback_observations"
         )
     head_foreign_keys = {
         tuple(item["constrained_columns"])
@@ -628,6 +635,9 @@ def test_alembic_upgrade_path_adds_pointer_foreign_keys_after_original_0001(
     assert {
         item["name"] for item in inspect(engine).get_unique_constraints("outbox_events")
     } >= {"uq_outbox_event_per_decision"}
+    assert {
+        item["name"] for item in inspect(engine).get_unique_constraints("playbacks")
+    } >= {"uq_playback_per_decision"}
     migrated_store = sqlite_store(database_url)
     assert migrated_store.get_case(original_case.case_id) == original_case
     assert migrated_store.list_cases() == (original_case,)

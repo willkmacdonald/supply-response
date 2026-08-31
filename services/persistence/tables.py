@@ -1,5 +1,6 @@
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
@@ -393,6 +394,7 @@ playbacks = Table(
     Column("started_at", DateTime(timezone=True), nullable=False, index=True),
     Column("completed_at", DateTime(timezone=True), nullable=True, index=True),
     Column("payload_json", Text, nullable=False),
+    UniqueConstraint("decision_id", name="uq_playback_per_decision"),
 )
 
 outcome_observations = Table(
@@ -420,9 +422,30 @@ outcome_observations = Table(
         nullable=True,
         index=True,
     ),
-    Column("observation_kind", String(32), nullable=False, index=True),
-    Column("observed_at", DateTime(timezone=True), nullable=False, index=True),
+    Column(
+        "action_id",
+        String(128),
+        ForeignKey("execution_actions.action_id"),
+        nullable=True,
+        index=True,
+    ),
+    Column("metric", String(128), nullable=False, index=True),
+    Column("observed_value", String(128), nullable=False),
+    Column("unit", String(32), nullable=False),
+    Column("predicted_value", String(128), nullable=False),
+    Column(
+        "scenario_effective_time", DateTime(timezone=True), nullable=False, index=True
+    ),
+    Column("scenario_timezone", String(64), nullable=False),
+    Column("recorded_at", DateTime(timezone=True), nullable=False, index=True),
+    Column("source_reference", String(256), nullable=False),
+    Column("kind", String(32), nullable=False, index=True),
+    Column("synthetic", Boolean, nullable=False, index=True),
     Column("payload_json", Text, nullable=False),
+    CheckConstraint(
+        "(kind = 'simulated' AND synthetic = 1) OR (kind = 'actual' AND synthetic = 0)",
+        name="observation_kind_synthetic_provenance",
+    ),
 )
 
 

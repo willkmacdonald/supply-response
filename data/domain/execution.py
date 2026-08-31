@@ -5,9 +5,10 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
-from pydantic import model_validator
+from pydantic import ConfigDict, model_validator
 
 from .common import FrozenModel
+from .decisions import IdentitySnapshot
 
 if TYPE_CHECKING:
     from .decisions import Decision
@@ -116,7 +117,15 @@ class DraftArtifact(FrozenModel):
     decision_id: str
     artifact_kind: Literal["alpha_recovery_request"] = "alpha_recovery_request"
     created_at: datetime
+    subject: str | None = None
+    body: str | None = None
     sent: Literal[False] = False
+
+    @model_validator(mode="after")
+    def validate_content(self) -> "DraftArtifact":
+        if (self.subject is None) != (self.body is None):
+            raise ValueError("Draft Artifact subject and body must be filled together")
+        return self
 
 
 class ExecutionAttempt(FrozenModel):
@@ -156,3 +165,77 @@ class OutboxClaim(FrozenModel):
     case_id: str
     analysis_id: str
     event_type: Literal["ActionPlanningRequested"] = "ActionPlanningRequested"
+
+
+class PlaybackStatus(StrEnum):
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+
+
+class PlaybackStep(FrozenModel):
+    offset_seconds: int
+    action_kind: str
+
+    @model_validator(mode="after")
+    def validate_offset(self) -> "PlaybackStep":
+        if self.offset_seconds < 0:
+            raise ValueError("playback offset must be nonnegative")
+        ExecutionActionKind(self.action_kind)
+        return self
+
+
+class Playback(FrozenModel):
+    playback_id: str
+    case_id: str
+    decision_id: str
+    actor: IdentitySnapshot
+    status: PlaybackStatus = PlaybackStatus.IN_PROGRESS
+    started_at: datetime
+    completed_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_status_time(self) -> "Playback":
+        if (self.status is PlaybackStatus.COMPLETED) != (self.completed_at is not None):
+            raise ValueError("completed playback must have completed_at")
+        return self
+
+
+class ObservationKind(StrEnum):
+    ACTUAL = "actual"
+    SIMULATED = "simulated"
+
+
+class OutcomeObservation(FrozenModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    observation_id: str
+    case_id: str
+    decision_id: str
+    playback_id: str | None = None
+    action_id: str | None = None
+    metric: str
+    observed_value: str
+    unit: str
+    predicted_value: str
+    scenario_effective_time: datetime
+    scenario_timezone: Literal["America/Chicago"] = "America/Chicago"
+    recorded_at: datetime
+    source_reference: str
+    kind: ObservationKind
+    synthetic: bool
+
+    @model_validator(mode="after")
+    def validate_provenance(self) -> "OutcomeObservation":
+        if self.kind is ObservationKind.ACTUAL and self.synthetic:
+            raise ValueError("actual observation cannot be synthetic")
+        if self.kind is ObservationKind.SIMULATED and not self.synthetic:
+            raise ValueError("simulated observation must be synthetic")
+        if self.playback_id is not None and (
+            self.kind is not ObservationKind.SIMULATED or not self.synthetic
+        ):
+            raise ValueError("playback observations must be simulated and synthetic")
+        return self
+
+    @property
+    def display_label(self) -> str:
+        return self.kind.value.title()

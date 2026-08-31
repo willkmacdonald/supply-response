@@ -24,9 +24,13 @@ from data.domain.execution import (
     ExecutionAttempt,
     ExecutionStatus,
     ExecutionStatusEvent,
+    ObservationKind,
+    OutcomeObservation,
     OutboxClaimStatus,
     OutboxClaim,
     OutboxProcessingState,
+    Playback,
+    PlaybackStatus,
 )
 from data.synthetic.rl001 import OperationalSnapshot
 from services.analysis.service import (
@@ -48,6 +52,8 @@ from services.persistence.tables import (
     action_projection,
     operational_snapshots,
     outbox_events,
+    outcome_observations,
+    playbacks,
 )
 
 if TYPE_CHECKING:
@@ -1660,6 +1666,28 @@ class SqlAlchemyExecutionRepository:
             )
         return artifact
 
+    def fill_draft_artifact(self, artifact: DraftArtifact) -> None:
+        previous = self.get_draft_artifact(artifact.action_id)
+        if previous.artifact_id != artifact.artifact_id:
+            raise ImmutableRecordConflict("Draft Artifact ID cannot be changed")
+        if artifact.sent is not False:
+            raise ImmutableRecordConflict("Draft Artifact must remain unsent")
+        if previous.subject is not None:
+            if previous != artifact:
+                raise ImmutableRecordConflict("Draft Artifact content is insert-only")
+            return
+        if artifact.subject is None or artifact.body is None:
+            raise ValueError("Draft Artifact content is required")
+        if artifact.model_copy(update={"subject": None, "body": None}) != previous:
+            raise ImmutableRecordConflict(
+                "Draft Artifact fill cannot change immutable fields"
+            )
+        self._connection.execute(
+            update(draft_artifacts)
+            .where(draft_artifacts.c.artifact_id == artifact.artifact_id)
+            .values(payload_json=serialize_model(artifact))
+        )
+
     @staticmethod
     def _decode_attempt(payload: str) -> ExecutionAttempt:
         try:
@@ -1876,6 +1904,244 @@ class SqlAlchemyExecutionRepository:
         ):
             raise PersistenceIntegrityError("Execution Status Event history has gaps")
         return ordered
+
+    @staticmethod
+    def _decode_playback(payload: str) -> Playback:
+        try:
+            return Playback.model_validate_json(payload)
+        except (ValidationError, ValueError) as error:
+            raise PersistenceIntegrityError(
+                "persisted Playback contains invalid JSON"
+            ) from error
+
+    def _playback_from_row(self, row) -> Playback:
+        playback = self._decode_playback(row["payload_json"])
+        if (
+            playback.playback_id != row["playback_id"]
+            or playback.case_id != row["case_id"]
+            or playback.decision_id != row["decision_id"]
+            or playback.status.value != row["status"]
+            or not self._store._datetime_matches(row["started_at"], playback.started_at)
+            or (playback.completed_at is None and row["completed_at"] is not None)
+            or (
+                playback.completed_at is not None
+                and (
+                    row["completed_at"] is None
+                    or not self._store._datetime_matches(
+                        row["completed_at"], playback.completed_at
+                    )
+                )
+            )
+        ):
+            raise PersistenceIntegrityError(
+                "Playback columns conflict with canonical JSON"
+            )
+        return playback
+
+    def insert_playback_if_absent(self, playback: Playback) -> bool:
+        if (
+            playback.status is not PlaybackStatus.IN_PROGRESS
+            or playback.completed_at is not None
+        ):
+            raise ValueError("new Playback must be in progress")
+        decision = SqlAlchemyDecisionRepository(self._store, self._connection).get(
+            playback.decision_id
+        )
+        if (
+            decision.kind.value != "approved"
+            or decision.case_id != playback.case_id
+            or decision.actor != playback.actor
+        ):
+            raise PersistenceIntegrityError(
+                "Playback must retain its approved Decision and actor lineage"
+            )
+        existing = self.get_playback_for_decision(playback.decision_id)
+        if existing is not None:
+            if existing.playback_id != playback.playback_id:
+                raise ImmutableRecordConflict(
+                    "Decision already has a different Playback"
+                )
+            return False
+        self._connection.execute(
+            insert(playbacks).values(
+                playback_id=playback.playback_id,
+                case_id=playback.case_id,
+                decision_id=playback.decision_id,
+                status=playback.status.value,
+                started_at=playback.started_at,
+                completed_at=playback.completed_at,
+                payload_json=serialize_model(playback),
+            )
+        )
+        return True
+
+    def get_playback(self, playback_id: str) -> Playback:
+        row = (
+            self._connection.execute(
+                select(playbacks).where(playbacks.c.playback_id == playback_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RecordNotFound(f"Playback does not exist: {playback_id}")
+        return self._playback_from_row(row)
+
+    def get_playback_for_decision(self, decision_id: str) -> Playback | None:
+        row = (
+            self._connection.execute(
+                select(playbacks).where(playbacks.c.decision_id == decision_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else self._playback_from_row(row)
+
+    def update_playback(self, playback: Playback) -> None:
+        previous = self.get_playback(playback.playback_id)
+        if (
+            previous.status is not PlaybackStatus.IN_PROGRESS
+            or playback.status is not PlaybackStatus.COMPLETED
+            or playback.completed_at is None
+            or playback.model_copy(
+                update={
+                    "status": PlaybackStatus.IN_PROGRESS,
+                    "completed_at": None,
+                }
+            )
+            != previous
+        ):
+            raise ImmutableRecordConflict(
+                "Playback update may only record its completion"
+            )
+        self._connection.execute(
+            update(playbacks)
+            .where(playbacks.c.playback_id == playback.playback_id)
+            .values(
+                status=playback.status.value,
+                completed_at=playback.completed_at,
+                payload_json=serialize_model(playback),
+            )
+        )
+
+    @staticmethod
+    def _decode_observation(payload: str) -> OutcomeObservation:
+        try:
+            return OutcomeObservation.model_validate_json(payload)
+        except (ValidationError, ValueError) as error:
+            raise PersistenceIntegrityError(
+                "persisted Outcome Observation contains invalid JSON"
+            ) from error
+
+    def _observation_from_row(self, row) -> OutcomeObservation:
+        observation = self._decode_observation(row["payload_json"])
+        if (
+            observation.observation_id != row["observation_id"]
+            or observation.case_id != row["case_id"]
+            or observation.decision_id != row["decision_id"]
+            or observation.playback_id != row["playback_id"]
+            or observation.action_id != row["action_id"]
+            or observation.metric != row["metric"]
+            or observation.observed_value != row["observed_value"]
+            or observation.unit != row["unit"]
+            or observation.predicted_value != row["predicted_value"]
+            or not self._store._datetime_matches(
+                row["scenario_effective_time"],
+                observation.scenario_effective_time,
+            )
+            or observation.scenario_timezone != row["scenario_timezone"]
+            or not self._store._datetime_matches(
+                row["recorded_at"], observation.recorded_at
+            )
+            or observation.source_reference != row["source_reference"]
+            or observation.kind.value != row["kind"]
+            or observation.synthetic is not bool(row["synthetic"])
+        ):
+            raise PersistenceIntegrityError(
+                "Outcome Observation columns conflict with canonical JSON"
+            )
+        return observation
+
+    def insert_observation(self, observation: OutcomeObservation) -> None:
+        decision = SqlAlchemyDecisionRepository(self._store, self._connection).get(
+            observation.decision_id
+        )
+        case = self._store._stored_case(self._connection, decision.case_id)
+        if (
+            observation.case_id != decision.case_id
+            or observation.scenario_effective_time != decision.scenario_effective_time
+            or observation.scenario_timezone != case.scenario_timezone
+        ):
+            raise PersistenceIntegrityError(
+                "Outcome Observation conflicts with its Decision or Case lineage"
+            )
+        if observation.playback_id is not None:
+            playback = self.get_playback(observation.playback_id)
+            if (
+                playback.decision_id != observation.decision_id
+                or observation.kind is not ObservationKind.SIMULATED
+                or not observation.synthetic
+            ):
+                raise PersistenceIntegrityError(
+                    "Playback observation provenance must remain simulated"
+                )
+        if observation.action_id is not None:
+            action = self.get_action(observation.action_id)
+            if action.decision_id != observation.decision_id:
+                raise PersistenceIntegrityError(
+                    "Outcome Observation action lineage is inconsistent"
+                )
+        existing = (
+            self._connection.execute(
+                select(outcome_observations).where(
+                    outcome_observations.c.observation_id == observation.observation_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if existing is not None:
+            raise ImmutableRecordConflict(
+                f"Outcome Observation is append-only: {observation.observation_id}"
+            )
+        self._connection.execute(
+            insert(outcome_observations).values(
+                observation_id=observation.observation_id,
+                case_id=observation.case_id,
+                decision_id=observation.decision_id,
+                playback_id=observation.playback_id,
+                action_id=observation.action_id,
+                metric=observation.metric,
+                observed_value=observation.observed_value,
+                unit=observation.unit,
+                predicted_value=observation.predicted_value,
+                scenario_effective_time=observation.scenario_effective_time,
+                scenario_timezone=observation.scenario_timezone,
+                recorded_at=observation.recorded_at,
+                source_reference=observation.source_reference,
+                kind=observation.kind.value,
+                synthetic=observation.synthetic,
+                payload_json=serialize_model(observation),
+            )
+        )
+
+    def list_observations(
+        self,
+        decision_id: str,
+    ) -> tuple[OutcomeObservation, ...]:
+        rows = (
+            self._connection.execute(
+                select(outcome_observations)
+                .where(outcome_observations.c.decision_id == decision_id)
+                .order_by(
+                    outcome_observations.c.recorded_at,
+                    outcome_observations.c.observation_id,
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return tuple(self._observation_from_row(row) for row in rows)
 
 
 class SqlAlchemyUnitOfWork:

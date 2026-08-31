@@ -10,8 +10,10 @@ from data.domain.execution import (
     ExecutionAction,
     ExecutionAttempt,
     ExecutionStatusEvent,
+    OutcomeObservation,
     OutboxClaim,
     OutboxProcessingState,
+    Playback,
 )
 from data.synthetic.rl001 import OperationalSnapshot
 
@@ -103,6 +105,8 @@ class ExecutionStore(Protocol):
 
     def get_draft_artifact(self, action_id: str) -> DraftArtifact: ...
 
+    def fill_draft_artifact(self, artifact: DraftArtifact) -> None: ...
+
     def insert_attempt(self, attempt: ExecutionAttempt) -> None: ...
 
     def update_attempt(self, attempt: ExecutionAttempt) -> None: ...
@@ -119,6 +123,21 @@ class ExecutionStore(Protocol):
         self,
         action_id: str,
     ) -> tuple[ExecutionStatusEvent, ...]: ...
+
+    def insert_playback_if_absent(self, playback: Playback) -> bool: ...
+
+    def get_playback(self, playback_id: str) -> Playback: ...
+
+    def get_playback_for_decision(self, decision_id: str) -> Playback | None: ...
+
+    def update_playback(self, playback: Playback) -> None: ...
+
+    def insert_observation(self, observation: OutcomeObservation) -> None: ...
+
+    def list_observations(
+        self,
+        decision_id: str,
+    ) -> tuple[OutcomeObservation, ...]: ...
 
 
 class UnitOfWork(Protocol):

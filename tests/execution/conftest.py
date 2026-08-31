@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import cast
+from uuid import UUID
 
 import pytest
 
@@ -26,6 +27,27 @@ from services.persistence.sqlite import sqlite_store
 from services.persistence.store import SqlAlchemyStore
 
 
+APPROVED_DECISION_ID = "RL-DECISION-00000000-0000-0000-0000-000000000008"
+
+
+def alex_identity(
+    *,
+    persona_id: str = "RL-PERSONA-ALEX",
+    effective_roles: tuple[str, ...] = (
+        "material_planner",
+        "response_approver",
+    ),
+) -> IdentitySnapshot:
+    return IdentitySnapshot(
+        persona_id=persona_id,
+        effective_roles=effective_roles,
+        identity_source=IdentitySource.ENTRA,
+        source_id="RL-ENTRA-ALEX",
+        display_name="Alex Morgan",
+        user_principal_name="alex@example.invalid",
+    )
+
+
 @dataclass(frozen=True)
 class PlanningContext:
     store: SqlAlchemyStore
@@ -37,7 +59,7 @@ class PlanningContext:
 
 
 @pytest.fixture
-def planning_context(tmp_path) -> PlanningContext:
+def planning_context(tmp_path, monkeypatch) -> PlanningContext:
     store = sqlite_store(f"sqlite:///{tmp_path / 'execution.db'}")
     case, snapshot = instantiate_rl001(
         case_id="RL-CASE-EXECUTION-1",
@@ -67,6 +89,7 @@ def planning_context(tmp_path) -> PlanningContext:
     store.save_case_projection(
         case.model_copy(update={"status": CaseStatus.AWAITING_DECISION})
     )
+    monkeypatch.setattr("data.domain.decisions.uuid4", lambda: UUID(int=8))
     decision = DecisionService(cast(UnitOfWorkFactory, store.uow_factory)).record(
         RecordDecisionCommand(
             case_id=case.case_id,
@@ -75,15 +98,9 @@ def planning_context(tmp_path) -> PlanningContext:
             kind=DecisionKind.APPROVED,
             idempotency_key="RL-IDEMPOTENCY-EXECUTION-1",
         ),
-        IdentitySnapshot(
-            persona_id="RL-PERSONA-ALEX",
-            effective_roles=("material_planner", "response_approver"),
-            identity_source=IdentitySource.ENTRA,
-            source_id="RL-ENTRA-ALEX",
-            display_name="Alex Morgan",
-            user_principal_name="alex@example.invalid",
-        ),
+        alex_identity(),
     )
+    assert decision.decision_id == APPROVED_DECISION_ID
     return PlanningContext(store=store, decision=decision)
 
 
