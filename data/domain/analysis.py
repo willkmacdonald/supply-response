@@ -79,6 +79,11 @@ class PredictedOutcome(FrozenModel):
     protected_customer_order_ids: tuple[str, ...] = ()
 
 
+class ResponseOptionEvidenceRequirement(FrozenModel):
+    evidence_id: str
+    authority_scope: tuple[AuthorityScope, ...]
+
+
 class ResponseOption(FrozenModel):
     option_id: str
     option_kind: ResponseOptionKind
@@ -88,6 +93,7 @@ class ResponseOption(FrozenModel):
     predicted: PredictedOutcome | None
     assumptions: tuple[str, ...] = ()
     evidence_ids: tuple[str, ...] = ()
+    evidence_requirements: tuple[ResponseOptionEvidenceRequirement, ...] = ()
     blocking_codes: tuple[str, ...] = ()
     prerequisite_roles: tuple[str, ...] = ()
     source_data_lineage: tuple[str, ...] = ()
@@ -332,6 +338,7 @@ class AnalysisResponseOptionMaterial(FrozenModel):
     predicted: PredictedOutcome | None
     assumptions: tuple[str, ...]
     evidence_ids: tuple[str, ...]
+    evidence_requirements: tuple[ResponseOptionEvidenceRequirement, ...]
     blocking_codes: tuple[str, ...]
     prerequisite_roles: tuple[str, ...]
     source_data_lineage: tuple[str, ...]
@@ -358,6 +365,9 @@ class AnalysisResponseOptionMaterial(FrozenModel):
             predicted=predicted,
             assumptions=tuple(sorted(set(item.assumptions))),
             evidence_ids=tuple(sorted(set(item.evidence_ids))),
+            evidence_requirements=tuple(
+                sorted(item.evidence_requirements, key=lambda value: value.evidence_id)
+            ),
             blocking_codes=tuple(sorted(set(item.blocking_codes))),
             prerequisite_roles=tuple(sorted(set(item.prerequisite_roles))),
             source_data_lineage=tuple(sorted(set(item.source_data_lineage))),

@@ -5,7 +5,13 @@ from typing import Callable
 import pytest
 
 from data.domain import CasePurpose, QualificationStatus, RuntimeMode
-from data.domain.decisions import CorpusScope, StandingAuthorization
+from data.domain.common import ResponseOptionKind
+from data.domain.decisions import (
+    AuthorizationConditions,
+    CorpusScope,
+    ExternalSideEffect,
+    StandingAuthorization,
+)
 from data.domain.evidence import (
     ActorProvenance,
     AuthorityScope,
@@ -33,12 +39,13 @@ def _evidence(
     evidence_id: str,
     claim: str,
     source_timestamp_present: bool = True,
+    authority_scope: tuple[AuthorityScope, ...] = (AuthorityScope.OPERATIONAL_DATE,),
 ) -> EvidenceItem:
     return EvidenceItem(
         evidence_id=evidence_id,
         case_id=command.case.case_id,
         kind=EvidenceKind.OPERATIONAL_FACT,
-        authority_scope=(AuthorityScope.OPERATIONAL_DATE,),
+        authority_scope=authority_scope,
         source_system=EvidenceSourceSystem.SYNTHETIC_FIXTURE,
         source_id=f"RL-SOURCE-{evidence_id}",
         source_timestamp=(
@@ -67,7 +74,7 @@ def _command(case_id: str) -> AnalyzeCaseCommand:
         purpose=CasePurpose.AUTOMATED_TEST,
         runtime_mode=RuntimeMode.FALLBACK,
     )
-    return AnalyzeCaseCommand(
+    command = AnalyzeCaseCommand(
         analysis_id=f"RL-ANALYSIS-{case_id}",
         case=case,
         corpus=CorpusScope.DEMO_CORPUS,
@@ -76,6 +83,53 @@ def _command(case_id: str) -> AnalyzeCaseCommand:
         analysis_started_at=case.scenario_effective_time,
         created_at=case.scenario_effective_time + timedelta(minutes=2),
         calculation_version="rl001-options-v1",
+    )
+    snapshot = command.operational_snapshot
+    evidence_items = (
+        _evidence(
+            command,
+            evidence_id=snapshot.alpha_expedite.receipt_id,
+            claim="Alpha partial shipment quantity and date are confirmed.",
+            authority_scope=(
+                AuthorityScope.OPERATIONAL_QUANTITY,
+                AuthorityScope.OPERATIONAL_DATE,
+            ),
+        ),
+        _evidence(
+            command,
+            evidence_id=snapshot.transfer.transfer_id,
+            claim="Dallas transfer quantity and date are confirmed.",
+            authority_scope=(
+                AuthorityScope.OPERATIONAL_QUANTITY,
+                AuthorityScope.OPERATIONAL_DATE,
+            ),
+        ),
+        _evidence(
+            command,
+            evidence_id=snapshot.beta_qualification.evidence_ref,
+            claim="Beta qualification state is pending.",
+            authority_scope=(AuthorityScope.QUALIFICATION_STATE,),
+        ),
+    )
+    return command.model_copy(update={"evidence_items": evidence_items})
+
+
+def _jordan_quality_authorization() -> StandingAuthorization:
+    start = OperationalSnapshot.rl001().scenario_effective_time
+    return StandingAuthorization(
+        authorization_id="RL-AUTH-JORDAN-QUALITY-1",
+        persona_id="RL-PERSONA-JORDAN",
+        role="quality_approver",
+        conditions=AuthorizationConditions(
+            allowed_option_kinds=(ResponseOptionKind.ALTERNATE_SOURCE,),
+            maximum_response_cost=Decimal("0"),
+            allowed_corpora=(CorpusScope.DEMO_CORPUS,),
+            allowed_template_ids=("RL-001",),
+            allowed_case_purposes=tuple(CasePurpose),
+            valid_from=start,
+            valid_through=start + timedelta(days=14),
+            forbidden_external_side_effects=tuple(ExternalSideEffect),
+        ),
     )
 
 
@@ -180,12 +234,20 @@ def beta_approved_case() -> tuple[AnalyzeCaseCommand, Expected]:
         command.operational_snapshot.model_copy(
             update={"beta_qualification": qualification}
         ),
+    ).model_copy(
+        update={
+            "standing_authorizations": (
+                *command.standing_authorizations,
+                _jordan_quality_authorization(),
+            )
+        }
     )
     return command, _expected(
         beta_executable=True,
         beta_blocking_codes=(),
         beta_has_predicted_outcome=True,
         beta_ranking_eligible=True,
+        quality_approval_satisfied=True,
     )
 
 
@@ -215,6 +277,10 @@ def no_feasible_mitigation_case() -> tuple[AnalyzeCaseCommand, Expected]:
         evidence_id=snapshot.alpha_expedite.receipt_id,
         claim="Alpha partial shipment timestamp is unavailable.",
         source_timestamp_present=False,
+        authority_scope=(
+            AuthorityScope.OPERATIONAL_QUANTITY,
+            AuthorityScope.OPERATIONAL_DATE,
+        ),
     )
     inventory = tuple(
         position.model_copy(
@@ -233,7 +299,18 @@ def no_feasible_mitigation_case() -> tuple[AnalyzeCaseCommand, Expected]:
         snapshot.model_copy(
             update={"inventory_positions": inventory, "production_orders": orders}
         ),
-    ).model_copy(update={"evidence_items": (alpha_evidence,)})
+    ).model_copy(
+        update={
+            "evidence_items": (
+                alpha_evidence,
+                *(
+                    item
+                    for item in command.evidence_items
+                    if item.evidence_id != alpha_evidence.evidence_id
+                ),
+            )
+        }
+    )
     return command, _expected(
         no_feasible_mitigation=True,
         recommended_option_id=None,
@@ -267,10 +344,23 @@ def stale_evidence_case() -> tuple[AnalyzeCaseCommand, Expected]:
         evidence_id=command.operational_snapshot.beta_qualification.evidence_ref,
         claim="Beta qualification evidence has no trustworthy source timestamp.",
         source_timestamp_present=False,
+        authority_scope=(AuthorityScope.QUALIFICATION_STATE,),
     )
-    command = command.model_copy(update={"evidence_items": (evidence,)})
+    transfer_id = command.operational_snapshot.transfer.transfer_id
+    command = command.model_copy(
+        update={
+            "evidence_items": (
+                evidence,
+                *(
+                    item
+                    for item in command.evidence_items
+                    if item.evidence_id == transfer_id
+                ),
+            )
+        }
+    )
     return command, _expected(
-        evidence_freshness=("stale",),
+        evidence_freshness=("stale", "current"),
         evidence_blocking_codes=("EVIDENCE_TIMESTAMP_STALE",),
         beta_executable=False,
         beta_blocking_codes=(
@@ -278,6 +368,11 @@ def stale_evidence_case() -> tuple[AnalyzeCaseCommand, Expected]:
             "EVIDENCE_TIMESTAMP_STALE",
         ),
         beta_ranking_eligible=False,
+        expedite_executable=False,
+        expedite_blocking_codes=(
+            "EVIDENCE_TIMESTAMP_STALE",
+            "REQUIRED_EVIDENCE_MISSING",
+        ),
     )
 
 
@@ -312,6 +407,7 @@ def summarize(analysis, *, keys: set[str]) -> Expected:
         ),
         "expedite_execution_risk": expedite.execution_risk,
         "expedite_executable": expedite.executable,
+        "expedite_blocking_codes": expedite.blocking_codes,
         "expedite_quantity": snapshot.alpha_expedite.quantity,
         "conflict_ids": tuple(
             conflict.conflict_id for conflict in analysis.material.conflicts
@@ -343,6 +439,12 @@ def summarize(analysis, *, keys: set[str]) -> Expected:
             and approval.satisfied
             for approval in analysis.approval_satisfactions
         ),
+        "quality_approval_satisfied": any(
+            approval.option_id == beta.option_id
+            and approval.role == "quality_approver"
+            and approval.satisfied
+            for approval in analysis.approval_satisfactions
+        ),
         "evidence_freshness": tuple(
             result.freshness.value
             for result in analysis.evidence_validation.item_results
@@ -364,11 +466,19 @@ def test_resolved_feasibility_conflict_does_not_block_referenced_option():
         command,
         evidence_id=alpha_id,
         claim="Alpha receipt date is 2026-09-06.",
+        authority_scope=(
+            AuthorityScope.OPERATIONAL_QUANTITY,
+            AuthorityScope.OPERATIONAL_DATE,
+        ),
     )
     corroborating = _evidence(
         command,
         evidence_id="RL-EVIDENCE-ALPHA-CORROBORATING",
         claim="Alpha receipt date is 2026-09-07.",
+        authority_scope=(
+            AuthorityScope.OPERATIONAL_QUANTITY,
+            AuthorityScope.OPERATIONAL_DATE,
+        ),
     )
     conflict = EvidenceConflict(
         conflict_id="RL-CONFLICT-ALPHA-RESOLVED",
@@ -391,7 +501,15 @@ def test_resolved_feasibility_conflict_does_not_block_referenced_option():
     )
     command = command.model_copy(
         update={
-            "evidence_items": (alpha, corroborating),
+            "evidence_items": (
+                alpha,
+                corroborating,
+                *(
+                    item
+                    for item in command.evidence_items
+                    if item.evidence_id != alpha.evidence_id
+                ),
+            ),
             "conflicts": (conflict,),
             "conflict_resolutions": (resolution,),
         }
@@ -427,3 +545,66 @@ def test_absent_partial_shipment_blocks_expedite_and_combined_options():
         "ALPHA_PARTIAL_SHIPMENT_UNAVAILABLE"
         in options["RL-OPTION-COMBINED"].blocking_codes
     )
+
+
+def test_missing_required_option_evidence_blocks_before_ranking():
+    command = _command("RL-EVAL-MISSING-OPTION-EVIDENCE")
+    alpha_id = command.operational_snapshot.alpha_expedite.receipt_id
+    command = command.model_copy(
+        update={
+            "evidence_items": tuple(
+                item for item in command.evidence_items if item.evidence_id != alpha_id
+            )
+        }
+    )
+
+    analysis = analyze_case(command)
+    options = {option.option_id: option for option in analysis.response_options}
+
+    assert options["RL-OPTION-EXPEDITE"].executable is False
+    assert options["RL-OPTION-EXPEDITE"].blocking_codes == (
+        "REQUIRED_EVIDENCE_MISSING",
+    )
+    assert options["RL-OPTION-COMBINED"].executable is False
+    assert "RL-OPTION-COMBINED" in analysis.ranking.infeasible_option_ids
+
+
+def test_global_authority_scope_failure_prevents_combined_recommendation():
+    command = _command("RL-EVAL-GLOBAL-AUTHORITY-MISMATCH").model_copy(
+        update={"required_authority_scope": (AuthorityScope.SUPPLIER_STATEMENT,)}
+    )
+
+    analysis = analyze_case(command)
+
+    assert analysis.evidence_validation.blocking_codes == ("AUTHORITY_SCOPE_MISMATCH",)
+    assert analysis.ranking.recommended_option_id is None
+    assert analysis.ranking.no_feasible_mitigation is True
+    assert all(
+        "AUTHORITY_SCOPE_MISMATCH" in option.blocking_codes
+        for option in analysis.response_options
+        if option.active_mitigation
+    )
+
+
+def test_approved_beta_without_quality_satisfaction_is_not_feasible():
+    command, _ = beta_approved_case()
+    command = command.model_copy(
+        update={
+            "standing_authorizations": tuple(
+                authorization
+                for authorization in command.standing_authorizations
+                if authorization.role != "quality_approver"
+            )
+        }
+    )
+
+    analysis = analyze_case(command)
+    beta = next(
+        option
+        for option in analysis.response_options
+        if option.option_id == "RL-OPTION-BETA"
+    )
+
+    assert beta.executable is False
+    assert "QUALITY_APPROVAL_UNSATISFIED" in beta.blocking_codes
+    assert beta.option_id not in analysis.ranking.eligible_option_ids

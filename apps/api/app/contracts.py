@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from data.domain import CaseInstance, Disruption
 from data.domain.analysis import AnalysisVersion, ResponseOption
+from data.domain.evidence import ActorProvenance
 
 
 AnalyzeCaseResponse = AnalysisVersion
@@ -24,6 +25,7 @@ class CaseResponse(BaseModel):
 
 class DecisionRequest(BaseModel):
     option_id: str
+    actor: ActorProvenance
 
 
 class DecisionResponse(BaseModel):
@@ -32,6 +34,7 @@ class DecisionResponse(BaseModel):
     option_id: str
     decision: Literal["approved", "rejected"]
     decided_at: datetime
+    satisfied_prerequisite_roles: tuple[str, ...]
 
 
 class DashboardSummary(BaseModel):

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -16,10 +16,25 @@ from apps.api.app.contracts import (
     DecisionResponse,
     ResponseOptionsResponse,
 )
-from data.domain import CaseInstance, CasePurpose, CaseStatus, Disruption, RuntimeMode
+from data.domain import (
+    CaseInstance,
+    CasePurpose,
+    CaseStatus,
+    Disruption,
+    RuntimeMode,
+    serialize_money,
+)
 from data.domain.analysis import AnalysisVersion
 from data.domain.decisions import CorpusScope, StandingAuthorization
-from data.synthetic.rl001 import OperationalSnapshot, instantiate_rl001
+from data.domain.evidence import (
+    ActorProvenance,
+    IdentitySource,
+)
+from data.synthetic.rl001 import (
+    OperationalSnapshot,
+    build_rl001_evidence,
+    instantiate_rl001,
+)
 from services.analysis.service import AnalyzeCaseCommand, analyze_case as run_analysis
 
 
@@ -80,15 +95,25 @@ def get_case(case_id: str) -> CaseResponse:
 @app.post("/api/cases/{case_id}/analyze", response_model=AnalyzeCaseResponse)
 def analyze(case_id: str) -> AnalyzeCaseResponse:
     record = _case(case_id)
+    analysis_id = f"RL-ANALYSIS-{uuid4().hex[:8].upper()}"
+    analysis_started_at = datetime.now(timezone.utc)
+    snapshot = record.snapshot
+
+    evidence_items = build_rl001_evidence(
+        snapshot,
+        analysis_id=analysis_id,
+        retrieved_at=analysis_started_at,
+    )
     analysis = run_analysis(
         AnalyzeCaseCommand(
-            analysis_id=f"RL-ANALYSIS-{uuid4().hex[:8].upper()}",
+            analysis_id=analysis_id,
             case=record.case,
             corpus=CorpusScope.DEMO_CORPUS,
-            operational_snapshot=record.snapshot,
+            operational_snapshot=snapshot,
+            evidence_items=evidence_items,
             standing_authorizations=(StandingAuthorization.taylor_rl001(),),
-            analysis_started_at=record.case.scenario_effective_time,
-            created_at=record.case.scenario_effective_time + timedelta(minutes=2),
+            analysis_started_at=analysis_started_at,
+            created_at=datetime.now(timezone.utc),
             calculation_version="rl001-options-v1",
         )
     )
@@ -133,6 +158,30 @@ def _decide(case_id: str, request: DecisionRequest, decision: str) -> CaseRespon
     ):
         raise HTTPException(status_code=409, detail="Response option is not executable")
 
+    satisfied_roles: set[str] = set()
+    if decision == "approved":
+        if not _is_alex_material_planner(request.actor):
+            raise HTTPException(
+                status_code=403,
+                detail="Approval requires authenticated Alex Material Planner interaction",
+            )
+        satisfied_roles.add("material_planner")
+        satisfied_roles.update(
+            satisfaction.role
+            for satisfaction in record.analysis.approval_satisfactions
+            if satisfaction.option_id == option.option_id and satisfaction.satisfied
+        )
+        required_roles = set(option.prerequisite_roles) - {"response_approver"}
+        missing_roles = tuple(sorted(required_roles - satisfied_roles))
+        if missing_roles:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Response option prerequisite approvals are not satisfied: "
+                    + ", ".join(missing_roles)
+                ),
+            )
+
     record.selected_option_id = option.option_id
     record.case = record.case.model_copy(
         update={
@@ -150,6 +199,7 @@ def _decide(case_id: str, request: DecisionRequest, decision: str) -> CaseRespon
             option_id=option.option_id,
             decision=decision,
             decided_at=datetime.now(timezone.utc),
+            satisfied_prerequisite_roles=tuple(sorted(satisfied_roles)),
         )
     )
     return _response(record)
@@ -163,6 +213,15 @@ def approve_case(case_id: str, request: DecisionRequest) -> CaseResponse:
 @app.post("/api/cases/{case_id}/reject", response_model=CaseResponse)
 def reject_case(case_id: str, request: DecisionRequest) -> CaseResponse:
     return _decide(case_id, request, "rejected")
+
+
+def _is_alex_material_planner(actor: ActorProvenance) -> bool:
+    return (
+        actor.persona_id == "RL-PERSONA-ALEX"
+        and actor.identity_source == IdentitySource.ENTRA
+        and actor.source_id == "RL-ENTRA-ALEX"
+        and "material_planner" in actor.roles
+    )
 
 
 @app.get("/api/dashboard/summary", response_model=DashboardSummary)
@@ -189,7 +248,7 @@ def dashboard_summary() -> DashboardSummary:
             record.case.status == CaseStatus.DECISION_REJECTED
             for record in CASES.values()
         ),
-        revenue_at_risk=str(
+        revenue_at_risk=serialize_money(
             sum(
                 (option.predicted.revenue_at_risk for option in no_mitigation),
                 Decimal("0"),

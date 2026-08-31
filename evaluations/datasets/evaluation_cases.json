@@ -67,8 +67,8 @@
     {
       "id": "RL-EVAL-010",
       "name": "Missing or stale collaboration evidence",
-      "input": "Qualification evidence is missing or older than the accepted age.",
-      "expected": "The evidence is classified as stale.",
+      "input": "Qualification evidence is older than the accepted age and required Alpha evidence is absent.",
+      "expected": "Stale and missing required evidence block the affected options before ranking.",
       "test": "tests/analysis/test_integrated_evaluation_cases.py::test_integrated_evaluation_case[RL-EVAL-010]"
     }
   ]

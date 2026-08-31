@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
@@ -16,6 +16,15 @@ from data.domain import (
     QualityQualification,
     RuntimeMode,
     SupplyReceiptOption,
+)
+from data.domain.evidence import (
+    AuthorityScope,
+    EvidenceItem,
+    EvidenceKind,
+    EvidenceRequirement,
+    EvidenceSourceSystem,
+    RetrievalHealth,
+    UncertaintyState,
 )
 
 
@@ -195,4 +204,69 @@ def instantiate_rl001(
     return case, OperationalSnapshot.rl001(
         case_id=case_id,
         runtime_mode=runtime_mode,
+    )
+
+
+def build_rl001_evidence(
+    snapshot: OperationalSnapshot,
+    *,
+    analysis_id: str,
+    retrieved_at: datetime,
+) -> tuple[EvidenceItem, ...]:
+    def operational_evidence(
+        evidence_id: str,
+        claim: str,
+        authority_scope: tuple[AuthorityScope, ...],
+    ) -> EvidenceItem:
+        return EvidenceItem(
+            evidence_id=evidence_id,
+            case_id=snapshot.case_id,
+            kind=EvidenceKind.OPERATIONAL_FACT,
+            authority_scope=authority_scope,
+            source_system=EvidenceSourceSystem.SYNTHETIC_FIXTURE,
+            source_id=f"RL-SOURCE-{evidence_id}",
+            source_timestamp=retrieved_at,
+            retrieved_at=retrieved_at,
+            retrieved_for_analysis_id=analysis_id,
+            retrieval_health=RetrievalHealth.HEALTHY,
+            effective_at=snapshot.scenario_effective_time,
+            expires_at=snapshot.scenario_effective_time + timedelta(days=1),
+            claim=claim,
+            excerpt=claim,
+            citation_url=f"https://rl.example/evidence/{evidence_id}",
+            runtime_mode=snapshot.runtime_mode,
+            synthetic=True,
+            requirement=EvidenceRequirement.REQUIRED_AUTHORITATIVE,
+            uncertainty_state=UncertaintyState.CERTAIN,
+        )
+
+    alpha = (
+        (
+            operational_evidence(
+                snapshot.alpha_expedite.receipt_id,
+                "Alpha partial shipment quantity and date are confirmed.",
+                (
+                    AuthorityScope.OPERATIONAL_QUANTITY,
+                    AuthorityScope.OPERATIONAL_DATE,
+                ),
+            ),
+        )
+        if snapshot.alpha_expedite is not None
+        else ()
+    )
+    return (
+        *alpha,
+        operational_evidence(
+            snapshot.transfer.transfer_id,
+            "Dallas transfer quantity and date are confirmed.",
+            (
+                AuthorityScope.OPERATIONAL_QUANTITY,
+                AuthorityScope.OPERATIONAL_DATE,
+            ),
+        ),
+        operational_evidence(
+            snapshot.beta_qualification.evidence_ref,
+            f"Beta qualification state is {snapshot.beta_qualification.status.value}.",
+            (AuthorityScope.QUALIFICATION_STATE,),
+        ),
     )

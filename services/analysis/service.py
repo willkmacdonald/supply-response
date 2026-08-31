@@ -27,6 +27,7 @@ from data.domain.evidence import (
     AuthorityScope,
     ConflictResolution,
     EvidenceConflict,
+    EvidenceBlockingCode,
     EvidenceItem,
     EvidenceValidation,
     UncertaintyState,
@@ -198,8 +199,6 @@ def create_analysis_version(
     canonical_authorizations = tuple(
         sorted(standing_authorizations, key=lambda item: item.authorization_id)
     )
-    ranking = rank_options(canonical_options)
-
     evidence_validation = validate_required_evidence(
         canonical_evidence,
         analysis_id=analysis_id,
@@ -213,26 +212,22 @@ def create_analysis_version(
         conflicts=canonical_conflicts,
         conflict_resolutions=canonical_resolutions,
     )
-    approval_satisfactions: tuple[ApprovalSatisfaction, ...] = tuple(
-        satisfaction
-        for option in canonical_options
-        for satisfaction in evaluate_approval_satisfaction(
-            option=option,
-            analysis_id=analysis_id,
-            standing_authorizations=canonical_authorizations,
-            target=ApprovalTarget(
-                case=case,
-                corpus=corpus,
-                scenario_effective_time=case.scenario_effective_time,
-                total_response_cost=(
-                    option.predicted.response_cost
-                    if option.predicted is not None
-                    else Decimal("0")
-                ),
-                requested_side_effects=option.requested_side_effects,
-            ),
-        )
+    evidence_adjusted_options = _apply_evidence_feasibility(
+        canonical_options,
+        evidence_validation=evidence_validation,
     )
+    approval_satisfactions = _evaluate_approval_satisfactions(
+        options=evidence_adjusted_options,
+        analysis_id=analysis_id,
+        case=case,
+        corpus=corpus,
+        standing_authorizations=canonical_authorizations,
+    )
+    canonical_options = _apply_quality_approval_feasibility(
+        evidence_adjusted_options,
+        approval_satisfactions=approval_satisfactions,
+    )
+    ranking = rank_options(canonical_options)
     validation_by_evidence_id = {
         item.evidence_id: item for item in evidence_validation.item_results
     }
@@ -314,21 +309,31 @@ def _apply_evidence_feasibility(
         validation.evidence_id: validation
         for validation in evidence_validation.item_results
     }
+    global_codes = tuple(code.value for code in evidence_validation.blocking_codes)
     adjusted: list[ResponseOption] = []
     for option in options:
-        evidence_codes = tuple(
-            code.value
-            for evidence_id in option.evidence_ids
-            if evidence_id in validation_by_id
-            for code in validation_by_id[evidence_id].blocking_codes
-        )
-        if any(
-            evidence_id in validation_by_id
-            and validation_by_id[evidence_id].uncertainty_state
-            == UncertaintyState.CONFLICTED
-            for evidence_id in option.evidence_ids
-        ):
-            evidence_codes += ("EVIDENCE_CONFLICT_UNRESOLVED",)
+        evidence_codes = global_codes if option.active_mitigation else ()
+        for requirement in option.evidence_requirements:
+            validation = validation_by_id.get(requirement.evidence_id)
+            if validation is None:
+                evidence_codes += (
+                    EvidenceBlockingCode.REQUIRED_EVIDENCE_MISSING.value,
+                )
+                continue
+            item_codes = tuple(code.value for code in validation.blocking_codes)
+            evidence_codes += item_codes
+            if not set(requirement.authority_scope).issubset(
+                validation.validated_authority_scope
+            ):
+                evidence_codes += (EvidenceBlockingCode.AUTHORITY_SCOPE_MISMATCH.value,)
+            if (
+                not validation.authoritative
+                and not item_codes
+                and validation.uncertainty_state != UncertaintyState.CONFLICTED
+            ):
+                evidence_codes += (
+                    EvidenceBlockingCode.REQUIRED_EVIDENCE_NOT_AUTHORITATIVE.value,
+                )
         blocking_codes = tuple(dict.fromkeys((*option.blocking_codes, *evidence_codes)))
         adjusted.append(
             option.model_copy(
@@ -341,30 +346,74 @@ def _apply_evidence_feasibility(
     return tuple(adjusted)
 
 
+def _evaluate_approval_satisfactions(
+    *,
+    options: tuple[ResponseOption, ...],
+    analysis_id: str,
+    case: CaseInstance,
+    corpus: CorpusScope,
+    standing_authorizations: tuple[StandingAuthorization, ...],
+) -> tuple[ApprovalSatisfaction, ...]:
+    return tuple(
+        satisfaction
+        for option in options
+        for satisfaction in evaluate_approval_satisfaction(
+            option=option,
+            analysis_id=analysis_id,
+            standing_authorizations=standing_authorizations,
+            target=ApprovalTarget(
+                case=case,
+                corpus=corpus,
+                scenario_effective_time=case.scenario_effective_time,
+                total_response_cost=(
+                    option.predicted.response_cost
+                    if option.predicted is not None
+                    else Decimal("0")
+                ),
+                requested_side_effects=option.requested_side_effects,
+            ),
+        )
+    )
+
+
+def _apply_quality_approval_feasibility(
+    options: tuple[ResponseOption, ...],
+    *,
+    approval_satisfactions: tuple[ApprovalSatisfaction, ...],
+) -> tuple[ResponseOption, ...]:
+    satisfied_quality_option_ids = {
+        satisfaction.option_id
+        for satisfaction in approval_satisfactions
+        if satisfaction.role == "quality_approver" and satisfaction.satisfied
+    }
+    return tuple(
+        option.model_copy(
+            update={
+                "executable": False,
+                "blocking_codes": tuple(
+                    dict.fromkeys(
+                        (*option.blocking_codes, "QUALITY_APPROVAL_UNSATISFIED")
+                    )
+                ),
+            }
+        )
+        if option.executable
+        and "quality_approver" in option.prerequisite_roles
+        and option.option_id not in satisfied_quality_option_ids
+        else option
+        for option in options
+    )
+
+
 def analyze_case(command: AnalyzeCaseCommand) -> AnalysisVersion:
     """Run the real deterministic option, evidence, approval, and ranking pipeline."""
-    evidence_validation = validate_required_evidence(
-        command.evidence_items,
-        analysis_id=command.analysis_id,
-        runtime_mode=command.case.runtime_mode,
-        scenario_effective_time=command.case.scenario_effective_time,
-        analysis_started_at=command.analysis_started_at,
-        analysis_recorded_at=command.created_at,
-        required_authority_scope=command.required_authority_scope,
-        conflicts=command.conflicts,
-        conflict_resolutions=command.conflict_resolutions,
-    )
-    response_options = _apply_evidence_feasibility(
-        evaluate_response_options(command.operational_snapshot),
-        evidence_validation=evidence_validation,
-    )
     return create_analysis_version(
         analysis_id=command.analysis_id,
         case=command.case,
         corpus=command.corpus,
         operational_snapshot=command.operational_snapshot,
         evidence_items=command.evidence_items,
-        response_options=response_options,
+        response_options=evaluate_response_options(command.operational_snapshot),
         standing_authorizations=command.standing_authorizations,
         analysis_started_at=command.analysis_started_at,
         created_at=command.created_at,

@@ -5,7 +5,11 @@ from pathlib import Path
 from data.domain import CasePurpose, RuntimeMode
 from data.domain.common import serialize_money
 from data.domain.decisions import CorpusScope
-from data.synthetic.rl001 import OperationalSnapshot, instantiate_rl001
+from data.synthetic.rl001 import (
+    OperationalSnapshot,
+    build_rl001_evidence,
+    instantiate_rl001,
+)
 from services.analysis.service import AnalyzeCaseCommand, analyze_case
 
 
@@ -103,6 +107,11 @@ def test_rl_001_expected_result_freezes_real_options_and_ranking():
             case=case,
             corpus=CorpusScope.DEMO_CORPUS,
             operational_snapshot=snapshot,
+            evidence_items=build_rl001_evidence(
+                snapshot,
+                analysis_id="RL-ANALYSIS-RL-001",
+                retrieved_at=case.scenario_effective_time,
+            ),
             analysis_started_at=case.scenario_effective_time,
             created_at=case.scenario_effective_time + timedelta(minutes=2),
             calculation_version="rl001-options-v1",

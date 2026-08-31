@@ -54,7 +54,6 @@ def test_rl001_options_derive_approval_burden_and_execution_risk():
         item.option_id: item
         for item in evaluate_response_options(OperationalSnapshot.rl001())
     }
-
     assert {
         option_id: (item.prerequisite_roles, item.approval_burden, item.execution_risk)
         for option_id, item in options.items()
@@ -65,6 +64,69 @@ def test_rl001_options_derive_approval_burden_and_execution_risk():
         "RL-OPTION-RESEQUENCE": (("material_planner",), 1, 1),
         "RL-OPTION-BETA": (("material_planner", "quality_approver"), 2, 2),
         "RL-OPTION-COMBINED": (("material_planner", "finance_approver"), 2, 6),
+    }
+
+
+def test_rl001_options_freeze_assumptions_evidence_roles_and_lineage():
+    options = {
+        item.option_id: item
+        for item in evaluate_response_options(OperationalSnapshot.rl001())
+    }
+    common = (
+        "RL-001",
+        "RL-INV-DEMO-CHI",
+        "RL-MO-DEMO-1",
+        "RL-MO-DEMO-2",
+    )
+
+    assert {
+        option_id: (
+            option.assumptions,
+            option.evidence_ids,
+            option.prerequisite_roles,
+            option.source_data_lineage,
+        )
+        for option_id, option in options.items()
+    } == {
+        "RL-OPTION-NO-MITIGATION": (
+            ("Optional Alpha expedite receipt is excluded.",),
+            (),
+            (),
+            common,
+        ),
+        "RL-OPTION-EXPEDITE": (
+            (
+                "Alpha receipt is confirmed for its offered due date.",
+                "Remaining supplier recovery date is unconfirmed.",
+            ),
+            ("RL-ALPHA-OPTIONAL-3000",),
+            ("material_planner", "finance_approver"),
+            (*common, "RL-ALPHA-OPTIONAL-3000"),
+        ),
+        "RL-OPTION-TRANSFER": (
+            (),
+            ("RL-TRANSFER-DAL-CHI-1500",),
+            ("material_planner",),
+            (*common, "RL-INV-DEMO-DAL", "RL-TRANSFER-DAL-CHI-1500"),
+        ),
+        "RL-OPTION-RESEQUENCE": ((), (), ("material_planner",), common),
+        "RL-OPTION-BETA": (
+            (),
+            ("RL-QUALITY-001",),
+            ("material_planner", "quality_approver"),
+            (*common, "RL-QUALITY-001"),
+        ),
+        "RL-OPTION-COMBINED": (
+            ("Remaining supplier recovery date is unconfirmed.",),
+            ("RL-ALPHA-OPTIONAL-3000", "RL-TRANSFER-DAL-CHI-1500"),
+            ("material_planner", "finance_approver"),
+            (
+                *common,
+                "RL-ALPHA-OPTIONAL-3000",
+                "RL-INV-DEMO-DAL",
+                "RL-TRANSFER-DAL-CHI-1500",
+            ),
+        ),
     }
 
 

@@ -30,6 +30,18 @@ def analyze(case_id: str) -> dict:
     return response.json()
 
 
+def alex_decision(option_id: str) -> dict:  # allowed - shared API test fixture
+    return {
+        "option_id": option_id,
+        "actor": {
+            "persona_id": "RL-PERSONA-ALEX",
+            "roles": ["material_planner", "response_approver"],
+            "identity_source": "entra",
+            "source_id": "RL-ENTRA-ALEX",
+        },
+    }
+
+
 def test_api_returns_canonical_analysis_version_and_response_options():
     case_id = create_case()
 
@@ -51,13 +63,32 @@ def test_api_returns_canonical_analysis_version_and_response_options():
     assert client.get(f"/api/cases/{case_id}").json()["analysis"]["analysis_id"]
 
 
+def test_api_analysis_uses_causal_utc_wall_clock_timestamps():
+    case_id = create_case()
+
+    analysis = analyze(case_id)
+
+    assert (
+        analysis["analysis_started_at"]
+        != analysis["material"]["scenario_effective_time"]
+    )
+    assert analysis["analysis_started_at"].endswith("Z")
+    assert analysis["created_at"] >= analysis["analysis_started_at"]
+    assert all(
+        analysis["analysis_started_at"]
+        <= item["retrieved_at"]
+        <= analysis["created_at"]
+        for item in analysis["evidence_items"]
+    )
+
+
 def test_cannot_approve_an_infeasible_response_option():
     case_id = create_case()
     analyze(case_id)
 
     response = client.post(
         f"/api/cases/{case_id}/approve",
-        json={"option_id": "RL-OPTION-BETA"},
+        json=alex_decision("RL-OPTION-BETA"),
     )
 
     assert response.status_code == 409
@@ -70,7 +101,7 @@ def test_decision_references_the_immutable_analysis_and_option():
 
     response = client.post(
         f"/api/cases/{case_id}/approve",
-        json={"option_id": "RL-OPTION-COMBINED"},
+        json=alex_decision("RL-OPTION-COMBINED"),
     )
 
     assert response.status_code == 200
@@ -79,9 +110,34 @@ def test_decision_references_the_immutable_analysis_and_option():
     assert len(DECISIONS) == 1
     assert DECISIONS[0].analysis_id == analysis["analysis_id"]
     assert DECISIONS[0].option_id == "RL-OPTION-COMBINED"
+    assert DECISIONS[0].satisfied_prerequisite_roles == (
+        "finance_approver",
+        "material_planner",
+    )
+
+
+def test_approval_rejects_missing_analysis_prerequisite_satisfaction():
+    case_id = create_case()
+    analyze(case_id)
+    record = CASES[case_id]
+    record.analysis = record.analysis.model_copy(update={"approval_satisfactions": ()})
+
+    response = client.post(
+        f"/api/cases/{case_id}/approve",
+        json=alex_decision("RL-OPTION-COMBINED"),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Response option prerequisite approvals are not satisfied: finance_approver"
+    )
+    assert record.case.status == "awaiting_decision"
+    assert record.selected_option_id is None
+    assert DECISIONS == []
 
 
 def test_dashboard_summary_uses_canonical_case_statuses():
+    empty = client.get("/api/dashboard/summary")
     case_id = create_case()
     analyze(case_id)
 
@@ -90,3 +146,5 @@ def test_dashboard_summary_uses_canonical_case_statuses():
     assert response.status_code == 200
     assert response.json()["active_disruptions"] == 1
     assert response.json()["analyzed_cases"] == 1
+    assert empty.json()["revenue_at_risk"] == "0.00"
+    assert response.json()["revenue_at_risk"] == "955000.00"

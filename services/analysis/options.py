@@ -6,9 +6,11 @@ from data.domain import (
     PredictedOutcome,
     QualificationStatus,
     ResponseOption,
+    ResponseOptionEvidenceRequirement,
     TimedQuantity,
 )
 from data.domain.common import ResponseOptionKind
+from data.domain.evidence import AuthorityScope
 from data.synthetic.rl001 import OperationalSnapshot
 from services.analysis.exposure import allocate_component_supply
 from services.policy.thresholds import requires_finance_approval
@@ -219,6 +221,7 @@ def _response_option(
     blocking_codes: tuple[str, ...] = (),
     assumptions: tuple[str, ...] = (),
     evidence_ids: tuple[str, ...] = (),
+    evidence_requirements: tuple[ResponseOptionEvidenceRequirement, ...] = (),
     source_data_lineage: tuple[str, ...] = (),
     unconfirmed_external_commitments: int = 0,
     cross_plant_movements: int = 0,
@@ -243,6 +246,7 @@ def _response_option(
         blocking_codes=blocking_codes,
         assumptions=assumptions,
         evidence_ids=evidence_ids,
+        evidence_requirements=evidence_requirements,
         source_data_lineage=source_data_lineage,
     )
 
@@ -330,6 +334,19 @@ def evaluate_response_options(
                 if snapshot.alpha_expedite is not None
                 else ()
             ),
+            evidence_requirements=(
+                (
+                    ResponseOptionEvidenceRequirement(
+                        evidence_id=snapshot.alpha_expedite.receipt_id,
+                        authority_scope=(
+                            AuthorityScope.OPERATIONAL_QUANTITY,
+                            AuthorityScope.OPERATIONAL_DATE,
+                        ),
+                    ),
+                )
+                if snapshot.alpha_expedite is not None
+                else ()
+            ),
             source_data_lineage=_lineage(snapshot, include_alpha=True),
             unconfirmed_external_commitments=_unconfirmed_recovery_commitments(
                 snapshot
@@ -348,6 +365,15 @@ def evaluate_response_options(
             if not transfer_available
             else (),
             evidence_ids=(snapshot.transfer.transfer_id,),
+            evidence_requirements=(
+                ResponseOptionEvidenceRequirement(
+                    evidence_id=snapshot.transfer.transfer_id,
+                    authority_scope=(
+                        AuthorityScope.OPERATIONAL_QUANTITY,
+                        AuthorityScope.OPERATIONAL_DATE,
+                    ),
+                ),
+            ),
             source_data_lineage=_lineage(snapshot, include_transfer=True),
             cross_plant_movements=_cross_plant_movements(snapshot),
             coordinated_action_count=_coordinated_action_count(transfer=True),
@@ -387,6 +413,12 @@ def evaluate_response_options(
             if not beta_blocked
             else (),
             evidence_ids=(snapshot.beta_qualification.evidence_ref,),
+            evidence_requirements=(
+                ResponseOptionEvidenceRequirement(
+                    evidence_id=snapshot.beta_qualification.evidence_ref,
+                    authority_scope=(AuthorityScope.QUALIFICATION_STATE,),
+                ),
+            ),
             source_data_lineage=_lineage(snapshot, include_beta=True),
             unconfirmed_external_commitments=_unconfirmed_recovery_commitments(
                 snapshot
@@ -426,6 +458,28 @@ def evaluate_response_options(
                     else ()
                 ),
                 snapshot.transfer.transfer_id,
+            ),
+            evidence_requirements=(
+                *(
+                    (
+                        ResponseOptionEvidenceRequirement(
+                            evidence_id=snapshot.alpha_expedite.receipt_id,
+                            authority_scope=(
+                                AuthorityScope.OPERATIONAL_QUANTITY,
+                                AuthorityScope.OPERATIONAL_DATE,
+                            ),
+                        ),
+                    )
+                    if snapshot.alpha_expedite is not None
+                    else ()
+                ),
+                ResponseOptionEvidenceRequirement(
+                    evidence_id=snapshot.transfer.transfer_id,
+                    authority_scope=(
+                        AuthorityScope.OPERATIONAL_QUANTITY,
+                        AuthorityScope.OPERATIONAL_DATE,
+                    ),
+                ),
             ),
             source_data_lineage=_lineage(
                 snapshot, include_alpha=True, include_transfer=True

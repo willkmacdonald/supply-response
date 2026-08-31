@@ -4,7 +4,7 @@ from data.domain import PredictedOutcome, ResponseOption
 from data.domain.common import ResponseOptionKind
 from data.synthetic.rl001 import OperationalSnapshot
 from services.analysis.options import evaluate_response_options
-from services.analysis.ranking import rank_options
+from services.analysis.ranking import COMPARATORS, rank_options
 
 
 def rl001_options() -> tuple[ResponseOption, ...]:
@@ -45,6 +45,19 @@ def test_thresholded_lexicographic_ranking_selects_combined():
     assert result.stages[0].retained_option_ids == ("RL-OPTION-COMBINED",)
     assert "RL-OPTION-BETA" in result.infeasible_option_ids
     assert "RL-OPTION-NO-MITIGATION" in result.excluded_baseline_ids
+
+
+def test_comparator_policy_names_and_thresholds_are_exact():
+    assert tuple((item.name, item.threshold) for item in COMPARATORS) == (
+        ("uncovered_part_demand", Decimal("500")),
+        ("otif_loss_percentage", Decimal("10")),
+        ("revenue_at_risk", Decimal("50000")),
+        ("margin_at_risk", Decimal("25000")),
+        ("response_cost", Decimal("10000")),
+        ("approval_burden", Decimal("0")),
+        ("execution_risk", Decimal("0")),
+        ("option_id", Decimal("0")),
+    )
 
 
 def test_threshold_keeps_immaterial_difference_for_next_comparator():

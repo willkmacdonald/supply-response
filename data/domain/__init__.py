@@ -6,6 +6,7 @@ from .analysis import (
     RankingResult,
     RankingStage,
     ResponseOption,
+    ResponseOptionEvidenceRequirement,
     TimedQuantity,
 )
 from .cases import CaseInstance, CaseStatus, DemoTemplate
@@ -54,6 +55,7 @@ __all__ = [
     "RankingResult",
     "RankingStage",
     "ResponseOption",
+    "ResponseOptionEvidenceRequirement",
     "serialize_money",
     "Supplier",
     "SupplierPart",
