@@ -69,6 +69,8 @@ test("a failed child action retries without replacing sibling actions", async ({
   await analyze(page);
   await approve(page);
   await expect(page.getByTestId("execution-action")).toHaveCount(5);
+  const actionIdsBefore = await page.getByTestId("execution-action").locator("small").allTextContents();
+  expect(new Set(actionIdsBefore).size).toBe(5);
 
   const failedAction = page.getByTestId(/execution-action-RL-ACTION-/).filter({hasText: "failed"});
   await expect(failedAction).toHaveCount(1);
@@ -77,6 +79,9 @@ test("a failed child action retries without replacing sibling actions", async ({
   await failedAction.getByRole("button", {name: /Retry prepare alpha recovery draft/}).click();
   await expect(page.getByTestId(actionTestId!)).toContainText("in_progress");
   await expect(page.getByTestId("execution-action")).toHaveCount(5);
+  const actionIdsAfter = await page.getByTestId("execution-action").locator("small").allTextContents();
+  expect(new Set(actionIdsAfter).size).toBe(5);
+  expect(actionIdsAfter.sort()).toEqual(actionIdsBefore.sort());
 });
 
 test("a second playback click reuses one playback and produces no duplicate outcomes", async ({page}) => {
