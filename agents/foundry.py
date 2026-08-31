@@ -13,6 +13,31 @@ from agents.orchestrator.local import LocalAgentSet
 
 _NAME = re.compile(r"^[a-z][a-z0-9-]{2,62}$")
 _VERSION = re.compile(r"^[1-9][0-9]{0,9}$")
+_PROJECT_ENDPOINT = re.compile(
+    r"^https://"
+    r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+    r"\.services\.ai\.azure\.com/api/projects/"
+    r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+)
+
+
+def _trusted_project_endpoint(value: str) -> bool:
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        return False
+    return bool(
+        _PROJECT_ENDPOINT.fullmatch(value)
+        and parsed.scheme == "https"
+        and parsed.hostname
+        and parsed.hostname == parsed.hostname.lower()
+        and parsed.username is None
+        and parsed.password is None
+        and port is None
+        and not parsed.query
+        and not parsed.fragment
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,13 +47,8 @@ class FoundryAgentBinding:
     agent_version: str
 
     def __post_init__(self) -> None:
-        parsed = urlsplit(self.project_endpoint)
         if (
-            parsed.scheme != "https"
-            or not parsed.hostname
-            or not parsed.hostname.endswith(".services.ai.azure.com")
-            or parsed.query
-            or parsed.fragment
+            not _trusted_project_endpoint(self.project_endpoint)
             or not _NAME.fullmatch(self.agent_name)
             or not _VERSION.fullmatch(self.agent_version)
         ):
@@ -38,14 +58,7 @@ class FoundryAgentBinding:
 
 
 def validate_project_endpoint(value: str) -> str:
-    parsed = urlsplit(value)
-    if (
-        parsed.scheme != "https"
-        or not parsed.hostname
-        or not parsed.hostname.endswith(".services.ai.azure.com")
-        or parsed.query
-        or parsed.fragment
-    ):
+    if not _trusted_project_endpoint(value):
         raise ValueError("Foundry project endpoint is outside the trusted policy")
     return value
 

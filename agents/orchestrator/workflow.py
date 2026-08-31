@@ -28,6 +28,10 @@ from .contracts import (
 from .local import LocalAgentSet
 
 _MAX_PROMPT_CHARS = 16_000
+_MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_MODEL_POLICY = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
+_MODEL_COMPARATOR = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_MODEL_NUMBER = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _SENSITIVE_PATTERNS = (
     re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/-]+=*"),
     re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
@@ -76,6 +80,23 @@ def _safe_partial(analysis: AnalysisVersion) -> PartialDeterministicResult:
     )
 
 
+def _require_model_value(value: str, pattern: re.Pattern[str], *, field: str) -> None:
+    if not pattern.fullmatch(value) or _contains_sensitive(value):
+        raise ValueError(f"{field} violates the model data boundary")
+
+
+def _validate_evidence_payload(payload: dict[str, Any]) -> None:
+    for item in payload["evidence"]:
+        _require_model_value(
+            item["evidence_id"], _MODEL_ID, field="evidence identifier"
+        )
+        for scope in item["authority_scope"]:
+            _require_model_value(scope, _MODEL_COMPARATOR, field="authority scope")
+        for field in ("claim", "excerpt"):
+            if _contains_sensitive(item[field]):
+                raise ValueError(f"evidence {field} violates the model data boundary")
+
+
 def _normalize_span(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).split())
 
@@ -94,6 +115,7 @@ def _evidence_payload(
         if set(item.authority_scope) & scopes
     )[:10]
     payload = {"evidence": [item.model_dump(mode="json") for item in bounded]}
+    _validate_evidence_payload(payload)
     serialized = str(payload)
     if _contains_sensitive(serialized):
         raise ValueError("evidence payload violates the model data boundary")
@@ -134,7 +156,7 @@ def _decision_payload(analysis: AnalysisVersion) -> dict[str, Any]:
     recommended = ranking.recommended_option_id
     if recommended is None:
         recommended = "NO-FEASIBLE-MITIGATION"
-    return {
+    payload = {
         "analysis_id": analysis.analysis_id,
         "recommended_option_id": recommended,
         "policy_version": ranking.policy_version,
@@ -152,6 +174,43 @@ def _decision_payload(analysis: AnalysisVersion) -> dict[str, Any]:
             for index, stage in enumerate(ranking.stages, start=1)
         ],
     }
+    _require_model_value(payload["analysis_id"], _MODEL_ID, field="analysis identifier")
+    _require_model_value(
+        payload["recommended_option_id"],
+        _MODEL_ID,
+        field="recommended option identifier",
+    )
+    _require_model_value(
+        payload["policy_version"], _MODEL_POLICY, field="ranking policy"
+    )
+    for stage in payload["stages"]:
+        _require_model_value(
+            stage["stage_reference"], _MODEL_ID, field="stage reference"
+        )
+        _require_model_value(
+            stage["comparator"], _MODEL_COMPARATOR, field="ranking comparator"
+        )
+        _require_model_value(
+            stage["threshold"], _MODEL_NUMBER, field="ranking threshold"
+        )
+        for item in stage["values"]:
+            _require_model_value(
+                item["option_id"], _MODEL_ID, field="ranked option identifier"
+            )
+            value_pattern = (
+                _MODEL_ID if stage["comparator"] == "option_id" else _MODEL_NUMBER
+            )
+            _require_model_value(item["value"], value_pattern, field="ranking value")
+        for option_id in stage["retained_option_ids"]:
+            _require_model_value(
+                option_id, _MODEL_ID, field="retained option identifier"
+            )
+    serialized = str(payload)
+    if _contains_sensitive(serialized):
+        raise ValueError("decision payload violates the model data boundary")
+    if len(serialized) > _MAX_PROMPT_CHARS:
+        raise ValueError("bounded decision prompt exceeds the configured limit")
+    return payload
 
 
 def _parse_decision(
@@ -355,6 +414,8 @@ class Orchestrator:
 
     async def analyze(self, command: AnalyzeCommand) -> OrchestrationResult:
         deterministic: AnalysisVersion | None = None
+        result: OrchestrationResult | None = None
+        failed_partial: PartialDeterministicResult | None = None
 
         def analyze_once(value: AnalyzeCaseCommand) -> AnalysisVersion:
             nonlocal deterministic
@@ -373,11 +434,17 @@ class Orchestrator:
             if len(outputs) != 1 or not isinstance(outputs[0], OrchestrationResult):
                 raise RuntimeError("workflow returned an invalid output contract")
             result = outputs[0]
-        except Exception as exc:
-            if isinstance(exc, AgentExplanationUnavailable):
-                raise
+        except Exception:  # noqa: BLE001 - discard the untrusted SDK exception
             deterministic = analyze_once(command.deterministic)
-            raise AgentExplanationUnavailable(_safe_partial(deterministic)) from None
+            failed_partial = _safe_partial(deterministic)
+        if failed_partial is not None:
+            public = AgentExplanationUnavailable(failed_partial)
+            public.__cause__ = None
+            public.__context__ = None
+            public.__traceback__ = None
+            raise public
+        if result is None:  # pragma: no cover - guarded by the workflow contract
+            raise RuntimeError("workflow did not produce a result")
         if result.explanation_status == "rejected":
             # A disagreement is safely downgraded without weakening the analysis.
             return result

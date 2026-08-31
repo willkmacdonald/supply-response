@@ -9,7 +9,12 @@ from typing import Any, cast
 import pytest
 from agent_framework import AgentResponse, Content, Message
 
-from agents.foundry import FoundryAgentBinding, FoundryJsonAgent, build_foundry_agent
+from agents.foundry import (
+    FoundryAgentBinding,
+    FoundryJsonAgent,
+    build_foundry_agent,
+    validate_project_endpoint,
+)
 from agents.manifests import ManifestError, load_manifests
 from scripts.publish_foundry_agents import publish
 from scripts.verify_foundry_agents import verify
@@ -105,6 +110,53 @@ def test_foundry_agent_requires_trusted_exact_binding() -> None:
             project_endpoint="https://example.invalid/project?token=secret",
             agent_name="supply-response-signal",
             agent_version="latest",
+        )
+
+
+def test_foundry_endpoint_accepts_only_canonical_project_origin() -> None:
+    endpoint = "https://example.services.ai.azure.com/api/projects/demo-project_1"
+    assert validate_project_endpoint(endpoint) == endpoint
+    assert (
+        FoundryAgentBinding(
+            project_endpoint=endpoint,
+            agent_name="supply-response-signal",
+            agent_version="7",
+        ).project_endpoint
+        == endpoint
+    )
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "http://example.services.ai.azure.com/api/projects/demo",
+        "https://user:secret@example.services.ai.azure.com/api/projects/demo",
+        "https://example.services.ai.azure.com:443/api/projects/demo",
+        "https://example.services.ai.azure.com:444/api/projects/demo",
+        "https://example.services.ai.azure.com/api/projects/demo?token=secret",
+        "https://example.services.ai.azure.com/api/projects/demo#fragment",
+        "https://example.services.ai.azure.com/api/projects/demo/extra",
+        "https://example.services.ai.azure.com/api/projects/../demo",
+        "https://EXAMPLE.services.ai.azure.com/api/projects/demo",
+        "https://example.evil.services.ai.azure.com/api/projects/demo",
+        "https://services.ai.azure.com/api/projects/demo",
+        "https://127.0.0.1/api/projects/demo",
+        "https://localhost/api/projects/demo",
+        "https://*.services.ai.azure.com/api/projects/demo",
+        "https://example.services.ai.azure.com/api/projects/demo%2fescape",
+        "https://example.services.ai.azure.com/api/projects/demo value",
+    ],
+)
+def test_foundry_endpoint_rejects_noncanonical_or_credentialed_values(
+    endpoint: str,
+) -> None:
+    with pytest.raises(ValueError, match="trusted"):
+        validate_project_endpoint(endpoint)
+    with pytest.raises(ValueError, match="trusted"):
+        FoundryAgentBinding(
+            project_endpoint=endpoint,
+            agent_name="supply-response-signal",
+            agent_version="7",
         )
 
 

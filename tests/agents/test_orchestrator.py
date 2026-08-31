@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import gc
+import traceback
 import weakref
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -12,6 +13,7 @@ import pytest
 from agents.orchestrator.contracts import (
     AgentExplanationUnavailable,
     AnalyzeCommand,
+    PartialDeterministicResult,
 )
 from agents.orchestrator.local import LocalAgentSet
 from agents.orchestrator.workflow import Orchestrator, _evidence_payload
@@ -295,6 +297,157 @@ def test_final_prompt_dto_fails_closed_on_identity_or_credential_patterns(
     )
     with pytest.raises(ValueError, match="model data boundary"):
         _evidence_payload((item,), scopes={AuthorityScope.QUALIFICATION_STATE})
+
+
+def test_final_prompt_dto_rejects_non_allowlisted_evidence_identifiers() -> None:
+    item = (
+        command()
+        .deterministic.evidence_items[-1]
+        .model_copy(update={"evidence_id": "not an identifier"})
+    )
+    with pytest.raises(ValueError, match="model data boundary"):
+        _evidence_payload((item,), scopes={AuthorityScope.QUALIFICATION_STATE})
+
+
+def _contaminate_decision_analysis(field: str, suspect: str):
+    analysis = analyze_case(command().deterministic)
+    ranking = analysis.ranking
+    stage = ranking.stages[0]
+    if field == "analysis_id":
+        return analysis.model_copy(update={"analysis_id": suspect})
+    if field == "recommended_option_id":
+        return analysis.model_copy(
+            update={
+                "ranking": ranking.model_copy(update={"recommended_option_id": suspect})
+            }
+        )
+    if field == "policy_version":
+        return analysis.model_copy(
+            update={"ranking": ranking.model_copy(update={"policy_version": suspect})}
+        )
+    if field == "comparator":
+        changed = stage.model_copy(update={"comparator": suspect})
+    elif field == "value_option_id":
+        changed_value = stage.values[0].model_copy(update={"option_id": suspect})
+        changed = stage.model_copy(
+            update={"values": (changed_value, *stage.values[1:])}
+        )
+    elif field == "value":
+        changed_value = stage.values[0].model_copy(update={"value": suspect})
+        changed = stage.model_copy(
+            update={"values": (changed_value, *stage.values[1:])}
+        )
+    elif field == "retained_option_id":
+        changed = stage.model_copy(update={"retained_option_ids": (suspect,)})
+    else:  # pragma: no cover - protects the test helper itself
+        raise AssertionError(field)
+    return analysis.model_copy(
+        update={
+            "ranking": ranking.model_copy(
+                update={"stages": (changed, *ranking.stages[1:])}
+            )
+        }
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("field", "suspect"),
+    [
+        (
+            "analysis_id",
+            "Bearer eyJhbGciOiJSUzI1NiJ9.eyJvaWQiOiIxMjM0NTY3OCJ9.abcdefghijklmnopqrstuvwxyz012345",
+        ),
+        ("recommended_option_id", "upn: alex@example.invalid"),
+        ("policy_version", "client_secret=fictional-confidential-value"),
+        ("comparator", "tenant_id=11111111-2222-3333-4444-555555555555"),
+        ("value_option_id", "oid is 11111111-2222-3333-4444-555555555555"),
+        (
+            "value",
+            "OBO assertion=eyJhbGciOiJSUzI1NiJ9.eyJ0aWQiOiIxMjM0NTY3OCJ9.abcdefghijklmnopqrstuvwxyz012345",
+        ),
+        ("retained_option_id", "https://user:password@example.invalid/project"),
+    ],
+)
+async def test_every_decision_dto_field_fails_closed_before_agent_invocation(
+    field: str, suspect: str
+) -> None:
+    contaminated = _contaminate_decision_analysis(field, suspect)
+    factory, made = agents()
+
+    with pytest.raises(AgentExplanationUnavailable) as caught:
+        await Orchestrator(factory, lambda _: contaminated).analyze(command())
+
+    assert cast(FakeAgent, made[0].decision).payloads == []
+    public = caught.value
+    exposed = " ".join(
+        (
+            str(public),
+            repr(public),
+            repr(public.args),
+            public.partial_result.model_dump_json(),
+        )
+    )
+    assert suspect not in exposed
+
+
+@pytest.mark.anyio
+async def test_public_unavailable_exception_detaches_original_exception_chain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret = "Bearer eyJhbGciOiJSUzI1NiJ9.secret-bearing-payload.signature-value"
+
+    class FailedWorkflow:
+        async def run(self, value):
+            raise RuntimeError(secret)
+
+    monkeypatch.setattr(
+        "agents.orchestrator.workflow.build_framework_workflow",
+        lambda *args, **kwargs: FailedWorkflow(),
+    )
+    with pytest.raises(AgentExplanationUnavailable) as caught:
+        await Orchestrator(agents()[0], analyze_case).analyze(command())
+
+    public = caught.value
+    assert public.__context__ is None
+    assert public.__cause__ is None
+    assert secret not in repr(public)
+    assert secret not in repr(public.args)
+    assert secret not in repr(vars(public))
+    assert secret not in "".join(traceback.format_exception(public))
+    assert secret not in public.partial_result.model_dump_json()
+
+
+@pytest.mark.anyio
+async def test_public_boundary_rebuilds_nested_unavailable_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    analysis = analyze_case(command().deterministic)
+    nested = AgentExplanationUnavailable(
+        PartialDeterministicResult(
+            analysis_version=analysis,
+            evidence_items=analysis.evidence_items,
+        )
+    )
+    secret = "client_secret=nested-public-exception-secret"
+    nested.__context__ = RuntimeError(secret)
+
+    class FailedWorkflow:
+        async def run(self, value):
+            raise nested
+
+    monkeypatch.setattr(
+        "agents.orchestrator.workflow.build_framework_workflow",
+        lambda *args, **kwargs: FailedWorkflow(),
+    )
+    with pytest.raises(AgentExplanationUnavailable) as caught:
+        await Orchestrator(agents()[0], analyze_case).analyze(command())
+
+    assert caught.value is not nested
+    assert caught.value.__context__ is None
+    assert caught.value.__cause__ is None
+    assert secret not in repr(vars(caught.value))
+    assert secret not in "".join(traceback.format_exception(caught.value))
 
 
 @pytest.mark.anyio
