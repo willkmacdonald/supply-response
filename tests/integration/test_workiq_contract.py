@@ -11,11 +11,12 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import jwt
 import pytest
 
-from apps.api.app.auth import UserAssertion
+from apps.api.app.auth import AuthService, PersonaBinding
 from data.domain.common import RuntimeMode
-from data.domain.evidence import EvidenceKind, EvidenceRequirement
+from data.domain.evidence import AuthorityScope, EvidenceKind, EvidenceRequirement
 from integrations.workiq.client import (
     WorkIQProtocolError,
     WorkIQResponseLimitError,
@@ -28,6 +29,14 @@ from integrations.workiq.obo import (
     WorkIQOboExchange,
 )
 from integrations.workiq.prompts import quality_context_prompt, supplier_signal_prompt
+from tests.auth.test_token_authorization import (
+    ALEX_OID,
+    API_CLIENT_ID,
+    FixtureHttp,
+    NOW as AUTH_NOW,
+    PRIVATE_KEY,
+    TENANT_ID,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -50,6 +59,33 @@ class ConfidentialClientFixture:
         return self.result
 
 
+def _authenticated_alex():
+    service = AuthService(
+        tenant_id=TENANT_ID,
+        audience=API_CLIENT_ID,
+        bindings=(PersonaBinding.alex(TENANT_ID, ALEX_OID),),
+        http_get=FixtureHttp(),
+        now=lambda: AUTH_NOW.timestamp(),
+    )
+    assertion = jwt.encode(
+        {
+            "iss": f"https://login.microsoftonline.com/{TENANT_ID}/v2.0",
+            "aud": API_CLIENT_ID,
+            "iat": int(AUTH_NOW.timestamp()) - 5,
+            "nbf": int(AUTH_NOW.timestamp()) - 5,
+            "exp": int(AUTH_NOW.timestamp()) + 300,
+            "tid": TENANT_ID,
+            "oid": ALEX_OID,
+            "roles": ["material_planner", "response_approver"],
+            "scp": "access_as_user",
+        },
+        PRIVATE_KEY,
+        algorithm="RS256",
+        headers={"kid": "fixture-key", "typ": "JWT"},
+    )
+    return service.authenticate(assertion)
+
+
 def test_obo_requests_only_explicit_delegated_scope_and_redacts_secrets() -> None:
     raw_assertion = "validated-api-bearer-secret"
     downstream = "downstream-work-iq-secret"
@@ -61,7 +97,9 @@ def test_obo_requests_only_explicit_delegated_scope_and_redacts_secrets() -> Non
         }
     )
 
-    token = WorkIQOboExchange(confidential).exchange(UserAssertion(raw_assertion))
+    actor = _authenticated_alex()
+    raw_assertion = actor.downstream_user_assertion.reveal()
+    token = WorkIQOboExchange(confidential, tenant_id=TENANT_ID).exchange(actor)
 
     assert token.reveal() == downstream
     assert confidential.calls == [
@@ -96,9 +134,9 @@ def test_obo_rejects_missing_error_or_application_only_results(
     result: dict[str, Any],
 ) -> None:
     with pytest.raises(WorkIQAuthenticationError) as error:
-        WorkIQOboExchange(ConfidentialClientFixture(result)).exchange(
-            UserAssertion("api-secret")
-        )
+        WorkIQOboExchange(
+            ConfidentialClientFixture(result), tenant_id=TENANT_ID
+        ).exchange(_authenticated_alex())
 
     message = str(error.value)
     assert "api-secret" not in message
@@ -114,6 +152,7 @@ def _completed_payload(request_id: str = "request-1") -> dict[str, Any]:
         "id": request_id,
         "result": {
             "contextId": "context-opaque",
+            "taskId": "task-opaque",
             "status": {"state": "TASK_STATE_COMPLETED"},
             "artifacts": [],
         },
@@ -226,12 +265,26 @@ async def test_client_bounds_response_bytes_json_depth_artifacts_and_parts() -> 
 )
 def test_a2a_response_normalizes_to_cited_evidence(fixture_name: str) -> None:
     payload = json.loads((FIXTURES / fixture_name).read_text())
-    items = normalize_a2a_evidence(
+    expected_source_id = (
+        "fixture-source-alpha"
+        if fixture_name.startswith("supplier-alpha")
+        else "fixture-source-beta-quality"
+    )
+    expected_scope = (
+        AuthorityScope.SUPPLIER_STATEMENT
+        if fixture_name.startswith("supplier-alpha")
+        else AuthorityScope.COLLABORATION_STATEMENT
+    )
+    retrieval = normalize_a2a_evidence(
         payload,
         case_id="RL-CASE-WORKIQ-1",
         analysis_id="RL-ANALYSIS-WORKIQ-1",
         retrieved_at=NOW,
+        expected_source_id=expected_source_id,
+        expected_authority_scope=expected_scope,
+        tenant_sharepoint_host="tenant.sharepoint.com",
     )
+    items = retrieval.evidence
 
     assert items
     assert all(item.source_system == "work_iq" for item in items)
@@ -289,7 +342,10 @@ def test_normalizer_never_upgrades_missing_or_untrusted_citations(
         case_id="RL-CASE-WORKIQ-2",
         analysis_id="RL-ANALYSIS-WORKIQ-2",
         retrieved_at=NOW,
-    )[0]
+        expected_source_id="x",
+        expected_authority_scope=AuthorityScope.SUPPLIER_STATEMENT,
+        tenant_sharepoint_host="tenant.sharepoint.com",
+    ).evidence[0]
 
     assert item.citation_url is None
     assert item.kind is EvidenceKind.CONTEXTUAL_EVIDENCE
@@ -311,6 +367,9 @@ def test_normalizer_rejects_oversized_text_and_part_bounds() -> None:
             case_id="case",
             analysis_id="analysis",
             retrieved_at=NOW,
+            expected_source_id="source",
+            expected_authority_scope=AuthorityScope.SUPPLIER_STATEMENT,
+            tenant_sharepoint_host="tenant.sharepoint.com",
         )
 
 
@@ -328,7 +387,10 @@ def test_free_text_is_contextual_and_never_authoritative() -> None:
         case_id="case",
         analysis_id="analysis",
         retrieved_at=NOW,
-    )[0]
+        expected_source_id="source",
+        expected_authority_scope=AuthorityScope.SUPPLIER_STATEMENT,
+        tenant_sharepoint_host="tenant.sharepoint.com",
+    ).evidence[0]
 
     assert item.kind is EvidenceKind.CONTEXTUAL_EVIDENCE
     assert item.requirement is EvidenceRequirement.CONTEXTUAL
@@ -351,6 +413,9 @@ def test_normalizer_rejects_excessive_part_count() -> None:
             case_id="case",
             analysis_id="analysis",
             retrieved_at=NOW,
+            expected_source_id="source",
+            expected_authority_scope=AuthorityScope.SUPPLIER_STATEMENT,
+            tenant_sharepoint_host="tenant.sharepoint.com",
         )
 
 
@@ -414,9 +479,12 @@ LIVE_SETTINGS = (
     "SUPPLY_RESPONSE_ALLOWED_TENANT_ID",
     "SUPPLY_RESPONSE_API_CLIENT_ID",
     "SUPPLY_RESPONSE_API_CLIENT_SECRET",
+    "SUPPLY_RESPONSE_ALEX_OBJECT_ID",
     "SUPPLY_RESPONSE_WORKIQ_ALEX_ASSERTION_FILE",
     "SUPPLY_RESPONSE_WORKIQ_ALPHA_SOURCE_ID",
     "SUPPLY_RESPONSE_WORKIQ_BETA_SOURCE_ID",
+    "SUPPLY_RESPONSE_WORKIQ_TENANT_SHAREPOINT_HOST",
+    "SUPPLY_RESPONSE_WORKIQ_ALEX_STORAGE_STATE_FILE",
 )
 
 

@@ -4,7 +4,7 @@ import json
 import time
 from collections.abc import Callable, Mapping, Sequence
 from types import MappingProxyType
-from typing import Any, Final
+from typing import Any, Final, NoReturn, SupportsIndex
 from urllib.request import Request, urlopen
 from uuid import UUID
 
@@ -26,6 +26,7 @@ _KNOWN_ROLES: Final = frozenset(
         "finance_approver",
     }
 )
+_AUTHENTICATION_PROOF = object()
 
 
 class AuthenticationError(ValueError):
@@ -92,7 +93,9 @@ class UserAssertion:
 
     __slots__ = ("__token",)
 
-    def __init__(self, token: str) -> None:
+    def __init__(self, token: str, *, _proof: object | None = None) -> None:
+        if _proof is not _AUTHENTICATION_PROOF:
+            raise TypeError("UserAssertion can only be created by AuthService")
         self.__token = token
 
     def reveal(self) -> str:
@@ -105,6 +108,10 @@ class UserAssertion:
     def __str__(self) -> str:
         return "<redacted>"
 
+    def __reduce_ex__(self, protocol: SupportsIndex) -> NoReturn:
+        del protocol
+        raise TypeError("UserAssertion cannot be serialized")
+
 
 class AuthenticatedActor:
     __slots__ = (
@@ -115,7 +122,9 @@ class AuthenticatedActor:
         "display_name",
         "user_principal_name",
         "source_id",
+        "delegated_scopes",
         "downstream_user_assertion",
+        "_sealed",
     )
 
     def __init__(
@@ -129,7 +138,10 @@ class AuthenticatedActor:
         user_principal_name: str | None,
         source_id: str,
         bearer_assertion: str,
+        _proof: object | None = None,
     ) -> None:
+        if _proof is not _AUTHENTICATION_PROOF:
+            raise TypeError("AuthenticatedActor can only be created by AuthService")
         self.tenant_id = tenant_id
         self.object_id = object_id
         self.persona_id = persona_id
@@ -137,7 +149,16 @@ class AuthenticatedActor:
         self.display_name = display_name
         self.user_principal_name = user_principal_name
         self.source_id = source_id
-        self.downstream_user_assertion = UserAssertion(bearer_assertion)
+        self.delegated_scopes = ("access_as_user",)
+        self.downstream_user_assertion = UserAssertion(
+            bearer_assertion, _proof=_AUTHENTICATION_PROOF
+        )
+        self._sealed = True
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_sealed", False):
+            raise AttributeError("AuthenticatedActor is immutable")
+        object.__setattr__(self, name, value)
 
     def to_identity_snapshot(self) -> IdentitySnapshot:
         return IdentitySnapshot(
@@ -340,6 +361,7 @@ class AuthService:
             user_principal_name=upn,
             source_id=binding.source_id,
             bearer_assertion=bearer_assertion,
+            _proof=_AUTHENTICATION_PROOF,
         )
 
     @staticmethod

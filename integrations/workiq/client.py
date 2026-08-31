@@ -7,11 +7,12 @@ from uuid import uuid4
 
 import httpx
 
-from apps.api.app.auth import UserAssertion
-from data.domain.evidence import EvidenceItem
+from apps.api.app.auth import AuthenticatedActor
+from data.domain.evidence import AuthorityScope
 
 from .normalizer import normalize_a2a_evidence
 from .obo import WorkIQOboExchange
+from .models import WorkIQRetrieval
 from .prompts import quality_context_prompt, supplier_signal_prompt
 from .errors import WorkIQProtocolError, WorkIQResponseLimitError
 
@@ -143,22 +144,29 @@ class WorkIQClient:
 
 
 class WorkIQEvidencePort:
-    """Application-facing adapter that exposes only normalized evidence."""
+    """Application-facing adapter exposing evidence and opaque retrieval lineage."""
 
-    def __init__(self, *, client: WorkIQClient, obo: WorkIQOboExchange) -> None:
+    def __init__(
+        self,
+        *,
+        client: WorkIQClient,
+        obo: WorkIQOboExchange,
+        tenant_sharepoint_host: str,
+    ) -> None:
         self._client = client
         self._obo = obo
+        self._tenant_sharepoint_host = tenant_sharepoint_host
 
     async def retrieve_supplier_signal(
         self,
         *,
-        assertion: UserAssertion,
+        actor: AuthenticatedActor,
         source_id: str,
         case_id: str,
         analysis_id: str,
         retrieved_at: Any,
-    ) -> tuple[EvidenceItem, ...]:
-        token = self._obo.exchange(assertion)
+    ) -> WorkIQRetrieval:
+        token = self._obo.exchange(actor)
         payload = await self._client.send_message(
             supplier_signal_prompt(source_id), access_token=token.reveal()
         )
@@ -167,18 +175,21 @@ class WorkIQEvidencePort:
             case_id=case_id,
             analysis_id=analysis_id,
             retrieved_at=retrieved_at,
+            expected_source_id=source_id,
+            expected_authority_scope=AuthorityScope.SUPPLIER_STATEMENT,
+            tenant_sharepoint_host=self._tenant_sharepoint_host,
         )
 
     async def retrieve_quality_context(
         self,
         *,
-        assertion: UserAssertion,
+        actor: AuthenticatedActor,
         source_id: str,
         case_id: str,
         analysis_id: str,
         retrieved_at: Any,
-    ) -> tuple[EvidenceItem, ...]:
-        token = self._obo.exchange(assertion)
+    ) -> WorkIQRetrieval:
+        token = self._obo.exchange(actor)
         payload = await self._client.send_message(
             quality_context_prompt(source_id), access_token=token.reveal()
         )
@@ -187,4 +198,7 @@ class WorkIQEvidencePort:
             case_id=case_id,
             analysis_id=analysis_id,
             retrieved_at=retrieved_at,
+            expected_source_id=source_id,
+            expected_authority_scope=AuthorityScope.COLLABORATION_STATEMENT,
+            tenant_sharepoint_host=self._tenant_sharepoint_host,
         )

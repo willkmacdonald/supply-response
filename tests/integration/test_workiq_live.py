@@ -15,9 +15,12 @@ LIVE_SETTINGS = (
     "SUPPLY_RESPONSE_ALLOWED_TENANT_ID",
     "SUPPLY_RESPONSE_API_CLIENT_ID",
     "SUPPLY_RESPONSE_API_CLIENT_SECRET",
+    "SUPPLY_RESPONSE_ALEX_OBJECT_ID",
     "SUPPLY_RESPONSE_WORKIQ_ALEX_ASSERTION_FILE",
     "SUPPLY_RESPONSE_WORKIQ_ALPHA_SOURCE_ID",
     "SUPPLY_RESPONSE_WORKIQ_BETA_SOURCE_ID",
+    "SUPPLY_RESPONSE_WORKIQ_TENANT_SHAREPOINT_HOST",
+    "SUPPLY_RESPONSE_WORKIQ_ALEX_STORAGE_STATE_FILE",
 )
 configured = {name: os.environ.get(name, "").strip() for name in LIVE_SETTINGS}
 present = {name for name, value in configured.items() if value}
@@ -64,37 +67,71 @@ def _fresh_alex_assertion() -> str:
     return assertion
 
 
+def _alex_storage_state() -> Path:
+    path = Path(configured["SUPPLY_RESPONSE_WORKIQ_ALEX_STORAGE_STATE_FILE"])
+    try:
+        info = path.stat()
+    except OSError as error:
+        raise AssertionError(
+            "Alex browser storage-state file is not readable"
+        ) from error
+    if stat.S_IMODE(info.st_mode) & 0o077:
+        raise AssertionError("Alex browser storage-state file must be owner-only")
+    if info.st_size <= 0 or info.st_size > 1_048_576:
+        raise AssertionError("Alex browser storage-state file size is invalid")
+    return path
+
+
 @pytest.mark.anyio
 async def test_alex_retrieves_current_cited_demo_corpus() -> None:
-    from apps.api.app.auth import UserAssertion
+    from apps.api.app.auth import AuthService, PersonaBinding
     from data.domain.evidence import EvidenceRequirement
+    from integrations.workiq.citations import PlaywrightCitationVerifier
     from integrations.workiq.client import WorkIQClient, WorkIQEvidencePort
     from integrations.workiq.obo import build_obo_exchange
 
     retrieved_at = datetime.now(UTC)
-    assertion = UserAssertion(_fresh_alex_assertion())
+    storage_state_path = _alex_storage_state()
+    tenant_id = configured["SUPPLY_RESPONSE_ALLOWED_TENANT_ID"]
+    auth = AuthService(
+        tenant_id=tenant_id,
+        audience=configured["SUPPLY_RESPONSE_API_CLIENT_ID"],
+        bindings=(
+            PersonaBinding.alex(
+                tenant_id,
+                configured["SUPPLY_RESPONSE_ALEX_OBJECT_ID"],
+            ),
+        ),
+    )
+    actor = auth.authenticate(_fresh_alex_assertion())
     obo = build_obo_exchange(
         client_id=configured["SUPPLY_RESPONSE_API_CLIENT_ID"],
         client_secret=configured["SUPPLY_RESPONSE_API_CLIENT_SECRET"],
-        tenant_id=configured["SUPPLY_RESPONSE_ALLOWED_TENANT_ID"],
+        tenant_id=tenant_id,
     )
     async with httpx.AsyncClient() as http:
-        port = WorkIQEvidencePort(client=WorkIQClient(http=http), obo=obo)
+        port = WorkIQEvidencePort(
+            client=WorkIQClient(http=http),
+            obo=obo,
+            tenant_sharepoint_host=configured[
+                "SUPPLY_RESPONSE_WORKIQ_TENANT_SHAREPOINT_HOST"
+            ],
+        )
         alpha = await port.retrieve_supplier_signal(
-            assertion=assertion,
+            actor=actor,
             source_id=configured["SUPPLY_RESPONSE_WORKIQ_ALPHA_SOURCE_ID"],
             case_id="RL-CASE-WORKIQ-LIVE",
             analysis_id="RL-ANALYSIS-WORKIQ-LIVE",
             retrieved_at=retrieved_at,
         )
         beta = await port.retrieve_quality_context(
-            assertion=assertion,
+            actor=actor,
             source_id=configured["SUPPLY_RESPONSE_WORKIQ_BETA_SOURCE_ID"],
             case_id="RL-CASE-WORKIQ-LIVE",
             analysis_id="RL-ANALYSIS-WORKIQ-LIVE",
             retrieved_at=retrieved_at,
         )
-        items = (*alpha, *beta)
+        items = (*alpha.evidence, *beta.evidence)
         assert items
         assert all(
             item.requirement is EvidenceRequirement.REQUIRED_AUTHORITATIVE
@@ -102,11 +139,13 @@ async def test_alex_retrieves_current_cited_demo_corpus() -> None:
         )
         assert all(item.retrieved_at == retrieved_at for item in items)
         assert all(item.citation_url for item in items)
-        for item in items:
-            assert item.citation_url is not None
-            response = await http.get(
-                item.citation_url,
-                follow_redirects=True,
-                timeout=15.0,
-            )
-            assert response.status_code < 500
+        citation_urls = tuple(
+            item.citation_url for item in items if item.citation_url is not None
+        )
+        verifier = PlaywrightCitationVerifier(
+            storage_state_path=storage_state_path,
+            tenant_sharepoint_host=configured[
+                "SUPPLY_RESPONSE_WORKIQ_TENANT_SHAREPOINT_HOST"
+            ],
+        )
+        await verifier.verify(citation_urls)

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from typing import Any, Final, NoReturn, Protocol, SupportsIndex
+from uuid import UUID
 
-from apps.api.app.auth import UserAssertion
+from apps.api.app.auth import AuthenticatedActor
 
 WORK_IQ_SCOPE: Final = "api://workiq.svc.cloud.microsoft/WorkIQAgent.Ask"
 
@@ -40,16 +41,29 @@ class WorkIQAccessToken:
 
 
 class WorkIQOboExchange:
-    def __init__(self, confidential_client: ConfidentialClient) -> None:
+    def __init__(
+        self, confidential_client: ConfidentialClient, *, tenant_id: str
+    ) -> None:
         self._client = confidential_client
+        try:
+            self._tenant_id = str(UUID(tenant_id))
+        except (TypeError, ValueError, AttributeError) as error:
+            raise ValueError("Work IQ OBO tenant ID must be a UUID") from error
 
-    def exchange(self, assertion: UserAssertion) -> WorkIQAccessToken:
-        if not isinstance(assertion, UserAssertion):
+    def exchange(self, actor: AuthenticatedActor) -> WorkIQAccessToken:
+        if (
+            not isinstance(actor, AuthenticatedActor)
+            or actor.tenant_id != self._tenant_id
+            or actor.persona_id != "RL-PERSONA-ALEX"
+            or actor.source_id != "RL-ENTRA-ALEX"
+            or actor.effective_roles != ("material_planner", "response_approver")
+            or actor.delegated_scopes != ("access_as_user",)
+        ):
             raise WorkIQAuthenticationError(
-                "Work IQ requires a validated delegated user assertion"
+                "Work IQ requires the validated delegated Alex actor"
             )
         result = self._client.acquire_token_on_behalf_of(
-            user_assertion=assertion.reveal(),
+            user_assertion=actor.downstream_user_assertion.reveal(),
             scopes=[WORK_IQ_SCOPE],
         )
         if not isinstance(result, dict):
@@ -88,4 +102,4 @@ def build_obo_exchange(
         client_credential=client_secret,
         authority=authority,
     )
-    return WorkIQOboExchange(client)
+    return WorkIQOboExchange(client, tenant_id=tenant_id)
