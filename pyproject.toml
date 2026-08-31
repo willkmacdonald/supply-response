@@ -11,6 +11,8 @@ dependencies = [
   "alembic>=1.16,<2",
   "azure-identity>=1.23,<2",
   "fastapi>=0.116,<1",
+  "httpx>=0.28,<1",
+  "msal>=1.32,<2",
   "pydantic>=2.11,<3",
   "pydantic-settings>=2.10,<3",
   "pyjwt[crypto]>=2.10,<3",
@@ -21,7 +23,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "httpx>=0.28,<1",
   "jsonschema>=4.25,<5",
   "pytest>=8.4,<10",
 ]
@@ -44,4 +45,5 @@ pythonpath = ["."]
 markers = [
   "fabric_live: requires an explicitly configured live Fabric SQL Database",
   "power_bi_live: requires explicit API and Power BI live settings",
+  "workiq_live: requires a fresh Alex delegated assertion and complete Work IQ tenant settings",
 ]

@@ -1,0 +1,36 @@
+{
+  "jsonrpc": "2.0",
+  "id": "fixture-alpha-request",
+  "result": {
+    "contextId": "fixture-context-alpha",
+    "taskId": "fixture-task-alpha",
+    "status": {"state": "TASK_STATE_COMPLETED"},
+    "artifacts": [
+      {
+        "artifactId": "fixture-artifact-alpha",
+        "parts": [
+          {
+            "data": {
+              "facts": [
+                {
+                  "factId": "RL-E-WORKIQ-ALPHA-1",
+                  "claim": "RL-Supplier Alpha cannot deliver 8,000 units on Scenario Day 2 and offers 3,000 units by air on September 6 at $7.50 per unit; the remaining 5,000 units have no confirmed date.",
+                  "sourceTimestamp": "2026-08-30T14:00:00Z",
+                  "effectiveAt": "2026-09-01T09:00:00-05:00",
+                  "expiresAt": "2026-09-16T00:00:00-05:00",
+                  "authorityScope": "supplier_statement",
+                  "citation": {
+                    "sourceType": "microsoft365",
+                    "sourceId": "fixture-source-alpha",
+                    "url": "https://outlook.office.com/mail/deeplink/read/fixture-alpha",
+                    "excerpt": "We cannot deliver the full 8,000 units on Scenario Day 2. We can offer 3,000 units by air on September 6 at $7.50 per unit."
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

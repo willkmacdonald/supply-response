@@ -837,6 +837,8 @@ dependencies = [
     { name = "alembic" },
     { name = "azure-identity" },
     { name = "fastapi" },
+    { name = "httpx" },
+    { name = "msal" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyjwt", extra = ["crypto"] },
@@ -847,7 +849,6 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "jsonschema" },
     { name = "pytest" },
 ]
@@ -862,9 +863,10 @@ requires-dist = [
     { name = "azure-identity", specifier = ">=1.23,<2" },
     { name = "fabric-cicd", marker = "python_full_version == '3.12.*' and extra == 'fabric-deploy'", specifier = "==1.3.0" },
     { name = "fastapi", specifier = ">=0.116,<1" },
-    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28,<1" },
+    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.25,<5" },
     { name = "jsonschema", marker = "extra == 'fabric-deploy'", specifier = ">=4.25,<5" },
+    { name = "msal", specifier = ">=1.32,<2" },
     { name = "pydantic", specifier = ">=2.11,<3" },
     { name = "pydantic-settings", specifier = ">=2.10,<3" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10,<3" },
