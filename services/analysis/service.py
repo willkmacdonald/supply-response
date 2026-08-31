@@ -1,8 +1,9 @@
 import hashlib
 import json
+from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
-from typing import Callable, TypeVar
+from typing import TypeVar
 
 from data.domain.analysis import (
     AnalysisApprovalMaterial,
@@ -15,8 +16,8 @@ from data.domain.analysis import (
     AnalysisVersion,
     ResponseOption,
 )
-from data.domain.common import FrozenModel
 from data.domain.cases import CaseInstance
+from data.domain.common import FrozenModel
 from data.domain.decisions import (
     ApprovalSatisfaction,
     ApprovalTarget,
@@ -26,8 +27,8 @@ from data.domain.decisions import (
 from data.domain.evidence import (
     AuthorityScope,
     ConflictResolution,
-    EvidenceConflict,
     EvidenceBlockingCode,
+    EvidenceConflict,
     EvidenceItem,
     EvidenceValidation,
     UncertaintyState,
@@ -37,12 +38,11 @@ from services.analysis.options import evaluate_response_options
 from services.analysis.ranking import rank_options
 from services.policy.approvals import evaluate_approval_satisfaction
 from services.policy.evidence import (
-    EVIDENCE_RETRIEVAL_WINDOW,
     EVIDENCE_POLICY_VERSION,
+    EVIDENCE_RETRIEVAL_WINDOW,
     PolicyViolation,
     validate_required_evidence,
 )
-
 
 APPROVAL_POLICY_VERSION = "standing-authorization-v1"
 
@@ -114,7 +114,7 @@ def _validate_provenance(
         )
 
 
-def _canonical_snapshot(snapshot: OperationalSnapshot) -> str:
+def canonical_operational_snapshot(snapshot: OperationalSnapshot) -> str:
     payload = snapshot.model_dump(mode="json")
     for field_name, id_field in _OPERATIONAL_COLLECTION_KEYS.items():
         items = payload[field_name]
@@ -241,7 +241,7 @@ def create_analysis_version(
         runtime_mode=case.runtime_mode,
         corpus=corpus,
         scenario_effective_time=case.scenario_effective_time,
-        operational_snapshot_json=_canonical_snapshot(operational_snapshot),
+        operational_snapshot_json=canonical_operational_snapshot(operational_snapshot),
         required_authority_scope=canonical_required_scope,
         evidence=tuple(
             AnalysisEvidenceMaterial.from_evidence(

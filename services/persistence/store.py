@@ -1,15 +1,19 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel
-from sqlalchemy import Engine, insert, select, update
+from pydantic import BaseModel, ValidationError
+from sqlalchemy import Connection, Engine, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from data.domain import CaseInstance, CasePurpose, RuntimeMode
 from data.domain.analysis import AnalysisVersion
 from data.synthetic.rl001 import OperationalSnapshot
+from services.analysis.service import (
+    analysis_material_hash,
+    canonical_operational_snapshot,
+)
 from services.persistence.ports import CaseStore
 from services.persistence.tables import (
     analysis_versions,
@@ -34,6 +38,10 @@ class RecordNotFound(PersistenceError):
 
 class ImmutableRecordConflict(PersistenceError):
     """Raised when an insert-only record would be overwritten."""
+
+
+class PersistenceIntegrityError(PersistenceError):
+    """Raised when persisted state conflicts with its canonical domain record."""
 
 
 class RuntimeModeConflict(PersistenceError):
@@ -61,39 +69,125 @@ class SqlAlchemyStore:
                 f"not {runtime_mode.value}"
             )
 
-    def _stored_runtime_mode(self, connection, case_id: str) -> RuntimeMode:
-        value = connection.execute(
-            select(case_instances.c.runtime_mode).where(
-                case_instances.c.case_id == case_id
-            )
-        ).scalar_one_or_none()
-        if value is None:
-            raise RecordNotFound(f"case does not exist: {case_id}")
-        return RuntimeMode(value)
+    @staticmethod
+    def _datetime_matches(stored: datetime, expected: datetime) -> bool:
+        if stored.tzinfo is None and expected.tzinfo is not None:
+            expected = expected.replace(tzinfo=None)
+        return stored == expected
 
-    def _stored_case(self, connection, case_id: str) -> CaseInstance:
-        payload = connection.execute(
-            select(case_instances.c.payload_json).where(
-                case_instances.c.case_id == case_id
+    @staticmethod
+    def _decode_case(payload: str, *, record_name: str) -> CaseInstance:
+        try:
+            return CaseInstance.model_validate_json(payload)
+        except (ValidationError, ValueError) as error:
+            raise PersistenceIntegrityError(
+                f"{record_name} contains invalid Case Instance JSON"
+            ) from error
+
+    @staticmethod
+    def _decode_snapshot(payload: str) -> OperationalSnapshot:
+        try:
+            return OperationalSnapshot.model_validate_json(payload)
+        except (ValidationError, ValueError) as error:
+            raise PersistenceIntegrityError(
+                "persisted Operational Snapshot contains invalid JSON"
+            ) from error
+
+    @staticmethod
+    def _decode_analysis(payload: str) -> AnalysisVersion:
+        try:
+            return AnalysisVersion.model_validate_json(payload)
+        except (ValidationError, ValueError) as error:
+            raise PersistenceIntegrityError(
+                "persisted Analysis Version contains invalid JSON"
+            ) from error
+
+    def _stored_case(
+        self,
+        connection: Connection,
+        case_id: str,
+    ) -> CaseInstance:
+        row = (
+            connection.execute(
+                select(case_instances).where(case_instances.c.case_id == case_id)
             )
-        ).scalar_one_or_none()
-        if payload is None:
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
             raise RecordNotFound(f"case does not exist: {case_id}")
-        return CaseInstance.model_validate_json(payload)
+        case = self._decode_case(
+            row["payload_json"],
+            record_name="immutable case record",
+        )
+        if (
+            case.case_id != row["case_id"]
+            or case.template_id != row["template_id"]
+            or case.purpose.value != row["purpose"]
+            or case.runtime_mode.value != row["runtime_mode"]
+            or case.status.value != row["status"]
+            or not self._datetime_matches(
+                row["scenario_effective_time"],
+                case.scenario_effective_time,
+            )
+        ):
+            raise PersistenceIntegrityError(
+                "immutable case columns conflict with canonical Case Instance JSON"
+            )
+        return case
+
+    def _stored_snapshot(
+        self,
+        connection: Connection,
+        case_id: str,
+    ) -> OperationalSnapshot:
+        row = (
+            connection.execute(
+                select(operational_snapshots).where(
+                    operational_snapshots.c.case_id == case_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise PersistenceIntegrityError(
+                f"persisted Operational Snapshot is missing for case {case_id}"
+            )
+        snapshot = self._decode_snapshot(row["payload_json"])
+        if (
+            snapshot.case_id != row["case_id"]
+            or snapshot.runtime_mode.value != row["runtime_mode"]
+            or not self._datetime_matches(
+                row["scenario_effective_time"],
+                snapshot.scenario_effective_time,
+            )
+            or not self._datetime_matches(
+                row["analysis_horizon_start"],
+                snapshot.analysis_horizon_start,
+            )
+            or snapshot.analysis_horizon_end.isoformat() != row["analysis_horizon_end"]
+        ):
+            raise PersistenceIntegrityError(
+                "persisted Operational Snapshot columns conflict with canonical JSON"
+            )
+        return snapshot
 
     def _require_case_runtime(
         self,
-        connection,
+        connection: Connection,
         *,
         case_id: str,
         runtime_mode: RuntimeMode,
-    ) -> None:
+    ) -> CaseInstance:
         self._require_configured_mode(runtime_mode)
-        stored_mode = self._stored_runtime_mode(connection, case_id)
-        if stored_mode is not runtime_mode:
+        stored_case = self._stored_case(connection, case_id)
+        if stored_case.runtime_mode is not runtime_mode:
             raise RuntimeModeConflict(
-                f"case {case_id} is {stored_mode.value}, not {runtime_mode.value}"
+                f"case {case_id} is {stored_case.runtime_mode.value}, "
+                f"not {runtime_mode.value}"
             )
+        return stored_case
 
     @staticmethod
     def _require_matching_runtime(
@@ -109,17 +203,25 @@ class SqlAlchemyStore:
 
     def _require_analysis_provenance(
         self,
-        connection,
+        connection: Connection,
         analysis: AnalysisVersion,
     ) -> None:
+        expected_hash = analysis_material_hash(analysis.material)
+        if analysis.material_hash != expected_hash:
+            raise PersistenceIntegrityError(
+                "Analysis Version material_hash does not match canonical material"
+            )
+
         runtime_mode = analysis.material.runtime_mode
-        self._require_case_runtime(
+        stored_case = self._require_case_runtime(
             connection,
             case_id=analysis.case_id,
             runtime_mode=runtime_mode,
         )
-        stored_case = self._stored_case(connection, analysis.case_id)
+        stored_snapshot = self._stored_snapshot(connection, analysis.case_id)
         material = analysis.material
+        if material.case_id != analysis.case_id:
+            raise ValueError("analysis material case_id must match Analysis Version")
         if (
             material.template_id != stored_case.template_id
             or material.case_purpose is not stored_case.purpose
@@ -127,6 +229,26 @@ class SqlAlchemyStore:
         ):
             raise ValueError(
                 "Analysis Version provenance must match its immutable Case Instance"
+            )
+        if material.operational_snapshot_json != canonical_operational_snapshot(
+            stored_snapshot
+        ):
+            raise PersistenceIntegrityError(
+                "Analysis Version Operational Snapshot does not match the "
+                "persisted Operational Snapshot"
+            )
+
+        for evidence in analysis.evidence_items:
+            if evidence.case_id != analysis.case_id:
+                raise ValueError("Evidence Item case_id must match Analysis Version")
+            if evidence.retrieved_for_analysis_id != analysis.analysis_id:
+                raise ValueError(
+                    "Evidence Item retrieval provenance must match Analysis Version"
+                )
+            self._require_matching_runtime(
+                evidence.runtime_mode,
+                runtime_mode,
+                record_name="Evidence Item",
             )
 
         for item in material.evidence:
@@ -170,6 +292,55 @@ class SqlAlchemyStore:
                 target_case.runtime_mode,
                 runtime_mode,
                 record_name="Approval Satisfaction",
+            )
+
+    def _require_analysis_row_integrity(
+        self,
+        row,
+        analysis: AnalysisVersion,
+    ) -> None:
+        if (
+            analysis.analysis_id != row["analysis_id"]
+            or analysis.case_id != row["case_id"]
+            or analysis.material_hash != row["material_hash"]
+            or analysis.material.runtime_mode.value != row["runtime_mode"]
+            or not self._datetime_matches(
+                row["analysis_started_at"],
+                analysis.analysis_started_at,
+            )
+            or not self._datetime_matches(
+                row["retrieval_window_ends_at"],
+                analysis.retrieval_window_ends_at,
+            )
+            or not self._datetime_matches(row["created_at"], analysis.created_at)
+        ):
+            raise PersistenceIntegrityError(
+                "analysis columns conflict with canonical Analysis Version JSON"
+            )
+
+    def _require_case_projection_integrity(
+        self,
+        row,
+        case: CaseInstance,
+        stored_case: CaseInstance,
+    ) -> None:
+        if (
+            case.case_id != row["case_id"]
+            or case.purpose.value != row["purpose"]
+            or case.runtime_mode.value != row["runtime_mode"]
+            or case.status.value != row["status"]
+            or not self._datetime_matches(
+                row["scenario_effective_time"],
+                case.scenario_effective_time,
+            )
+            or case.template_id != stored_case.template_id
+            or case.purpose is not stored_case.purpose
+            or case.runtime_mode is not stored_case.runtime_mode
+            or case.scenario_effective_time != stored_case.scenario_effective_time
+            or case.scenario_timezone != stored_case.scenario_timezone
+        ):
+            raise PersistenceIntegrityError(
+                "case projection conflicts with immutable Case Instance provenance"
             )
 
     def create_case(
@@ -229,33 +400,26 @@ class SqlAlchemyStore:
 
     def get_case(self, case_id: str) -> CaseInstance:
         with self.engine.connect() as connection:
-            payload = connection.execute(
-                select(case_projection.c.payload_json).where(
-                    case_projection.c.case_id == case_id
+            row = (
+                connection.execute(
+                    select(case_projection).where(case_projection.c.case_id == case_id)
                 )
-            ).scalar_one_or_none()
-        if payload is None:
-            raise RecordNotFound(f"case does not exist: {case_id}")
-        case = CaseInstance.model_validate_json(payload)
-        self._require_configured_mode(case.runtime_mode)
-        return case
+                .mappings()
+                .one_or_none()
+            )
+            if row is None:
+                raise RecordNotFound(f"case does not exist: {case_id}")
+            case = self._decode_case(
+                row["payload_json"],
+                record_name="case projection",
+            )
+            stored_case = self._stored_case(connection, case_id)
+            self._require_case_projection_integrity(row, case, stored_case)
+            self._require_configured_mode(case.runtime_mode)
+            return case
 
     def save_analysis(self, analysis: AnalysisVersion) -> None:
         runtime_mode = analysis.material.runtime_mode
-        if analysis.material.case_id != analysis.case_id:
-            raise ValueError("analysis material case_id must match Analysis Version")
-
-        for evidence in analysis.evidence_items:
-            if evidence.case_id != analysis.case_id:
-                raise ValueError("Evidence Item case_id must match Analysis Version")
-            if evidence.retrieved_for_analysis_id != analysis.analysis_id:
-                raise ValueError(
-                    "Evidence Item retrieval provenance must match Analysis Version"
-                )
-            if evidence.runtime_mode is not runtime_mode:
-                raise RuntimeModeConflict(
-                    "Evidence Item runtime_mode must match Analysis Version"
-                )
 
         try:
             with self.engine.begin() as connection:
@@ -315,7 +479,7 @@ class SqlAlchemyStore:
                     .values(
                         current_analysis_id=analysis.analysis_id,
                         current_analysis_hash=analysis.material_hash,
-                        updated_at=datetime.now(timezone.utc),
+                        updated_at=datetime.now(UTC),
                     )
                 )
                 if result.rowcount != 1:
@@ -330,25 +494,36 @@ class SqlAlchemyStore:
 
     def get_analysis(self, analysis_id: str) -> AnalysisVersion:
         with self.engine.connect() as connection:
-            payload = connection.execute(
-                select(analysis_versions.c.payload_json).where(
-                    analysis_versions.c.analysis_id == analysis_id
+            row = (
+                connection.execute(
+                    select(analysis_versions).where(
+                        analysis_versions.c.analysis_id == analysis_id
+                    )
                 )
-            ).scalar_one_or_none()
-        if payload is None:
-            raise RecordNotFound(f"analysis does not exist: {analysis_id}")
-        analysis = AnalysisVersion.model_validate_json(payload)
-        self._require_configured_mode(analysis.material.runtime_mode)
-        return analysis
+                .mappings()
+                .one_or_none()
+            )
+            if row is None:
+                raise RecordNotFound(f"analysis does not exist: {analysis_id}")
+            analysis = self._decode_analysis(row["payload_json"])
+            self._require_analysis_row_integrity(row, analysis)
+            try:
+                self._require_analysis_provenance(connection, analysis)
+            except PersistenceIntegrityError:
+                raise
+            except (RuntimeModeConflict, ValueError) as error:
+                raise PersistenceIntegrityError(
+                    "persisted Analysis Version provenance is inconsistent"
+                ) from error
+            return analysis
 
     def save_case_projection(self, case: CaseInstance) -> None:
         with self.engine.begin() as connection:
-            self._require_case_runtime(
+            stored_case = self._require_case_runtime(
                 connection,
                 case_id=case.case_id,
                 runtime_mode=case.runtime_mode,
             )
-            stored_case = self._stored_case(connection, case.case_id)
             if (
                 case.template_id != stored_case.template_id
                 or case.purpose is not stored_case.purpose
@@ -367,7 +542,7 @@ class SqlAlchemyStore:
                     status=case.status.value,
                     scenario_effective_time=case.scenario_effective_time,
                     payload_json=serialize_model(case),
-                    updated_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(UTC),
                 )
             )
             if result.rowcount != 1:
@@ -378,15 +553,24 @@ class SqlAlchemyStore:
         *,
         purpose: CasePurpose | None = None,
     ) -> tuple[CaseInstance, ...]:
-        statement = select(case_projection.c.payload_json).where(
+        statement = select(case_projection).where(
             case_projection.c.runtime_mode == self.runtime_mode.value
         )
         if purpose is not None:
             statement = statement.where(case_projection.c.purpose == purpose.value)
         statement = statement.order_by(case_projection.c.case_id)
         with self.engine.connect() as connection:
-            payloads = connection.execute(statement).scalars().all()
-        return tuple(CaseInstance.model_validate_json(item) for item in payloads)
+            rows = connection.execute(statement).mappings().all()
+            cases: list[CaseInstance] = []
+            for row in rows:
+                case = self._decode_case(
+                    row["payload_json"],
+                    record_name="case projection",
+                )
+                stored_case = self._stored_case(connection, case.case_id)
+                self._require_case_projection_integrity(row, case, stored_case)
+                cases.append(case)
+            return tuple(cases)
 
 
 def build_store(settings: Settings) -> CaseStore:

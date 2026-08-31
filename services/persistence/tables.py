@@ -13,7 +13,6 @@ from sqlalchemy import (
     text,
 )
 
-
 metadata = MetaData(
     naming_convention={
         "ix": "ix_%(table_name)s_%(column_0_name)s",
@@ -81,9 +80,21 @@ case_projection = Table(
     Column(
         "scenario_effective_time", DateTime(timezone=True), nullable=False, index=True
     ),
-    Column("current_analysis_id", String(128), nullable=True, index=True),
+    Column(
+        "current_analysis_id",
+        String(128),
+        ForeignKey("analysis_versions.analysis_id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    ),
     Column("current_analysis_hash", String(128), nullable=True, index=True),
-    Column("current_decision_id", String(128), nullable=True, index=True),
+    Column(
+        "current_decision_id",
+        String(128),
+        ForeignKey("decisions.decision_id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    ),
     Column(
         "updated_at",
         DateTime(timezone=True),

@@ -2,18 +2,18 @@
 
 Revision ID: 0001_closed_loop_schema
 Revises:
-Create Date: 2026-08-31 02:32:03.552942
+Create Date: 2026-08-31 02:46:46.127400
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision: str = "0001_closed_loop_schema"
-down_revision: Union[str, Sequence[str], None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -121,80 +121,6 @@ def upgrade() -> None:
         op.f("ix_analysis_versions_runtime_mode"),
         "analysis_versions",
         ["runtime_mode"],
-        unique=False,
-    )
-    op.create_table(
-        "case_projection",
-        sa.Column("case_id", sa.String(length=128), nullable=False),
-        sa.Column("purpose", sa.String(length=32), nullable=False),
-        sa.Column("runtime_mode", sa.String(length=16), nullable=False),
-        sa.Column("status", sa.String(length=32), nullable=False),
-        sa.Column(
-            "scenario_effective_time", sa.DateTime(timezone=True), nullable=False
-        ),
-        sa.Column("current_analysis_id", sa.String(length=128), nullable=True),
-        sa.Column("current_analysis_hash", sa.String(length=128), nullable=True),
-        sa.Column("current_decision_id", sa.String(length=128), nullable=True),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
-            nullable=False,
-        ),
-        sa.Column("payload_json", sa.Text(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["case_id"],
-            ["case_instances.case_id"],
-            name=op.f("fk_case_projection_case_id_case_instances"),
-        ),
-        sa.PrimaryKeyConstraint("case_id", name=op.f("pk_case_projection")),
-    )
-    op.create_index(
-        op.f("ix_case_projection_current_analysis_hash"),
-        "case_projection",
-        ["current_analysis_hash"],
-        unique=False,
-    )
-    op.create_index(
-        op.f("ix_case_projection_current_analysis_id"),
-        "case_projection",
-        ["current_analysis_id"],
-        unique=False,
-    )
-    op.create_index(
-        op.f("ix_case_projection_current_decision_id"),
-        "case_projection",
-        ["current_decision_id"],
-        unique=False,
-    )
-    op.create_index(
-        op.f("ix_case_projection_purpose"), "case_projection", ["purpose"], unique=False
-    )
-    op.create_index(
-        "ix_case_projection_purpose_status",
-        "case_projection",
-        ["purpose", "status"],
-        unique=False,
-    )
-    op.create_index(
-        op.f("ix_case_projection_runtime_mode"),
-        "case_projection",
-        ["runtime_mode"],
-        unique=False,
-    )
-    op.create_index(
-        op.f("ix_case_projection_scenario_effective_time"),
-        "case_projection",
-        ["scenario_effective_time"],
-        unique=False,
-    )
-    op.create_index(
-        op.f("ix_case_projection_status"), "case_projection", ["status"], unique=False
-    )
-    op.create_index(
-        op.f("ix_case_projection_updated_at"),
-        "case_projection",
-        ["updated_at"],
         unique=False,
     )
     op.create_table(
@@ -421,6 +347,92 @@ def upgrade() -> None:
         op.f("ix_approval_satisfactions_satisfied"),
         "approval_satisfactions",
         ["satisfied"],
+        unique=False,
+    )
+    op.create_table(
+        "case_projection",
+        sa.Column("case_id", sa.String(length=128), nullable=False),
+        sa.Column("purpose", sa.String(length=32), nullable=False),
+        sa.Column("runtime_mode", sa.String(length=16), nullable=False),
+        sa.Column("status", sa.String(length=32), nullable=False),
+        sa.Column(
+            "scenario_effective_time", sa.DateTime(timezone=True), nullable=False
+        ),
+        sa.Column("current_analysis_id", sa.String(length=128), nullable=True),
+        sa.Column("current_analysis_hash", sa.String(length=128), nullable=True),
+        sa.Column("current_decision_id", sa.String(length=128), nullable=True),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            nullable=False,
+        ),
+        sa.Column("payload_json", sa.Text(), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["case_id"],
+            ["case_instances.case_id"],
+            name=op.f("fk_case_projection_case_id_case_instances"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["current_analysis_id"],
+            ["analysis_versions.analysis_id"],
+            name=op.f("fk_case_projection_current_analysis_id_analysis_versions"),
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["current_decision_id"],
+            ["decisions.decision_id"],
+            name=op.f("fk_case_projection_current_decision_id_decisions"),
+            ondelete="RESTRICT",
+        ),
+        sa.PrimaryKeyConstraint("case_id", name=op.f("pk_case_projection")),
+    )
+    op.create_index(
+        op.f("ix_case_projection_current_analysis_hash"),
+        "case_projection",
+        ["current_analysis_hash"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_case_projection_current_analysis_id"),
+        "case_projection",
+        ["current_analysis_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_case_projection_current_decision_id"),
+        "case_projection",
+        ["current_decision_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_case_projection_purpose"), "case_projection", ["purpose"], unique=False
+    )
+    op.create_index(
+        "ix_case_projection_purpose_status",
+        "case_projection",
+        ["purpose", "status"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_case_projection_runtime_mode"),
+        "case_projection",
+        ["runtime_mode"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_case_projection_scenario_effective_time"),
+        "case_projection",
+        ["scenario_effective_time"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_case_projection_status"), "case_projection", ["status"], unique=False
+    )
+    op.create_index(
+        op.f("ix_case_projection_updated_at"),
+        "case_projection",
+        ["updated_at"],
         unique=False,
     )
     op.create_table(
@@ -934,6 +946,24 @@ def downgrade() -> None:
         op.f("ix_execution_actions_action_kind"), table_name="execution_actions"
     )
     op.drop_table("execution_actions")
+    op.drop_index(op.f("ix_case_projection_updated_at"), table_name="case_projection")
+    op.drop_index(op.f("ix_case_projection_status"), table_name="case_projection")
+    op.drop_index(
+        op.f("ix_case_projection_scenario_effective_time"), table_name="case_projection"
+    )
+    op.drop_index(op.f("ix_case_projection_runtime_mode"), table_name="case_projection")
+    op.drop_index("ix_case_projection_purpose_status", table_name="case_projection")
+    op.drop_index(op.f("ix_case_projection_purpose"), table_name="case_projection")
+    op.drop_index(
+        op.f("ix_case_projection_current_decision_id"), table_name="case_projection"
+    )
+    op.drop_index(
+        op.f("ix_case_projection_current_analysis_id"), table_name="case_projection"
+    )
+    op.drop_index(
+        op.f("ix_case_projection_current_analysis_hash"), table_name="case_projection"
+    )
+    op.drop_table("case_projection")
     op.drop_index(
         op.f("ix_approval_satisfactions_satisfied"), table_name="approval_satisfactions"
     )
@@ -994,24 +1024,6 @@ def downgrade() -> None:
         table_name="operational_snapshots",
     )
     op.drop_table("operational_snapshots")
-    op.drop_index(op.f("ix_case_projection_updated_at"), table_name="case_projection")
-    op.drop_index(op.f("ix_case_projection_status"), table_name="case_projection")
-    op.drop_index(
-        op.f("ix_case_projection_scenario_effective_time"), table_name="case_projection"
-    )
-    op.drop_index(op.f("ix_case_projection_runtime_mode"), table_name="case_projection")
-    op.drop_index("ix_case_projection_purpose_status", table_name="case_projection")
-    op.drop_index(op.f("ix_case_projection_purpose"), table_name="case_projection")
-    op.drop_index(
-        op.f("ix_case_projection_current_decision_id"), table_name="case_projection"
-    )
-    op.drop_index(
-        op.f("ix_case_projection_current_analysis_id"), table_name="case_projection"
-    )
-    op.drop_index(
-        op.f("ix_case_projection_current_analysis_hash"), table_name="case_projection"
-    )
-    op.drop_table("case_projection")
     op.drop_index(
         op.f("ix_analysis_versions_runtime_mode"), table_name="analysis_versions"
     )
