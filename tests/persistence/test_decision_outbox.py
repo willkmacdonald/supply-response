@@ -1,0 +1,466 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from functools import partial
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
+import pytest
+from sqlalchemy import func, select
+
+from services.decisions.service import (
+    DecisionPolicyViolation,
+    DecisionService,
+    IdempotencyKeyConflict,
+)
+from data.domain import CasePurpose, CaseStatus, RuntimeMode
+from data.domain.decisions import (
+    CorpusScope,
+    DecisionKind,
+    IdentitySnapshot,
+    RecordDecisionCommand,
+    StandingAuthorization,
+)
+from data.domain.evidence import IdentitySource
+from data.synthetic.rl001 import build_rl001_evidence, instantiate_rl001
+from services.analysis.service import AnalyzeCaseCommand, analyze_case
+from services.persistence.sqlite import sqlite_store
+from services.persistence.store import serialize_model
+from services.persistence.tables import (
+    approval_satisfactions,
+    decisions,
+    outbox_events,
+)
+
+
+@dataclass(frozen=True)
+class DecisionContext:
+    store: object
+    case: object
+    snapshot: object
+    analysis: object
+
+    @property
+    def uow_factory(self):
+        return self.store.uow_factory
+
+
+def build_analysis(
+    case,
+    snapshot,
+    *,
+    analysis_id: str,
+    calculation_version: str = "rl001-options-v1",
+):
+    started_at = datetime.fromisoformat("2026-09-01T09:01:00-05:00")
+    return analyze_case(
+        AnalyzeCaseCommand(
+            analysis_id=analysis_id,
+            case=case,
+            corpus=CorpusScope.DEMO_CORPUS,
+            operational_snapshot=snapshot,
+            evidence_items=build_rl001_evidence(
+                snapshot,
+                analysis_id=analysis_id,
+                retrieved_at=started_at,
+            ),
+            standing_authorizations=(StandingAuthorization.taylor_rl001(),),
+            analysis_started_at=started_at,
+            created_at=started_at,
+            calculation_version=calculation_version,
+        )
+    )
+
+
+@pytest.fixture
+def decision_context(tmp_path) -> DecisionContext:
+    store = sqlite_store(f"sqlite:///{tmp_path / 'decisions.db'}")
+    case, snapshot = instantiate_rl001(
+        case_id="RL-CASE-DECISION-1",
+        purpose=CasePurpose.AUTOMATED_TEST,
+        runtime_mode=RuntimeMode.FALLBACK,
+    )
+    analysis = build_analysis(
+        case,
+        snapshot,
+        analysis_id="RL-ANALYSIS-DECISION-1",
+    )
+    store.create_case(case, snapshot)
+    store.save_analysis(analysis)
+    store.save_case_projection(
+        case.model_copy(update={"status": CaseStatus.AWAITING_DECISION})
+    )
+    return DecisionContext(store=store, case=case, snapshot=snapshot, analysis=analysis)
+
+
+@pytest.fixture
+def sqlite_uow(decision_context):
+    return decision_context.uow_factory
+
+
+def alex_identity(
+    *,
+    effective_roles: tuple[str, ...] = (
+        "material_planner",
+        "response_approver",
+    ),
+    persona_id: str = "RL-PERSONA-ALEX",
+) -> IdentitySnapshot:
+    return IdentitySnapshot(
+        persona_id=persona_id,
+        effective_roles=effective_roles,
+        identity_source=IdentitySource.ENTRA,
+        source_id="RL-ENTRA-ALEX",
+        display_name="Alex Morgan",
+        user_principal_name="alex@example.invalid",
+    )
+
+
+def approved_combined_command(
+    idempotency_key: str,
+    *,
+    analysis_id: str = "RL-ANALYSIS-DECISION-1",
+) -> RecordDecisionCommand:
+    return RecordDecisionCommand(
+        case_id="RL-CASE-DECISION-1",
+        analysis_id=analysis_id,
+        selected_option_id="RL-OPTION-COMBINED",
+        kind=DecisionKind.APPROVED,
+        idempotency_key=idempotency_key,
+    )
+
+
+def rejection_command(
+    idempotency_key: str = "RL-IDEMPOTENCY-REJECT",
+    *,
+    reason: str = "Supplier recovery evidence must be refreshed.",
+) -> RecordDecisionCommand:
+    return RecordDecisionCommand(
+        case_id="RL-CASE-DECISION-1",
+        analysis_id="RL-ANALYSIS-DECISION-1",
+        selected_option_id=None,
+        kind=DecisionKind.REJECTED,
+        idempotency_key=idempotency_key,
+        rejection_reason=reason,
+    )
+
+
+def test_approval_atomically_writes_decision_outbox_and_projection(sqlite_uow):
+    command = approved_combined_command("RL-IDEMPOTENCY-1")
+
+    decision = DecisionService(sqlite_uow).record(command, alex_identity())
+
+    with sqlite_uow() as uow:
+        assert uow.decisions.get(decision.decision_id) == decision
+        events = uow.execution.list_outbox(decision_id=decision.decision_id)
+        assert [(event.event_type, event.decision_id) for event in events] == [
+            ("ActionPlanningRequested", decision.decision_id)
+        ]
+        projection = uow.cases.get_projection(decision.case_id)
+        assert projection.current_decision_id == decision.decision_id
+        assert projection.case.status is CaseStatus.ACTION_PLANNING
+
+
+def test_same_idempotency_key_returns_same_decision_and_one_event(sqlite_uow):
+    service = DecisionService(sqlite_uow)
+
+    first = service.record(
+        approved_combined_command("RL-IDEMPOTENCY-2"), alex_identity()
+    )
+    second = service.record(
+        approved_combined_command("RL-IDEMPOTENCY-2"), alex_identity()
+    )
+
+    assert second == first
+    with sqlite_uow() as uow:
+        assert len(uow.decisions.list_for_case(first.case_id)) == 1
+        assert len(uow.execution.list_outbox(decision_id=first.decision_id)) == 1
+
+
+def test_same_idempotency_key_rejects_payload_or_actor_mismatch(sqlite_uow):
+    service = DecisionService(sqlite_uow)
+    first = service.record(
+        approved_combined_command("RL-IDEMPOTENCY-MISMATCH"), alex_identity()
+    )
+
+    with pytest.raises(IdempotencyKeyConflict, match="different request"):
+        service.record(
+            rejection_command("RL-IDEMPOTENCY-MISMATCH"),
+            alex_identity(),
+        )
+    with pytest.raises(IdempotencyKeyConflict, match="different request"):
+        service.record(
+            approved_combined_command("RL-IDEMPOTENCY-MISMATCH"),
+            alex_identity(effective_roles=("response_approver",)),
+        )
+
+    with sqlite_uow() as uow:
+        assert uow.decisions.list_for_case(first.case_id) == (first,)
+        assert len(uow.execution.list_outbox(decision_id=first.decision_id)) == 1
+
+
+def test_concurrent_same_idempotency_key_creates_one_decision_and_event(
+    decision_context,
+):
+    barrier = Barrier(2)
+    command = approved_combined_command("RL-IDEMPOTENCY-CONCURRENT")
+
+    def record() -> str:
+        barrier.wait()
+        return (
+            DecisionService(decision_context.uow_factory)
+            .record(
+                command,
+                alex_identity(),
+            )
+            .decision_id
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        decision_ids = tuple(executor.map(lambda _: record(), range(2)))
+
+    assert len(set(decision_ids)) == 1
+    with decision_context.uow_factory() as uow:
+        decision = uow.decisions.get(decision_ids[0])
+        assert uow.decisions.list_for_case(decision.case_id) == (decision,)
+        assert len(uow.execution.list_outbox(decision_id=decision.decision_id)) == 1
+
+
+def test_rejection_is_immutable_and_creates_no_outbox(sqlite_uow):
+    decision = DecisionService(sqlite_uow).record(
+        rejection_command(), alex_identity(effective_roles=("response_approver",))
+    )
+
+    with sqlite_uow() as uow:
+        assert decision.kind is DecisionKind.REJECTED
+        assert decision.selected_option is None
+        assert decision.rejection_reason == (
+            "Supplier recovery evidence must be refreshed."
+        )
+        assert uow.decisions.get(decision.decision_id) == decision
+        assert uow.execution.list_outbox(decision_id=decision.decision_id) == ()
+        projection = uow.cases.get_projection(decision.case_id)
+        assert projection.current_decision_id == decision.decision_id
+        assert projection.case.status is CaseStatus.DECISION_REJECTED
+
+
+def test_alex_approval_atomically_records_material_planner_satisfaction(sqlite_uow):
+    decision = DecisionService(sqlite_uow).record(
+        approved_combined_command("RL-IDEMPOTENCY-3"), alex_identity()
+    )
+
+    with sqlite_uow() as uow:
+        satisfactions = uow.decisions.list_approval_satisfactions(decision.decision_id)
+        assert [
+            (item.role, item.persona_id, item.satisfied) for item in satisfactions
+        ] == [
+            ("finance_approver", "RL-PERSONA-TAYLOR", True),
+            ("material_planner", "RL-PERSONA-ALEX", True),
+        ]
+        assert decision.approval_satisfactions == satisfactions
+
+
+def test_decision_contains_complete_option_identity_and_analysis_lineage(sqlite_uow):
+    decision = DecisionService(sqlite_uow).record(
+        approved_combined_command("RL-IDEMPOTENCY-LINEAGE"), alex_identity()
+    )
+
+    assert decision.selected_option == next(
+        option
+        for option in decision_context_analysis(sqlite_uow).response_options
+        if option.option_id == "RL-OPTION-COMBINED"
+    )
+    analysis = decision_context_analysis(sqlite_uow)
+    assert decision.analysis_material_hash == analysis.material_hash
+    assert decision.evidence_ids == decision.selected_option.evidence_ids
+    assert decision.assumptions == decision.selected_option.assumptions
+    assert decision.constraints == decision.selected_option.blocking_codes
+    assert decision.comparator_trace == analysis.ranking
+    assert decision.calculation_version == analysis.material.calculation_version
+    assert decision.evidence_policy_version == analysis.material.evidence_policy_version
+    assert decision.approval_policy_version == analysis.material.approval_policy_version
+    assert decision.ranking_policy_version == analysis.ranking.policy_version
+    assert decision.runtime_mode is RuntimeMode.FALLBACK
+    assert decision.scenario_effective_time == analysis.material.scenario_effective_time
+    assert decision.actor == alex_identity()
+
+
+def decision_context_analysis(sqlite_uow):
+    with sqlite_uow() as uow:
+        return uow.cases.get_analysis("RL-ANALYSIS-DECISION-1")
+
+
+def test_failure_before_outbox_rolls_back_every_approval_write(decision_context):
+    def fail_before_outbox():
+        raise RuntimeError("injected outbox failure")
+
+    faulting_factory = partial(
+        decision_context.store.uow_factory,
+        before_outbox_insert=fail_before_outbox,
+    )
+
+    with pytest.raises(RuntimeError, match="injected outbox failure"):
+        DecisionService(faulting_factory).record(
+            approved_combined_command("RL-IDEMPOTENCY-ROLLBACK"),
+            alex_identity(),
+        )
+
+    with decision_context.store.engine.connect() as connection:
+        assert connection.scalar(select(func.count()).select_from(decisions)) == 0
+        assert (
+            connection.scalar(
+                select(func.count())
+                .select_from(approval_satisfactions)
+                .where(approval_satisfactions.c.decision_id.is_not(None))
+            )
+            == 0
+        )
+        assert connection.scalar(select(func.count()).select_from(outbox_events)) == 0
+    with decision_context.uow_factory() as uow:
+        projection = uow.cases.get_projection(decision_context.case.case_id)
+        assert projection.current_decision_id is None
+        assert projection.case.status is CaseStatus.AWAITING_DECISION
+
+
+@pytest.mark.parametrize(
+    ("identity", "message"),
+    [
+        (
+            alex_identity(persona_id="RL-PERSONA-IMPOSTOR"),
+            "Alex",
+        ),
+        (
+            alex_identity(effective_roles=("material_planner",)),
+            "response_approver",
+        ),
+        (
+            alex_identity(effective_roles=("response_approver",)),
+            "material_planner",
+        ),
+    ],
+)
+def test_approval_revalidates_alex_persona_and_roles(sqlite_uow, identity, message):
+    with pytest.raises(DecisionPolicyViolation, match=message):
+        DecisionService(sqlite_uow).record(
+            approved_combined_command(f"RL-IDEMPOTENCY-ACTOR-{message}"),
+            identity,
+        )
+
+
+def test_approval_revalidates_taylor_finance_satisfaction(decision_context):
+    analysis = decision_context.analysis.model_copy(
+        update={"approval_satisfactions": ()}
+    )
+    changed_material = analysis.material.model_copy(
+        update={"approval_satisfactions": ()}
+    )
+    from services.analysis.service import analysis_material_hash
+
+    analysis = analysis.model_copy(
+        update={
+            "material": changed_material,
+            "material_hash": analysis_material_hash(changed_material),
+        }
+    )
+    replacement_store = sqlite_store(
+        f"sqlite:///{decision_context.store.engine.url.database}-missing-finance"
+    )
+    replacement_store.create_case(decision_context.case, decision_context.snapshot)
+    replacement_store.save_analysis(analysis)
+
+    with pytest.raises(DecisionPolicyViolation, match="finance_approver"):
+        DecisionService(replacement_store.uow_factory).record(
+            approved_combined_command("RL-IDEMPOTENCY-NO-FINANCE"),
+            alex_identity(),
+        )
+
+
+def test_old_analysis_is_rejected_after_material_reanalysis(decision_context):
+    changed = build_analysis(
+        decision_context.case,
+        decision_context.snapshot,
+        analysis_id="RL-ANALYSIS-DECISION-2",
+        calculation_version="rl001-options-v2",
+    )
+    decision_context.store.save_case_projection(
+        decision_context.case.model_copy(
+            update={"status": CaseStatus.REANALYSIS_REQUIRED}
+        )
+    )
+    decision_context.store.save_analysis(changed)
+
+    with pytest.raises(DecisionPolicyViolation, match="current analysis"):
+        DecisionService(decision_context.uow_factory).record(
+            approved_combined_command("RL-IDEMPOTENCY-STALE"),
+            alex_identity(),
+        )
+
+
+def test_material_change_marks_case_for_reanalysis_without_rewriting_decision(
+    decision_context,
+):
+    first = DecisionService(decision_context.uow_factory).record(
+        approved_combined_command("RL-IDEMPOTENCY-MATERIAL-CHANGE"),
+        alex_identity(),
+    )
+    changed = build_analysis(
+        decision_context.case,
+        decision_context.snapshot,
+        analysis_id="RL-ANALYSIS-DECISION-MATERIAL-CHANGE",
+        calculation_version="rl001-options-v2",
+    )
+
+    decision_context.store.save_analysis(changed)
+
+    with decision_context.uow_factory() as uow:
+        projection = uow.cases.get_projection(first.case_id)
+        assert projection.case.status is CaseStatus.REANALYSIS_REQUIRED
+        assert projection.current_decision_id == first.decision_id
+        assert uow.decisions.get(first.decision_id) == first
+
+
+def test_later_approval_becomes_current_without_rewriting_history(decision_context):
+    service = DecisionService(decision_context.uow_factory)
+    first = service.record(
+        approved_combined_command("RL-IDEMPOTENCY-4"), alex_identity()
+    )
+    with decision_context.store.engine.connect() as connection:
+        original_payload = connection.scalar(
+            select(decisions.c.payload_json).where(
+                decisions.c.decision_id == first.decision_id
+            )
+        )
+
+    changed = build_analysis(
+        decision_context.case,
+        decision_context.snapshot,
+        analysis_id="RL-ANALYSIS-DECISION-2",
+        calculation_version="rl001-options-v2",
+    )
+    decision_context.store.save_analysis(changed)
+    second = service.record(
+        approved_combined_command(
+            "RL-IDEMPOTENCY-5",
+            analysis_id=changed.analysis_id,
+        ),
+        alex_identity(),
+    )
+
+    with decision_context.uow_factory() as uow:
+        assert uow.decisions.get(first.decision_id) == first
+        assert uow.decisions.get(second.decision_id) == second
+        assert (
+            uow.cases.get_projection(first.case_id).current_decision_id
+            == second.decision_id
+        )
+    with decision_context.store.engine.connect() as connection:
+        assert (
+            connection.scalar(
+                select(decisions.c.payload_json).where(
+                    decisions.c.decision_id == first.decision_id
+                )
+            )
+            == original_payload
+            == serialize_model(first)
+        )

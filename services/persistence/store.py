@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import Connection, Engine, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
-from data.domain import CaseInstance, CasePurpose, RuntimeMode
+from data.domain import CaseInstance, CasePurpose, CaseStatus, RuntimeMode
 from data.domain.analysis import AnalysisVersion
+from data.domain.decisions import (
+    ApprovalSatisfaction,
+    CaseProjection,
+    Decision,
+)
+from data.domain.execution import ActionPlanningRequested
 from data.synthetic.rl001 import OperationalSnapshot
 from services.analysis.service import (
     analysis_material_hash,
@@ -20,8 +26,10 @@ from services.persistence.tables import (
     approval_satisfactions,
     case_instances,
     case_projection,
+    decisions,
     evidence_items,
     operational_snapshots,
+    outbox_events,
 )
 
 if TYPE_CHECKING:
@@ -473,14 +481,41 @@ class SqlAlchemyStore:
                             for item in analysis.approval_satisfactions
                         ],
                     )
+                projection = (
+                    connection.execute(
+                        select(case_projection).where(
+                            case_projection.c.case_id == analysis.case_id
+                        )
+                    )
+                    .mappings()
+                    .one_or_none()
+                )
+                if projection is None:
+                    raise RecordNotFound(
+                        f"case projection does not exist: {analysis.case_id}"
+                    )
+                values = {
+                    "current_analysis_id": analysis.analysis_id,
+                    "current_analysis_hash": analysis.material_hash,
+                    "updated_at": datetime.now(UTC),
+                }
+                if (
+                    projection["current_decision_id"] is not None
+                    and projection["current_analysis_hash"] is not None
+                    and projection["current_analysis_hash"] != analysis.material_hash
+                ):
+                    projected_case = self._decode_case(
+                        projection["payload_json"],
+                        record_name="case projection",
+                    ).model_copy(update={"status": CaseStatus.REANALYSIS_REQUIRED})
+                    values.update(
+                        status=CaseStatus.REANALYSIS_REQUIRED.value,
+                        payload_json=serialize_model(projected_case),
+                    )
                 result = connection.execute(
                     update(case_projection)
                     .where(case_projection.c.case_id == analysis.case_id)
-                    .values(
-                        current_analysis_id=analysis.analysis_id,
-                        current_analysis_hash=analysis.material_hash,
-                        updated_at=datetime.now(UTC),
-                    )
+                    .values(**values)
                 )
                 if result.rowcount != 1:
                     raise RecordNotFound(
@@ -570,6 +605,402 @@ class SqlAlchemyStore:
                     continue
                 cases.append(case)
             return tuple(cases)
+
+    def uow_factory(
+        self,
+        *,
+        before_outbox_insert: Callable[[], None] | None = None,
+    ) -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(
+            self,
+            before_outbox_insert=before_outbox_insert,
+        )
+
+    def get_projection(self, case_id: str) -> CaseProjection:
+        with self.uow_factory() as uow:
+            return uow.cases.get_projection(case_id)
+
+    def set_current_decision(self, case_id: str, decision_id: str) -> None:
+        with self.uow_factory() as uow:
+            uow.cases.set_current_decision(case_id, decision_id)
+            uow.commit()
+
+    def mark_rejected(self, case_id: str, decision_id: str) -> None:
+        with self.uow_factory() as uow:
+            uow.cases.mark_rejected(case_id, decision_id)
+            uow.commit()
+
+
+class SqlAlchemyCaseRepository:
+    def __init__(self, store: SqlAlchemyStore, connection: Connection) -> None:
+        self._store = store
+        self._connection = connection
+
+    def get_case(self, case_id: str) -> CaseInstance:
+        return self.get_projection(case_id).case
+
+    def get_analysis(self, analysis_id: str) -> AnalysisVersion:
+        row = (
+            self._connection.execute(
+                select(analysis_versions).where(
+                    analysis_versions.c.analysis_id == analysis_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RecordNotFound(f"analysis does not exist: {analysis_id}")
+        analysis = self._store._decode_analysis(row["payload_json"])
+        self._store._require_analysis_row_integrity(row, analysis)
+        try:
+            self._store._require_analysis_provenance(self._connection, analysis)
+        except PersistenceIntegrityError:
+            raise
+        except (RuntimeModeConflict, ValueError) as error:
+            raise PersistenceIntegrityError(
+                "persisted Analysis Version provenance is inconsistent"
+            ) from error
+        return analysis
+
+    def get_projection(self, case_id: str) -> CaseProjection:
+        row = (
+            self._connection.execute(
+                select(case_projection).where(case_projection.c.case_id == case_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RecordNotFound(f"case does not exist: {case_id}")
+        case = self._store._decode_case(
+            row["payload_json"],
+            record_name="case projection",
+        )
+        stored_case = self._store._stored_case(self._connection, case_id)
+        self._store._require_case_projection_integrity(row, case, stored_case)
+        self._store._require_configured_mode(case.runtime_mode)
+        return CaseProjection(
+            case=case,
+            current_analysis_id=row["current_analysis_id"],
+            current_analysis_hash=row["current_analysis_hash"],
+            current_decision_id=row["current_decision_id"],
+        )
+
+    def _set_decision_projection(
+        self,
+        case_id: str,
+        decision_id: str,
+        *,
+        status: CaseStatus,
+    ) -> None:
+        projection = self.get_projection(case_id)
+        changed = projection.case.model_copy(update={"status": status})
+        result = self._connection.execute(
+            update(case_projection)
+            .where(case_projection.c.case_id == case_id)
+            .values(
+                status=status.value,
+                current_decision_id=decision_id,
+                updated_at=datetime.now(UTC),
+                payload_json=serialize_model(changed),
+            )
+        )
+        if result.rowcount != 1:
+            raise RecordNotFound(f"case projection does not exist: {case_id}")
+
+    def set_current_decision(self, case_id: str, decision_id: str) -> None:
+        self._set_decision_projection(
+            case_id,
+            decision_id,
+            status=CaseStatus.ACTION_PLANNING,
+        )
+
+    def mark_rejected(self, case_id: str, decision_id: str) -> None:
+        self._set_decision_projection(
+            case_id,
+            decision_id,
+            status=CaseStatus.DECISION_REJECTED,
+        )
+
+
+class SqlAlchemyDecisionRepository:
+    def __init__(self, store: SqlAlchemyStore, connection: Connection) -> None:
+        self._store = store
+        self._connection = connection
+
+    @staticmethod
+    def _decode_decision(payload: str) -> Decision:
+        try:
+            return Decision.model_validate_json(payload)
+        except (ValidationError, ValueError) as error:
+            raise PersistenceIntegrityError(
+                "persisted Decision contains invalid JSON"
+            ) from error
+
+    def _decision_from_row(self, row) -> Decision:
+        decision = self._decode_decision(row["payload_json"])
+        if (
+            decision.decision_id != row["decision_id"]
+            or decision.case_id != row["case_id"]
+            or decision.analysis_id != row["analysis_id"]
+            or decision.idempotency_key != row["idempotency_key"]
+            or decision.kind.value != row["kind"]
+            or decision.runtime_mode.value != row["runtime_mode"]
+            or not self._store._datetime_matches(row["decided_at"], decision.decided_at)
+        ):
+            raise PersistenceIntegrityError(
+                "decision columns conflict with canonical Decision JSON"
+            )
+        self._store._require_configured_mode(decision.runtime_mode)
+        return decision
+
+    def get(self, decision_id: str) -> Decision:
+        row = (
+            self._connection.execute(
+                select(decisions).where(decisions.c.decision_id == decision_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RecordNotFound(f"decision does not exist: {decision_id}")
+        return self._decision_from_row(row)
+
+    def get_by_idempotency_key(self, idempotency_key: str) -> Decision | None:
+        row = (
+            self._connection.execute(
+                select(decisions).where(decisions.c.idempotency_key == idempotency_key)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else self._decision_from_row(row)
+
+    def list_for_case(self, case_id: str) -> tuple[Decision, ...]:
+        rows = (
+            self._connection.execute(
+                select(decisions)
+                .where(decisions.c.case_id == case_id)
+                .order_by(decisions.c.decided_at, decisions.c.decision_id)
+            )
+            .mappings()
+            .all()
+        )
+        return tuple(self._decision_from_row(row) for row in rows)
+
+    def insert(self, decision: Decision) -> None:
+        self._store._require_configured_mode(decision.runtime_mode)
+        stored_case = self._store._stored_case(self._connection, decision.case_id)
+        if stored_case.runtime_mode is not decision.runtime_mode:
+            raise RuntimeModeConflict(
+                "Decision runtime_mode must match its immutable Case Instance"
+            )
+        analysis = SqlAlchemyCaseRepository(self._store, self._connection).get_analysis(
+            decision.analysis_id
+        )
+        if (
+            analysis.case_id != decision.case_id
+            or analysis.material_hash != decision.analysis_material_hash
+            or analysis.material.runtime_mode is not decision.runtime_mode
+        ):
+            raise PersistenceIntegrityError(
+                "Decision provenance must match its persisted Analysis Version"
+            )
+        self._connection.execute(
+            insert(decisions).values(
+                decision_id=decision.decision_id,
+                case_id=decision.case_id,
+                analysis_id=decision.analysis_id,
+                idempotency_key=decision.idempotency_key,
+                kind=decision.kind.value,
+                runtime_mode=decision.runtime_mode.value,
+                decided_at=decision.decided_at,
+                payload_json=serialize_model(decision),
+            )
+        )
+
+    def insert_satisfactions(
+        self,
+        decision_id: str,
+        satisfactions: tuple[ApprovalSatisfaction, ...],
+    ) -> None:
+        decision = self.get(decision_id)
+        if not satisfactions:
+            return
+        for item in satisfactions:
+            if (
+                item.analysis_id != decision.analysis_id
+                or item.option_id != decision.selected_option_id
+            ):
+                raise PersistenceIntegrityError(
+                    "Decision Approval Satisfaction provenance is inconsistent"
+                )
+        self._connection.execute(
+            insert(approval_satisfactions),
+            [
+                {
+                    "analysis_id": item.analysis_id,
+                    "decision_id": decision_id,
+                    "option_id": item.option_id,
+                    "authorization_id": item.authorization_id,
+                    "persona_id": item.persona_id,
+                    "role": item.role,
+                    "satisfied": item.satisfied,
+                    "payload_json": serialize_model(item),
+                }
+                for item in satisfactions
+            ],
+        )
+
+    def list_approval_satisfactions(
+        self,
+        decision_id: str,
+    ) -> tuple[ApprovalSatisfaction, ...]:
+        rows = (
+            self._connection.execute(
+                select(approval_satisfactions)
+                .where(approval_satisfactions.c.decision_id == decision_id)
+                .order_by(
+                    approval_satisfactions.c.role,
+                    approval_satisfactions.c.persona_id,
+                )
+            )
+            .mappings()
+            .all()
+        )
+        result: list[ApprovalSatisfaction] = []
+        for row in rows:
+            try:
+                item = ApprovalSatisfaction.model_validate_json(row["payload_json"])
+            except (ValidationError, ValueError) as error:
+                raise PersistenceIntegrityError(
+                    "persisted Approval Satisfaction contains invalid JSON"
+                ) from error
+            if (
+                item.analysis_id != row["analysis_id"]
+                or item.option_id != row["option_id"]
+                or item.authorization_id != row["authorization_id"]
+                or item.persona_id != row["persona_id"]
+                or item.role != row["role"]
+                or item.satisfied is not row["satisfied"]
+            ):
+                raise PersistenceIntegrityError(
+                    "approval satisfaction columns conflict with canonical JSON"
+                )
+            result.append(item)
+        return tuple(result)
+
+
+class SqlAlchemyExecutionRepository:
+    def __init__(
+        self,
+        store: SqlAlchemyStore,
+        connection: Connection,
+        *,
+        before_outbox_insert: Callable[[], None] | None = None,
+    ) -> None:
+        self._store = store
+        self._connection = connection
+        self._before_outbox_insert = before_outbox_insert
+
+    def insert_outbox(self, event: ActionPlanningRequested) -> None:
+        if self._before_outbox_insert is not None:
+            self._before_outbox_insert()
+        self._connection.execute(
+            insert(outbox_events).values(
+                event_id=event.event_id,
+                decision_id=event.decision_id,
+                event_type=event.event_type,
+                created_at=event.created_at,
+                available_at=event.available_at,
+                claim_status=event.claim_status.value,
+                payload_json=serialize_model(event),
+            )
+        )
+
+    def list_outbox(
+        self,
+        *,
+        decision_id: str,
+    ) -> tuple[ActionPlanningRequested, ...]:
+        rows = (
+            self._connection.execute(
+                select(outbox_events)
+                .where(outbox_events.c.decision_id == decision_id)
+                .order_by(outbox_events.c.created_at, outbox_events.c.event_id)
+            )
+            .mappings()
+            .all()
+        )
+        events: list[ActionPlanningRequested] = []
+        for row in rows:
+            try:
+                event = ActionPlanningRequested.model_validate_json(row["payload_json"])
+            except (ValidationError, ValueError) as error:
+                raise PersistenceIntegrityError(
+                    "persisted outbox event contains invalid JSON"
+                ) from error
+            if (
+                event.event_id != row["event_id"]
+                or event.decision_id != row["decision_id"]
+                or event.event_type != row["event_type"]
+                or event.claim_status.value != row["claim_status"]
+                or not self._store._datetime_matches(
+                    row["created_at"], event.created_at
+                )
+                or not self._store._datetime_matches(
+                    row["available_at"], event.available_at
+                )
+            ):
+                raise PersistenceIntegrityError(
+                    "outbox columns conflict with canonical event JSON"
+                )
+            events.append(event)
+        return tuple(events)
+
+
+class SqlAlchemyUnitOfWork:
+    def __init__(
+        self,
+        store: SqlAlchemyStore,
+        *,
+        before_outbox_insert: Callable[[], None] | None = None,
+    ) -> None:
+        self._store = store
+        self._before_outbox_insert = before_outbox_insert
+        self._connection: Connection | None = None
+        self._transaction = None
+
+    def __enter__(self) -> SqlAlchemyUnitOfWork:
+        self._connection = self._store.engine.connect()
+        self._transaction = self._connection.begin()
+        self.cases = SqlAlchemyCaseRepository(self._store, self._connection)
+        self.decisions = SqlAlchemyDecisionRepository(self._store, self._connection)
+        self.execution = SqlAlchemyExecutionRepository(
+            self._store,
+            self._connection,
+            before_outbox_insert=self._before_outbox_insert,
+        )
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        del exc_type, exc, tb
+        try:
+            if self._transaction is not None and self._transaction.is_active:
+                self._transaction.rollback()
+        finally:
+            if self._connection is not None:
+                self._connection.close()
+
+    def commit(self) -> None:
+        if self._transaction is None or not self._transaction.is_active:
+            raise PersistenceError("unit of work has no active transaction")
+        self._transaction.commit()
+
+    def rollback(self) -> None:
+        if self._transaction is not None and self._transaction.is_active:
+            self._transaction.rollback()
 
 
 def build_store(settings: Settings) -> CaseStore:
