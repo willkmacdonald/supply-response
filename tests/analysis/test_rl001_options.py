@@ -83,6 +83,10 @@ def test_rl001_options_freeze_assumptions_evidence_roles_and_lineage():
         option_id: (
             option.assumptions,
             option.evidence_ids,
+            tuple(
+                (requirement.evidence_id, requirement.authority_scope)
+                for requirement in option.evidence_requirements
+            ),
             option.prerequisite_roles,
             option.source_data_lineage,
         )
@@ -90,6 +94,7 @@ def test_rl001_options_freeze_assumptions_evidence_roles_and_lineage():
     } == {
         "RL-OPTION-NO-MITIGATION": (
             ("Optional Alpha expedite receipt is excluded.",),
+            (),
             (),
             (),
             common,
@@ -100,25 +105,48 @@ def test_rl001_options_freeze_assumptions_evidence_roles_and_lineage():
                 "Remaining supplier recovery date is unconfirmed.",
             ),
             ("RL-ALPHA-OPTIONAL-3000",),
+            (
+                (
+                    "RL-ALPHA-OPTIONAL-3000",
+                    ("operational_quantity", "operational_date"),
+                ),
+            ),
             ("material_planner", "finance_approver"),
             (*common, "RL-ALPHA-OPTIONAL-3000"),
         ),
         "RL-OPTION-TRANSFER": (
             (),
             ("RL-TRANSFER-DAL-CHI-1500",),
+            (
+                (
+                    "RL-TRANSFER-DAL-CHI-1500",
+                    ("operational_quantity", "operational_date"),
+                ),
+            ),
             ("material_planner",),
             (*common, "RL-INV-DEMO-DAL", "RL-TRANSFER-DAL-CHI-1500"),
         ),
-        "RL-OPTION-RESEQUENCE": ((), (), ("material_planner",), common),
+        "RL-OPTION-RESEQUENCE": ((), (), (), ("material_planner",), common),
         "RL-OPTION-BETA": (
             (),
             ("RL-QUALITY-001",),
+            (("RL-QUALITY-001", ("qualification_state",)),),
             ("material_planner", "quality_approver"),
             (*common, "RL-QUALITY-001"),
         ),
         "RL-OPTION-COMBINED": (
             ("Remaining supplier recovery date is unconfirmed.",),
             ("RL-ALPHA-OPTIONAL-3000", "RL-TRANSFER-DAL-CHI-1500"),
+            (
+                (
+                    "RL-ALPHA-OPTIONAL-3000",
+                    ("operational_quantity", "operational_date"),
+                ),
+                (
+                    "RL-TRANSFER-DAL-CHI-1500",
+                    ("operational_quantity", "operational_date"),
+                ),
+            ),
             ("material_planner", "finance_approver"),
             (
                 *common,

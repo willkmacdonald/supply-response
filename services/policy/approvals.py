@@ -6,6 +6,9 @@ from data.domain.decisions import (
 )
 
 
+_ROLE_PERSONAS = {"quality_approver": "RL-PERSONA-JORDAN"}
+
+
 def evaluate_approval_satisfaction(
     *,
     option: ResponseOption,
@@ -20,5 +23,10 @@ def evaluate_approval_satisfaction(
         )
         for role in sorted(required)
         for authorization in standing_authorizations
-        if authorization.role == role and authorization.permits(option, target)
+        if authorization.role == role
+        and (
+            role not in _ROLE_PERSONAS
+            or authorization.persona_id == _ROLE_PERSONAS[role]
+        )
+        and authorization.permits(option, target)
     )

@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
 
+from apps.api.app import main as api_main
 from apps.api.app.main import CASES, DECISIONS, app
+from data.domain.evidence import ActorProvenance, IdentitySource
 from data.synthetic.rl001 import OperationalSnapshot
 
 
@@ -10,6 +12,7 @@ client = TestClient(app)
 def setup_function():
     CASES.clear()
     DECISIONS.clear()
+    app.dependency_overrides.clear()
 
 
 def create_case() -> str:  # allowed - shared API test fixture
@@ -31,15 +34,7 @@ def analyze(case_id: str) -> dict:
 
 
 def alex_decision(option_id: str) -> dict:  # allowed - shared API test fixture
-    return {
-        "option_id": option_id,
-        "actor": {
-            "persona_id": "RL-PERSONA-ALEX",
-            "roles": ["material_planner", "response_approver"],
-            "identity_source": "entra",
-            "source_id": "RL-ENTRA-ALEX",
-        },
-    }
+    return {"option_id": option_id}
 
 
 def test_api_returns_canonical_analysis_version_and_response_options():
@@ -116,6 +111,85 @@ def test_decision_references_the_immutable_analysis_and_option():
     )
 
 
+def test_decision_request_rejects_client_controlled_actor_provenance():
+    case_id = create_case()
+    analyze(case_id)
+
+    response = client.post(
+        f"/api/cases/{case_id}/approve",
+        json={
+            "option_id": "RL-OPTION-COMBINED",
+            "actor": {
+                "persona_id": "RL-PERSONA-ALEX",
+                "roles": ["material_planner", "response_approver"],
+                "identity_source": "entra",
+                "source_id": "RL-ENTRA-ALEX",
+            },
+        },
+    )
+
+    assert response.status_code == 422
+    assert DECISIONS == []
+
+
+def test_server_owned_actor_requires_both_approval_roles_before_mutation():
+    case_id = create_case()
+    analyze(case_id)
+    dependency = getattr(api_main, "resolve_fallback_demo_actor", lambda: None)
+    app.dependency_overrides[dependency] = lambda: ActorProvenance(
+        persona_id="RL-PERSONA-ALEX",
+        roles=("material_planner",),
+        identity_source=IdentitySource.ENTRA,
+        source_id="RL-ENTRA-ALEX",
+    )
+
+    response = client.post(
+        f"/api/cases/{case_id}/approve",
+        json=alex_decision("RL-OPTION-COMBINED"),
+    )
+
+    assert response.status_code == 403
+    assert CASES[case_id].selected_option_id is None
+    assert CASES[case_id].case.status == "awaiting_decision"
+    assert DECISIONS == []
+
+
+def test_server_owned_actor_requires_response_approver_to_reject():
+    case_id = create_case()
+    analyze(case_id)
+    dependency = getattr(api_main, "resolve_fallback_demo_actor", lambda: None)
+    app.dependency_overrides[dependency] = lambda: ActorProvenance(
+        persona_id="RL-PERSONA-ALEX",
+        roles=("material_planner",),
+        identity_source=IdentitySource.ENTRA,
+        source_id="RL-ENTRA-ALEX",
+    )
+
+    response = client.post(
+        f"/api/cases/{case_id}/reject",
+        json=alex_decision("RL-OPTION-COMBINED"),
+    )
+
+    assert response.status_code == 403
+    assert CASES[case_id].selected_option_id is None
+    assert CASES[case_id].case.status == "awaiting_decision"
+    assert DECISIONS == []
+
+
+def test_server_owned_response_approver_can_reject():
+    case_id = create_case()
+    analyze(case_id)
+
+    response = client.post(
+        f"/api/cases/{case_id}/reject",
+        json=alex_decision("RL-OPTION-COMBINED"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["case"]["status"] == "decision_rejected"
+    assert len(DECISIONS) == 1
+
+
 def test_approval_rejects_missing_analysis_prerequisite_satisfaction():
     case_id = create_case()
     analyze(case_id)
@@ -148,3 +222,11 @@ def test_dashboard_summary_uses_canonical_case_statuses():
     assert response.json()["analyzed_cases"] == 1
     assert empty.json()["revenue_at_risk"] == "0.00"
     assert response.json()["revenue_at_risk"] == "955000.00"
+    assert response.json()["otif_lines_at_risk"] == 2
+
+    approved = client.post(
+        f"/api/cases/{case_id}/approve",
+        json=alex_decision("RL-OPTION-COMBINED"),
+    )
+    assert approved.status_code == 200
+    assert client.get("/api/dashboard/summary").json()["otif_lines_at_risk"] == 1

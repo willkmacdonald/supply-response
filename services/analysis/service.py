@@ -309,7 +309,9 @@ def _apply_evidence_feasibility(
         validation.evidence_id: validation
         for validation in evidence_validation.item_results
     }
-    global_codes = tuple(code.value for code in evidence_validation.blocking_codes)
+    global_codes = tuple(
+        code.value for code in evidence_validation.global_blocking_codes
+    )
     adjusted: list[ResponseOption] = []
     for option in options:
         evidence_codes = global_codes if option.active_mitigation else ()
@@ -322,6 +324,10 @@ def _apply_evidence_feasibility(
                 continue
             item_codes = tuple(code.value for code in validation.blocking_codes)
             evidence_codes += item_codes
+            if validation.uncertainty_state == UncertaintyState.CONFLICTED:
+                evidence_codes += (
+                    EvidenceBlockingCode.EVIDENCE_CONFLICT_UNRESOLVED.value,
+                )
             if not set(requirement.authority_scope).issubset(
                 validation.validated_authority_scope
             ):

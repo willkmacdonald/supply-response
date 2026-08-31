@@ -391,10 +391,14 @@ def validate_required_evidence(
     if authority_mismatch:
         item_codes.add(EvidenceBlockingCode.AUTHORITY_SCOPE_MISMATCH)
     blocking_codes = tuple(code for code in EvidenceBlockingCode if code in item_codes)
+    global_blocking_codes = (
+        (EvidenceBlockingCode.AUTHORITY_SCOPE_MISMATCH,) if authority_mismatch else ()
+    )
     return EvidenceValidation(
         policy_version=EVIDENCE_POLICY_VERSION,
         item_results=item_results,
         blocking_codes=blocking_codes,
+        global_blocking_codes=global_blocking_codes,
     )
 
 

@@ -150,6 +150,7 @@ class EvidenceValidation(FrozenModel):
     policy_version: str
     item_results: tuple[EvidenceItemValidation, ...]
     blocking_codes: tuple[EvidenceBlockingCode, ...] = ()
+    global_blocking_codes: tuple[EvidenceBlockingCode, ...] = ()
 
     @property
     def authoritative(self) -> bool:

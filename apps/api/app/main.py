@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 
 from apps.api.app.contracts import (
     AnalyzeCaseResponse,
@@ -134,7 +134,41 @@ def get_options(case_id: str) -> ResponseOptionsResponse:
     return analysis.response_options
 
 
-def _decide(case_id: str, request: DecisionRequest, decision: str) -> CaseResponse:
+def resolve_fallback_demo_actor() -> ActorProvenance:
+    """Return server-owned fictional identity scaffolding; this is not live Entra."""
+    return ActorProvenance(
+        persona_id="RL-PERSONA-ALEX",
+        roles=("material_planner", "response_approver"),
+        identity_source=IdentitySource.ENTRA,
+        source_id="RL-ENTRA-ALEX",
+    )
+
+
+def _authorize_fallback_demo_actor(actor: ActorProvenance, *, decision: str) -> None:
+    required_roles = (
+        {"material_planner", "response_approver"}
+        if decision == "approved"
+        else {"response_approver"}
+    )
+    authorized = (
+        actor.persona_id == "RL-PERSONA-ALEX"
+        and actor.identity_source == IdentitySource.ENTRA
+        and actor.source_id == "RL-ENTRA-ALEX"
+        and required_roles.issubset(actor.roles)
+    )
+    if not authorized:
+        raise HTTPException(
+            status_code=403,
+            detail=f"{decision.title()} requires the server-owned Alex demo identity",
+        )
+
+
+def _decide(
+    case_id: str,
+    request: DecisionRequest,
+    decision: str,
+    actor: ActorProvenance,
+) -> CaseResponse:
     record = _case(case_id)
     if record.analysis is None:
         raise HTTPException(
@@ -158,13 +192,10 @@ def _decide(case_id: str, request: DecisionRequest, decision: str) -> CaseRespon
     ):
         raise HTTPException(status_code=409, detail="Response option is not executable")
 
+    _authorize_fallback_demo_actor(actor, decision=decision)
+
     satisfied_roles: set[str] = set()
     if decision == "approved":
-        if not _is_alex_material_planner(request.actor):
-            raise HTTPException(
-                status_code=403,
-                detail="Approval requires authenticated Alex Material Planner interaction",
-            )
         satisfied_roles.add("material_planner")
         satisfied_roles.update(
             satisfaction.role
@@ -206,22 +237,53 @@ def _decide(case_id: str, request: DecisionRequest, decision: str) -> CaseRespon
 
 
 @app.post("/api/cases/{case_id}/approve", response_model=CaseResponse)
-def approve_case(case_id: str, request: DecisionRequest) -> CaseResponse:
-    return _decide(case_id, request, "approved")
+def approve_case(
+    case_id: str,
+    request: DecisionRequest,
+    actor: ActorProvenance = Depends(resolve_fallback_demo_actor),
+) -> CaseResponse:
+    return _decide(case_id, request, "approved", actor)
 
 
 @app.post("/api/cases/{case_id}/reject", response_model=CaseResponse)
-def reject_case(case_id: str, request: DecisionRequest) -> CaseResponse:
-    return _decide(case_id, request, "rejected")
+def reject_case(
+    case_id: str,
+    request: DecisionRequest,
+    actor: ActorProvenance = Depends(resolve_fallback_demo_actor),
+) -> CaseResponse:
+    return _decide(case_id, request, "rejected", actor)
 
 
-def _is_alex_material_planner(actor: ActorProvenance) -> bool:
-    return (
-        actor.persona_id == "RL-PERSONA-ALEX"
-        and actor.identity_source == IdentitySource.ENTRA
-        and actor.source_id == "RL-ENTRA-ALEX"
-        and "material_planner" in actor.roles
+def _dashboard_prediction(record: CaseRecord):
+    analysis = record.analysis
+    if analysis is None:
+        return None
+    selected = next(
+        (
+            option
+            for option in analysis.response_options
+            if option.option_id == record.selected_option_id
+        ),
+        None,
     )
+    baseline = next(
+        (
+            option
+            for option in analysis.response_options
+            if not option.active_mitigation
+        ),
+        None,
+    )
+    option = selected or baseline
+    return option.predicted if option is not None else None
+
+
+def _affected_customer_order_lines(record: CaseRecord) -> int:
+    prediction = _dashboard_prediction(record)
+    if prediction is None:
+        return 0
+    line_count = len(record.snapshot.customer_orders)
+    return (line_count * prediction.otif_loss_percentage + 99) // 100
 
 
 @app.get("/api/dashboard/summary", response_model=DashboardSummary)
@@ -255,6 +317,6 @@ def dashboard_summary() -> DashboardSummary:
             )
         ),
         otif_lines_at_risk=sum(
-            int(option.predicted.otif_loss_percentage > 0) for option in no_mitigation
+            _affected_customer_order_lines(record) for record in CASES.values()
         ),
     )

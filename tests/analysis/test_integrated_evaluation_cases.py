@@ -234,12 +234,25 @@ def beta_approved_case() -> tuple[AnalyzeCaseCommand, Expected]:
         command.operational_snapshot.model_copy(
             update={"beta_qualification": qualification}
         ),
-    ).model_copy(
+    )
+    approved_evidence = _evidence(
+        command,
+        evidence_id=qualification.evidence_ref,
+        claim="Beta qualification state is approved.",
+        authority_scope=(AuthorityScope.QUALIFICATION_STATE,),
+    )
+    command = command.model_copy(
         update={
+            "evidence_items": tuple(
+                approved_evidence
+                if item.evidence_id == approved_evidence.evidence_id
+                else item
+                for item in command.evidence_items
+            ),
             "standing_authorizations": (
                 *command.standing_authorizations,
                 _jordan_quality_authorization(),
-            )
+            ),
         }
     )
     return command, _expected(
@@ -248,6 +261,9 @@ def beta_approved_case() -> tuple[AnalyzeCaseCommand, Expected]:
         beta_has_predicted_outcome=True,
         beta_ranking_eligible=True,
         quality_approval_satisfied=True,
+        quality_approval_persona_id="RL-PERSONA-JORDAN",
+        beta_evidence_claim="Beta qualification state is approved.",
+        conflict_ids=(),
     )
 
 
@@ -368,11 +384,13 @@ def stale_evidence_case() -> tuple[AnalyzeCaseCommand, Expected]:
             "EVIDENCE_TIMESTAMP_STALE",
         ),
         beta_ranking_eligible=False,
+        transfer_executable=True,
+        transfer_blocking_codes=(),
+        resequence_executable=True,
+        resequence_blocking_codes=(),
         expedite_executable=False,
-        expedite_blocking_codes=(
-            "EVIDENCE_TIMESTAMP_STALE",
-            "REQUIRED_EVIDENCE_MISSING",
-        ),
+        expedite_blocking_codes=("REQUIRED_EVIDENCE_MISSING",),
+        recommended_option_id="RL-OPTION-TRANSFER",
     )
 
 
@@ -395,6 +413,7 @@ def summarize(analysis, *, keys: set[str]) -> Expected:
     expedite = options["RL-OPTION-EXPEDITE"]
     beta = options["RL-OPTION-BETA"]
     transfer = options["RL-OPTION-TRANSFER"]
+    resequence = options["RL-OPTION-RESEQUENCE"]
     combined = options["RL-OPTION-COMBINED"]
     snapshot = OperationalSnapshot.model_validate_json(
         analysis.material.operational_snapshot_json
@@ -424,6 +443,9 @@ def summarize(analysis, *, keys: set[str]) -> Expected:
         "beta_has_predicted_outcome": beta.predicted is not None,
         "beta_ranking_eligible": beta.option_id in analysis.ranking.eligible_option_ids,
         "transfer_executable": transfer.executable,
+        "transfer_blocking_codes": transfer.blocking_codes,
+        "resequence_executable": resequence.executable,
+        "resequence_blocking_codes": resequence.blocking_codes,
         "transfer_available_units": snapshot.usable_inventory(
             snapshot.transfer.part_id, snapshot.transfer.source_plant_id
         ),
@@ -444,6 +466,24 @@ def summarize(analysis, *, keys: set[str]) -> Expected:
             and approval.role == "quality_approver"
             and approval.satisfied
             for approval in analysis.approval_satisfactions
+        ),
+        "quality_approval_persona_id": next(
+            (
+                approval.persona_id
+                for approval in analysis.approval_satisfactions
+                if approval.option_id == beta.option_id
+                and approval.role == "quality_approver"
+                and approval.satisfied
+            ),
+            None,
+        ),
+        "beta_evidence_claim": next(
+            (
+                item.claim
+                for item in analysis.evidence_items
+                if item.evidence_id == "RL-QUALITY-001"
+            ),
+            None,
         ),
         "evidence_freshness": tuple(
             result.freshness.value
@@ -567,6 +607,8 @@ def test_missing_required_option_evidence_blocks_before_ranking():
     )
     assert options["RL-OPTION-COMBINED"].executable is False
     assert "RL-OPTION-COMBINED" in analysis.ranking.infeasible_option_ids
+    assert options["RL-OPTION-TRANSFER"].executable is True
+    assert options["RL-OPTION-RESEQUENCE"].executable is True
 
 
 def test_global_authority_scope_failure_prevents_combined_recommendation():
@@ -577,6 +619,9 @@ def test_global_authority_scope_failure_prevents_combined_recommendation():
     analysis = analyze_case(command)
 
     assert analysis.evidence_validation.blocking_codes == ("AUTHORITY_SCOPE_MISMATCH",)
+    assert analysis.evidence_validation.global_blocking_codes == (
+        "AUTHORITY_SCOPE_MISMATCH",
+    )
     assert analysis.ranking.recommended_option_id is None
     assert analysis.ranking.no_feasible_mitigation is True
     assert all(
@@ -608,3 +653,37 @@ def test_approved_beta_without_quality_satisfaction_is_not_feasible():
     assert beta.executable is False
     assert "QUALITY_APPROVAL_UNSATISFIED" in beta.blocking_codes
     assert beta.option_id not in analysis.ranking.eligible_option_ids
+
+
+def test_non_jordan_quality_authorization_cannot_unlock_approved_beta():
+    command, _ = beta_approved_case()
+    impostor = _jordan_quality_authorization().model_copy(
+        update={
+            "authorization_id": "RL-AUTH-IMPOSTOR-QUALITY-1",
+            "persona_id": "RL-PERSONA-IMPOSTOR",
+        }
+    )
+    command = command.model_copy(
+        update={
+            "standing_authorizations": tuple(
+                authorization
+                for authorization in command.standing_authorizations
+                if authorization.role != "quality_approver"
+            )
+            + (impostor,)
+        }
+    )
+
+    analysis = analyze_case(command)
+    beta = next(
+        option
+        for option in analysis.response_options
+        if option.option_id == "RL-OPTION-BETA"
+    )
+
+    assert not any(
+        satisfaction.role == "quality_approver"
+        for satisfaction in analysis.approval_satisfactions
+    )
+    assert beta.executable is False
+    assert "QUALITY_APPROVAL_UNSATISFIED" in beta.blocking_codes

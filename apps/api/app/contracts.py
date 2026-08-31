@@ -1,11 +1,10 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from data.domain import CaseInstance, Disruption
 from data.domain.analysis import AnalysisVersion, ResponseOption
-from data.domain.evidence import ActorProvenance
 
 
 AnalyzeCaseResponse = AnalysisVersion
@@ -24,8 +23,9 @@ class CaseResponse(BaseModel):
 
 
 class DecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     option_id: str
-    actor: ActorProvenance
 
 
 class DecisionResponse(BaseModel):
