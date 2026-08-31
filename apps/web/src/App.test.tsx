@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import {cleanup, render, screen, within} from "@testing-library/react";
+import {act, cleanup, render, screen, within} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {StrictMode} from "react";
 import {afterEach, describe, expect, it, vi} from "vitest";
@@ -231,6 +231,8 @@ const decision = {
   new_analysis_available: false,
 };
 
+const pendingDecision = {...decision, action_planning_status: "pending"};
+
 const actions = [
   "prepare_alpha_recovery_draft",
   "coordinate_alpha_expedited_partial",
@@ -278,6 +280,8 @@ const playback = {
   scenario_effective_time: scenarioTime,
 };
 
+const inProgressPlayback = {...playback, status: "in_progress", completed_at: null};
+
 const observations = Array.from({length: 10}, (_, index) => ({
   observation_id: `RL-OBSERVATION-${index + 1}`,
   case_id: "RL-CASE-1",
@@ -311,6 +315,8 @@ function mockFallbackCaseLifecycle(overrides: {
   retryDecision?: unknown;
   runtimeFailure?: boolean;
 } = {}) {
+  let decisionPolls = 0;
+  let playbackPolls = 0;
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const path = new URL(url).pathname;
@@ -325,14 +331,22 @@ function mockFallbackCaseLifecycle(overrides: {
       return response(overrides.analysis ?? analysis, 201);
     }
     if (path === "/api/cases/RL-CASE-1/decisions" && method === "POST") {
-      return response(overrides.decision ?? decision, 201);
+      return response(overrides.decision ?? pendingDecision, 201);
+    }
+    if (path === "/api/decisions/RL-DECISION-1" && method === "GET") {
+      decisionPolls += 1;
+      return response(decisionPolls === 1 ? pendingDecision : decision);
     }
     if (path === "/api/decisions/RL-DECISION-1/actions/retry" && method === "POST") {
       return response(overrides.retryDecision ?? decision);
     }
     if (path === "/api/decisions/RL-DECISION-1/actions" && method === "GET") return response(actions);
     if (path === "/api/decisions/RL-DECISION-1/drafts" && method === "GET") return response(drafts);
-    if (path === "/api/decisions/RL-DECISION-1/playback" && method === "POST") return response(playback, 201);
+    if (path === "/api/decisions/RL-DECISION-1/playback" && method === "POST") return response(inProgressPlayback, 201);
+    if (path === "/api/decisions/RL-DECISION-1/playback" && method === "GET") {
+      playbackPolls += 1;
+      return response(playbackPolls === 1 ? inProgressPlayback : playback);
+    }
     if (path === "/api/decisions/RL-DECISION-1/observations" && method === "GET") return response(observations);
     throw new Error(`Unexpected API request: ${method} ${path}`);
   });
@@ -346,6 +360,22 @@ afterEach(() => {
 });
 
 describe("progressive Case workspace", () => {
+  it("announces Case creation for the full initialization request", async () => {
+    let resolveCase!: (value: Response) => void;
+    const created = new Promise<Response>((resolve) => { resolveCase = resolve; });
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname;
+      if (path === "/api/runtime") return response(runtime);
+      if (path === "/api/cases" && init?.method === "POST") return created;
+      throw new Error(`Unexpected API request: ${path}`);
+    }));
+
+    render(<App />);
+    expect(await screen.findByRole("status")).toHaveTextContent("Creating Case workspace…");
+    await act(async () => resolveCase(await response(caseInstance, 201)));
+    expect(await screen.findByText("Fallback mode")).toBeVisible();
+  });
+
   it("creates only one Case under the app's StrictMode development shell", async () => {
     const fetchMock = mockFallbackCaseLifecycle();
     render(<StrictMode><App /></StrictMode>);
@@ -370,7 +400,7 @@ describe("progressive Case workspace", () => {
     expect(screen.getByText("Unsent draft")).toBeVisible();
     await userEvent.click(screen.getByRole("button", {name: "Start simulated execution"}));
     expect(await screen.findByText("Simulated outcomes")).toBeVisible();
-    expect(screen.getAllByTestId("outcome-observation")).toHaveLength(10);
+    expect(await screen.findAllByTestId("outcome-observation")).toHaveLength(10);
     expect(screen.queryByText("Actual outcomes")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", {name: "Evidence items"})).toBeVisible();
     expect(screen.getByRole("heading", {name: "Exposure and lineage"})).toBeVisible();

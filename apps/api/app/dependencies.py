@@ -15,8 +15,9 @@ from data.domain import RuntimeMode
 from data.domain.analysis import AnalysisVersion
 from data.domain.decisions import DecisionKind, IdentitySnapshot
 from data.domain.evidence import IdentitySource
-from services.decisions.service import DecisionService, UnitOfWorkFactory
+from data.domain.execution import PlaybackStatus
 from services.analysis.application import FallbackAnalysisApplicationService
+from services.decisions.service import DecisionService, UnitOfWorkFactory
 from services.execution.planner import plan_actions
 from services.execution.playback import PlaybackClock, PlaybackService, RealClock
 from services.execution.worker import ActionPlanningWorker
@@ -26,6 +27,7 @@ from services.persistence.tables import (
     action_projection,
     case_instances,
     case_projection,
+    playbacks,
 )
 
 
@@ -51,6 +53,7 @@ class ApplicationServices:
     decision_service: DecisionService
     planning_worker: ActionPlanningWorker
     playback_service: PlaybackService
+    playback_clock: PlaybackClock
     clock: Callable[[], datetime]
     identity: IdentitySnapshot
 
@@ -61,6 +64,15 @@ class ApplicationServices:
     def run_worker_until_idle(self) -> None:
         while self.planning_worker.process_next_outbox():
             pass
+
+    def in_progress_playback_ids(self) -> tuple[str, ...]:
+        with self.store.engine.connect() as connection:
+            values = connection.execute(
+                select(playbacks.c.playback_id)
+                .where(playbacks.c.status == PlaybackStatus.IN_PROGRESS.value)
+                .order_by(playbacks.c.started_at, playbacks.c.playback_id)
+            ).scalars()
+            return tuple(values)
 
     @staticmethod
     def _utc_timestamp(value: datetime) -> datetime:
@@ -156,6 +168,7 @@ def build_composition(
             uow_factory,
             clock=active_playback_clock,
         ),
+        playback_clock=active_playback_clock,
         clock=now,
         identity=fallback_identity(),
     )

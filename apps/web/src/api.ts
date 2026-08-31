@@ -42,6 +42,8 @@ export const api = {
     post(`/api/cases/${caseId}/analysis`, {}),
   decide: (caseId: string, input: DecisionInput, key: string): Promise<Decision> =>
     post(`/api/cases/${caseId}/decisions`, input, {"Idempotency-Key": key}),
+  decision: (decisionId: string): Promise<Decision> =>
+    get(`/api/decisions/${decisionId}`),
   actions: (decisionId: string): Promise<ExecutionAction[]> =>
     get(`/api/decisions/${decisionId}/actions`),
   drafts: (decisionId: string): Promise<DraftArtifact[]> =>
@@ -50,6 +52,8 @@ export const api = {
     post(`/api/decisions/${decisionId}/actions/retry`, {}),
   startPlayback: (decisionId: string): Promise<Playback> =>
     post(`/api/decisions/${decisionId}/playback`, {}),
+  playback: (decisionId: string): Promise<Playback> =>
+    get(`/api/decisions/${decisionId}/playback`),
   observations: (decisionId: string): Promise<OutcomeObservation[]> =>
     get(`/api/decisions/${decisionId}/observations`),
 };

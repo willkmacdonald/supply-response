@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from threading import Event
 from typing import Protocol
 from uuid import NAMESPACE_URL, uuid5
 
@@ -21,7 +21,6 @@ from data.domain.execution import (
 )
 from services.execution.worker import ExecutionService
 from services.persistence.ports import UnitOfWork
-
 
 UnitOfWorkFactory = Callable[[], UnitOfWork]
 
@@ -68,6 +67,10 @@ class PlaybackStateError(RuntimeError):
     """Raised when playback cannot safely advance its bounded actions."""
 
 
+class PlaybackInterrupted(RuntimeError):
+    """Raised when application shutdown interrupts runtime playback."""
+
+
 class PlaybackClock(Protocol):
     def now(self) -> datetime: ...
 
@@ -75,13 +78,22 @@ class PlaybackClock(Protocol):
 
 
 class RealClock:
+    def __init__(self) -> None:
+        self._stopped = Event()
+
     def now(self) -> datetime:
         return datetime.now(UTC)
 
     def wait_until(self, target: datetime) -> None:
         delay = (target - self.now()).total_seconds()
-        if delay > 0:
-            time.sleep(delay)
+        if delay > 0 and self._stopped.wait(delay):
+            raise PlaybackInterrupted("playback interrupted by application shutdown")
+
+    def reset(self) -> None:
+        self._stopped.clear()
+
+    def stop(self) -> None:
+        self._stopped.set()
 
 
 class ImmediateClock:

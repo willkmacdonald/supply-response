@@ -11,7 +11,11 @@ import "./styles.css";
 export default function App() {
   const workspace = useCaseWorkspace();
   return <main className="case-workspace">
-    {workspace.operation === "initializing" && <p role="status">Initializing Case workspace…</p>}
+    {(workspace.operation === "initializing" || workspace.operation === "creating") && (
+      <p role="status" aria-live="polite">
+        {workspace.operation === "creating" ? "Creating Case workspace…" : "Initializing Case workspace…"}
+      </p>
+    )}
     {workspace.error && <p className="error" role="alert">{workspace.error}</p>}
     <CaseHeader
       runtime={workspace.runtime}

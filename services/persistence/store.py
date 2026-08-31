@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from pydantic import BaseModel, ValidationError
@@ -26,10 +27,10 @@ from data.domain.execution import (
     ExecutionStatus,
     ExecutionStatusEvent,
     ObservationKind,
-    OutcomeObservation,
-    OutboxClaimStatus,
     OutboxClaim,
+    OutboxClaimStatus,
     OutboxProcessingState,
+    OutcomeObservation,
     Playback,
     PlaybackStatus,
 )
@@ -40,6 +41,7 @@ from services.analysis.service import (
 )
 from services.persistence.ports import CaseStore
 from services.persistence.tables import (
+    action_projection,
     analysis_versions,
     approval_satisfactions,
     case_instances,
@@ -50,7 +52,6 @@ from services.persistence.tables import (
     execution_actions,
     execution_attempts,
     execution_events,
-    action_projection,
     operational_snapshots,
     outbox_events,
     outcome_observations,
@@ -1323,20 +1324,39 @@ class SqlAlchemyExecutionRepository:
         self,
         event_type: str,
     ) -> OutboxClaim | None:
-        return self._claim_outbox(event_type, decision_id=None)
+        return self._claim_outbox(
+            event_type,
+            decision_id=None,
+            include_failed=True,
+        )
+
+    def claim_next_unattempted_outbox(
+        self,
+        event_type: str,
+    ) -> OutboxClaim | None:
+        return self._claim_outbox(
+            event_type,
+            decision_id=None,
+            include_failed=False,
+        )
 
     def claim_outbox_for_decision(
         self,
         event_type: str,
         decision_id: str,
     ) -> OutboxClaim | None:
-        return self._claim_outbox(event_type, decision_id=decision_id)
+        return self._claim_outbox(
+            event_type,
+            decision_id=decision_id,
+            include_failed=True,
+        )
 
     def _claim_outbox(
         self,
         event_type: str,
         *,
         decision_id: str | None,
+        include_failed: bool,
     ) -> OutboxClaim | None:
         if event_type != "ActionPlanningRequested":
             raise ValueError("unsupported outbox event type")
@@ -1357,6 +1377,8 @@ class SqlAlchemyExecutionRepository:
         ]
         if decision_id is not None:
             filters.append(outbox_events.c.decision_id == decision_id)
+        if not include_failed:
+            filters.append(outbox_events.c.last_error.is_(None))
         candidate = (
             self._connection.execute(
                 select(

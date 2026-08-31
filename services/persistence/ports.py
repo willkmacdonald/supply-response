@@ -10,9 +10,9 @@ from data.domain.execution import (
     ExecutionAction,
     ExecutionAttempt,
     ExecutionStatusEvent,
-    OutcomeObservation,
     OutboxClaim,
     OutboxProcessingState,
+    OutcomeObservation,
     Playback,
 )
 from data.synthetic.rl001 import OperationalSnapshot
@@ -82,6 +82,11 @@ class ExecutionStore(Protocol):
     ) -> tuple[ActionPlanningRequested, ...]: ...
 
     def claim_next_outbox(
+        self,
+        event_type: str,
+    ) -> OutboxClaim | None: ...
+
+    def claim_next_unattempted_outbox(
         self,
         event_type: str,
     ) -> OutboxClaim | None: ...

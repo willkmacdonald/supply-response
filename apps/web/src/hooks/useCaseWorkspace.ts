@@ -47,6 +47,28 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
 }
 
+const POLL_INTERVAL_MS = 250;
+const MAX_POLL_ATTEMPTS = 240;
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function pollWhile<T>(
+  initial: T,
+  read: () => Promise<T>,
+  pending: (value: T) => boolean,
+  description: string,
+): Promise<T> {
+  let current = initial;
+  for (let attempt = 0; pending(current) && attempt < MAX_POLL_ATTEMPTS; attempt += 1) {
+    await delay(POLL_INTERVAL_MS);
+    current = await read();
+  }
+  if (pending(current)) throw new Error(`Timed out waiting for ${description}.`);
+  return current;
+}
+
 export function useCaseWorkspace(): CaseWorkspaceState {
   const initialized = useRef(false);
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
@@ -140,19 +162,27 @@ export function useCaseWorkspace(): CaseWorkspaceState {
         selected_option_id: selectedOption.option_id,
       }, `RL-WEB-${caseInstance.case_id}-${analysis.analysis_id}-approved`);
       setDecision(recorded);
+      if (recorded.action_planning_status === "pending") setOperation("planning");
+      const planned = await pollWhile(
+        recorded,
+        () => api.decision(recorded.decision_id),
+        (current) => current.action_planning_status === "pending",
+        "action planning",
+      );
+      setDecision(planned);
       setCaseInstance((current) => current ? {
         ...current,
-        current_decision_id: recorded.decision_id,
-        status: recorded.action_planning_status === "complete" ? "executing" : "action_planning",
-        display_status: recorded.action_planning_status === "failed" ? "Approved — action planning failed" : null,
+        current_decision_id: planned.decision_id,
+        status: planned.action_planning_status === "complete" ? "executing" : "action_planning",
+        display_status: planned.action_planning_status === "failed" ? "Approved — action planning failed" : null,
         controls: {
           ...current.controls,
           decide: false,
-          retry_action_planning: recorded.action_planning_status === "failed",
-          start_playback: recorded.action_planning_status === "complete",
+          retry_action_planning: planned.action_planning_status === "failed",
+          start_playback: planned.action_planning_status === "complete",
         },
       } : current);
-      if (recorded.action_planning_status === "complete") await loadExecution(recorded.decision_id);
+      if (planned.action_planning_status === "complete") await loadExecution(planned.decision_id);
     } catch (caught) {
       setError(`Decision failed. ${message(caught)}`);
     } finally {
@@ -191,15 +221,22 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     try {
       const retried = await api.retryPlanning(decision.decision_id);
       setDecision(retried);
-      if (retried.action_planning_status === "complete") await loadExecution(retried.decision_id);
+      const planned = await pollWhile(
+        retried,
+        () => api.decision(retried.decision_id),
+        (current) => current.action_planning_status === "pending",
+        "action planning",
+      );
+      setDecision(planned);
+      if (planned.action_planning_status === "complete") await loadExecution(planned.decision_id);
       setCaseInstance((current) => current ? {
         ...current,
-        status: retried.action_planning_status === "complete" ? "executing" : "action_planning",
-        display_status: retried.action_planning_status === "failed" ? "Approved — action planning failed" : null,
+        status: planned.action_planning_status === "complete" ? "executing" : "action_planning",
+        display_status: planned.action_planning_status === "failed" ? "Approved — action planning failed" : null,
         controls: {
           ...current.controls,
-          retry_action_planning: retried.action_planning_status === "failed",
-          start_playback: retried.action_planning_status === "complete",
+          retry_action_planning: planned.action_planning_status === "failed",
+          start_playback: planned.action_planning_status === "complete",
         },
       } : current);
     } catch (caught) {
@@ -214,9 +251,17 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     setOperation("playback");
     setError(null);
     try {
-      const nextPlayback = await api.startPlayback(decision.decision_id);
-      const nextObservations = await api.observations(decision.decision_id);
+      const started = await api.startPlayback(decision.decision_id);
+      setPlayback(started);
+      const nextPlayback = await pollWhile(
+        started,
+        () => api.playback(decision.decision_id),
+        (current) => current.status !== "completed" && current.status !== "failed",
+        "simulated playback",
+      );
       setPlayback(nextPlayback);
+      if (nextPlayback.status === "failed") throw new Error("Simulated playback failed on the server.");
+      const nextObservations = await api.observations(decision.decision_id);
       setObservations(nextObservations);
     } catch (caught) {
       setError(`Simulated execution failed. ${message(caught)}`);

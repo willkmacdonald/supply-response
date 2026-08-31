@@ -16,7 +16,6 @@ from data.domain.execution import (
 from services.execution.planner import plan_actions
 from services.persistence.ports import UnitOfWork
 
-
 UnitOfWorkFactory = Callable[[], UnitOfWork]
 Planner = Callable[[Decision], tuple[ExecutionAction, ...]]
 Clock = Callable[[], datetime]
@@ -42,15 +41,29 @@ class ActionPlanningWorker:
         self._planner = planner
 
     def process_next_outbox(self) -> bool:
-        return self._process_outbox(decision_id=None)
+        return self._process_outbox(decision_id=None, unattempted_only=False)
+
+    def process_next_unattempted_outbox(self) -> bool:
+        return self._process_outbox(decision_id=None, unattempted_only=True)
 
     def process_decision_outbox(self, decision_id: str) -> bool:
-        return self._process_outbox(decision_id=decision_id)
+        return self._process_outbox(decision_id=decision_id, unattempted_only=False)
 
-    def _process_outbox(self, *, decision_id: str | None) -> bool:
+    def _process_outbox(
+        self,
+        *,
+        decision_id: str | None,
+        unattempted_only: bool,
+    ) -> bool:
         with self._uow_factory() as uow:
             claim = (
-                uow.execution.claim_next_outbox("ActionPlanningRequested")
+                (
+                    uow.execution.claim_next_unattempted_outbox(
+                        "ActionPlanningRequested"
+                    )
+                    if unattempted_only
+                    else uow.execution.claim_next_outbox("ActionPlanningRequested")
+                )
                 if decision_id is None
                 else uow.execution.claim_outbox_for_decision(
                     "ActionPlanningRequested",

@@ -311,8 +311,10 @@ describe("API client", () => {
       {analysis_id: "RL-ANALYSIS-1", kind: "approved", selected_option_id: "RL-OPTION-COMBINED"},
       "RL-WEB-DECISION-1",
     );
+    await api.decision("RL-DECISION-1");
     await api.actions("RL-DECISION-1");
     await api.startPlayback("RL-DECISION-1");
+    await api.playback("RL-DECISION-1");
     await api.observations("RL-DECISION-1");
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, "http://localhost:8000/api/runtime", undefined);
