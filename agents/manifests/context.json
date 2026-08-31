@@ -1,0 +1,7 @@
+{
+  "agent_name": "supply-response-context",
+  "model": "gpt-4.1-mini",
+  "instructions_path": "agents/context/instructions.md",
+  "description": "Extracts explicit fictional Quality and collaboration context only.",
+  "tools": []
+}

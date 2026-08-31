@@ -1,0 +1,7 @@
+{
+  "agent_name": "supply-response-decision",
+  "model": "gpt-4.1-mini",
+  "instructions_path": "agents/decision/instructions.md",
+  "description": "Explains a supplied deterministic recommendation without changing it.",
+  "tools": []
+}

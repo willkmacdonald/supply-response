@@ -1,3 +1,3 @@
-# Placeholder
+# Agent Framework orchestrator
 
-Reserved for a later integration phase. No external service is connected in the portable-core scaffold.
+Every analysis constructs a fresh fixed Agent Framework graph: signal, context, deterministic analysis, then decision explanation. Deterministic services remain the sole authority. Foundry publication, exact-version binding, and live invocation remain approval-gated deployment operations.

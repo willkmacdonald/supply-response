@@ -1,0 +1,7 @@
+{
+  "agent_name": "supply-response-signal",
+  "model": "gpt-4.1-mini",
+  "instructions_path": "agents/signal/instructions.md",
+  "description": "Extracts explicit fictional supplier facts without decision authority.",
+  "tools": []
+}

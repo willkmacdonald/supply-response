@@ -1,3 +1,3 @@
-# Placeholder
+# Context agent
 
-Reserved for a later integration phase. No external service is connected in the portable-core scaffold.
+The frozen prompt extracts explicit Quality and collaboration facts from bounded typed Evidence Items. It cannot resolve conflicts, satisfy approvals, or change feasibility.

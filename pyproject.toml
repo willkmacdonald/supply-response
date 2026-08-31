@@ -8,7 +8,10 @@ version = "0.1.0"
 description = "Portable core for the Supply Response prototype"
 requires-python = ">=3.12,<3.14"
 dependencies = [
+  "agent-framework-core>=1,<2",
+  "agent-framework-foundry>=1,<2",
   "alembic>=1.16,<2",
+  "azure-ai-projects>=2.3,<3",
   "azure-identity>=1.23,<2",
   "fastapi>=0.116,<1",
   "httpx>=0.28,<1",
@@ -32,7 +35,7 @@ fabric-deploy = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["apps", "services", "data", "integrations"]
+packages = ["apps", "services", "data", "integrations", "agents"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "fabric/sql/001_operational_schema.sql" = "fabric/sql/001_operational_schema.sql"
@@ -46,4 +49,14 @@ markers = [
   "fabric_live: requires an explicitly configured live Fabric SQL Database",
   "power_bi_live: requires explicit API and Power BI live settings",
   "workiq_live: requires a fresh Alex delegated assertion and complete Work IQ tenant settings",
+  "foundry_live: requires explicit pinned Foundry agent settings and separate approval",
+]
+
+[dependency-groups]
+dev = [
+    "build>=1.2,<2",
+    "hatchling>=1.27,<2",
+    "pip-audit>=2.9,<3",
+    "pyright>=1.1.400,<2",
+    "ruff>=0.12,<1",
 ]
