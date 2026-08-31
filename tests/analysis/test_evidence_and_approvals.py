@@ -99,6 +99,22 @@ def alex_actor(*, roles: tuple[str, ...] = ("material_planner",)) -> ActorProven
     )
 
 
+def current_evidence_validation(
+    evidence_items: tuple[EvidenceItem, ...] | None = None,
+):
+    return validate_required_evidence(
+        evidence_items
+        or (
+            evidence_item(evidence_id="RL-E-1"),
+            evidence_item(evidence_id="RL-E-2"),
+        ),
+        analysis_id="RL-ANALYSIS-1",
+        runtime_mode=RuntimeMode.LIVE,
+        scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+    )
+
+
 def combined_option(
     *,
     option_kind: ResponseOptionKind = ResponseOptionKind.COMBINED,
@@ -179,6 +195,7 @@ def test_uncited_required_workiq_evidence_blocks_authoritative_analysis():
         analysis_id="RL-ANALYSIS-1",
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        analysis_started_at=SCENARIO_EFFECTIVE_TIME,
     )
     assert result.blocking_codes == ("REQUIRED_CITATION_MISSING",)
 
@@ -188,8 +205,10 @@ def test_agent_cannot_resolve_a_feasibility_relevant_conflict():
     with pytest.raises(PolicyViolation, match="authorized human"):
         resolve_conflict(
             conflict,
+            evidence_validation=current_evidence_validation(),
             actor=alex_actor(roles=("agent",)),
             governing_evidence_id="RL-E-2",
+            why="RL agent attempted to choose a source.",
         )
 
 
@@ -217,10 +236,11 @@ def test_evidence_validation_reports_each_field_scoped_blocking_code():
     conflict = evidence_conflict(feasibility_relevant=True)
 
     result = validate_required_evidence(
-        (stale_and_expired,),
+        (stale_and_expired, evidence_item(evidence_id="RL-E-2")),
         runtime_mode=RuntimeMode.LIVE,
         analysis_id="RL-ANALYSIS-1",
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        analysis_started_at=SCENARIO_EFFECTIVE_TIME,
         required_authority_scope=(AuthorityScope.QUALIFICATION_STATE,),
         conflicts=(conflict,),
     )
@@ -237,20 +257,27 @@ def test_typed_human_resolution_clears_only_the_matching_conflict():
     conflict = evidence_conflict(feasibility_relevant=True)
     resolution = resolve_conflict(
         conflict,
+        evidence_validation=current_evidence_validation(),
         actor=alex_actor(),
         governing_evidence_id="RL-E-2",
+        why="RL supplier citation is the current governing statement.",
     )
     assert resolution == ConflictResolution(
         conflict_id="RL-CONFLICT-1",
         governing_evidence_id="RL-E-2",
         actor=alex_actor(),
+        why="RL supplier citation is the current governing statement.",
     )
 
     result = validate_required_evidence(
-        (evidence_item(),),
+        (
+            evidence_item(evidence_id="RL-E-1"),
+            evidence_item(evidence_id="RL-E-2"),
+        ),
         analysis_id="RL-ANALYSIS-1",
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        analysis_started_at=SCENARIO_EFFECTIVE_TIME,
         conflicts=(conflict,),
         conflict_resolutions=(resolution,),
     )
@@ -263,13 +290,18 @@ def test_forged_resolution_with_nonmember_evidence_does_not_clear_conflict():
         conflict_id="RL-CONFLICT-1",
         governing_evidence_id="RL-E-999",
         actor=alex_actor(),
+        why="RL attempted to select an unrelated source.",
     )
     with pytest.raises(PolicyViolation, match="governing evidence"):
         validate_required_evidence(
-            (evidence_item(),),
+            (
+                evidence_item(evidence_id="RL-E-1"),
+                evidence_item(evidence_id="RL-E-2"),
+            ),
             analysis_id="RL-ANALYSIS-1",
             runtime_mode=RuntimeMode.LIVE,
             scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+            analysis_started_at=SCENARIO_EFFECTIVE_TIME,
             conflicts=(conflict,),
             conflict_resolutions=(forged,),
         )
@@ -279,8 +311,10 @@ def test_agent_cannot_resolve_even_a_context_only_conflict():
     with pytest.raises(PolicyViolation, match="authorized human"):
         resolve_conflict(
             evidence_conflict(feasibility_relevant=False),
+            evidence_validation=current_evidence_validation(),
             actor=alex_actor(roles=("agent",)),
             governing_evidence_id="RL-E-1",
+            why="RL agent attempted to choose a source.",
         )
 
 
@@ -317,8 +351,10 @@ def test_forged_actor_provenance_cannot_resolve_conflict(actor):
     with pytest.raises(PolicyViolation, match="authorized human"):
         resolve_conflict(
             evidence_conflict(feasibility_relevant=True),
+            evidence_validation=current_evidence_validation(),
             actor=actor,
             governing_evidence_id="RL-E-1",
+            why="RL actor attempted to choose a source.",
         )
 
 
@@ -332,13 +368,18 @@ def test_directly_constructed_forged_resolution_is_revalidated_at_consumption():
             identity_source=IdentitySource.ENTRA,
             source_id="RL-ENTRA-TAYLOR",
         ),
+        why="RL forged actor attempted to choose a source.",
     )
     with pytest.raises(PolicyViolation, match="authorized human"):
         validate_required_evidence(
-            (evidence_item(),),
+            (
+                evidence_item(evidence_id="RL-E-1"),
+                evidence_item(evidence_id="RL-E-2"),
+            ),
             analysis_id="RL-ANALYSIS-1",
             runtime_mode=RuntimeMode.LIVE,
             scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+            analysis_started_at=SCENARIO_EFFECTIVE_TIME,
             conflicts=(evidence_conflict(feasibility_relevant=True),),
             conflict_resolutions=(forged,),
         )
@@ -349,8 +390,10 @@ def test_mismatched_nonblank_identity_source_cannot_resolve_conflict():
     with pytest.raises(PolicyViolation, match="authorized human"):
         resolve_conflict(
             evidence_conflict(feasibility_relevant=True),
+            evidence_validation=current_evidence_validation(),
             actor=actor,
             governing_evidence_id="RL-E-1",
+            why="RL mismatched identity attempted to choose a source.",
         )
 
 
@@ -387,6 +430,7 @@ def test_source_system_cannot_self_assert_an_unauthorized_scope(
         analysis_id="RL-ANALYSIS-1",
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        analysis_started_at=SCENARIO_EFFECTIVE_TIME,
         required_authority_scope=authority_scope,
     )
     assert "AUTHORITY_SCOPE_MISMATCH" in result.blocking_codes
@@ -405,6 +449,7 @@ def test_contextual_evidence_is_visible_but_cannot_satisfy_a_gate():
         analysis_id="RL-ANALYSIS-1",
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        analysis_started_at=SCENARIO_EFFECTIVE_TIME,
         required_authority_scope=(AuthorityScope.COLLABORATION_STATEMENT,),
     )
     assert result.item_results[0].authoritative is False
@@ -423,6 +468,7 @@ def test_contextual_kind_cannot_self_promote_by_claiming_required_status():
         analysis_id="RL-ANALYSIS-1",
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        analysis_started_at=SCENARIO_EFFECTIVE_TIME,
         required_authority_scope=(AuthorityScope.COLLABORATION_STATEMENT,),
     )
     assert result.item_results[0].authoritative is False
@@ -459,6 +505,7 @@ def test_source_authority_is_bound_to_its_runtime_mode(source_system, runtime_mo
         analysis_id="RL-ANALYSIS-1",
         runtime_mode=runtime_mode,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        analysis_started_at=SCENARIO_EFFECTIVE_TIME,
         required_authority_scope=item.authority_scope,
     )
     assert result.item_results[0].authoritative is False
@@ -477,6 +524,7 @@ def test_future_effective_and_exact_expiry_are_typed_business_invalidity():
         analysis_id="RL-ANALYSIS-1",
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        analysis_started_at=SCENARIO_EFFECTIVE_TIME,
     )
     states = {item.evidence_id: item.business_validity for item in result.item_results}
     assert states == {
@@ -509,11 +557,12 @@ def test_source_retrieval_order_and_current_analysis_health_are_visible():
         analysis_id="RL-ANALYSIS-1",
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        analysis_started_at=SCENARIO_EFFECTIVE_TIME,
     )
     assert result.item_results[0].freshness == FreshnessState.STALE
     assert "EVIDENCE_TIMESTAMP_STALE" in result.blocking_codes
     assert "RETRIEVAL_HEALTH_UNACCEPTABLE" in result.blocking_codes
-    assert result.policy_version == "evidence-policy-v1"
+    assert result.policy_version == "evidence-policy-v2"
 
 
 @pytest.mark.parametrize(
@@ -533,6 +582,7 @@ def test_required_live_workiq_evidence_requires_complete_navigable_metadata(upda
         analysis_id="RL-ANALYSIS-1",
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        analysis_started_at=SCENARIO_EFFECTIVE_TIME,
     )
     assert result.blocking_codes
     assert result.item_results[0].authoritative is False
@@ -716,6 +766,7 @@ def test_create_analysis_version_uses_injected_clock_and_material_hash():
         ),
         response_options=(combined_option(),),
         standing_authorizations=(taylor_authorization(),),
+        analysis_started_at=SCENARIO_EFFECTIVE_TIME,
         created_at=created_at,
         calculation_version="RL-CALC-V1",
     )
@@ -742,6 +793,7 @@ def create_analysis(**overrides):  # allowed
         "evidence_items": (evidence_item(),),
         "response_options": (combined_option(),),
         "standing_authorizations": (taylor_authorization(),),
+        "analysis_started_at": SCENARIO_EFFECTIVE_TIME,
         "created_at": SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
         "calculation_version": "RL-CALC-V1",
     }
@@ -798,8 +850,10 @@ def conflict_evidence_bundle():
     conflict = evidence_conflict(feasibility_relevant=True)
     resolution = resolve_conflict(
         conflict,
+        evidence_validation=current_evidence_validation((first, second)),
         actor=alex_actor(),
         governing_evidence_id="RL-E-2",
+        why="RL supplier citation is the current governing statement.",
     )
     return (first, second), conflict, resolution
 
@@ -975,3 +1029,147 @@ def test_analysis_material_is_deeply_immutable_and_hash_remains_consistent():
     with pytest.raises(ValidationError, match="frozen"):
         analysis.material.response_options[0].blocking_codes = ("RL-MUTATED",)
     assert analysis_material_hash(analysis.material) == original_hash
+
+
+def test_final_review_declared_conflict_scope_cannot_relabel_validated_scope():
+    quality_items = tuple(
+        evidence_item(
+            evidence_id=evidence_id,
+            kind=EvidenceKind.OPERATIONAL_FACT,
+            authority_scope=(AuthorityScope.QUALIFICATION_STATE,),
+            source_system=EvidenceSourceSystem.FABRIC,
+        )
+        for evidence_id in ("RL-E-QUALITY-1", "RL-E-QUALITY-2")
+    )
+    validation = validate_required_evidence(
+        quality_items,
+        analysis_id="RL-ANALYSIS-1",
+        runtime_mode=RuntimeMode.LIVE,
+        scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+    )
+    forged_scope = EvidenceConflict(
+        conflict_id="RL-CONFLICT-QUALITY-1",
+        case_id="RL-CASE-1",
+        evidence_ids=("RL-E-QUALITY-1", "RL-E-QUALITY-2"),
+        authority_scope=(AuthorityScope.SUPPLIER_STATEMENT,),
+        description="RL qualification records disagree.",
+        feasibility_relevant=True,
+    )
+
+    with pytest.raises(PolicyViolation, match="validated evidence scope"):
+        resolve_conflict(
+            forged_scope,
+            evidence_validation=validation,
+            actor=alex_actor(),
+            governing_evidence_id="RL-E-QUALITY-1",
+            why="RL planner selected the newer qualification record.",
+        )
+    with pytest.raises(PolicyViolation, match="validated evidence scope"):
+        create_analysis(
+            evidence_items=quality_items,
+            conflicts=(forged_scope,),
+        )
+
+
+def test_final_review_unresolved_conflict_makes_each_item_nonauthoritative():
+    evidence = (
+        evidence_item(evidence_id="RL-E-1"),
+        evidence_item(evidence_id="RL-E-2"),
+    )
+    validation = validate_required_evidence(
+        evidence,
+        analysis_id="RL-ANALYSIS-1",
+        runtime_mode=RuntimeMode.LIVE,
+        scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+        conflicts=(evidence_conflict(feasibility_relevant=True),),
+    )
+
+    assert all(
+        item.uncertainty_state == UncertaintyState.CONFLICTED
+        and item.authoritative is False
+        for item in validation.item_results
+    )
+
+
+def test_final_review_old_retrieval_relabelled_current_is_still_stale():
+    analysis_started_at = SCENARIO_EFFECTIVE_TIME + timedelta(hours=2)
+    relabelled = evidence_item().model_copy(
+        update={"retrieved_for_analysis_id": "RL-ANALYSIS-1"}
+    )
+
+    validation = validate_required_evidence(
+        (relabelled,),
+        analysis_id="RL-ANALYSIS-1",
+        runtime_mode=RuntimeMode.LIVE,
+        scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        analysis_started_at=analysis_started_at,
+    )
+
+    assert validation.item_results[0].freshness == FreshnessState.STALE
+    assert validation.item_results[0].business_validity == BusinessValidityState.VALID
+    assert "EVIDENCE_RETRIEVAL_OUTSIDE_WINDOW" in validation.blocking_codes
+
+
+@pytest.mark.parametrize(
+    ("field_name", "claimed_version"),
+    (
+        ("evidence_policy_version", "RL-FORGED-EVIDENCE-POLICY"),
+        ("approval_policy_version", "RL-FORGED-APPROVAL-POLICY"),
+    ),
+)
+def test_final_review_analysis_rejects_unexecuted_policy_lineage(
+    field_name, claimed_version
+):
+    with pytest.raises(PolicyViolation, match="policy version"):
+        create_analysis(**{field_name: claimed_version})
+
+
+def test_final_review_conflict_resolution_requires_nonblank_rationale():
+    with pytest.raises(ValidationError, match="why"):
+        ConflictResolution(
+            conflict_id="RL-CONFLICT-1",
+            governing_evidence_id="RL-E-1",
+            actor=alex_actor(),
+            why="   ",
+        )
+
+
+def test_final_review_conflict_rationale_is_material_and_changes_hash():
+    evidence = (
+        evidence_item(evidence_id="RL-E-1"),
+        evidence_item(evidence_id="RL-E-2"),
+    )
+    validation = validate_required_evidence(
+        evidence,
+        analysis_id="RL-ANALYSIS-1",
+        runtime_mode=RuntimeMode.LIVE,
+        scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+    )
+    conflict = evidence_conflict(feasibility_relevant=True)
+    first = resolve_conflict(
+        conflict,
+        evidence_validation=validation,
+        actor=alex_actor(),
+        governing_evidence_id="RL-E-2",
+        why="RL supplier timestamp is newer.",
+    )
+    second = first.model_copy(
+        update={"why": "RL supplier timestamp and citation are more reliable."}
+    )
+
+    first_analysis = create_analysis(
+        evidence_items=evidence,
+        conflicts=(conflict,),
+        conflict_resolutions=(first,),
+    )
+    second_analysis = create_analysis(
+        evidence_items=evidence,
+        conflicts=(conflict,),
+        conflict_resolutions=(second,),
+    )
+
+    assert first_analysis.material.conflict_resolutions[0].why == first.why
+    assert first_analysis.material_hash != second_analysis.material_hash

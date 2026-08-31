@@ -31,6 +31,7 @@ from data.domain.evidence import (
 from data.synthetic.rl001 import OperationalSnapshot
 from services.policy.approvals import evaluate_approval_satisfaction
 from services.policy.evidence import (
+    EVIDENCE_RETRIEVAL_WINDOW,
     EVIDENCE_POLICY_VERSION,
     PolicyViolation,
     validate_required_evidence,
@@ -123,6 +124,7 @@ def create_analysis_version(
     evidence_items: tuple[EvidenceItem, ...],
     response_options: tuple[ResponseOption, ...],
     standing_authorizations: tuple[StandingAuthorization, ...],
+    analysis_started_at: datetime,
     created_at: datetime,
     calculation_version: str,
     conflicts: tuple[EvidenceConflict, ...] = (),
@@ -131,6 +133,12 @@ def create_analysis_version(
     evidence_policy_version: str = EVIDENCE_POLICY_VERSION,
     approval_policy_version: str = APPROVAL_POLICY_VERSION,
 ) -> AnalysisVersion:
+    if evidence_policy_version != EVIDENCE_POLICY_VERSION:
+        raise PolicyViolation("Evidence policy version does not match the evaluator.")
+    if approval_policy_version != APPROVAL_POLICY_VERSION:
+        raise PolicyViolation("Approval policy version does not match the evaluator.")
+    if created_at < analysis_started_at:
+        raise PolicyViolation("Analysis creation cannot precede analysis start.")
     _reject_duplicate_ids(
         evidence_items, key=lambda item: item.evidence_id, label="evidence"
     )
@@ -174,6 +182,7 @@ def create_analysis_version(
         analysis_id=analysis_id,
         runtime_mode=case.runtime_mode,
         scenario_effective_time=case.scenario_effective_time,
+        analysis_started_at=analysis_started_at,
         required_authority_scope=tuple(
             sorted(set(required_authority_scope), key=lambda value: value.value)
         ),
@@ -213,6 +222,8 @@ def create_analysis_version(
         runtime_mode=case.runtime_mode,
         corpus=corpus,
         scenario_effective_time=case.scenario_effective_time,
+        analysis_started_at=analysis_started_at,
+        retrieval_window_ends_at=(analysis_started_at + EVIDENCE_RETRIEVAL_WINDOW),
         operational_snapshot_json=_canonical_snapshot(operational_snapshot),
         required_authority_scope=canonical_required_scope,
         evidence=tuple(
@@ -250,8 +261,8 @@ def create_analysis_version(
             )
         ),
         calculation_version=calculation_version,
-        evidence_policy_version=evidence_policy_version,
-        approval_policy_version=approval_policy_version,
+        evidence_policy_version=EVIDENCE_POLICY_VERSION,
+        approval_policy_version=APPROVAL_POLICY_VERSION,
     )
     return AnalysisVersion(
         analysis_id=analysis_id,

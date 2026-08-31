@@ -1,6 +1,8 @@
 from datetime import datetime
 from enum import StrEnum
 
+from pydantic import field_validator
+
 from .common import FrozenModel, RuntimeMode
 
 
@@ -68,6 +70,7 @@ class EvidenceBlockingCode(StrEnum):
     REQUIRED_CITATION_MISSING = "REQUIRED_CITATION_MISSING"
     REQUIRED_SOURCE_METADATA_MISSING = "REQUIRED_SOURCE_METADATA_MISSING"
     EVIDENCE_TIMESTAMP_STALE = "EVIDENCE_TIMESTAMP_STALE"
+    EVIDENCE_RETRIEVAL_OUTSIDE_WINDOW = "EVIDENCE_RETRIEVAL_OUTSIDE_WINDOW"
     RETRIEVAL_HEALTH_UNACCEPTABLE = "RETRIEVAL_HEALTH_UNACCEPTABLE"
     EVIDENCE_NOT_YET_EFFECTIVE = "EVIDENCE_NOT_YET_EFFECTIVE"
     EVIDENCE_EXPIRED = "EVIDENCE_EXPIRED"
@@ -119,6 +122,14 @@ class ConflictResolution(FrozenModel):
     conflict_id: str
     governing_evidence_id: str
     actor: ActorProvenance
+    why: str
+
+    @field_validator("why")
+    @classmethod
+    def why_must_be_nonblank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("why must be nonblank")
+        return value
 
 
 class EvidenceItemValidation(FrozenModel):

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
 from data.domain.common import RuntimeMode
@@ -22,7 +22,8 @@ from data.domain.evidence import (
 )
 
 
-EVIDENCE_POLICY_VERSION = "evidence-policy-v1"
+EVIDENCE_POLICY_VERSION = "evidence-policy-v2"
+EVIDENCE_RETRIEVAL_WINDOW = timedelta(minutes=5)
 
 
 class PolicyViolation(ValueError):
@@ -117,7 +118,9 @@ def _validated_scope(
     )
 
 
-def _actor_is_authorized(conflict: EvidenceConflict, actor: ActorProvenance) -> bool:
+def _actor_is_authorized(
+    authority_scope: tuple[AuthorityScope, ...], actor: ActorProvenance
+) -> bool:
     recognized_roles = _PERSONA_ROLES.get(actor.persona_id)
     roles = set(actor.roles)
     if (
@@ -130,22 +133,53 @@ def _actor_is_authorized(conflict: EvidenceConflict, actor: ActorProvenance) -> 
         or not roles.issubset(recognized_roles)
     ):
         return False
-    conflict_roles = {
-        role
-        for scope in conflict.authority_scope
-        for role in _SCOPE_RESOLVER_ROLES[scope]
-    }
+    if not authority_scope:
+        return False
+    permitted_role_sets = tuple(
+        _SCOPE_RESOLVER_ROLES[scope] for scope in authority_scope
+    )
+    conflict_roles = set.intersection(*permitted_role_sets)
     return bool(roles & conflict_roles)
 
 
 def _resolution_is_valid(
-    conflict: EvidenceConflict, resolution: ConflictResolution
+    conflict: EvidenceConflict,
+    resolution: ConflictResolution,
+    validated_scope: tuple[AuthorityScope, ...],
 ) -> bool:
     return (
         resolution.conflict_id == conflict.conflict_id
         and resolution.governing_evidence_id in conflict.evidence_ids
-        and _actor_is_authorized(conflict, resolution.actor)
+        and bool(resolution.why.strip())
+        and _actor_is_authorized(validated_scope, resolution.actor)
     )
+
+
+def _validated_conflict_scope(
+    conflict: EvidenceConflict,
+    validation_by_evidence_id: dict[str, EvidenceItemValidation],
+) -> tuple[AuthorityScope, ...]:
+    referenced = tuple(
+        validation_by_evidence_id.get(evidence_id)
+        for evidence_id in conflict.evidence_ids
+    )
+    declared = tuple(
+        sorted(set(conflict.authority_scope), key=lambda value: value.value)
+    )
+    if (
+        not conflict.evidence_ids
+        or not declared
+        or any(result is None for result in referenced)
+        or any(
+            tuple(result.validated_authority_scope) != declared
+            for result in referenced
+            if result is not None
+        )
+    ):
+        raise PolicyViolation(
+            "Conflict authority scope must match every referenced validated evidence scope."
+        )
+    return declared
 
 
 def _item_validation(
@@ -154,6 +188,7 @@ def _item_validation(
     analysis_id: str,
     runtime_mode: RuntimeMode,
     scenario_effective_time: datetime,
+    analysis_started_at: datetime,
     conflicted_evidence_ids: set[str],
 ) -> EvidenceItemValidation:
     codes: list[EvidenceBlockingCode] = []
@@ -188,15 +223,23 @@ def _item_validation(
         item.retrieved_for_analysis_id == analysis_id
         and item.retrieval_health == RetrievalHealth.HEALTHY
     )
+    retrieval_in_window = (
+        item.retrieved_at is not None
+        and analysis_started_at
+        <= item.retrieved_at
+        <= analysis_started_at + EVIDENCE_RETRIEVAL_WINDOW
+    )
     freshness = (
         FreshnessState.CURRENT
-        if timestamps_ordered and current_retrieval
+        if timestamps_ordered and current_retrieval and retrieval_in_window
         else FreshnessState.STALE
     )
     if required and not timestamps_ordered:
         codes.append(EvidenceBlockingCode.EVIDENCE_TIMESTAMP_STALE)
     if required and not current_retrieval:
         codes.append(EvidenceBlockingCode.RETRIEVAL_HEALTH_UNACCEPTABLE)
+    if required and not retrieval_in_window:
+        codes.append(EvidenceBlockingCode.EVIDENCE_RETRIEVAL_OUTSIDE_WINDOW)
 
     if item.effective_at is not None and scenario_effective_time < item.effective_at:
         business_validity = BusinessValidityState.NOT_YET_EFFECTIVE
@@ -218,6 +261,7 @@ def _item_validation(
         and scope_valid
         and freshness == FreshnessState.CURRENT
         and business_validity == BusinessValidityState.VALID
+        and uncertainty_state != UncertaintyState.CONFLICTED
         and not codes
     )
     return EvidenceItemValidation(
@@ -239,10 +283,29 @@ def validate_required_evidence(
     analysis_id: str,
     runtime_mode: RuntimeMode,
     scenario_effective_time: datetime,
+    analysis_started_at: datetime,
     required_authority_scope: tuple[AuthorityScope, ...] = (),
     conflicts: tuple[EvidenceConflict, ...] = (),
     conflict_resolutions: tuple[ConflictResolution, ...] = (),
 ) -> EvidenceValidation:
+    base_item_results = tuple(
+        _item_validation(
+            item,
+            analysis_id=analysis_id,
+            runtime_mode=runtime_mode,
+            scenario_effective_time=scenario_effective_time,
+            analysis_started_at=analysis_started_at,
+            conflicted_evidence_ids=set(),
+        )
+        for item in sorted(evidence_items, key=lambda item: item.evidence_id)
+    )
+    validation_by_evidence_id = {item.evidence_id: item for item in base_item_results}
+    validated_conflict_scopes = {
+        conflict.conflict_id: _validated_conflict_scope(
+            conflict, validation_by_evidence_id
+        )
+        for conflict in conflicts
+    }
     for resolution in conflict_resolutions:
         matching_conflict = next(
             (
@@ -259,14 +322,23 @@ def validate_required_evidence(
             raise PolicyViolation(
                 "Conflict resolution governing evidence must belong to its conflict."
             )
-        if not _actor_is_authorized(matching_conflict, resolution.actor):
+        if not resolution.why.strip():
+            raise PolicyViolation("Conflict resolution requires a nonblank rationale.")
+        if not _actor_is_authorized(
+            validated_conflict_scopes[matching_conflict.conflict_id],
+            resolution.actor,
+        ):
             raise PolicyViolation("Conflict resolution requires an authorized human.")
     unresolved_conflicts = tuple(
         conflict
         for conflict in conflicts
         if conflict.feasibility_relevant
         and not any(
-            _resolution_is_valid(conflict, resolution)
+            _resolution_is_valid(
+                conflict,
+                resolution,
+                validated_conflict_scopes[conflict.conflict_id],
+            )
             for resolution in conflict_resolutions
         )
     )
@@ -281,6 +353,7 @@ def validate_required_evidence(
             analysis_id=analysis_id,
             runtime_mode=runtime_mode,
             scenario_effective_time=scenario_effective_time,
+            analysis_started_at=analysis_started_at,
             conflicted_evidence_ids=conflicted_ids,
         )
         for item in sorted(evidence_items, key=lambda item: item.evidence_id)
@@ -314,10 +387,20 @@ def validate_required_evidence(
 def resolve_conflict(
     conflict: EvidenceConflict,
     *,
+    evidence_validation: EvidenceValidation,
     actor: ActorProvenance,
     governing_evidence_id: str,
+    why: str,
 ) -> ConflictResolution:
-    if not _actor_is_authorized(conflict, actor):
+    if evidence_validation.policy_version != EVIDENCE_POLICY_VERSION:
+        raise PolicyViolation(
+            "Evidence validation policy version does not match the evaluator."
+        )
+    validation_by_evidence_id = {
+        item.evidence_id: item for item in evidence_validation.item_results
+    }
+    validated_scope = _validated_conflict_scope(conflict, validation_by_evidence_id)
+    if not _actor_is_authorized(validated_scope, actor):
         raise PolicyViolation("Conflict resolution requires an authorized human.")
     if governing_evidence_id not in conflict.evidence_ids:
         raise PolicyViolation("Governing evidence must belong to the conflict.")
@@ -325,4 +408,5 @@ def resolve_conflict(
         conflict_id=conflict.conflict_id,
         governing_evidence_id=governing_evidence_id,
         actor=actor,
+        why=why,
     )

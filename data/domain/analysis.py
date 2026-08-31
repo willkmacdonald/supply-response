@@ -172,6 +172,7 @@ class AnalysisConflictResolutionMaterial(FrozenModel):
     conflict_id: str
     governing_evidence_id: str
     actor: ActorProvenance
+    why: str
 
     @classmethod
     def from_resolution(
@@ -184,6 +185,7 @@ class AnalysisConflictResolutionMaterial(FrozenModel):
             conflict_id=item.conflict_id,
             governing_evidence_id=item.governing_evidence_id,
             actor=actor,
+            why=item.why,
         )
 
 
@@ -349,6 +351,8 @@ class AnalysisMaterial(FrozenModel):
     runtime_mode: RuntimeMode
     corpus: CorpusScope
     scenario_effective_time: datetime
+    analysis_started_at: datetime
+    retrieval_window_ends_at: datetime
     operational_snapshot_json: str
     required_authority_scope: tuple[AuthorityScope, ...]
     evidence: tuple[AnalysisEvidenceMaterial, ...]
