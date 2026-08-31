@@ -187,7 +187,9 @@ def test_server_owned_response_approver_can_reject():
 
     assert response.status_code == 200
     assert response.json()["case"]["status"] == "decision_rejected"
+    assert response.json()["selected_option_id"] is None
     assert len(DECISIONS) == 1
+    assert client.get("/api/dashboard/summary").json()["otif_lines_at_risk"] == 2
 
 
 def test_approval_rejects_missing_analysis_prerequisite_satisfaction():

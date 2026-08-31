@@ -213,7 +213,8 @@ def _decide(
                 ),
             )
 
-    record.selected_option_id = option.option_id
+    if decision == "approved":
+        record.selected_option_id = option.option_id
     record.case = record.case.model_copy(
         update={
             "status": (
