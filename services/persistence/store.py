@@ -776,7 +776,6 @@ class SqlAlchemyDecisionRepository:
             or analysis.material.runtime_mode is not decision.runtime_mode
             or analysis.material.scenario_effective_time
             != decision.scenario_effective_time
-            or analysis.ranking != decision.comparator_trace
             or analysis.material.calculation_version != decision.calculation_version
             or analysis.material.evidence_policy_version
             != decision.evidence_policy_version
@@ -804,10 +803,100 @@ class SqlAlchemyDecisionRepository:
             or option.assumptions != decision.assumptions
             or option.blocking_codes != decision.constraints
             or option.prerequisite_roles != decision.prerequisite_roles
+            or analysis.ranking != decision.comparator_trace
         ):
             raise PersistenceIntegrityError(
                 "Decision selected option conflicts with its immutable Analysis Version"
             )
+        self._require_derived_satisfactions(decision, analysis, option)
+
+    @staticmethod
+    def _require_material_planner_satisfaction(
+        satisfaction: ApprovalSatisfaction,
+        *,
+        decision: Decision,
+        analysis: AnalysisVersion,
+        option,
+    ) -> bool:
+        predicted = option.predicted
+        conditions = satisfaction.authorization_conditions
+        target = satisfaction.target
+        return bool(
+            predicted is not None
+            and decision.actor.persona_id == "RL-PERSONA-ALEX"
+            and decision.actor.source_id == "RL-ENTRA-ALEX"
+            and decision.actor.identity_source.value == "entra"
+            and "material_planner" in decision.actor.effective_roles
+            and "response_approver" in decision.actor.effective_roles
+            and satisfaction.role == "material_planner"
+            and satisfaction.persona_id == decision.actor.persona_id
+            and satisfaction.authorization_id == "RL-AUTH-ALEX-MATERIAL-DECISION"
+            and satisfaction.analysis_id == decision.analysis_id
+            and satisfaction.option_id == decision.selected_option_id
+            and satisfaction.satisfied
+            and target.case.case_id == decision.case_id
+            and target.case.template_id == analysis.material.template_id
+            and target.case.purpose is analysis.material.case_purpose
+            and target.case.runtime_mode is decision.runtime_mode
+            and target.scenario_effective_time == decision.scenario_effective_time
+            and target.corpus is analysis.material.corpus
+            and target.total_response_cost == predicted.response_cost
+            and target.requested_side_effects == option.requested_side_effects
+            and conditions.allowed_option_kinds == (option.option_kind,)
+            and conditions.maximum_response_cost == predicted.response_cost
+            and conditions.allowed_corpora == (analysis.material.corpus,)
+            and conditions.allowed_template_ids == (analysis.material.template_id,)
+            and conditions.allowed_case_purposes == (analysis.material.case_purpose,)
+            and conditions.valid_from == decision.scenario_effective_time
+            and conditions.valid_through == decision.scenario_effective_time
+            and conditions.forbidden_external_side_effects == ()
+        )
+
+    def _require_derived_satisfactions(
+        self,
+        decision: Decision,
+        analysis: AnalysisVersion,
+        option,
+    ) -> None:
+        required_roles = set(option.prerequisite_roles) - {"response_approver"}
+        actual_by_role = {item.role: item for item in decision.approval_satisfactions}
+        if set(actual_by_role) != required_roles:
+            raise PersistenceIntegrityError(
+                "Decision required satisfaction roles conflict with Analysis Version"
+            )
+        for role in required_roles:
+            actual = actual_by_role[role]
+            if role == "material_planner":
+                if not self._require_material_planner_satisfaction(
+                    actual,
+                    decision=decision,
+                    analysis=analysis,
+                    option=option,
+                ):
+                    raise PersistenceIntegrityError(
+                        "Decision required satisfaction conflicts with Alex material approval"
+                    )
+                continue
+            expected = tuple(
+                item
+                for item in analysis.approval_satisfactions
+                if item.option_id == option.option_id and item.role == role
+            )
+            expected_personas = {
+                "finance_approver": "RL-PERSONA-TAYLOR",
+                "quality_approver": "RL-PERSONA-JORDAN",
+            }
+            if (
+                len(expected) != 1
+                or actual != expected[0]
+                or (
+                    role in expected_personas
+                    and expected[0].persona_id != expected_personas[role]
+                )
+            ):
+                raise PersistenceIntegrityError(
+                    "Decision required satisfaction conflicts with Analysis Version"
+                )
 
     def _require_bound_satisfactions(self, decision: Decision) -> None:
         rows = self._list_approval_satisfactions(decision.decision_id)
@@ -1016,6 +1105,9 @@ class SqlAlchemyExecutionRepository:
         *,
         decision_id: str,
     ) -> tuple[ActionPlanningRequested, ...]:
+        decision = SqlAlchemyDecisionRepository(self._store, self._connection).get(
+            decision_id
+        )
         rows = (
             self._connection.execute(
                 select(outbox_events)
@@ -1048,9 +1140,6 @@ class SqlAlchemyExecutionRepository:
                 raise PersistenceIntegrityError(
                     "outbox columns conflict with canonical event JSON"
                 )
-            decision = SqlAlchemyDecisionRepository(self._store, self._connection).get(
-                event.decision_id
-            )
             if event.case_id != decision.case_id:
                 raise PersistenceIntegrityError(
                     "outbox case_id conflicts with its Decision"
@@ -1066,6 +1155,14 @@ class SqlAlchemyExecutionRepository:
                     "outbox event requires an approved Decision"
                 )
             events.append(event)
+        if decision.kind.value == "approved" and len(events) != 1:
+            raise PersistenceIntegrityError(
+                "approved Decision requires exactly one ActionPlanningRequested event"
+            )
+        if decision.kind.value == "rejected" and events:
+            raise PersistenceIntegrityError(
+                "rejected Decision cannot have outbox events"
+            )
         return tuple(events)
 
 

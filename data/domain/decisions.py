@@ -208,7 +208,7 @@ class Decision(FrozenModel):
     assumptions: tuple[str, ...]
     constraints: tuple[str, ...]
     prerequisite_roles: tuple[str, ...]
-    comparator_trace: Any
+    comparator_trace: Any | None
     calculation_version: str
     evidence_policy_version: str
     approval_policy_version: str
@@ -240,6 +240,8 @@ class Decision(FrozenModel):
     def decode_comparator_trace(cls, value: Any) -> Any:
         from .analysis import RankingResult
 
+        if value is None:
+            return None
         if isinstance(value, RankingResult):
             return value
         # Preserve numeric comparator values across JSON persistence.  The
@@ -253,6 +255,11 @@ class Decision(FrozenModel):
             if (
                 self.selected_option_id is not None
                 or self.selected_option is not None
+                or self.evidence_ids
+                or self.assumptions
+                or self.constraints
+                or self.prerequisite_roles
+                or self.comparator_trace is not None
                 or self.approval_satisfactions
                 or self.rejection_reason is None
                 or not self.rejection_reason.strip()
@@ -265,6 +272,7 @@ class Decision(FrozenModel):
             self.selected_option_id is None
             or option is None
             or option.option_id != self.selected_option_id
+            or self.comparator_trace is None
             or self.rejection_reason is not None
             or not self.approval_satisfactions
         ):
@@ -334,7 +342,9 @@ class Decision(FrozenModel):
             prerequisite_roles=(
                 option.prerequisite_roles if option is not None else ()
             ),
-            comparator_trace=analysis.ranking,
+            comparator_trace=(
+                analysis.ranking if command.kind is DecisionKind.APPROVED else None
+            ),
             calculation_version=analysis.material.calculation_version,
             evidence_policy_version=analysis.material.evidence_policy_version,
             approval_policy_version=analysis.material.approval_policy_version,

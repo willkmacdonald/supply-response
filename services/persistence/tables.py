@@ -235,6 +235,11 @@ outbox_events = Table(
     Column("attempt_count", Integer, nullable=False, server_default=text("0")),
     Column("last_error", Text, nullable=True),
     Column("payload_json", Text, nullable=False),
+    UniqueConstraint(
+        "decision_id",
+        "event_type",
+        name="uq_outbox_event_per_decision",
+    ),
 )
 
 execution_actions = Table(

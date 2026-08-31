@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
@@ -11,25 +11,39 @@ from threading import Barrier
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import IntegrityError
 
 from services.decisions.service import (
     DecisionPolicyViolation,
     DecisionService,
     IdempotencyKeyConflict,
 )
-from data.domain import CasePurpose, CaseStatus, RuntimeMode
+from data.domain import (
+    CasePurpose,
+    CaseStatus,
+    QualificationStatus,
+    RuntimeMode,
+)
+from data.domain.common import ResponseOptionKind
 from data.domain.decisions import (
+    AuthorizationConditions,
     CorpusScope,
     DecisionKind,
+    ExternalSideEffect,
     IdentitySnapshot,
     RecordDecisionCommand,
     StandingAuthorization,
 )
 from data.domain.evidence import IdentitySource
 from data.synthetic.rl001 import build_rl001_evidence, instantiate_rl001
-from services.analysis.service import AnalyzeCaseCommand, analyze_case
+from services.analysis.service import (
+    AnalyzeCaseCommand,
+    analysis_material_hash,
+    analyze_case,
+)
 from services.persistence.sqlite import sqlite_store
 from services.persistence.store import PersistenceIntegrityError, serialize_model
+from data.domain.execution import ActionPlanningRequested
 from services.persistence.tables import (
     approval_satisfactions,
     decisions,
@@ -73,6 +87,82 @@ def build_analysis(
             created_at=started_at,
             calculation_version=calculation_version,
         )
+    )
+
+
+def beta_without_jordan_analysis(case, snapshot, *, analysis_id: str):
+    qualification = snapshot.beta_qualification.model_copy(
+        update={
+            "status": QualificationStatus.APPROVED,
+            "effective_date": date(2026, 9, 1),
+            "audit_complete": True,
+            "first_article_complete": True,
+        }
+    )
+    approved_snapshot = snapshot.model_copy(
+        update={"beta_qualification": qualification}
+    )
+    scenario_time = case.scenario_effective_time
+    jordan = StandingAuthorization(
+        authorization_id="RL-AUTH-JORDAN-QUALITY-1",
+        persona_id="RL-PERSONA-JORDAN",
+        role="quality_approver",
+        conditions=AuthorizationConditions(
+            allowed_option_kinds=(ResponseOptionKind.ALTERNATE_SOURCE,),
+            maximum_response_cost=Decimal("0"),
+            allowed_corpora=(CorpusScope.DEMO_CORPUS,),
+            allowed_template_ids=(case.template_id,),
+            allowed_case_purposes=(case.purpose,),
+            valid_from=scenario_time,
+            valid_through=scenario_time + timedelta(days=14),
+            forbidden_external_side_effects=tuple(ExternalSideEffect),
+        ),
+    )
+    started_at = datetime.fromisoformat("2026-09-01T09:01:00-05:00")
+    complete = analyze_case(
+        AnalyzeCaseCommand(
+            analysis_id=analysis_id,
+            case=case,
+            corpus=CorpusScope.DEMO_CORPUS,
+            operational_snapshot=approved_snapshot,
+            evidence_items=build_rl001_evidence(
+                approved_snapshot,
+                analysis_id=analysis_id,
+                retrieved_at=started_at,
+            ),
+            standing_authorizations=(StandingAuthorization.taylor_rl001(), jordan),
+            analysis_started_at=started_at,
+            created_at=started_at,
+            calculation_version="rl001-options-v1",
+        )
+    )
+    beta = next(
+        item for item in complete.response_options if item.option_id == "RL-OPTION-BETA"
+    )
+    assert beta.executable
+    missing_quality = tuple(
+        item
+        for item in complete.approval_satisfactions
+        if item.role != "quality_approver"
+    )
+    material = complete.material.model_copy(
+        update={
+            "approval_satisfactions": tuple(
+                item
+                for item in complete.material.approval_satisfactions
+                if item.role != "quality_approver"
+            )
+        }
+    )
+    return (
+        complete.model_copy(
+            update={
+                "approval_satisfactions": missing_quality,
+                "material": material,
+                "material_hash": analysis_material_hash(material),
+            }
+        ),
+        approved_snapshot,
     )
 
 
@@ -781,3 +871,176 @@ def test_idempotency_race_after_both_requests_observe_no_existing_row(
         stored = uow.decisions.list_for_case(command.case_id)
         assert stored == (returned[0],)
         assert len(uow.execution.list_outbox(decision_id=stored[0].decision_id)) == 1
+
+
+def test_decision_read_derives_required_finance_satisfaction_from_analysis(
+    decision_context,
+):
+    decision = DecisionService(decision_context.uow_factory).record(
+        approved_combined_command("RL-IDEMPOTENCY-DERIVED-FINANCE"),
+        alex_identity(),
+    )
+    finance = next(
+        item
+        for item in decision.approval_satisfactions
+        if item.role == "finance_approver"
+    )
+    forged_finance = finance.model_copy(
+        update={
+            "persona_id": "RL-PERSONA-EVE",
+            "authorization_conditions": finance.authorization_conditions.model_copy(
+                update={"maximum_response_cost": Decimal("0")}
+            ),
+        }
+    )
+    forged = decision.model_copy(
+        update={
+            "approval_satisfactions": tuple(
+                forged_finance if item.role == "finance_approver" else item
+                for item in decision.approval_satisfactions
+            )
+        }
+    )
+    with decision_context.store.engine.begin() as connection:
+        connection.execute(
+            update(decisions)
+            .where(decisions.c.decision_id == decision.decision_id)
+            .values(payload_json=serialize_model(forged))
+        )
+        connection.execute(
+            update(approval_satisfactions)
+            .where(
+                approval_satisfactions.c.decision_id == decision.decision_id,
+                approval_satisfactions.c.role == "finance_approver",
+            )
+            .values(
+                persona_id=forged_finance.persona_id,
+                payload_json=serialize_model(forged_finance),
+            )
+        )
+
+    with decision_context.uow_factory() as uow:
+        with pytest.raises(PersistenceIntegrityError, match="required satisfaction"):
+            uow.decisions.get(decision.decision_id)
+
+
+def test_decision_read_rejects_finance_removed_from_both_representations(
+    decision_context,
+):
+    decision = DecisionService(decision_context.uow_factory).record(
+        approved_combined_command("RL-IDEMPOTENCY-DERIVED-FINANCE-MISSING"),
+        alex_identity(),
+    )
+    without_finance = decision.model_copy(
+        update={
+            "approval_satisfactions": tuple(
+                item
+                for item in decision.approval_satisfactions
+                if item.role != "finance_approver"
+            )
+        }
+    )
+    with decision_context.store.engine.begin() as connection:
+        connection.execute(
+            update(decisions)
+            .where(decisions.c.decision_id == decision.decision_id)
+            .values(payload_json=serialize_model(without_finance))
+        )
+        connection.execute(
+            delete(approval_satisfactions).where(
+                approval_satisfactions.c.decision_id == decision.decision_id,
+                approval_satisfactions.c.role == "finance_approver",
+            )
+        )
+
+    with decision_context.uow_factory() as uow:
+        with pytest.raises(PersistenceIntegrityError, match="required satisfaction"):
+            uow.decisions.get(decision.decision_id)
+
+
+def test_rejected_decision_rejects_option_projection_material(sqlite_uow):
+    rejected = DecisionService(sqlite_uow).record(
+        rejection_command("RL-IDEMPOTENCY-REJECTED-PROJECTION"),
+        alex_identity(effective_roles=("response_approver",)),
+    )
+
+    with pytest.raises(ValidationError, match="rejection Decision"):
+        rejected.__class__.model_validate(
+            {
+                **rejected.model_dump(),
+                "evidence_ids": ("RL-EVIDENCE-1",),
+            }
+        )
+
+
+def test_rejected_decision_read_rejects_forged_comparator_trace(decision_context):
+    rejected = DecisionService(decision_context.uow_factory).record(
+        rejection_command("RL-IDEMPOTENCY-REJECTED-TRACE"),
+        alex_identity(effective_roles=("response_approver",)),
+    )
+    with decision_context.uow_factory() as uow:
+        ranking = uow.cases.get_analysis(rejected.analysis_id).ranking
+    forged = rejected.model_copy(update={"comparator_trace": ranking})
+    with decision_context.store.engine.begin() as connection:
+        connection.execute(
+            update(decisions)
+            .where(decisions.c.decision_id == rejected.decision_id)
+            .values(payload_json=serialize_model(forged))
+        )
+
+    with decision_context.uow_factory() as uow:
+        with pytest.raises(PersistenceIntegrityError, match="invalid JSON"):
+            uow.decisions.get(rejected.decision_id)
+
+
+def test_approved_decision_allows_exactly_one_planning_event(sqlite_uow):
+    decision = DecisionService(sqlite_uow).record(
+        approved_combined_command("RL-IDEMPOTENCY-ONE-OUTBOX"),
+        alex_identity(),
+    )
+
+    with sqlite_uow() as uow:
+        with pytest.raises(IntegrityError):
+            uow.execution.insert_outbox(ActionPlanningRequested.for_decision(decision))
+
+
+def test_outbox_read_rejects_missing_planning_event(decision_context):
+    decision = DecisionService(decision_context.uow_factory).record(
+        approved_combined_command("RL-IDEMPOTENCY-MISSING-OUTBOX"),
+        alex_identity(),
+    )
+    with decision_context.store.engine.begin() as connection:
+        connection.execute(
+            delete(outbox_events).where(
+                outbox_events.c.decision_id == decision.decision_id
+            )
+        )
+
+    with decision_context.uow_factory() as uow:
+        with pytest.raises(PersistenceIntegrityError, match="exactly one"):
+            uow.execution.list_outbox(decision_id=decision.decision_id)
+
+
+def test_executable_beta_requires_current_jordan_quality_satisfaction(
+    decision_context,
+):
+    analysis, approved_snapshot = beta_without_jordan_analysis(
+        decision_context.case,
+        decision_context.snapshot,
+        analysis_id="RL-ANALYSIS-BETA-WITHOUT-JORDAN",
+    )
+    replacement_store = sqlite_store(
+        f"sqlite:///{decision_context.store.engine.url.database}-beta-without-jordan"
+    )
+    replacement_store.create_case(decision_context.case, approved_snapshot)
+    replacement_store.save_analysis(analysis)
+    command = RecordDecisionCommand(
+        case_id=analysis.case_id,
+        analysis_id=analysis.analysis_id,
+        selected_option_id="RL-OPTION-BETA",
+        kind=DecisionKind.APPROVED,
+        idempotency_key="RL-IDEMPOTENCY-BETA-WITHOUT-JORDAN",
+    )
+
+    with pytest.raises(DecisionPolicyViolation, match="quality_approver"):
+        DecisionService(replacement_store.uow_factory).record(command, alex_identity())

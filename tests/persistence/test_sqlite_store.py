@@ -560,6 +560,10 @@ def test_alembic_upgrade_and_downgrade_manage_shared_schema(tmp_path):
         == "RESTRICT"
     )
 
+    assert {
+        item["name"] for item in inspect(engine).get_unique_constraints("outbox_events")
+    } >= {"uq_outbox_event_per_decision"}
+
     migrated_store = sqlite_store(database_url)
     case, snapshot = fallback_rl001_case("RL-CASE-MIGRATED-FOREIGN-KEYS")
     migrated_store.create_case(case, snapshot)
@@ -613,7 +617,7 @@ def test_alembic_upgrade_path_adds_pointer_foreign_keys_after_original_0001(
             connection.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-            == "0002_case_projection_pointer_fks"
+            == "0003_outbox_one_planning_event"
         )
     head_foreign_keys = {
         tuple(item["constrained_columns"])
@@ -621,6 +625,9 @@ def test_alembic_upgrade_path_adds_pointer_foreign_keys_after_original_0001(
     }
     assert ("current_analysis_id",) in head_foreign_keys
     assert ("current_decision_id",) in head_foreign_keys
+    assert {
+        item["name"] for item in inspect(engine).get_unique_constraints("outbox_events")
+    } >= {"uq_outbox_event_per_decision"}
     migrated_store = sqlite_store(database_url)
     assert migrated_store.get_case(original_case.case_id) == original_case
     assert migrated_store.list_cases() == (original_case,)
@@ -643,6 +650,9 @@ def test_alembic_upgrade_path_adds_pointer_foreign_keys_after_original_0001(
     }
     assert ("current_analysis_id",) not in downgraded_foreign_keys
     assert ("current_decision_id",) not in downgraded_foreign_keys
+    assert "uq_outbox_event_per_decision" not in {
+        item["name"] for item in inspect(engine).get_unique_constraints("outbox_events")
+    }
 
     command.downgrade(config, "base")
     assert inspect(engine).get_table_names() == ["alembic_version"]
@@ -660,5 +670,13 @@ def test_pointer_migration_is_frozen_from_runtime_metadata():
     revision = Path(
         "migrations/versions/0002_case_projection_pointer_fks.py"
     ).read_text(encoding="utf-8")
+
+    assert "services.persistence.tables" not in revision
+
+
+def test_outbox_uniqueness_migration_is_frozen_from_runtime_metadata():
+    revision = Path("migrations/versions/0003_outbox_one_planning_event.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "services.persistence.tables" not in revision
