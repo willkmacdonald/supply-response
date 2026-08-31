@@ -1,3 +1,6 @@
+# FastAPI dependency markers are intentionally declared in signature defaults.
+# ruff: noqa: B008
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,11 +13,10 @@ from apps.api.app.contracts import (
 )
 from apps.api.app.dependencies import (
     ApplicationServices,
-    get_server_identity,
+    get_decision_identity,
     get_services,
 )
-from apps.api.app.routes.decisions import _decision
-from apps.api.app.routes.decisions import _require_role
+from apps.api.app.routes.decisions import _decision, _require_role
 from data.domain.decisions import IdentitySnapshot
 from services.execution.playback import (
     PlaybackAuthorizationError,
@@ -22,7 +24,6 @@ from services.execution.playback import (
 )
 from services.execution.worker import ExecutionService, IllegalExecutionTransition
 from services.persistence.store import RecordNotFound
-
 
 router = APIRouter(prefix="/api/decisions", tags=["execution"])
 
@@ -55,7 +56,7 @@ def retry_failed_action(
     decision_id: str,
     action_id: str,
     services: ApplicationServices = Depends(get_services),
-    actor: IdentitySnapshot = Depends(get_server_identity),
+    actor: IdentitySnapshot = Depends(get_decision_identity),
 ) -> ActionResponse:
     _require_role(actor, "response_approver")
     decision = _decision(services, decision_id)
@@ -111,7 +112,7 @@ def list_drafts(
 def start_playback(
     decision_id: str,
     services: ApplicationServices = Depends(get_services),
-    actor: IdentitySnapshot = Depends(get_server_identity),
+    actor: IdentitySnapshot = Depends(get_decision_identity),
 ) -> PlaybackResponse:
     decision = _decision(services, decision_id)
     try:

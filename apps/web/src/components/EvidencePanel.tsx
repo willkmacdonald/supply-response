@@ -1,7 +1,11 @@
 import type {AnalysisVersion} from "../types";
+import {trustedMicrosoftUrl} from "../security/trustedUrls";
 
 export function EvidencePanel({analysis}: {analysis: AnalysisVersion | null}) {
   if (!analysis) return null;
+  const missingRequiredLiveCitation = analysis.runtime_mode === "live" && analysis.evidence_items.some((item) =>
+    item.requirement === "required_authoritative" && !trustedMicrosoftUrl(item.citation_url)
+  );
   return <section className="panel" aria-labelledby="evidence-heading">
     <div className="section-heading">
       <div>
@@ -10,8 +14,13 @@ export function EvidencePanel({analysis}: {analysis: AnalysisVersion | null}) {
       </div>
       <span className="badge">{analysis.evidence_items.length} cited</span>
     </div>
+    {missingRequiredLiveCitation && <p className="warning" role="alert">Required live citation missing</p>}
     <div className="card-grid">
-      {analysis.evidence_items.map((item) => <article className="evidence-card" key={item.evidence_id}>
+      {analysis.evidence_items.map((item) => {
+        const citation = analysis.runtime_mode === "live"
+          ? trustedMicrosoftUrl(item.citation_url)
+          : item.citation_url;
+        return <article className="evidence-card" key={item.evidence_id}>
         <div className="card-labels">
           <span className="badge">{item.synthetic ? "Synthetic fixture" : item.source_system}</span>
           <span className="badge">{item.retrieval_health}</span>
@@ -23,8 +32,8 @@ export function EvidencePanel({analysis}: {analysis: AnalysisVersion | null}) {
           <div><dt>Authority</dt><dd>{item.authority_scope.join(", ")}</dd></div>
           <div><dt>Uncertainty</dt><dd>{item.uncertainty_state}</dd></div>
         </dl>
-        {item.citation_url && <a href={item.citation_url} target="_blank" rel="noreferrer">Open citation</a>}
-      </article>)}
+        {citation && <a href={citation} target="_blank" rel="noopener noreferrer">Open citation</a>}
+      </article>})}
     </div>
   </section>;
 }

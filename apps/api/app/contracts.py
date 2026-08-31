@@ -36,7 +36,7 @@ class DecisionRequest(StrictRequest):
     rejection_reason: str | None = None
 
     @model_validator(mode="after")
-    def validate_shape(self) -> "DecisionRequest":
+    def validate_shape(self) -> DecisionRequest:
         if self.kind == "approved":
             if self.selected_option_id is None:
                 raise ValueError("approval requires selected_option_id")
@@ -51,10 +51,12 @@ class DecisionRequest(StrictRequest):
 
 class RuntimeResponse(BaseModel):
     runtime_mode: RuntimeMode
-    work_iq: Literal["synthetic"]
+    work_iq: Literal["synthetic", "work_iq"]
     operational_store: Literal["sqlite", "fabric_sql"]
-    agent_runtime: Literal["local"]
+    agent_runtime: Literal["local", "foundry"]
     power_bi_available: bool
+    power_bi_url: str | None = None
+    capability_health: dict[str, Literal["ready", "unavailable"]]
 
 
 class CaseControls(BaseModel):

@@ -1,3 +1,6 @@
+# FastAPI dependency/body markers are intentionally declared in signature defaults.
+# ruff: noqa: B008
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException
@@ -9,7 +12,7 @@ from apps.api.app.contracts import (
 )
 from apps.api.app.dependencies import (
     ApplicationServices,
-    get_server_identity,
+    get_decision_identity,
     get_services,
 )
 from apps.api.app.routes.cases import _projection
@@ -25,7 +28,6 @@ from services.decisions.service import (
     IdempotencyKeyConflict,
 )
 from services.persistence.store import RecordNotFound
-
 
 router = APIRouter(tags=["decisions"])
 
@@ -130,7 +132,7 @@ def record_decision(
     request: DecisionRequest,
     idempotency_key: str = Header(alias="Idempotency-Key"),
     services: ApplicationServices = Depends(get_services),
-    actor: IdentitySnapshot = Depends(get_server_identity),
+    actor: IdentitySnapshot = Depends(get_decision_identity),
 ) -> DecisionResponse:
     kind = DecisionKind(request.kind)
     command = RecordDecisionCommand(
@@ -182,7 +184,7 @@ def retry_action_planning(
     decision_id: str,
     request: ServerMutationRequest | None = Body(default=None),
     services: ApplicationServices = Depends(get_services),
-    actor: IdentitySnapshot = Depends(get_server_identity),
+    actor: IdentitySnapshot = Depends(get_decision_identity),
 ) -> DecisionResponse:
     del request
     _require_role(actor, "response_approver")

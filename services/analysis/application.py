@@ -24,7 +24,10 @@ class FallbackAnalysisApplicationService:
         self._store = store
         self._clock = clock
 
-    def create(self, case_id: str) -> AnalysisVersion:
+    async def create(
+        self, case_id: str, *, actor: object | None = None
+    ) -> AnalysisVersion:
+        del actor
         projection = self._store.get_projection(case_id)
         case = projection.case
         _, snapshot = instantiate_rl001(

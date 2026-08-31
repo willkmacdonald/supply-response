@@ -12,6 +12,7 @@ import type {
   ResponseOption,
   RuntimeStatus,
 } from "../types";
+import {trustedMicrosoftUrl} from "../security/trustedUrls";
 
 export type WorkspaceOperation =
   | "initializing"
@@ -291,9 +292,14 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     const stale = analysis.evidence_validation.item_results.some((item) => item.freshness === "stale");
     const blocked = analysis.evidence_validation.blocking_codes.length > 0
       || analysis.evidence_validation.global_blocking_codes.length > 0;
+    const missingRequiredLiveCitation = analysis.runtime_mode === "live"
+      && analysis.evidence_items.some((item) =>
+        item.requirement === "required_authoritative"
+        && !trustedMicrosoftUrl(item.citation_url)
+      );
     const superseded = caseInstance?.current_analysis_id !== null
       && caseInstance?.current_analysis_id !== analysis.analysis_id;
-    return stale || blocked || superseded;
+    return stale || blocked || superseded || missingRequiredLiveCitation;
   }, [analysis, caseInstance]);
 
   return {

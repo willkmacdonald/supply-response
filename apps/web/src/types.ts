@@ -49,10 +49,12 @@ export interface CaseControls {
 
 export interface RuntimeStatus {
   runtime_mode: RuntimeMode;
-  work_iq: "synthetic";
-  operational_store: "sqlite";
-  agent_runtime: "local";
-  power_bi_available: false;
+  work_iq: "synthetic" | "work_iq";
+  operational_store: "sqlite" | "fabric_sql";
+  agent_runtime: "local" | "foundry";
+  power_bi_available: boolean;
+  power_bi_url?: string | null;
+  capability_health?: Record<string, "ready" | "unavailable">;
 }
 
 export interface Disruption {

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from typing import Any, Final, NoReturn, Protocol, SupportsIndex
-from apps.api.app.auth import AuthService, AuthenticatedActor, AuthorizationError
+
+from apps.api.app.auth import AuthenticatedActor, AuthorizationError, AuthService
 
 WORK_IQ_SCOPE: Final = "api://workiq.svc.cloud.microsoft/WorkIQAgent.Ask"
 
@@ -99,13 +100,29 @@ def build_obo_exchange(
     tenant_id: str,
     auth_service: AuthService,
 ) -> WorkIQOboExchange:
-    """Build the production MSAL seam without exposing credentials elsewhere."""
-    import msal
+    """Build a lazy production MSAL seam; construction performs no discovery."""
 
-    authority = f"https://login.microsoftonline.com/{tenant_id}"
-    client = msal.ConfidentialClientApplication(
-        client_id=client_id,
-        client_credential=client_secret,
-        authority=authority,
-    )
+    class LazyMsalClient:
+        __slots__ = ("_client",)
+
+        def __init__(self) -> None:
+            self._client: Any = None
+
+        def acquire_token_on_behalf_of(
+            self, *, user_assertion: str, scopes: list[str]
+        ) -> dict[str, Any]:
+            if self._client is None:
+                import msal
+
+                self._client = msal.ConfidentialClientApplication(
+                    client_id=client_id,
+                    client_credential=client_secret,
+                    authority=f"https://login.microsoftonline.com/{tenant_id}",
+                    instance_discovery=False,
+                )
+            return self._client.acquire_token_on_behalf_of(
+                user_assertion=user_assertion, scopes=scopes
+            )
+
+    client = LazyMsalClient()
     return WorkIQOboExchange(client, auth_service=auth_service)

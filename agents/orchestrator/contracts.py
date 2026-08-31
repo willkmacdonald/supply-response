@@ -13,10 +13,18 @@ class AgentContract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class RetrievalLineage(AgentContract):
+    context_id: str = Field(min_length=1, max_length=256)
+    task_id: str = Field(min_length=1, max_length=256)
+    artifact_ids: tuple[str, ...] = Field(max_length=64)
+    source_ids: tuple[str, ...] = Field(max_length=64)
+
+
 class AnalyzeCommand(AgentContract):
     """Server-created command; no actor assertion or tenant binding is permitted."""
 
     deterministic: AnalyzeCaseCommand
+    retrieval_lineage: tuple[RetrievalLineage, ...] = Field(default=(), max_length=8)
 
 
 class BoundedEvidence(AgentContract):

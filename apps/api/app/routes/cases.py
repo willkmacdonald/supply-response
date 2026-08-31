@@ -1,20 +1,25 @@
+# FastAPI dependency markers are intentionally declared in signature defaults.
+# ruff: noqa: B008
+
 from __future__ import annotations
 
+import inspect
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from apps.api.app.auth import AuthenticatedActor
 from apps.api.app.contracts import (
     AnalysisResponse,
     CaseControls,
     CaseResponse,
     CreateCaseRequest,
 )
-from apps.api.app.dependencies import ApplicationServices, get_services
+from apps.api.app.dependencies import ApplicationServices, get_actor, get_services
+from apps.api.app.live import LiveSourceUnavailable
 from data.domain import CaseStatus
 from data.synthetic.rl001 import instantiate_rl001
 from services.persistence.store import RecordNotFound
-
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 
@@ -107,16 +112,30 @@ def get_case(
 
 
 @router.post("/{case_id}/analysis", response_model=AnalysisResponse, status_code=201)
-def create_analysis(
+async def create_analysis(
     case_id: str,
     services: ApplicationServices = Depends(get_services),
+    actor: AuthenticatedActor | None = Depends(get_actor),
 ) -> AnalysisResponse:
     try:
-        analysis = services.analysis_service.create(case_id)
+        pending = (
+            services.analysis_service.create(case_id)
+            if actor is None
+            else services.analysis_service.create(case_id, actor=actor)
+        )
+        analysis = await pending if inspect.isawaitable(pending) else pending
     except RecordNotFound:
         raise HTTPException(
             status_code=404,
             detail={"code": "CASE_NOT_FOUND", "case_id": case_id},
+        ) from None
+    except LiveSourceUnavailable as error:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": error.code,
+                "new_fallback_case_allowed": error.new_fallback_case_allowed,
+            },
         ) from None
     return analysis_response(analysis)
 

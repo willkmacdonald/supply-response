@@ -47,6 +47,7 @@ def create_app(
             yield
         finally:
             await progression.stop()
+            await active_services.close()
 
     api = FastAPI(
         title="Supply Response API",

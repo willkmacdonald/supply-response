@@ -1,12 +1,9 @@
-import pytest
 from fastapi.testclient import TestClient
 
-from apps.api.app import dependencies
 from apps.api.app.dependencies import build_composition
 from apps.api.app.main import create_app
 from apps.api.app.settings import Settings
 from data.domain import RuntimeMode
-from integrations.fabric.health import FABRIC_SCHEMA_VERSION, FabricHealth
 from services.persistence.sqlite import sqlite_store
 
 
@@ -30,6 +27,13 @@ def test_health_and_runtime_report_the_composed_fallback_graph(tmp_path):
         "operational_store": "sqlite",
         "agent_runtime": "local",
         "power_bi_available": False,
+        "power_bi_url": None,
+        "capability_health": {
+            "operational_store": "ready",
+            "work_iq": "ready",
+            "agent_runtime": "ready",
+            "power_bi": "unavailable",
+        },
     }
 
 
@@ -43,70 +47,54 @@ def _live_settings() -> Settings:
     )
 
 
-def test_live_runtime_is_reported_only_after_fabric_health_succeeds(
-    tmp_path,
-    monkeypatch,
-):
+def test_live_runtime_reports_injected_graph_without_source_calls(tmp_path):
     store = sqlite_store(
         f"sqlite:///{tmp_path / 'live-contract.db'}",
         runtime_mode=RuntimeMode.LIVE,
     )
-    monkeypatch.setattr(dependencies, "fabric_store", lambda settings: store)
-    monkeypatch.setattr(
-        dependencies,
-        "check_fabric_health",
-        lambda engine: FabricHealth(
-            operational_store="fabric_sql",
-            power_bi_available=True,
-            schema_version=FABRIC_SCHEMA_VERSION,
-        ),
+    services = build_composition(
+        _live_settings(),
+        live_components={
+            "store": store,
+            "analysis_service": object(),
+            "auth_service": object(),
+            "power_bi_url": "https://app.powerbi.com/groups/demo/reports/report",
+        },
     )
-
-    services = build_composition(_live_settings())
     api = create_app(services=services)
     with TestClient(api) as client:
         runtime = client.get("/api/runtime")
 
     assert runtime.json() == {
         "runtime_mode": "live",
-        "work_iq": "synthetic",
+        "work_iq": "work_iq",
         "operational_store": "fabric_sql",
-        "agent_runtime": "local",
+        "agent_runtime": "foundry",
         "power_bi_available": True,
+        "power_bi_url": "https://app.powerbi.com/groups/demo/reports/report",
+        "capability_health": {
+            "operational_store": "ready",
+            "work_iq": "ready",
+            "agent_runtime": "ready",
+            "power_bi": "ready",
+        },
     }
 
 
-def test_live_composition_never_falls_back_when_fabric_connection_fails(monkeypatch):
-    fallback_called = False
-
-    def fail_fabric(settings):
-        raise RuntimeError("Fabric token rejected")
-
-    def record_fallback(*args, **kwargs):
-        nonlocal fallback_called
-        fallback_called = True
-        raise AssertionError("SQLite fallback must not be constructed")
-
-    monkeypatch.setattr(dependencies, "fabric_store", fail_fabric)
-    monkeypatch.setattr(dependencies, "sqlite_store", record_fallback)
-
-    with pytest.raises(RuntimeError, match="Fabric token rejected"):
-        build_composition(_live_settings())
-
-    assert fallback_called is False
-
-
-def test_live_composition_propagates_schema_health_failure(tmp_path, monkeypatch):
-    store = sqlite_store(
-        f"sqlite:///{tmp_path / 'bad-schema.db'}",
-        runtime_mode=RuntimeMode.LIVE,
+def test_live_and_fallback_graphs_are_mutually_exclusive(tmp_path):
+    live_store = sqlite_store(
+        f"sqlite:///{tmp_path / 'live.db'}", runtime_mode=RuntimeMode.LIVE
     )
-    monkeypatch.setattr(dependencies, "fabric_store", lambda settings: store)
-    monkeypatch.setattr(
-        dependencies,
-        "check_fabric_health",
-        lambda engine: (_ for _ in ()).throw(RuntimeError("schema mismatch")),
+    services = build_composition(
+        _live_settings(),
+        live_components={
+            "store": live_store,
+            "analysis_service": object(),
+            "auth_service": object(),
+            "power_bi_url": "https://app.powerbi.com/groups/demo/reports/report",
+        },
     )
 
-    with pytest.raises(RuntimeError, match="schema mismatch"):
-        build_composition(_live_settings())
+    assert services.store is live_store
+    assert services.operational_store == "fabric_sql"
+    assert services.settings.database_url is None

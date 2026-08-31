@@ -1,4 +1,5 @@
 import type {CaseInstance, CasePurpose, RuntimeStatus} from "../types";
+import {trustedMicrosoftUrl} from "../security/trustedUrls";
 
 interface CaseHeaderProps {
   runtime: RuntimeStatus | null;
@@ -31,6 +32,9 @@ export function CaseHeader({
   onCreate,
   onAnalyze,
 }: CaseHeaderProps) {
+  const powerBiUrl = runtime?.runtime_mode === "live" && runtime.power_bi_available
+    ? trustedMicrosoftUrl(runtime.power_bi_url)
+    : null;
   return <header className="case-header panel">
     <div>
       <p className="eyebrow">RL-001 · Supply disruption response</p>
@@ -43,6 +47,7 @@ export function CaseHeader({
       </span>}
       {caseInstance && <span>Scenario time: {scenarioLabel(caseInstance.scenario_effective_time)}</span>}
       {runtime && !runtime.power_bi_available && <span>Power BI unavailable in fallback</span>}
+      {powerBiUrl && <a href={powerBiUrl} target="_blank" rel="noopener noreferrer">Open Power BI command center</a>}
     </div>
     {runtime && !caseInstance && <button type="button" onClick={() => onCreate(createPurpose)} disabled={creating}>
       {creating

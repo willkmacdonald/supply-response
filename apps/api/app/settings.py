@@ -24,6 +24,21 @@ class Settings(BaseSettings):
     tenant_domain: str = "willmacdonald.com"
     frontend_origin: str = "http://localhost:5173"
     automated_test_faults_enabled: bool = False
+    api_client_id: str | None = None
+    entra_client_secret: str | None = None
+    alex_object_id: str | None = None
+    workiq_supplier_source_id: str | None = None
+    workiq_quality_source_id: str | None = None
+    tenant_sharepoint_host: str | None = None
+    foundry_project_endpoint: str | None = None
+    foundry_signal_agent_name: str | None = None
+    foundry_signal_agent_version: str | None = None
+    foundry_context_agent_name: str | None = None
+    foundry_context_agent_version: str | None = None
+    foundry_decision_agent_name: str | None = None
+    foundry_decision_agent_version: str | None = None
+    power_bi_report_url: str | None = None
+    fabric_citation_base_url: str | None = None
 
     @model_validator(mode="after")
     def validate_mode_specific_settings(self) -> "Settings":

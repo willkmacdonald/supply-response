@@ -1,3 +1,6 @@
+# Existing concrete unit-of-work context manager intentionally uses its class type.
+# ruff: noqa: PYI034
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -458,6 +461,18 @@ class SqlAlchemyStore:
             self._require_case_projection_integrity(row, case, stored_case)
             self._require_configured_mode(case.runtime_mode)
             return case
+
+    def get_operational_snapshot(self, case_id: str) -> OperationalSnapshot:
+        """Load the immutable snapshot after re-checking its Case runtime."""
+        with self.engine.connect() as connection:
+            case = self._stored_case(connection, case_id)
+            self._require_configured_mode(case.runtime_mode)
+            snapshot = self._stored_snapshot(connection, case_id)
+            if snapshot.runtime_mode is not case.runtime_mode:
+                raise RuntimeModeConflict(
+                    "Operational Snapshot runtime does not match Case Instance"
+                )
+            return snapshot
 
     def save_analysis(self, analysis: AnalysisVersion) -> None:
         runtime_mode = analysis.material.runtime_mode

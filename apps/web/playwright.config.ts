@@ -18,6 +18,23 @@ export default defineConfig({
   outputDir: resolve(repositoryRoot, ".artifacts/playwright"),
   reporter: "list",
   metadata: {e2eDatabasePath: databasePath},
+  projects: [
+    {
+      name: "fallback",
+      testIgnore: /live-demo\.spec\.ts/,
+    },
+    {
+      name: "live",
+      testMatch: /live-demo\.spec\.ts/,
+      use: {
+        baseURL: process.env.SUPPLY_RESPONSE_LIVE_BASE_URL,
+        storageState: process.env.SUPPLY_RESPONSE_ALEX_STORAGE_STATE,
+        trace: "off",
+        screenshot: "off",
+        video: "off",
+      },
+    },
+  ],
   use: {
     ...devices["Desktop Chrome"],
     baseURL: "http://127.0.0.1:5173",
@@ -25,7 +42,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
-  webServer: [
+  webServer: process.env.SUPPLY_RESPONSE_E2E_EXTERNAL_SERVERS === "1" ? undefined : [
     {
       command: "scripts/run_e2e_api.sh",
       cwd: repositoryRoot,

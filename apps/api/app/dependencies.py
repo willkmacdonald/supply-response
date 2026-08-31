@@ -1,3 +1,6 @@
+# FastAPI dependency markers are intentionally declared in signature defaults.
+# ruff: noqa: B008
+
 from __future__ import annotations
 
 import os
@@ -5,11 +8,17 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 
-from fastapi import Request
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy import select
 
+from apps.api.app.auth import (
+    AuthenticatedActor,
+    AuthenticationError,
+    AuthorizationError,
+    AuthService,
+)
 from apps.api.app.settings import Settings
 from apps.api.app.test_support import AutomatedTestFaults
 from data.domain import RuntimeMode
@@ -22,8 +31,8 @@ from services.decisions.service import DecisionService, UnitOfWorkFactory
 from services.execution.planner import plan_actions
 from services.execution.playback import PlaybackClock, PlaybackService, RealClock
 from services.execution.worker import ActionPlanningWorker, ExecutionService
-from services.persistence.sqlite import sqlite_store
 from services.persistence.fabric_sql import fabric_store
+from services.persistence.sqlite import sqlite_store
 from services.persistence.store import SqlAlchemyStore
 from services.persistence.tables import (
     action_projection,
@@ -31,7 +40,6 @@ from services.persistence.tables import (
     case_projection,
     playbacks,
 )
-from integrations.fabric.health import check_fabric_health
 
 
 def fallback_identity() -> IdentitySnapshot:
@@ -45,7 +53,9 @@ def fallback_identity() -> IdentitySnapshot:
 
 
 class AnalysisApplicationService(Protocol):
-    def create(self, case_id: str) -> AnalysisVersion: ...
+    async def create(
+        self, case_id: str, *, actor: AuthenticatedActor | None = None
+    ) -> AnalysisVersion: ...
 
 
 @dataclass
@@ -63,6 +73,9 @@ class ApplicationServices:
     operational_store: Literal["sqlite", "fabric_sql"]
     power_bi_available: bool
     fabric_schema_version: int | None = None
+    auth_service: AuthService | None = None
+    power_bi_url: str | None = None
+    async_resources: tuple[Any, ...] = ()
 
     @property
     def uow_factory(self) -> UnitOfWorkFactory:
@@ -134,6 +147,13 @@ class ApplicationServices:
             return "failed"
         return "pending"
 
+    async def close(self) -> None:
+        for resource in self.async_resources:
+            closer = getattr(resource, "aclose", None)
+            if closer is not None:
+                await closer()
+        self.store.engine.dispose()
+
 
 def default_settings() -> Settings:
     configured_mode = os.getenv("SUPPLY_RESPONSE_RUNTIME_MODE")
@@ -155,8 +175,10 @@ def build_composition(
     clock: Callable[[], datetime] | None = None,
     playback_clock: PlaybackClock | None = None,
     planner=plan_actions,
+    live_components: dict[str, Any] | None = None,
 ) -> ApplicationServices:
     now = clock or (lambda: datetime.now(UTC))
+    owned_resources: tuple[Any, ...] = ()
     if settings.runtime_mode is RuntimeMode.FALLBACK:
         if settings.database_url is None:
             raise RuntimeError("fallback database URL is not configured")
@@ -167,20 +189,29 @@ def build_composition(
         operational_store: Literal["sqlite", "fabric_sql"] = "sqlite"
         power_bi_available = False
         fabric_schema_version = None
+        analysis_service: AnalysisApplicationService = (
+            FallbackAnalysisApplicationService(store, clock=now)
+        )
     else:
-        store = fabric_store(settings)
-        fabric_health = check_fabric_health(store.engine)
-        operational_store = fabric_health.operational_store
-        power_bi_available = fabric_health.power_bi_available
-        fabric_schema_version = fabric_health.schema_version
+        if live_components is None:
+            live_components = build_live_components(settings, clock=now)
+        assert live_components is not None
+        owned_resources = tuple(live_components.get("async_resources", ()))
+        store = live_components["store"]
+        if store.runtime_mode is not RuntimeMode.LIVE:
+            raise RuntimeError("live dependency graph requires a live store")
+        operational_store = "fabric_sql"
+        power_bi_available = True
+        fabric_schema_version = live_components.get("fabric_schema_version")
+        analysis_service = live_components["analysis_service"]
     uow_factory = cast(UnitOfWorkFactory, store.uow_factory)
     active_playback_clock = playback_clock or RealClock()
     test_faults = AutomatedTestFaults(settings.automated_test_faults_enabled)
     execution_service = ExecutionService(uow_factory, clock=now)
-    return ApplicationServices(
+    services = ApplicationServices(
         settings=settings,
         store=store,
-        analysis_service=FallbackAnalysisApplicationService(store, clock=now),
+        analysis_service=analysis_service,
         decision_service=DecisionService(uow_factory, clock=now),
         planning_worker=ActionPlanningWorker(
             uow_factory,
@@ -202,7 +233,115 @@ def build_composition(
         operational_store=operational_store,
         power_bi_available=power_bi_available,
         fabric_schema_version=fabric_schema_version,
+        auth_service=(
+            None if live_components is None else live_components["auth_service"]
+        ),
+        power_bi_url=(
+            None if live_components is None else live_components["power_bi_url"]
+        ),
+        async_resources=owned_resources,
     )
+    return services
+
+
+def _required_live_setting(settings: Settings, name: str) -> str:
+    value = getattr(settings, name)
+    if not isinstance(value, str) or not value.strip():
+        raise RuntimeError(f"live dependency setting is missing: {name}")
+    return value
+
+
+def build_live_components(
+    settings: Settings,
+    *,
+    clock: Callable[[], datetime],
+) -> dict[str, Any]:
+    """Construct the live graph without opening a source/user-context connection."""
+    import httpx
+
+    from agents.foundry import FoundryAgentBinding, build_foundry_agent_set
+    from agents.orchestrator.workflow import Orchestrator
+    from apps.api.app.auth import PersonaBinding
+    from apps.api.app.live import (
+        LiveAnalysisApplicationService,
+        validate_live_https_url,
+    )
+    from integrations.workiq.client import WorkIQClient, WorkIQEvidencePort
+    from integrations.workiq.obo import build_obo_exchange
+    from services.analysis.service import analyze_case
+    from services.persistence.fabric_sql import build_credential
+
+    tenant_id = _required_live_setting(settings, "allowed_tenant_id")
+    client_id = _required_live_setting(settings, "api_client_id")
+    auth_service = AuthService(
+        tenant_id=tenant_id,
+        audience=client_id,
+        bindings=(
+            PersonaBinding.alex(
+                tenant_id, _required_live_setting(settings, "alex_object_id")
+            ),
+        ),
+    )
+    credential = build_credential(settings)
+    store = fabric_store(settings, credential)
+    http = httpx.AsyncClient()
+    work_iq = WorkIQEvidencePort(
+        client=WorkIQClient(http=http),
+        obo=build_obo_exchange(
+            client_id=client_id,
+            client_secret=_required_live_setting(settings, "entra_client_secret"),
+            tenant_id=tenant_id,
+            auth_service=auth_service,
+        ),
+        tenant_sharepoint_host=_required_live_setting(
+            settings, "tenant_sharepoint_host"
+        ),
+    )
+    endpoint = _required_live_setting(settings, "foundry_project_endpoint")
+    bindings = {
+        role: FoundryAgentBinding(
+            project_endpoint=endpoint,
+            agent_name=_required_live_setting(settings, f"foundry_{role}_agent_name"),
+            agent_version=_required_live_setting(
+                settings, f"foundry_{role}_agent_version"
+            ),
+        )
+        for role in ("signal", "context", "decision")
+    }
+    orchestrator = Orchestrator(
+        lambda: build_foundry_agent_set(
+            bindings=bindings,
+            credential=credential,
+        ),
+        analyze_case,
+    )
+    power_bi_url = validate_live_https_url(
+        _required_live_setting(settings, "power_bi_report_url"),
+        allowed_hosts={"app.powerbi.com"},
+    )
+    analysis = LiveAnalysisApplicationService(
+        store=store,
+        work_iq=work_iq,
+        orchestrator=orchestrator,
+        supplier_source_id=_required_live_setting(
+            settings, "workiq_supplier_source_id"
+        ),
+        quality_source_id=_required_live_setting(settings, "workiq_quality_source_id"),
+        fabric_citation_base_url=_required_live_setting(
+            settings, "fabric_citation_base_url"
+        ),
+        tenant_sharepoint_host=_required_live_setting(
+            settings, "tenant_sharepoint_host"
+        ),
+        clock=clock,
+    )
+    return {
+        "store": store,
+        "analysis_service": analysis,
+        "auth_service": auth_service,
+        "power_bi_url": power_bi_url,
+        "async_resources": (http,),
+    }
 
 
 def get_services(request: Request) -> ApplicationServices:
@@ -211,3 +350,39 @@ def get_services(request: Request) -> ApplicationServices:
 
 def get_server_identity(request: Request) -> IdentitySnapshot:
     return get_services(request).identity
+
+
+def get_actor(
+    request: Request,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> AuthenticatedActor | None:
+    services = get_services(request)
+    if services.settings.runtime_mode is RuntimeMode.FALLBACK:
+        return None
+    if authorization is None or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "AUTHENTICATION_REQUIRED"},
+        )
+    token = authorization.removeprefix("Bearer ")
+    try:
+        if services.auth_service is None:
+            raise AuthenticationError("authentication is unavailable")
+        return services.auth_service.authenticate(token)
+    except AuthenticationError:
+        raise HTTPException(
+            status_code=401, detail={"code": "INVALID_ACCESS_TOKEN"}
+        ) from None
+    except AuthorizationError:
+        raise HTTPException(
+            status_code=403, detail={"code": "PERSONA_NOT_AUTHORIZED"}
+        ) from None
+
+
+def get_decision_identity(
+    services: ApplicationServices = Depends(get_services),
+    actor: AuthenticatedActor | None = Depends(get_actor),
+) -> IdentitySnapshot:
+    if actor is None:
+        return services.identity
+    return actor.to_identity_snapshot()

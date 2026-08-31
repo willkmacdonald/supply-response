@@ -62,6 +62,13 @@ def test_runtime_contract_is_server_owned_and_cannot_be_overridden(client):
         "operational_store": "sqlite",
         "agent_runtime": "local",
         "power_bi_available": False,
+        "power_bi_url": None,
+        "capability_health": {
+            "operational_store": "ready",
+            "work_iq": "ready",
+            "agent_runtime": "ready",
+            "power_bi": "unavailable",
+        },
     }
     assert overridden.status_code == 422
 
