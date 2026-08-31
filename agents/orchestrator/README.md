@@ -1,3 +1,3 @@
 # Agent Framework orchestrator
 
-Every analysis constructs a fresh fixed Agent Framework graph: signal, context, deterministic analysis, then decision explanation. Deterministic services remain the sole authority. Foundry publication, exact-version binding, and live invocation remain approval-gated deployment operations.
+Every analysis constructs a fresh fixed Agent Framework graph: signal, context, deterministic analysis, then decision explanation. Extraction results cite a supplied Evidence Item, purpose-appropriate authority scope, and source span. The decision agent selects only deterministic stage references; the application builds the displayed explanation from those stages. Workflows and agents are released after each run, and every runtime failure returns one redacted deterministic partial result. Deterministic services remain the sole authority. Foundry publication, exact-version binding, and live invocation remain approval-gated deployment operations.

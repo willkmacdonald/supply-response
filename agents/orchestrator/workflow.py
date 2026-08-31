@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Callable
 from typing import Any, Never
 
@@ -17,6 +18,7 @@ from .contracts import (
     BoundedEvidence,
     ContextMessage,
     DecisionExplanation,
+    DecisionSelection,
     DeterministicMessage,
     ExtractedFacts,
     OrchestrationResult,
@@ -26,8 +28,56 @@ from .contracts import (
 from .local import LocalAgentSet
 
 _MAX_PROMPT_CHARS = 16_000
-_OPTION_ID = re.compile(r"RL-OPTION-[A-Z0-9-]+")
-_NUMBER = re.compile(r"(?<![A-Za-z])\$?\d+(?:[,.]\d+)*(?:%|\b)")
+_SENSITIVE_PATTERNS = (
+    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/-]+=*"),
+    re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
+    re.compile(
+        r"(?i)\b(?:client[_ -]?secret|obo(?:[_ -]?assertion)?|assertion)\s*[:=]\s*[^\s&,;]+"
+    ),
+    re.compile(
+        r"(?i)\b(?:tenant[_ -]?id|object[_ -]?id|upn|tid|oid)"
+        r"\s*(?::|=|\bis\b)\s*[^\s&,;]+"
+    ),
+    re.compile(r"(?i)https://[^\s/@:]+:[^\s/@]+@[^\s/]+"),
+    re.compile(
+        r"(?i)[?&](?:access_token|client_secret|assertion|sig|token|code)=[^&#\s]+"
+    ),
+)
+_REDACTED = "[REDACTED]"
+
+
+def _contains_sensitive(value: str) -> bool:
+    return any(pattern.search(value) for pattern in _SENSITIVE_PATTERNS)
+
+
+def _redact_text(value: str) -> str:
+    for pattern in _SENSITIVE_PATTERNS:
+        value = pattern.sub(_REDACTED, value)
+    return value
+
+
+def _scrub(value: Any) -> Any:
+    if isinstance(value, str):
+        return _redact_text(value)
+    if isinstance(value, dict):
+        return {key: _scrub(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_scrub(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_scrub(item) for item in value)
+    return value
+
+
+def _safe_partial(analysis: AnalysisVersion) -> PartialDeterministicResult:
+    safe = AnalysisVersion.model_validate(_scrub(analysis.model_dump()))
+    return PartialDeterministicResult(
+        analysis_version=safe,
+        evidence_items=safe.evidence_items,
+    )
+
+
+def _normalize_span(value: str) -> str:
+    return " ".join(unicodedata.normalize("NFKC", value).split())
 
 
 def _evidence_payload(
@@ -44,24 +94,38 @@ def _evidence_payload(
         if set(item.authority_scope) & scopes
     )[:10]
     payload = {"evidence": [item.model_dump(mode="json") for item in bounded]}
-    if len(str(payload)) > _MAX_PROMPT_CHARS:
+    serialized = str(payload)
+    if _contains_sensitive(serialized):
+        raise ValueError("evidence payload violates the model data boundary")
+    if len(serialized) > _MAX_PROMPT_CHARS:
         raise ValueError("bounded evidence prompt exceeds the configured limit")
     return payload
 
 
-def _parse_extraction(value: dict[str, Any], payload: dict[str, Any]) -> ExtractedFacts:
+def _parse_extraction(
+    value: dict[str, Any],
+    payload: dict[str, Any],
+    *,
+    scopes: set[AuthorityScope],
+) -> ExtractedFacts:
     result = ExtractedFacts.model_validate(value)
-    allowed_text = " ".join(
-        f"{item['claim']} {item['excerpt']}" for item in payload["evidence"]
-    )
-    for text in (*result.facts, *result.uncertainties):
-        if len(text) > 2_000:
-            raise ValueError("agent output exceeds the configured limit")
-        for number in _NUMBER.findall(text):
-            if number not in allowed_text:
-                raise ValueError(
-                    "agent output introduced a number absent from evidence"
-                )
+    evidence = {item["evidence_id"]: item for item in payload["evidence"]}
+    if not evidence and (result.facts or result.uncertainties):
+        raise ValueError("an extraction requires supplied relevant evidence")
+    for reference in (*result.facts, *result.uncertainties):
+        source = evidence.get(reference.evidence_id)
+        if source is None:
+            raise ValueError("agent cited evidence outside the supplied payload")
+        scope = reference.authority_scope
+        if scope not in scopes or scope.value not in source["authority_scope"]:
+            raise ValueError("agent cited an authority scope outside its purpose")
+        span = _normalize_span(reference.source_span)
+        allowed = (
+            _normalize_span(source["claim"]),
+            _normalize_span(source["excerpt"]),
+        )
+        if not span or not any(span in candidate for candidate in allowed):
+            raise ValueError("agent source span is not grounded in cited evidence")
     return result
 
 
@@ -76,6 +140,7 @@ def _decision_payload(analysis: AnalysisVersion) -> dict[str, Any]:
         "policy_version": ranking.policy_version,
         "stages": [
             {
+                "stage_reference": f"ranking-stage-{index}",
                 "comparator": stage.comparator,
                 "threshold": str(stage.threshold),
                 "values": [
@@ -84,7 +149,7 @@ def _decision_payload(analysis: AnalysisVersion) -> dict[str, Any]:
                 ],
                 "retained_option_ids": list(stage.retained_option_ids),
             }
-            for stage in ranking.stages
+            for index, stage in enumerate(ranking.stages, start=1)
         ],
     }
 
@@ -92,19 +157,33 @@ def _decision_payload(analysis: AnalysisVersion) -> dict[str, Any]:
 def _parse_decision(
     value: dict[str, Any], payload: dict[str, Any]
 ) -> DecisionExplanation:
-    result = DecisionExplanation.model_validate(value)
+    result = DecisionSelection.model_validate(value)
     if result.recommended_option_id != payload["recommended_option_id"]:
         raise ValueError("agent disagreed with deterministic recommendation")
-    allowed = str(payload)
-    mentioned_options = set(_OPTION_ID.findall(result.explanation))
-    if mentioned_options - {result.recommended_option_id}:
-        raise ValueError("agent explanation introduced a different option")
-    for number in _NUMBER.findall(result.explanation):
-        if number not in allowed:
-            raise ValueError(
-                "agent explanation introduced a number absent from analysis"
-            )
-    return result
+    stage_by_reference = {item["stage_reference"]: item for item in payload["stages"]}
+    if len(set(result.stage_references)) != len(result.stage_references):
+        raise ValueError("agent repeated a deterministic stage reference")
+    if any(
+        reference not in stage_by_reference for reference in result.stage_references
+    ):
+        raise ValueError("agent cited a stage outside the deterministic payload")
+    if stage_by_reference and not result.stage_references:
+        raise ValueError("agent omitted deterministic stage support")
+    clauses = [
+        f"The deterministic Analysis Version recommends {result.recommended_option_id}."
+    ]
+    for reference in result.stage_references:
+        stage = stage_by_reference[reference]
+        retained = ", ".join(stage["retained_option_ids"]) or "no options"
+        clauses.append(
+            f"{reference} applied {stage['comparator']} at threshold "
+            f"{stage['threshold']} and retained {retained}."
+        )
+    return DecisionExplanation(
+        recommended_option_id=result.recommended_option_id,
+        stage_references=result.stage_references,
+        explanation=" ".join(clauses),
+    )
 
 
 class SignalExecutor(Executor):
@@ -120,8 +199,15 @@ class SignalExecutor(Executor):
             message.deterministic.evidence_items,
             scopes={AuthorityScope.SUPPLIER_STATEMENT},
         )
+        if not payload["evidence"]:
+            await ctx.send_message(SignalMessage(command=message))
+            return
         try:
-            result = _parse_extraction(await self._agent.invoke(payload), payload)
+            result = _parse_extraction(
+                await self._agent.invoke(payload),
+                payload,
+                scopes={AuthorityScope.SUPPLIER_STATEMENT},
+            )
             await ctx.send_message(SignalMessage(command=message, extraction=result))
         except Exception:  # noqa: BLE001 - the SDK trust boundary fails closed
             await ctx.send_message(SignalMessage(command=message, failed=True))
@@ -143,8 +229,24 @@ class ContextExecutor(Executor):
                 AuthorityScope.QUALIFICATION_STATE,
             },
         )
+        if not payload["evidence"]:
+            await ctx.send_message(
+                ContextMessage(
+                    command=message.command,
+                    signal=message.extraction,
+                    failed=message.failed,
+                )
+            )
+            return
         try:
-            result = _parse_extraction(await self._agent.invoke(payload), payload)
+            result = _parse_extraction(
+                await self._agent.invoke(payload),
+                payload,
+                scopes={
+                    AuthorityScope.COLLABORATION_STATEMENT,
+                    AuthorityScope.QUALIFICATION_STATE,
+                },
+            )
             await ctx.send_message(
                 ContextMessage(
                     command=message.command,
@@ -201,9 +303,7 @@ class DecisionExplanationExecutor(Executor):
         status = "unavailable" if message.failed else "available"
         try:
             explanation = _parse_decision(await self._agent.invoke(payload), payload)
-        except ValidationError:
-            status = "unavailable"
-        except ValueError:
+        except (ValidationError, ValueError):
             status = "rejected"
         except Exception:  # noqa: BLE001 - SDK details must not cross this boundary
             status = "unavailable"
@@ -246,38 +346,41 @@ class Orchestrator:
         self,
         agent_factory: Callable[[], LocalAgentSet],
         analyze: Callable[[AnalyzeCaseCommand], AnalysisVersion],
+        *,
+        topology_observer: Callable[[tuple[str, ...]], None] | None = None,
     ) -> None:
         self._agent_factory = agent_factory
         self._analyze = analyze
-        self.framework_workflows: list[Any] = []
-        self.topologies: list[tuple[str, ...]] = []
+        self._topology_observer = topology_observer
 
     async def analyze(self, command: AnalyzeCommand) -> OrchestrationResult:
-        workflow = build_framework_workflow(self._agent_factory(), self._analyze)
-        self.framework_workflows.append(workflow)
-        self.topologies.append(
-            ("signal", "context", "deterministic_analysis", "decision")
-        )
-        run = await workflow.run(command)
-        outputs = run.get_outputs()
-        if len(outputs) != 1 or not isinstance(outputs[0], OrchestrationResult):
-            # This cannot safely expose an SDK exception or event payload.
-            deterministic = self._analyze(command.deterministic)
-            raise AgentExplanationUnavailable(
-                PartialDeterministicResult(
-                    analysis_version=deterministic,
-                    evidence_items=deterministic.evidence_items,
+        deterministic: AnalysisVersion | None = None
+
+        def analyze_once(value: AnalyzeCaseCommand) -> AnalysisVersion:
+            nonlocal deterministic
+            if deterministic is None:
+                deterministic = self._analyze(value)
+            return deterministic
+
+        try:
+            workflow = build_framework_workflow(self._agent_factory(), analyze_once)
+            if self._topology_observer is not None:
+                self._topology_observer(
+                    ("signal", "context", "deterministic_analysis", "decision")
                 )
-            )
-        result = outputs[0]
+            run = await workflow.run(command)
+            outputs = run.get_outputs()
+            if len(outputs) != 1 or not isinstance(outputs[0], OrchestrationResult):
+                raise RuntimeError("workflow returned an invalid output contract")
+            result = outputs[0]
+        except Exception as exc:
+            if isinstance(exc, AgentExplanationUnavailable):
+                raise
+            deterministic = analyze_once(command.deterministic)
+            raise AgentExplanationUnavailable(_safe_partial(deterministic)) from None
         if result.explanation_status == "rejected":
             # A disagreement is safely downgraded without weakening the analysis.
             return result
         if result.explanation_status != "available":
-            raise AgentExplanationUnavailable(
-                PartialDeterministicResult(
-                    analysis_version=result.analysis_version,
-                    evidence_items=result.analysis_version.evidence_items,
-                )
-            )
+            raise AgentExplanationUnavailable(_safe_partial(result.analysis_version))
         return result

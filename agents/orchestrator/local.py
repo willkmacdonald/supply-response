@@ -12,7 +12,14 @@ class _LocalExtractionAgent:
     async def invoke(self, payload: dict[str, Any]) -> dict[str, Any]:
         evidence = payload.get("evidence", ())
         return {
-            "facts": [item["claim"] for item in evidence],
+            "facts": [
+                {
+                    "evidence_id": item["evidence_id"],
+                    "authority_scope": item["authority_scope"][0],
+                    "source_span": item["claim"],
+                }
+                for item in evidence
+            ],
             "uncertainties": [],
         }
 
@@ -22,10 +29,7 @@ class _LocalDecisionAgent:
         option_id = str(payload["recommended_option_id"])
         return {
             "recommended_option_id": option_id,
-            "explanation": (
-                f"The deterministic Analysis Version recommends {option_id}; "
-                "the displayed comparator trace remains authoritative."
-            ),
+            "stage_references": [item["stage_reference"] for item in payload["stages"]],
         }
 
 

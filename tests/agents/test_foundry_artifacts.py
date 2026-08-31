@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import shutil
+import sys
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from agent_framework import AgentResponse, Content, Message
 
-from agents.foundry import FoundryAgentBinding, build_foundry_agent
+from agents.foundry import FoundryAgentBinding, FoundryJsonAgent, build_foundry_agent
 from agents.manifests import ManifestError, load_manifests
 from scripts.publish_foundry_agents import publish
 from scripts.verify_foundry_agents import verify
@@ -58,6 +61,30 @@ def test_manifest_loader_rejects_path_escape_duplicate_names_and_extra_fields(
         load_manifests(tmp_path)
 
 
+def _copy_agent_artifacts(root: Path) -> None:
+    shutil.copytree(ROOT / "agents", root / "agents")
+
+
+def test_manifest_loader_rejects_manifest_symlink(tmp_path: Path) -> None:
+    _copy_agent_artifacts(tmp_path)
+    outside = tmp_path / "outside.json"
+    outside.write_text((tmp_path / "agents/manifests/signal.json").read_text())
+    (tmp_path / "agents/manifests/signal.json").unlink()
+    (tmp_path / "agents/manifests/signal.json").symlink_to(outside)
+    with pytest.raises(ManifestError, match="manifest"):
+        load_manifests(tmp_path)
+
+
+def test_manifest_loader_freezes_role_instruction_mapping(tmp_path: Path) -> None:
+    _copy_agent_artifacts(tmp_path)
+    path = tmp_path / "agents/manifests/signal.json"
+    payload = json.loads(path.read_text())
+    payload["instructions_path"] = "agents/context/instructions.md"
+    path.write_text(json.dumps(payload))
+    with pytest.raises(ManifestError, match="instruction"):
+        load_manifests(tmp_path)
+
+
 def test_foundry_agent_requires_trusted_exact_binding() -> None:
     captured: dict[str, object] = {}
 
@@ -79,6 +106,57 @@ def test_foundry_agent_requires_trusted_exact_binding() -> None:
             agent_name="supply-response-signal",
             agent_version="latest",
         )
+
+
+@pytest.mark.anyio
+async def test_foundry_response_rejects_tool_content_alongside_valid_json() -> None:
+    class Agent:
+        async def run(self, prompt: str) -> AgentResponse:
+            return AgentResponse(
+                messages=[
+                    Message(
+                        "assistant",
+                        [
+                            Content(
+                                type="function_call",
+                                call_id="1",
+                                name="danger",
+                                arguments="{}",
+                            ),
+                            Content(
+                                type="text", text='{"facts":[],"uncertainties":[]}'
+                            ),
+                        ],
+                    )
+                ]
+            )
+
+    with pytest.raises(RuntimeError, match="plain text"):
+        await FoundryJsonAgent(Agent()).invoke({"evidence": []})
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "content_type",
+    [
+        "function_result",
+        "mcp_server_tool_call",
+        "hosted_tool_call",
+        "code_interpreter_tool_call",
+        "approval_request",
+    ],
+)
+async def test_foundry_response_rejects_every_non_text_content(
+    content_type: str,
+) -> None:
+    class Agent:
+        async def run(self, prompt: str) -> AgentResponse:
+            return AgentResponse(
+                messages=[Message("assistant", [Content(type=cast(Any, content_type))])]
+            )
+
+    with pytest.raises(RuntimeError, match="plain text"):
+        await FoundryJsonAgent(Agent()).invoke({"evidence": []})
 
 
 def test_publish_uses_create_version_and_prints_only_name_version() -> None:
@@ -130,3 +208,33 @@ def test_publish_and_verify_default_to_offline_validation(monkeypatch) -> None:
     monkeypatch.delenv("SUPPLY_RESPONSE_FOUNDRY_PUBLISH", raising=False)
     assert publish(ROOT, project=None, emit=lambda _: None) == ()
     assert verify(ROOT, project=None, versions=None) == ()
+
+
+def test_live_verify_validates_bindings_before_constructing_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scripts.verify_foundry_agents as script
+
+    manifests = load_manifests(ROOT)
+    monkeypatch.setattr(sys, "argv", ["verify_foundry_agents.py", "--live"])
+    monkeypatch.setenv(
+        "SUPPLY_RESPONSE_FOUNDRY_PROJECT_ENDPOINT",
+        "https://example.services.ai.azure.com/api/projects/demo",
+    )
+    monkeypatch.setenv("SUPPLY_RESPONSE_ENTRA_TENANT_ID", "tenant")
+    for item in manifests:
+        prefix = f"SUPPLY_RESPONSE_FOUNDRY_{item.role.upper()}"
+        monkeypatch.setenv(f"{prefix}_NAME", item.agent_name)
+        monkeypatch.delenv(f"{prefix}_VERSION", raising=False)
+
+    constructed = False
+
+    def forbidden_project():
+        nonlocal constructed
+        constructed = True
+        raise AssertionError("credential/client construction occurred")
+
+    monkeypatch.setattr(script, "_live_project", forbidden_project)
+    with pytest.raises(SystemExit, match="pinned versions"):
+        script.main()
+    assert not constructed

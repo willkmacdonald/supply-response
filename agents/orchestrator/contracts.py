@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from data.domain.analysis import AnalysisVersion
-from data.domain.evidence import EvidenceItem
+from data.domain.evidence import AuthorityScope, EvidenceItem
 from services.analysis.service import AnalyzeCaseCommand
 
 
@@ -26,14 +26,26 @@ class BoundedEvidence(AgentContract):
     excerpt: str = Field(min_length=1, max_length=2_000)
 
 
+class ExtractedReference(AgentContract):
+    evidence_id: str = Field(min_length=1, max_length=128)
+    authority_scope: AuthorityScope
+    source_span: str = Field(min_length=1, max_length=2_000)
+
+
 class ExtractedFacts(AgentContract):
-    facts: tuple[str, ...] = Field(default=(), max_length=20)
-    uncertainties: tuple[str, ...] = Field(default=(), max_length=20)
+    facts: tuple[ExtractedReference, ...] = Field(default=(), max_length=20)
+    uncertainties: tuple[ExtractedReference, ...] = Field(default=(), max_length=20)
 
 
 class DecisionExplanation(AgentContract):
     recommended_option_id: str = Field(min_length=1, max_length=128)
+    stage_references: tuple[str, ...] = Field(max_length=20)
     explanation: str = Field(min_length=1, max_length=2_000)
+
+
+class DecisionSelection(AgentContract):
+    recommended_option_id: str = Field(min_length=1, max_length=128)
+    stage_references: tuple[str, ...] = Field(max_length=20)
 
 
 class PartialDeterministicResult(AgentContract):

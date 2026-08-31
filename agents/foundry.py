@@ -76,12 +76,36 @@ class FoundryJsonAgent:
 
     async def invoke(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = await self._agent.run(json.dumps(payload, separators=(",", ":")))
-        text = getattr(response, "text", None)
+        messages = getattr(response, "messages", None)
+        if not isinstance(messages, list) or not messages:
+            raise RuntimeError("Foundry response must contain plain text only")
+        text_parts: list[str] = []
+        for message in messages:
+            if getattr(message, "role", None) != "assistant":
+                raise RuntimeError("Foundry response must contain plain text only")
+            contents = getattr(message, "contents", None)
+            if not isinstance(contents, list) or not contents:
+                raise RuntimeError("Foundry response must contain plain text only")
+            for content in contents:
+                if getattr(content, "type", None) != "text":
+                    raise RuntimeError("Foundry response must contain plain text only")
+                item = getattr(content, "text", None)
+                if not isinstance(item, str):
+                    raise TypeError("Foundry response must contain plain text only")
+                text_parts.append(item)
+        if getattr(response, "finish_reason", None) == "tool_calls":
+            raise RuntimeError("Foundry response must contain plain text only")
+        text = " ".join(text_parts)
         if not isinstance(text, str) or len(text.encode("utf-8")) > 16_000:
             raise RuntimeError(
                 "Foundry response did not satisfy the bounded JSON contract"
             )
-        value = json.loads(text)
+        try:
+            value = json.loads(text)
+        except (json.JSONDecodeError, UnicodeError):
+            raise RuntimeError(
+                "Foundry response did not satisfy the bounded JSON contract"
+            ) from None
         if not isinstance(value, dict):
             raise TypeError("Foundry response must be a JSON object")
         return value

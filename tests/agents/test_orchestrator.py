@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import gc
+import weakref
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -11,9 +14,10 @@ from agents.orchestrator.contracts import (
     AnalyzeCommand,
 )
 from agents.orchestrator.local import LocalAgentSet
-from agents.orchestrator.workflow import Orchestrator
+from agents.orchestrator.workflow import Orchestrator, _evidence_payload
 from data.domain import CasePurpose, RuntimeMode
 from data.domain.decisions import CorpusScope, StandingAuthorization
+from data.domain.evidence import AuthorityScope
 from data.synthetic.rl001 import build_rl001_evidence, instantiate_rl001
 from services.analysis.service import AnalyzeCaseCommand, analyze_case
 
@@ -69,14 +73,20 @@ def agents(
             signal=FakeAgent(
                 signal
                 or {
-                    "facts": ["Alpha confirmed an explicit partial-shipment fact."],
+                    "facts": [],
                     "uncertainties": [],
                 }
             ),
             context=FakeAgent(
                 context
                 or {
-                    "facts": ["Beta qualification is explicitly pending."],
+                    "facts": [
+                        {
+                            "evidence_id": "RL-QUALITY-001",
+                            "authority_scope": "qualification_state",
+                            "source_span": "Beta qualification state is pending.",
+                        }
+                    ],
                     "uncertainties": [],
                 }
             ),
@@ -84,7 +94,7 @@ def agents(
                 decision
                 or {
                     "recommended_option_id": "RL-OPTION-COMBINED",
-                    "explanation": "The deterministic result recommends the combined response.",
+                    "stage_references": ["ranking-stage-1"],
                 }
             ),
         )
@@ -99,7 +109,7 @@ async def test_agent_disagreement_cannot_change_authoritative_analysis() -> None
     factory, made = agents(
         decision={
             "recommended_option_id": "RL-OPTION-BETA",
-            "explanation": "Choose Beta because it sounds fast and costs 1 invented dollar.",
+            "stage_references": ["ranking-stage-1"],
         }
     )
     result = await Orchestrator(factory, analyze_case).analyze(command())
@@ -133,9 +143,9 @@ async def test_model_payloads_are_minimized_bounded_and_identity_free() -> None:
     factory, made = agents()
     await Orchestrator(factory, analyze_case).analyze(command())
 
-    signal_payload = cast(FakeAgent, made[0].signal).payloads[0]
-    assert set(signal_payload) == {"evidence"}
-    serialized = str(signal_payload)
+    context_payload = cast(FakeAgent, made[0].context).payloads[0]
+    assert set(context_payload) == {"evidence"}
+    serialized = str(context_payload)
     assert "bearer" not in serialized.lower()
     assert "upn" not in serialized.lower()
     assert "tenant" not in serialized.lower()
@@ -147,21 +157,153 @@ async def test_model_payloads_are_minimized_bounded_and_identity_free() -> None:
 @pytest.mark.parametrize(
     "response",
     [
-        {"facts": ["ok"], "uncertainties": [], "tool_calls": ["danger"]},
-        {"facts": ["x" * 5000], "uncertainties": []},
-        {"facts": ["invented price: $123"], "uncertainties": []},
+        {"facts": [], "uncertainties": [], "tool_calls": ["danger"]},
+        {
+            "facts": [
+                {
+                    "evidence_id": "RL-QUALITY-001",
+                    "authority_scope": "qualification_state",
+                    "source_span": "x" * 5000,
+                }
+            ],
+            "uncertainties": [],
+        },
+        {
+            "facts": [
+                {
+                    "evidence_id": "RL-QUALITY-001",
+                    "authority_scope": "qualification_state",
+                    "source_span": "invented nonnumeric assertion",
+                }
+            ],
+            "uncertainties": [],
+        },
+        {
+            "facts": [
+                {
+                    "evidence_id": "RL-QUALITY-001",
+                    "authority_scope": "supplier_statement",
+                    "source_span": "Beta qualification state is pending.",
+                }
+            ],
+            "uncertainties": [],
+        },
+        {
+            "facts": [
+                {
+                    "evidence_id": "absent",
+                    "authority_scope": "qualification_state",
+                    "source_span": "Beta qualification state is pending.",
+                }
+            ],
+            "uncertainties": [],
+        },
     ],
 )
-async def test_untrusted_signal_output_is_rejected(response: dict[str, Any]) -> None:
-    factory, _ = agents(signal=response)
+async def test_untrusted_context_output_is_rejected(response: dict[str, Any]) -> None:
+    factory, _ = agents(context=response)
     with pytest.raises(AgentExplanationUnavailable):
         await Orchestrator(factory, analyze_case).analyze(command())
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "response",
+    [
+        {
+            "recommended_option_id": "rl-option-combined",
+            "stage_references": ["ranking-stage-1"],
+        },
+        {"recommended_option_id": "combined", "stage_references": ["ranking-stage-1"]},
+        {
+            "recommended_option_id": "RL-OPTION-COMBINED",
+            "stage_references": ["ranking-stage-99"],
+        },
+        {
+            "recommended_option_id": "RL-OPTION-COMBINED",
+            "stage_references": [],
+            "explanation": "invented cause",
+        },
+    ],
+)
+async def test_untrusted_decision_output_is_rejected(response: dict[str, Any]) -> None:
+    factory, _ = agents(decision=response)
+    result = await Orchestrator(factory, analyze_case).analyze(command())
+    assert result.analysis_version.ranking.recommended_option_id == "RL-OPTION-COMBINED"
+    assert result.decision_explanation is None
+    assert result.explanation_status == "rejected"
+
+
+@pytest.mark.anyio
+async def test_empty_relevant_evidence_is_not_reported_as_available_extraction() -> (
+    None
+):
+    factory, made = agents()
+    result = await Orchestrator(factory, analyze_case).analyze(command())
+    assert result.signal_extraction is None
+    assert cast(FakeAgent, made[0].signal).payloads == []
+
+
+@pytest.mark.anyio
+async def test_final_model_boundary_rejects_credential_like_evidence() -> None:
+    original = command()
+    evidence = list(original.deterministic.evidence_items)
+    secret = (
+        "eyJhbGciOiJSUzI1NiJ9.eyJvaWQiOiJzZWNyZXQifQ.abcdefghijklmnopqrstuvwxyz012345"
+    )
+    evidence[-1] = evidence[-1].model_copy(
+        update={
+            "claim": f"Beta pending Bearer {secret}",
+            "excerpt": f"Beta pending Bearer {secret}",
+        }
+    )
+    contaminated = original.model_copy(
+        update={
+            "deterministic": original.deterministic.model_copy(
+                update={"evidence_items": tuple(evidence)}
+            )
+        }
+    )
+    factory, made = agents()
+    with pytest.raises(AgentExplanationUnavailable) as caught:
+        await Orchestrator(factory, analyze_case).analyze(contaminated)
+    assert cast(FakeAgent, made[0].context).payloads == []
+    assert secret not in caught.value.partial_result.model_dump_json()
+    assert secret not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "suspect",
+    [
+        "Bearer eyJhbGciOiJSUzI1NiJ9.eyJvaWQiOiIxMjM0NTY3OCJ9.abcdefghijklmnopqrstuvwxyz012345",
+        "OBO assertion=eyJhbGciOiJSUzI1NiJ9.eyJ0aWQiOiIxMjM0NTY3OCJ9.abcdefghijklmnopqrstuvwxyz012345",
+        "client_secret=fictional-but-confidential-value",
+        "tenant_id=11111111-2222-3333-4444-555555555555",
+        "oid is 11111111-2222-3333-4444-555555555555",
+        "upn: alex@example.invalid",
+        "https://example.invalid/evidence?access_token=credential",
+        "https://user:password@example.invalid/evidence",
+    ],
+)
+def test_final_prompt_dto_fails_closed_on_identity_or_credential_patterns(
+    suspect: str,
+) -> None:
+    item = (
+        command()
+        .deterministic.evidence_items[-1]
+        .model_copy(update={"claim": suspect, "excerpt": suspect})
+    )
+    with pytest.raises(ValueError, match="model data boundary"):
+        _evidence_payload((item,), scopes={AuthorityScope.QUALIFICATION_STATE})
+
+
+@pytest.mark.anyio
 async def test_fresh_workflow_and_executors_are_built_for_every_run() -> None:
     factory, made = agents()
-    orchestrator = Orchestrator(factory, analyze_case)
+    observed: list[tuple[str, ...]] = []
+    orchestrator = Orchestrator(
+        factory, analyze_case, topology_observer=observed.append
+    )
 
     await orchestrator.analyze(command())
     await orchestrator.analyze(command())
@@ -169,13 +311,75 @@ async def test_fresh_workflow_and_executors_are_built_for_every_run() -> None:
     assert len(made) == 2
     assert made[0] is not made[1]
     assert made[0].signal is not made[1].signal
-    assert (
-        orchestrator.framework_workflows[0] is not orchestrator.framework_workflows[1]
-    )
-    assert orchestrator.topologies == [
+    assert not hasattr(orchestrator, "framework_workflows")
+    assert not hasattr(orchestrator, "topologies")
+    assert observed == [
         ("signal", "context", "deterministic_analysis", "decision"),
         ("signal", "context", "deterministic_analysis", "decision"),
     ]
+
+
+@pytest.mark.anyio
+async def test_completed_workflow_does_not_retain_case_agents() -> None:
+    references: list[weakref.ReferenceType[FakeAgent]] = []
+
+    def factory() -> LocalAgentSet:
+        result = agents()[0]()
+        references.extend(
+            weakref.ref(cast(FakeAgent, item))
+            for item in (result.signal, result.context, result.decision)
+        )
+        return result
+
+    orchestrator = Orchestrator(factory, analyze_case)
+    await orchestrator.analyze(command())
+    await asyncio.sleep(0)
+    gc.collect()
+    assert all(reference() is None for reference in references)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("failure", ["build", "run", "outputs", "multiple"])
+async def test_framework_failures_preserve_one_redacted_deterministic_result(
+    monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    calls = 0
+
+    def counting_analyze(value: AnalyzeCaseCommand):
+        nonlocal calls
+        calls += 1
+        return analyze_case(value)
+
+    class FailedRun:
+        def get_outputs(self):
+            if failure == "outputs":
+                raise RuntimeError("Bearer eyJhbGciOiJSUzI1NiJ9.secret.signature")
+            return [object(), object()]
+
+    class FailedWorkflow:
+        def __init__(self, analyze) -> None:
+            self._analyze = analyze
+
+        async def run(self, value):
+            if failure == "run":
+                raise RuntimeError("client_secret=do-not-leak")
+            self._analyze(value.deterministic)
+            return FailedRun()
+
+    def build(*args, **kwargs):
+        if failure == "build":
+            raise RuntimeError("OBO assertion=do-not-leak")
+        return FailedWorkflow(args[1])
+
+    monkeypatch.setattr("agents.orchestrator.workflow.build_framework_workflow", build)
+    with pytest.raises(AgentExplanationUnavailable) as caught:
+        await Orchestrator(agents()[0], counting_analyze).analyze(command())
+    assert calls == 1
+    assert (
+        str(caught.value)
+        == "Agent explanation unavailable; deterministic result preserved."
+    )
+    assert "secret" not in caught.value.partial_result.model_dump_json().lower()
 
 
 @pytest.mark.anyio

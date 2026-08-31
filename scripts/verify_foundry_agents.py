@@ -19,7 +19,11 @@ def _versions_from_environment(
         prefix = f"SUPPLY_RESPONSE_FOUNDRY_{item.role.upper()}"
         configured_name = os.getenv(f"{prefix}_NAME", "")
         version = os.getenv(f"{prefix}_VERSION", "")
-        if configured_name != item.agent_name or not version or version == "latest":
+        if (
+            configured_name != item.agent_name
+            or not version.isdigit()
+            or version.startswith("0")
+        ):
             raise SystemExit(
                 "verify requires exact committed names and pinned versions"
             )
@@ -91,8 +95,8 @@ def main() -> int:
     )
     args = parser.parse_args()
     manifests = load_manifests(ROOT)
-    project = _live_project() if args.live else None
     versions = _versions_from_environment(manifests) if args.live else None
+    project = _live_project() if args.live else None
     checked = verify(ROOT, project=project, versions=versions)
     if project is None:
         print("Validated three local manifests; no credentials or network used.")

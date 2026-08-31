@@ -10,6 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 _NAME = re.compile(r"^[a-z][a-z0-9-]{2,62}$")
 _MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,127}$")
 _EXPECTED_ROLES = {"signal", "context", "decision"}
+_EXPECTED_INSTRUCTIONS = {
+    "signal": Path("agents/signal/instructions.md"),
+    "context": Path("agents/context/instructions.md"),
+    "decision": Path("agents/decision/instructions.md"),
+}
 
 
 class ManifestError(ValueError):
@@ -62,7 +67,18 @@ class AgentManifest(BaseModel):
 
 def load_manifests(root: Path) -> tuple[AgentManifest, ...]:
     root = root.resolve()
-    manifest_dir = root / "agents" / "manifests"
+    manifest_candidate = root / "agents" / "manifests"
+    try:
+        manifest_dir = manifest_candidate.resolve(strict=True)
+    except OSError as exc:
+        raise ManifestError("agent manifest directory validation failed") from exc
+    if (
+        manifest_candidate.is_symlink()
+        or manifest_dir != manifest_candidate
+        or not manifest_dir.is_dir()
+        or not manifest_dir.is_relative_to(root)
+    ):
+        raise ManifestError("agent manifest directory is outside the frozen location")
     paths = sorted(manifest_dir.glob("*.json"))
     roles = {path.stem for path in paths}
     if roles != _EXPECTED_ROLES or len(paths) != 3:
@@ -72,10 +88,14 @@ def load_manifests(root: Path) -> tuple[AgentManifest, ...]:
     loaded: list[AgentManifest] = []
     try:
         for path in paths:
+            if path.is_symlink() or path.resolve(strict=True).parent != manifest_dir:
+                raise ManifestError("agent manifest file is not a frozen regular file")
             document = _ManifestDocument.model_validate_json(path.read_text("utf-8"))
             relative = Path(document.instructions_path)
             if relative.is_absolute() or ".." in relative.parts:
                 raise ManifestError("instructions path must be repository-relative")
+            if relative != _EXPECTED_INSTRUCTIONS[path.stem]:
+                raise ManifestError("agent role instruction path contains drift")
             resolved = (root / relative).resolve(strict=True)
             if not resolved.is_relative_to(root) or resolved.is_symlink():
                 raise ManifestError("instructions path escapes the repository")
