@@ -8,6 +8,7 @@ from data.domain import (
     ResponseOption,
     TimedQuantity,
 )
+from data.domain.common import ResponseOptionKind
 from data.synthetic.rl001 import OperationalSnapshot
 from services.analysis.exposure import allocate_component_supply
 from services.policy.thresholds import requires_finance_approval
@@ -174,6 +175,7 @@ def _lineage(
 def _response_option(
     *,
     option_id: str,
+    option_kind: ResponseOptionKind,
     name: str,
     executable: bool,
     active_mitigation: bool,
@@ -190,6 +192,7 @@ def _response_option(
 ) -> ResponseOption:
     return ResponseOption(
         option_id=option_id,
+        option_kind=option_kind,
         name=name,
         executable=executable,
         active_mitigation=active_mitigation,
@@ -253,6 +256,7 @@ def evaluate_response_options(
     return (
         _response_option(
             option_id="RL-OPTION-NO-MITIGATION",
+            option_kind=ResponseOptionKind.NO_MITIGATION,
             name="No-Mitigation Baseline",
             executable=False,
             active_mitigation=False,
@@ -262,6 +266,7 @@ def evaluate_response_options(
         ),
         _response_option(
             option_id="RL-OPTION-EXPEDITE",
+            option_kind=ResponseOptionKind.EXPEDITE,
             name="Expedite Alpha partial receipt",
             executable=True,
             active_mitigation=True,
@@ -279,6 +284,7 @@ def evaluate_response_options(
         ),
         _response_option(
             option_id="RL-OPTION-TRANSFER",
+            option_kind=ResponseOptionKind.TRANSFER,
             name="Transfer inventory from Dallas",
             executable=True,
             active_mitigation=True,
@@ -291,6 +297,7 @@ def evaluate_response_options(
         ),
         _response_option(
             option_id="RL-OPTION-RESEQUENCE",
+            option_kind=ResponseOptionKind.RESEQUENCE,
             name="Resequence production toward priority customers",
             executable=True,
             active_mitigation=True,
@@ -302,6 +309,7 @@ def evaluate_response_options(
         ),
         _response_option(
             option_id="RL-OPTION-BETA",
+            option_kind=ResponseOptionKind.ALTERNATE_SOURCE,
             name="Source from Supplier Beta",
             executable=not beta_blocked,
             active_mitigation=True,
@@ -317,6 +325,7 @@ def evaluate_response_options(
         ),
         _response_option(
             option_id="RL-OPTION-COMBINED",
+            option_kind=ResponseOptionKind.COMBINED,
             name="Combine expedite, transfer, and resequencing",
             executable=True,
             active_mitigation=True,

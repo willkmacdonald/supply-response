@@ -32,3 +32,12 @@ class CasePurpose(StrEnum):
     AUTOMATED_TEST = "automated_test"
     REHEARSAL = "rehearsal"
     SHOWCASE = "showcase"
+
+
+class ResponseOptionKind(StrEnum):
+    NO_MITIGATION = "no_mitigation"
+    EXPEDITE = "expedite"
+    TRANSFER = "transfer"
+    RESEQUENCE = "resequence"
+    ALTERNATE_SOURCE = "alternate_source"
+    COMBINED = "combined"

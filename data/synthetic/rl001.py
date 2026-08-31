@@ -23,6 +23,8 @@ SCENARIO_EFFECTIVE_TIME = datetime.fromisoformat("2026-09-01T09:00:00-05:00")
 
 
 class OperationalSnapshot(FrozenModel):
+    case_id: str
+    runtime_mode: RuntimeMode
     scenario_effective_time: datetime
     scenario_timezone: Literal["America/Chicago"] = "America/Chicago"
     analysis_horizon_start: datetime
@@ -43,7 +45,12 @@ class OperationalSnapshot(FrozenModel):
         )
 
     @classmethod
-    def rl001(cls) -> "OperationalSnapshot":
+    def rl001(
+        cls,
+        *,
+        case_id: str = "RL-CASE-1",
+        runtime_mode: RuntimeMode = RuntimeMode.FALLBACK,
+    ) -> "OperationalSnapshot":
         production_orders = (
             ProductionOrder(
                 production_order_id="RL-MO-DEMO-1",
@@ -95,6 +102,8 @@ class OperationalSnapshot(FrozenModel):
             ),
         )
         return cls(
+            case_id=case_id,
+            runtime_mode=runtime_mode,
             scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
             analysis_horizon_start=SCENARIO_EFFECTIVE_TIME,
             analysis_horizon_end=max(
@@ -183,4 +192,7 @@ def instantiate_rl001(
         runtime_mode=runtime_mode,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
     )
-    return case, OperationalSnapshot.rl001()
+    return case, OperationalSnapshot.rl001(
+        case_id=case_id,
+        runtime_mode=runtime_mode,
+    )

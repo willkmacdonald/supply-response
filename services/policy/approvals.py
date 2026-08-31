@@ -1,7 +1,9 @@
-from datetime import datetime
-
 from data.domain.analysis import ResponseOption
-from data.domain.decisions import ApprovalSatisfaction, StandingAuthorization
+from data.domain.decisions import (
+    ApprovalSatisfaction,
+    ApprovalTarget,
+    StandingAuthorization,
+)
 
 
 def evaluate_approval_satisfaction(
@@ -9,13 +11,14 @@ def evaluate_approval_satisfaction(
     option: ResponseOption,
     analysis_id: str,
     standing_authorizations: tuple[StandingAuthorization, ...],
-    scenario_effective_time: datetime,
+    target: ApprovalTarget,
 ) -> tuple[ApprovalSatisfaction, ...]:
     required = set(option.prerequisite_roles) - {"response_approver"}
     return tuple(
-        ApprovalSatisfaction.from_authorization(analysis_id, option, authorization)
+        ApprovalSatisfaction.from_authorization(
+            analysis_id, option, authorization, target
+        )
         for role in sorted(required)
         for authorization in standing_authorizations
-        if authorization.role == role
-        and authorization.permits(option, scenario_effective_time)
+        if authorization.role == role and authorization.permits(option, target)
     )
