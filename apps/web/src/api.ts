@@ -13,6 +13,13 @@ import type {
 
 export const API_BASE = "";
 
+type AccessTokenProvider = () => Promise<string | null>;
+let accessTokenProvider: AccessTokenProvider = async () => null;
+
+export function setAccessTokenProvider(provider: AccessTokenProvider): void {
+  accessTokenProvider = provider;
+}
+
 async function json<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const errorBody = await response.json().catch(() => null) as {detail?: unknown} | null;
@@ -23,10 +30,14 @@ async function json<T>(response: Response): Promise<T> {
 }
 
 async function get<T>(path: string): Promise<T> {
-  return json(await fetch(`${API_BASE}${path}`, undefined));
+  const token = await accessTokenProvider();
+  const options = token ? {headers: {Authorization: `Bearer ${token}`}} : undefined;
+  return json(await fetch(`${API_BASE}${path}`, options));
 }
 
 async function post<T>(path: string, body: object, headers: Record<string, string> = {}): Promise<T> {
+  const token = await accessTokenProvider();
+  if (token) headers = {...headers, Authorization: `Bearer ${token}`};
   return json(await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: {"Content-Type": "application/json", ...headers},

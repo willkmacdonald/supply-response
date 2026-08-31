@@ -1,0 +1,69 @@
+{
+  "displayName": "Supply Response API",
+  "signInAudience": "AzureADMyOrg",
+  "identifierUris": ["api://{{API_APP_ID}}"],
+  "api": {
+    "acceptMappedClaims": null,
+    "requestedAccessTokenVersion": 2,
+    "oauth2PermissionScopes": [
+      {
+        "adminConsentDescription": "Allow Supply Response Web to act as the signed-in user.",
+        "adminConsentDisplayName": "Access Supply Response as the signed-in user",
+        "id": "8996a4c2-f0bd-4b58-90c3-172f6f35e017",
+        "isEnabled": true,
+        "type": "User",
+        "userConsentDescription": "Allow Supply Response Web to act as you.",
+        "userConsentDisplayName": "Access Supply Response",
+        "value": "access_as_user"
+      }
+    ]
+  },
+  "appRoles": [
+    {
+      "allowedMemberTypes": ["User"],
+      "description": "Plans material responses.",
+      "displayName": "Material Planner",
+      "id": "3549f14f-f0af-4e37-9276-e7186ba6599e",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "material_planner"
+    },
+    {
+      "allowedMemberTypes": ["User"],
+      "description": "Approves response decisions.",
+      "displayName": "Response Approver",
+      "id": "e42f6a12-cf3b-4bc3-988e-f9f074034f60",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "response_approver"
+    },
+    {
+      "allowedMemberTypes": ["User"],
+      "description": "Approves quality-sensitive responses.",
+      "displayName": "Quality Approver",
+      "id": "9bb74f50-a888-45b2-95b4-c0a32d81b450",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "quality_approver"
+    },
+    {
+      "allowedMemberTypes": ["User"],
+      "description": "Approves finance-sensitive responses.",
+      "displayName": "Finance Approver",
+      "id": "ab2d7f94-bf55-481e-8951-bfa9ea77572d",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "finance_approver"
+    }
+  ],
+  "requiredResourceAccess": [
+    {
+      "resourceAppId": "{{WORKIQ_RESOURCE_APP_ID}}",
+      "resourceAccess": [
+        {"id": "{{WORKIQ_AGENT_ASK_SCOPE_ID}}", "type": "Scope"}
+      ]
+    }
+  ],
+  "isFallbackPublicClient": false,
+  "web": {"redirectUris": []}
+}

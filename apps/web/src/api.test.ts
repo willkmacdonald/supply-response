@@ -1,10 +1,32 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api } from "./api";
+import { api, setAccessTokenProvider } from "./api";
 import type { AnalysisVersion, ResponseOption } from "./types";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  setAccessTokenProvider(async () => null);
+});
 
 describe("API client", () => {
+  it("attaches fresh bearer tokens dynamically without persistence", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ok: true, json: async () => ({runtime_mode: "fallback"})})
+      .mockResolvedValueOnce({ok: true, json: async () => ({runtime_mode: "fallback"})});
+    vi.stubGlobal("fetch", fetchMock);
+    const tokens = ["first-token", "second-token"];
+    setAccessTokenProvider(async () => tokens.shift() ?? null);
+
+    await api.runtime();
+    await api.runtime();
+
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      headers: {Authorization: "Bearer first-token"},
+    });
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({
+      headers: {Authorization: "Bearer second-token"},
+    });
+  });
+
   it("represents the canonical backend response-option contract", () => {
     const option: ResponseOption = {
       option_id: "RL-OPTION-BETA",

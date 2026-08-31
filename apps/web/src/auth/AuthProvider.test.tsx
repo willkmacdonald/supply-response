@@ -1,0 +1,122 @@
+// @vitest-environment jsdom
+
+import "@testing-library/jest-dom/vitest";
+import {BrowserCacheLocation} from "@azure/msal-browser";
+import {act, cleanup, render, screen, waitFor} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import {afterEach, describe, expect, it, vi} from "vitest";
+import {AuthProvider, type AuthClient, useAuth} from "./AuthProvider";
+import {createMsalConfig, readEntraConfig} from "./msal";
+
+const entraConfig = {
+  tenantId: "11111111-1111-4111-8111-111111111111",
+  webClientId: "22222222-2222-4222-8222-222222222222",
+  apiScope: "api://33333333-3333-4333-8333-333333333333/access_as_user",
+  redirectUri: "http://localhost:5173/auth/callback",
+};
+
+function Consumer() {
+  const auth = useAuth();
+  return <div>
+    <span data-testid="mode">{auth.mode}</span>
+    <span data-testid="name">{auth.account?.name ?? "anonymous"}</span>
+    <button onClick={() => void auth.signIn()}>Sign in</button>
+    <button onClick={() => void auth.getAccessToken().then((token) => {
+      document.body.dataset.token = token ?? "none";
+    })}>Get token</button>
+  </div>;
+}
+
+function fakeClient(): AuthClient {
+  return {
+    initialize: vi.fn().mockResolvedValue(undefined),
+    handleRedirectPromise: vi.fn().mockResolvedValue(null),
+    getAllAccounts: vi.fn().mockReturnValue([{homeAccountId: "alex", name: "Alex Morgan"}]),
+    getActiveAccount: vi.fn().mockReturnValue(null),
+    setActiveAccount: vi.fn(),
+    loginRedirect: vi.fn().mockResolvedValue(undefined),
+    acquireTokenSilent: vi.fn().mockResolvedValue({accessToken: "dynamic-api-token"}),
+    acquireTokenRedirect: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+afterEach(() => {
+  cleanup();
+  delete document.body.dataset.token;
+});
+
+describe("Entra configuration", () => {
+  it("requires an exact all-or-nothing tenant/client/scope/redirect configuration", () => {
+    expect(() => readEntraConfig({VITE_ENTRA_TENANT_ID: entraConfig.tenantId}))
+      .toThrow(/all four/);
+    expect(() => readEntraConfig({
+      VITE_ENTRA_TENANT_ID: entraConfig.tenantId,
+      VITE_ENTRA_WEB_CLIENT_ID: entraConfig.webClientId,
+      VITE_ENTRA_API_SCOPE: "api://------------------------------------/access_as_user",
+      VITE_ENTRA_REDIRECT_URI: entraConfig.redirectUri,
+    })).toThrow(/scope/);
+    expect(readEntraConfig({})).toBeNull();
+    expect(readEntraConfig({
+      VITE_ENTRA_TENANT_ID: entraConfig.tenantId,
+      VITE_ENTRA_WEB_CLIENT_ID: entraConfig.webClientId,
+      VITE_ENTRA_API_SCOPE: entraConfig.apiScope,
+      VITE_ENTRA_REDIRECT_URI: entraConfig.redirectUri,
+    })).toEqual(entraConfig);
+  });
+
+  it("uses the tenant-specific authority and never localStorage", () => {
+    const config = createMsalConfig(entraConfig);
+    expect(config.auth).toMatchObject({
+      clientId: entraConfig.webClientId,
+      authority: `https://login.microsoftonline.com/${entraConfig.tenantId}`,
+      redirectUri: entraConfig.redirectUri,
+    });
+    expect(config.cache?.cacheLocation).toBe(BrowserCacheLocation.SessionStorage);
+    expect(config.cache?.cacheLocation).not.toBe(BrowserCacheLocation.LocalStorage);
+  });
+});
+
+describe("AuthProvider", () => {
+  it("keeps fallback browser tests operational without Entra", async () => {
+    render(<AuthProvider config={null}><Consumer /></AuthProvider>);
+    expect(screen.getByTestId("mode")).toHaveTextContent("fallback");
+    await userEvent.click(screen.getByRole("button", {name: "Get token"}));
+    expect(document.body.dataset.token).toBe("none");
+  });
+
+  it("handles redirect state and acquires API tokens silently", async () => {
+    const client = fakeClient();
+    render(<AuthProvider config={entraConfig} client={client}><Consumer /></AuthProvider>);
+
+    await waitFor(() => expect(screen.getByTestId("name")).toHaveTextContent("Alex Morgan"));
+    expect(client.initialize).toHaveBeenCalledOnce();
+    expect(client.handleRedirectPromise).toHaveBeenCalledOnce();
+    await userEvent.click(screen.getByRole("button", {name: "Get token"}));
+    await waitFor(() => expect(document.body.dataset.token).toBe("dynamic-api-token"));
+    expect(client.acquireTokenSilent).toHaveBeenCalledWith({
+      account: expect.objectContaining({homeAccountId: "alex"}),
+      scopes: [entraConfig.apiScope],
+    });
+  });
+
+  it("starts sign-in using redirect with only the API scope", async () => {
+    const client = fakeClient();
+    render(<AuthProvider config={entraConfig} client={client}><Consumer /></AuthProvider>);
+    await waitFor(() => expect(screen.getByTestId("mode")).toHaveTextContent("entra"));
+    await userEvent.click(screen.getByRole("button", {name: "Sign in"}));
+    expect(client.loginRedirect).toHaveBeenCalledWith({scopes: [entraConfig.apiScope]});
+  });
+
+  it("does not mount API-consuming children before redirect initialization", async () => {
+    let resolveInitialization!: () => void;
+    const client = fakeClient();
+    client.initialize = vi.fn(() => new Promise<void>((resolve) => {
+      resolveInitialization = resolve;
+    }));
+
+    render(<AuthProvider config={entraConfig} client={client}><Consumer /></AuthProvider>);
+    expect(screen.queryByRole("button", {name: "Get token"})).not.toBeInTheDocument();
+    await act(async () => resolveInitialization());
+    await waitFor(() => expect(screen.getByRole("button", {name: "Get token"})).toBeInTheDocument());
+  });
+});

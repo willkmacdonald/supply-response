@@ -10,6 +10,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@azure/msal-browser": ">=5.20.0 <6",
+    "@azure/msal-react": ">=5.7.0 <6",
     "@vitejs/plugin-react": "latest",
     "react": "latest",
     "react-dom": "latest",

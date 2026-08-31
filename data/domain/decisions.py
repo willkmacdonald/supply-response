@@ -148,6 +148,8 @@ class IdentitySnapshot(FrozenModel):
     effective_roles: tuple[str, ...]
     identity_source: IdentitySource
     source_id: str
+    tenant_id: str | None = None
+    object_id: str | None = None
     display_name: str | None = None
     user_principal_name: str | None = None
 

@@ -1,0 +1,14 @@
+{
+  "displayName": "Supply Response Web",
+  "signInAudience": "AzureADMyOrg",
+  "spa": {"redirectUris": ["{{REDIRECT_URI}}"]},
+  "requiredResourceAccess": [
+    {
+      "resourceAppId": "{{API_APP_ID}}",
+      "resourceAccess": [
+        {"id": "8996a4c2-f0bd-4b58-90c3-172f6f35e017", "type": "Scope"}
+      ]
+    }
+  ],
+  "isFallbackPublicClient": false
+}
