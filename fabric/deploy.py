@@ -80,65 +80,230 @@ EXPECTED_QUERY_REFS = {
         "ActionOutcomes.Scenario Effective Time",
     },
 }
+
+
+def _projection_contract(
+    role: str,
+    kind: str,
+    entity: str,
+    property_name: str,
+    query_ref: str,
+    *,
+    aggregation: int | None = None,
+    display_name: str | None = None,
+) -> tuple[str, str, str, str, int | None, str | None, str]:
+    return (
+        role,
+        kind,
+        entity,
+        property_name,
+        aggregation,
+        display_name,
+        query_ref,
+    )
+
+
+def _filter_contract(
+    name: str,
+    filter_type: str,
+    entity: str,
+    property_name: str,
+    alias: str,
+    operator: str,
+    target_kind: str,
+    target: str,
+) -> tuple[
+    str,
+    str,
+    str,
+    bool,
+    bool,
+    str,
+    str,
+    str,
+    str,
+    int,
+    int,
+    str,
+    str,
+    str | None,
+    str | None,
+    str | None,
+]:
+    return (
+        name,
+        filter_type,
+        "User",
+        True,
+        True,
+        "Column",
+        entity,
+        property_name,
+        alias,
+        0,
+        2,
+        operator,
+        target_kind,
+        entity if target_kind == "Measure" else None,
+        target if target_kind == "Measure" else None,
+        target if target_kind == "Literal" else None,
+    )
+
+
 EXPECTED_VISUALS = {
     "command-center": {
         "active-cases": (
             "card",
-            {"Data": ("CaseCommandCenter.case_id",)},
-            (("FilterActiveCases", "CaseCommandCenter", "status", "not-in", "closed"),),
+            (
+                _projection_contract(
+                    "Data",
+                    "Aggregation",
+                    "CaseCommandCenter",
+                    "case_id",
+                    "CaseCommandCenter.case_id",
+                    aggregation=2,
+                    display_name="Active Cases",
+                ),
+            ),
+            (
+                _filter_contract(
+                    "FilterActiveCases",
+                    "Advanced",
+                    "CaseCommandCenter",
+                    "status",
+                    "c",
+                    "not-in",
+                    "Literal",
+                    "closed",
+                ),
+            ),
         ),
         "current-decision": (
             "multiRowCard",
-            {
-                "Values": (
-                    "CaseCommandCenter.Current Decision ID",
-                    "CaseCommandCenter.status",
-                )
-            },
             (
-                (
+                _projection_contract(
+                    "Values",
+                    "Measure",
+                    "CaseCommandCenter",
+                    "Current Decision ID",
+                    "CaseCommandCenter.Current Decision ID",
+                ),
+                _projection_contract(
+                    "Values",
+                    "Column",
+                    "CaseCommandCenter",
+                    "status",
+                    "CaseCommandCenter.status",
+                    display_name="Decision Status",
+                ),
+            ),
+            (
+                _filter_contract(
                     "FilterCurrentDecisionLatestCase",
+                    "Advanced",
                     "CaseCommandCenter",
                     "case_id",
+                    "c",
                     "equals-measure",
+                    "Measure",
                     "Latest Showcase Case",
                 ),
             ),
         ),
-        "otif-loss": ("card", {"Data": ("CaseCommandCenter.OTIF Loss %",)}, ()),
+        "otif-loss": (
+            "card",
+            (
+                _projection_contract(
+                    "Data",
+                    "Measure",
+                    "CaseCommandCenter",
+                    "OTIF Loss %",
+                    "CaseCommandCenter.OTIF Loss %",
+                ),
+            ),
+            (),
+        ),
         "revenue-at-risk": (
             "card",
-            {"Data": ("CaseCommandCenter.Revenue At Risk",)},
+            (
+                _projection_contract(
+                    "Data",
+                    "Measure",
+                    "CaseCommandCenter",
+                    "Revenue At Risk",
+                    "CaseCommandCenter.Revenue At Risk",
+                ),
+            ),
             (),
         ),
         "scenario-effective-time": (
             "card",
-            {"Data": ("CaseCommandCenter.Scenario Effective Time",)},
+            (
+                _projection_contract(
+                    "Data",
+                    "Measure",
+                    "CaseCommandCenter",
+                    "Scenario Effective Time",
+                    "CaseCommandCenter.Scenario Effective Time",
+                    display_name="Time Since Signal",
+                ),
+            ),
             (),
         ),
         "showcase-cases": (
             "tableEx",
-            {
-                "Values": (
-                    "CaseCommandCenter.case_id",
-                    "CaseCommandCenter.purpose",
-                    "CaseCommandCenter.Latest Showcase Case",
-                    "CaseCommandCenter.status",
-                )
-            },
             (
-                (
-                    "FilterShowcasePurpose",
-                    "CaseCommandCenter",
-                    "purpose",
-                    "in",
-                    "showcase",
-                ),
-                (
-                    "FilterLatestShowcaseCase",
+                _projection_contract(
+                    "Values",
+                    "Column",
                     "CaseCommandCenter",
                     "case_id",
+                    "CaseCommandCenter.case_id",
+                    display_name="Case ID",
+                ),
+                _projection_contract(
+                    "Values",
+                    "Column",
+                    "CaseCommandCenter",
+                    "purpose",
+                    "CaseCommandCenter.purpose",
+                    display_name="Purpose",
+                ),
+                _projection_contract(
+                    "Values",
+                    "Measure",
+                    "CaseCommandCenter",
+                    "Latest Showcase Case",
+                    "CaseCommandCenter.Latest Showcase Case",
+                    display_name="Latest Showcase Case",
+                ),
+                _projection_contract(
+                    "Values",
+                    "Column",
+                    "CaseCommandCenter",
+                    "status",
+                    "CaseCommandCenter.status",
+                ),
+            ),
+            (
+                _filter_contract(
+                    "FilterShowcasePurpose",
+                    "Categorical",
+                    "CaseCommandCenter",
+                    "purpose",
+                    "c",
+                    "in",
+                    "Literal",
+                    "showcase",
+                ),
+                _filter_contract(
+                    "FilterLatestShowcaseCase",
+                    "Advanced",
+                    "CaseCommandCenter",
+                    "case_id",
+                    "c",
                     "equals-measure",
+                    "Measure",
                     "Latest Showcase Case",
                 ),
             ),
@@ -147,61 +312,138 @@ EXPECTED_VISUALS = {
     "actions-outcomes": {
         "action-status": (
             "tableEx",
-            {
-                "Values": (
-                    "ActionOutcomes.action_kind",
-                    "ActionOutcomes.action_status",
-                )
-            },
             (
-                (
+                _projection_contract(
+                    "Values",
+                    "Column",
+                    "ActionOutcomes",
+                    "action_kind",
+                    "ActionOutcomes.action_kind",
+                ),
+                _projection_contract(
+                    "Values",
+                    "Column",
+                    "ActionOutcomes",
+                    "action_status",
+                    "ActionOutcomes.action_status",
+                ),
+            ),
+            (
+                _filter_contract(
                     "FilterActionStatusRecordType",
+                    "Categorical",
                     "ActionOutcomes",
                     "record_type",
+                    "a",
                     "in",
+                    "Literal",
                     "action",
                 ),
             ),
         ),
-        "decision-id": ("card", {"Data": ("ActionOutcomes.decision_id",)}, ()),
+        "decision-id": (
+            "card",
+            (
+                _projection_contract(
+                    "Data",
+                    "Column",
+                    "ActionOutcomes",
+                    "decision_id",
+                    "ActionOutcomes.decision_id",
+                    display_name="Decision ID",
+                ),
+            ),
+            (),
+        ),
         "observation-kind": (
             "card",
-            {"Data": ("ActionOutcomes.observation_kind",)},
             (
-                (
+                _projection_contract(
+                    "Data",
+                    "Column",
+                    "ActionOutcomes",
+                    "observation_kind",
+                    "ActionOutcomes.observation_kind",
+                    display_name="Observation Kind",
+                ),
+            ),
+            (
+                _filter_contract(
                     "FilterObservationKindRecordType",
+                    "Categorical",
                     "ActionOutcomes",
                     "record_type",
+                    "a",
                     "in",
+                    "Literal",
                     "observation",
                 ),
             ),
         ),
         "predicted-observed-variance": (
             "clusteredColumnChart",
-            {
-                "Category": ("ActionOutcomes.metric",),
-                "Series": ("ActionOutcomes.observation_kind",),
-                "Y": ("ActionOutcomes.Observed Variance",),
-            },
             (
-                (
+                _projection_contract(
+                    "Category",
+                    "Column",
+                    "ActionOutcomes",
+                    "metric",
+                    "ActionOutcomes.metric",
+                ),
+                _projection_contract(
+                    "Series",
+                    "Column",
+                    "ActionOutcomes",
+                    "observation_kind",
+                    "ActionOutcomes.observation_kind",
+                ),
+                _projection_contract(
+                    "Y",
+                    "Measure",
+                    "ActionOutcomes",
+                    "Observed Variance",
+                    "ActionOutcomes.Observed Variance",
+                    display_name="Predicted vs Observed Variance",
+                ),
+            ),
+            (
+                _filter_contract(
                     "FilterPredictedObservedVarianceRecordType",
+                    "Categorical",
                     "ActionOutcomes",
                     "record_type",
+                    "a",
                     "in",
+                    "Literal",
                     "observation",
                 ),
             ),
         ),
         "projection-refresh": (
             "card",
-            {"Data": ("ActionOutcomes.Projection Refresh Time",)},
+            (
+                _projection_contract(
+                    "Data",
+                    "Measure",
+                    "ActionOutcomes",
+                    "Projection Refresh Time",
+                    "ActionOutcomes.Projection Refresh Time",
+                ),
+            ),
             (),
         ),
         "scenario-effective-time": (
             "card",
-            {"Data": ("ActionOutcomes.Scenario Effective Time",)},
+            (
+                _projection_contract(
+                    "Data",
+                    "Measure",
+                    "ActionOutcomes",
+                    "Scenario Effective Time",
+                    "ActionOutcomes.Scenario Effective Time",
+                    display_name="Scenario Effective Time",
+                ),
+            ),
             (),
         ),
     },
@@ -486,77 +728,261 @@ def _validate_item_references(repository: Path) -> None:
             raise PreflightError(f"invalid stable .platform metadata: {directory}")
 
 
-def _visual_filter_signatures(value: dict[str, Any]) -> tuple[tuple[str, ...], ...]:
+def _require_exact_keys(value: Any, keys: set[str]) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != keys:
+        raise TypeError
+    return value
+
+
+def _entity_field_signature(field: Any) -> tuple[str, str, str, int | None]:
+    if not isinstance(field, dict) or len(field) != 1:
+        raise TypeError
+    container = field
+    kind = next(iter(container))
+    expression = container[kind]
+    aggregation: int | None = None
+    if kind == "Aggregation":
+        aggregation_value = _require_exact_keys(expression, {"Expression", "Function"})
+        if not isinstance(aggregation_value["Function"], int):
+            raise TypeError
+        aggregation = aggregation_value["Function"]
+        column_container = _require_exact_keys(
+            aggregation_value["Expression"], {"Column"}
+        )
+        expression = column_container["Column"]
+    elif kind not in {"Column", "Measure"}:
+        raise TypeError
+    expression_value = _require_exact_keys(expression, {"Expression", "Property"})
+    source_expression = _require_exact_keys(
+        expression_value["Expression"], {"SourceRef"}
+    )
+    source = _require_exact_keys(source_expression["SourceRef"], {"Entity"})
+    entity = source["Entity"]
+    property_name = expression_value["Property"]
+    if not isinstance(entity, str) or not isinstance(property_name, str):
+        raise TypeError
+    return kind, entity, property_name, aggregation
+
+
+def _visual_projection_signatures(
+    query_state: dict[str, Any],
+) -> tuple[tuple[str, str, str, str, int | None, str | None, str], ...]:
     try:
-        filters = value.get("filterConfig", {}).get("filters", [])
+        signatures: list[tuple[str, str, str, str, int | None, str | None, str]] = []
+        for role, raw_state in query_state.items():
+            if not isinstance(role, str):
+                raise TypeError
+            state = _require_exact_keys(raw_state, {"projections"})
+            projections = state["projections"]
+            if not isinstance(projections, list) or not projections:
+                raise TypeError
+            for raw_projection in projections:
+                if not isinstance(raw_projection, dict):
+                    raise TypeError
+                allowed_keys = {"field", "queryRef"}
+                if "displayName" in raw_projection:
+                    allowed_keys.add("displayName")
+                projection = _require_exact_keys(raw_projection, allowed_keys)
+                kind, entity, property_name, aggregation = _entity_field_signature(
+                    projection["field"]
+                )
+                query_ref = projection["queryRef"]
+                display_name = projection.get("displayName")
+                if not isinstance(query_ref, str) or (
+                    display_name is not None and not isinstance(display_name, str)
+                ):
+                    raise TypeError
+                signatures.append(
+                    (
+                        role,
+                        kind,
+                        entity,
+                        property_name,
+                        aggregation,
+                        display_name,
+                        query_ref,
+                    )
+                )
+        return tuple(signatures)
+    except (KeyError, StopIteration, TypeError) as error:
+        raise PreflightError("visual projection contract is malformed") from error
+
+
+def _source_field(value: Any, kind: str, alias: str) -> str:
+    container = _require_exact_keys(value, {kind})
+    expression = _require_exact_keys(container[kind], {"Expression", "Property"})
+    source_expression = _require_exact_keys(expression["Expression"], {"SourceRef"})
+    source = _require_exact_keys(source_expression["SourceRef"], {"Source"})
+    if source["Source"] != alias or not isinstance(expression["Property"], str):
+        raise TypeError
+    return expression["Property"]
+
+
+def _literal_selection(value: Any, alias: str, property_name: str) -> str:
+    selection = _require_exact_keys(value, {"Expressions", "Values"})
+    expressions = selection["Expressions"]
+    values = selection["Values"]
+    if (
+        not isinstance(expressions, list)
+        or len(expressions) != 1
+        or _source_field(expressions[0], "Column", alias) != property_name
+        or not isinstance(values, list)
+        or len(values) != 1
+        or not isinstance(values[0], list)
+        or len(values[0]) != 1
+    ):
+        raise TypeError
+    literal_container = _require_exact_keys(values[0][0], {"Literal"})
+    literal = _require_exact_keys(literal_container["Literal"], {"Value"})["Value"]
+    if (
+        not isinstance(literal, str)
+        or len(literal) < 2
+        or literal[0] != "'"
+        or literal[-1] != "'"
+    ):
+        raise TypeError
+    return literal[1:-1]
+
+
+def _visual_filter_signatures(
+    value: dict[str, Any],
+) -> tuple[
+    tuple[
+        str,
+        str,
+        str,
+        bool,
+        bool,
+        str,
+        str,
+        str,
+        str,
+        int,
+        int,
+        str,
+        str,
+        str | None,
+        str | None,
+        str | None,
+    ],
+    ...,
+]:
+    try:
+        filter_config = value.get("filterConfig")
+        if filter_config is None:
+            return ()
+        filters = _require_exact_keys(filter_config, {"filters"})["filters"]
         if not isinstance(filters, list):
             raise TypeError
-        signatures: list[tuple[str, ...]] = []
-        for item in filters:
+        signatures = []
+        for raw_item in filters:
+            item = _require_exact_keys(
+                raw_item,
+                {
+                    "name",
+                    "field",
+                    "type",
+                    "filter",
+                    "howCreated",
+                    "isHiddenInViewMode",
+                    "isLockedInViewMode",
+                },
+            )
+            name = item["name"]
+            filter_type = item["type"]
+            how_created = item["howCreated"]
+            hidden = item["isHiddenInViewMode"]
+            locked = item["isLockedInViewMode"]
+            field_kind, entity, property_name, aggregation = _entity_field_signature(
+                item["field"]
+            )
             if (
-                not isinstance(item, dict)
-                or item.get("isHiddenInViewMode") is not True
-                or item.get("isLockedInViewMode") is not True
+                not isinstance(name, str)
+                or not isinstance(filter_type, str)
+                or not isinstance(how_created, str)
+                or hidden is not True
+                or locked is not True
+                or field_kind != "Column"
+                or aggregation is not None
             ):
                 raise TypeError
-            name = item["name"]
-            field = item["field"]["Column"]
-            entity = field["Expression"]["SourceRef"]["Entity"]
-            property_name = field["Property"]
-            definition = item["filter"]
+            definition = _require_exact_keys(
+                item["filter"], {"Version", "From", "Where"}
+            )
             sources = definition["From"]
             conditions = definition["Where"]
             if definition["Version"] != 2 or len(sources) != 1 or len(conditions) != 1:
                 raise TypeError
-            source = sources[0]
+            source = _require_exact_keys(sources[0], {"Name", "Entity", "Type"})
             if source["Entity"] != entity or source["Type"] != 0:
                 raise TypeError
             alias = source["Name"]
-            condition = conditions[0]["Condition"]
+            if not isinstance(alias, str):
+                raise TypeError
+            where = _require_exact_keys(conditions[0], {"Condition"})
+            condition = where["Condition"]
+            if not isinstance(condition, dict) or len(condition) != 1:
+                raise TypeError
             operator: str
+            target_kind: str
+            target_entity: str | None
+            target_property: str | None
+            target_value: str | None
             if "In" in condition:
                 operator = "in"
-                selection = condition["In"]
+                target_kind = "Literal"
+                target_entity = None
+                target_property = None
+                target_value = _literal_selection(condition["In"], alias, property_name)
             elif "Not" in condition:
                 operator = "not-in"
-                selection = condition["Not"]["Expression"]["In"]
+                target_kind = "Literal"
+                target_entity = None
+                target_property = None
+                not_value = _require_exact_keys(condition["Not"], {"Expression"})
+                expression = _require_exact_keys(not_value["Expression"], {"In"})
+                target_value = _literal_selection(
+                    expression["In"], alias, property_name
+                )
             elif "Comparison" in condition:
                 operator = "equals-measure"
-                comparison = condition["Comparison"]
-                left = comparison["Left"]["Column"]
-                right = comparison["Right"]["Measure"]
+                comparison = _require_exact_keys(
+                    condition["Comparison"], {"ComparisonKind", "Left", "Right"}
+                )
                 if (
                     comparison["ComparisonKind"] != 0
-                    or left["Expression"]["SourceRef"]["Source"] != alias
-                    or left["Property"] != property_name
-                    or right["Expression"]["SourceRef"]["Source"] != alias
+                    or _source_field(comparison["Left"], "Column", alias)
+                    != property_name
                 ):
                     raise TypeError
-                signatures.append(
-                    (name, entity, property_name, operator, right["Property"])
-                )
-                continue
+                target_kind = "Measure"
+                target_entity = entity
+                target_property = _source_field(comparison["Right"], "Measure", alias)
+                target_value = None
             else:
                 raise TypeError
-            expressions = selection["Expressions"]
-            values = selection["Values"]
-            expression = expressions[0]["Column"]
-            literal = values[0][0]["Literal"]["Value"]
-            if (
-                len(expressions) != 1
-                or len(values) != 1
-                or len(values[0]) != 1
-                or expression["Expression"]["SourceRef"]["Source"] != alias
-                or expression["Property"] != property_name
-                or not isinstance(literal, str)
-                or len(literal) < 2
-                or literal[0] != "'"
-                or literal[-1] != "'"
-            ):
-                raise TypeError
-            signatures.append((name, entity, property_name, operator, literal[1:-1]))
+            signatures.append(
+                (
+                    name,
+                    filter_type,
+                    how_created,
+                    hidden,
+                    locked,
+                    field_kind,
+                    entity,
+                    property_name,
+                    alias,
+                    source["Type"],
+                    definition["Version"],
+                    operator,
+                    target_kind,
+                    target_entity,
+                    target_property,
+                    target_value,
+                )
+            )
         return tuple(signatures)
-    except (KeyError, IndexError, TypeError) as error:
+    except (KeyError, IndexError, StopIteration, TypeError) as error:
         raise PreflightError("visual filter contract is malformed") from error
 
 
@@ -579,7 +1005,7 @@ def _validate_visual_inventory(report_definition: Path) -> None:
             )
         for visual_id, (
             visual_type,
-            expected_roles,
+            expected_projections,
             expected_filters,
         ) in expected_visuals.items():
             container = _load_json(visuals_directory / visual_id / "visual.json")
@@ -595,19 +1021,14 @@ def _validate_visual_inventory(report_definition: Path) -> None:
                     f"{page_name}/{visual_id} visual contract is invalid"
                 )
             try:
-                actual_roles = {
-                    role: tuple(
-                        projection["queryRef"] for projection in state["projections"]
-                    )
-                    for role, state in query_state.items()
-                }
-            except (KeyError, TypeError) as error:
+                actual_projections = _visual_projection_signatures(query_state)
+            except PreflightError as error:
                 raise PreflightError(
-                    f"{page_name}/{visual_id} visual contract is invalid"
+                    f"{page_name}/{visual_id} visual projection contract is invalid"
                 ) from error
             if (
                 visual.get("visualType") != visual_type
-                or actual_roles != expected_roles
+                or actual_projections != expected_projections
             ):
                 raise PreflightError(
                     f"{page_name}/{visual_id} visual contract is invalid"

@@ -41,131 +41,23 @@ PAGES = {
     "actions-outcomes": "Actions and Outcomes",
 }
 
-VISUAL_CONTRACTS = {
-    "command-center": {
-        "active-cases": (
-            "card",
-            {"Data": ("CaseCommandCenter.case_id",)},
-            (("FilterActiveCases", "CaseCommandCenter", "status", "not-in", "closed"),),
-        ),
-        "current-decision": (
-            "multiRowCard",
-            {
-                "Values": (
-                    "CaseCommandCenter.Current Decision ID",
-                    "CaseCommandCenter.status",
-                )
-            },
-            (
-                (
-                    "FilterCurrentDecisionLatestCase",
-                    "CaseCommandCenter",
-                    "case_id",
-                    "equals-measure",
-                    "Latest Showcase Case",
-                ),
-            ),
-        ),
-        "otif-loss": ("card", {"Data": ("CaseCommandCenter.OTIF Loss %",)}, ()),
-        "revenue-at-risk": (
-            "card",
-            {"Data": ("CaseCommandCenter.Revenue At Risk",)},
-            (),
-        ),
-        "scenario-effective-time": (
-            "card",
-            {"Data": ("CaseCommandCenter.Scenario Effective Time",)},
-            (),
-        ),
-        "showcase-cases": (
-            "tableEx",
-            {
-                "Values": (
-                    "CaseCommandCenter.case_id",
-                    "CaseCommandCenter.purpose",
-                    "CaseCommandCenter.Latest Showcase Case",
-                    "CaseCommandCenter.status",
-                )
-            },
-            (
-                (
-                    "FilterShowcasePurpose",
-                    "CaseCommandCenter",
-                    "purpose",
-                    "in",
-                    "showcase",
-                ),
-                (
-                    "FilterLatestShowcaseCase",
-                    "CaseCommandCenter",
-                    "case_id",
-                    "equals-measure",
-                    "Latest Showcase Case",
-                ),
-            ),
-        ),
-    },
-    "actions-outcomes": {
-        "action-status": (
-            "tableEx",
-            {
-                "Values": (
-                    "ActionOutcomes.action_kind",
-                    "ActionOutcomes.action_status",
-                )
-            },
-            (
-                (
-                    "FilterActionStatusRecordType",
-                    "ActionOutcomes",
-                    "record_type",
-                    "in",
-                    "action",
-                ),
-            ),
-        ),
-        "decision-id": ("card", {"Data": ("ActionOutcomes.decision_id",)}, ()),
-        "observation-kind": (
-            "card",
-            {"Data": ("ActionOutcomes.observation_kind",)},
-            (
-                (
-                    "FilterObservationKindRecordType",
-                    "ActionOutcomes",
-                    "record_type",
-                    "in",
-                    "observation",
-                ),
-            ),
-        ),
-        "predicted-observed-variance": (
-            "clusteredColumnChart",
-            {
-                "Category": ("ActionOutcomes.metric",),
-                "Series": ("ActionOutcomes.observation_kind",),
-                "Y": ("ActionOutcomes.Observed Variance",),
-            },
-            (
-                (
-                    "FilterPredictedObservedVarianceRecordType",
-                    "ActionOutcomes",
-                    "record_type",
-                    "in",
-                    "observation",
-                ),
-            ),
-        ),
-        "projection-refresh": (
-            "card",
-            {"Data": ("ActionOutcomes.Projection Refresh Time",)},
-            (),
-        ),
-        "scenario-effective-time": (
-            "card",
-            {"Data": ("ActionOutcomes.Scenario Effective Time",)},
-            (),
-        ),
-    },
+EXPECTED_VISUAL_IDS = {
+    "command-center": (
+        "active-cases",
+        "current-decision",
+        "otif-loss",
+        "revenue-at-risk",
+        "scenario-effective-time",
+        "showcase-cases",
+    ),
+    "actions-outcomes": (
+        "action-status",
+        "decision-id",
+        "observation-kind",
+        "predicted-observed-variance",
+        "projection-refresh",
+        "scenario-effective-time",
+    ),
 }
 
 QUERY_REF_ALLOWLIST = {
@@ -536,10 +428,152 @@ def _copy_power_bi(tmp_path: Path, name: str) -> Path:
     return repository
 
 
+def _staged_visual_mutation_repository(tmp_path: Path, name: str) -> Path:
+    repository = _copy_power_bi(tmp_path, name)
+    (repository / "parameter.yml").write_text(
+        json.dumps(
+            {
+                "find_replace": [
+                    {
+                        "find_value": "__FABRIC_SQL_SERVER__",
+                        "replace_value": {"dev": "server.example.invalid"},
+                        "item_type": "SemanticModel",
+                        "file_path": "**/expressions.tmdl",
+                    },
+                    {
+                        "find_value": "__FABRIC_SQL_DATABASE__",
+                        "replace_value": {"dev": "database-name"},
+                        "item_type": "SemanticModel",
+                        "file_path": "**/expressions.tmdl",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    return repository
+
+
+VISUAL_PREFLIGHT_VALUES = {
+    "SUPPLY_RESPONSE_ALLOWED_TENANT_ID": "00000000-0000-4000-8000-000000000001",
+    "SUPPLY_RESPONSE_FABRIC_WORKSPACE_ID": "00000000-0000-4000-8000-000000000002",
+    "FABRIC_SQL_SERVER": "server.example.invalid",
+    "FABRIC_SQL_DATABASE": "database-name",
+}
+
+
+def _visual_path(repository: Path, page: str, visual: str) -> Path:
+    return (
+        repository
+        / "SupplyResponse.Report"
+        / "definition"
+        / "pages"
+        / page
+        / "visuals"
+        / visual
+        / "visual.json"
+    )
+
+
+def _mutate_projection_field_queryref_disagreement(value: dict[str, Any]) -> None:
+    projection = value["visual"]["query"]["queryState"]["Data"]["projections"][0]
+    projection["field"]["Column"]["Property"] = "observation_kind"
+
+
+def _mutate_projection_column_to_measure(value: dict[str, Any]) -> None:
+    projection = value["visual"]["query"]["queryState"]["Data"]["projections"][0]
+    projection["field"] = {
+        "Measure": {
+            "Expression": {"SourceRef": {"Entity": "ActionOutcomes"}},
+            "Property": "Scenario Effective Time",
+        }
+    }
+
+
+def _mutate_aggregation_function(value: dict[str, Any]) -> None:
+    projection = value["visual"]["query"]["queryState"]["Data"]["projections"][0]
+    projection["field"]["Aggregation"]["Function"] = 0
+
+
+def _mutate_projection_display_name(value: dict[str, Any]) -> None:
+    projection = value["visual"]["query"]["queryState"]["Data"]["projections"][0]
+    projection["displayName"] = "Different Decision Label"
+
+
+def _mutate_projection_role(value: dict[str, Any]) -> None:
+    query_state = value["visual"]["query"]["queryState"]
+    query_state["Values"] = query_state.pop("Data")
+
+
+def _mutate_filter_type(value: dict[str, Any]) -> None:
+    value["filterConfig"]["filters"][0]["type"] = "Advanced"
+
+
+def _mutate_unknown_projection_shape(value: dict[str, Any]) -> None:
+    projection = value["visual"]["query"]["queryState"]["Data"]["projections"][0]
+    projection["hidden"] = True
+
+
+def _mutate_unknown_filter_shape(value: dict[str, Any]) -> None:
+    value["filterConfig"]["filters"][0]["ordinal"] = 0
+
+
+@pytest.mark.parametrize(
+    ("page", "visual", "mutation"),
+    [
+        (
+            "actions-outcomes",
+            "decision-id",
+            _mutate_projection_field_queryref_disagreement,
+        ),
+        ("actions-outcomes", "decision-id", _mutate_projection_column_to_measure),
+        ("command-center", "active-cases", _mutate_aggregation_function),
+        ("actions-outcomes", "decision-id", _mutate_projection_display_name),
+        ("actions-outcomes", "decision-id", _mutate_projection_role),
+        ("actions-outcomes", "action-status", _mutate_filter_type),
+        ("actions-outcomes", "decision-id", _mutate_unknown_projection_shape),
+        ("actions-outcomes", "action-status", _mutate_unknown_filter_shape),
+    ],
+    ids=(
+        "field-queryref-disagreement",
+        "column-to-measure",
+        "aggregation-function",
+        "display-name",
+        "role",
+        "filter-type",
+        "unknown-projection-shape",
+        "unknown-filter-shape",
+    ),
+)
+def test_staged_preflight_rejects_schema_valid_visual_semantic_mutations(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    page: str,
+    visual: str,
+    mutation: Any,
+) -> None:
+    from fabric import deploy
+
+    repository = _staged_visual_mutation_repository(tmp_path, mutation.__name__)
+    path = _visual_path(repository, page, visual)
+    value = _load(path)
+    mutation(value)
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+    # Every adversarial mutation is accepted by Microsoft's declared JSON schema.
+    # The local semantic contract must therefore supply the fail-closed boundary.
+    deploy._validate_offline_json_schemas(repository)
+    monkeypatch.setattr(deploy, "_validate_tmdl", lambda _: None)
+    with pytest.raises(deploy.PreflightError, match="visual"):
+        deploy._validate_staged_repository(repository, VISUAL_PREFLIGHT_VALUES)
+
+
 def test_preflight_has_exact_visual_inventory_and_per_visual_contracts() -> None:
     from fabric import deploy
 
-    assert deploy.EXPECTED_VISUALS == VISUAL_CONTRACTS
+    assert {
+        page: tuple(visuals) for page, visuals in deploy.EXPECTED_VISUALS.items()
+    } == EXPECTED_VISUAL_IDS
     deploy._validate_visual_inventory(POWER_BI / "SupplyResponse.Report" / "definition")
 
 
