@@ -25,6 +25,7 @@ from data.domain.execution import (
     ExecutionStatus,
     ExecutionStatusEvent,
     OutboxClaimStatus,
+    OutboxClaim,
     OutboxProcessingState,
 )
 from data.synthetic.rl001 import OperationalSnapshot
@@ -1314,38 +1315,52 @@ class SqlAlchemyExecutionRepository:
     def claim_next_outbox(
         self,
         event_type: str,
-    ) -> ActionPlanningRequested | None:
+    ) -> OutboxClaim | None:
         if event_type != "ActionPlanningRequested":
             raise ValueError("unsupported outbox event type")
         now = datetime.now(UTC)
         claim_expires_at = now + timedelta(minutes=5)
-        candidate = (
-            select(outbox_events.c.event_id)
-            .where(
-                outbox_events.c.event_type == event_type,
-                outbox_events.c.available_at <= now,
-                outbox_events.c.processed_at.is_(None),
-                or_(
-                    outbox_events.c.claim_status == OutboxClaimStatus.PENDING.value,
-                    (
-                        (
-                            outbox_events.c.claim_status
-                            == OutboxClaimStatus.CLAIMED.value
-                        )
-                        & (outbox_events.c.claim_expires_at < now)
-                    ),
-                ),
-            )
-            .order_by(outbox_events.c.available_at, outbox_events.c.event_id)
-            .limit(1)
-            .scalar_subquery()
+        ready_to_claim = or_(
+            outbox_events.c.claim_status == OutboxClaimStatus.PENDING.value,
+            (
+                (outbox_events.c.claim_status == OutboxClaimStatus.CLAIMED.value)
+                & (outbox_events.c.claim_expires_at < now)
+            ),
         )
+        candidate = (
+            self._connection.execute(
+                select(
+                    outbox_events.c.event_id,
+                    outbox_events.c.decision_id,
+                    outbox_events.c.event_type,
+                    decisions.c.case_id,
+                    decisions.c.analysis_id,
+                )
+                .join(
+                    decisions,
+                    decisions.c.decision_id == outbox_events.c.decision_id,
+                )
+                .where(
+                    outbox_events.c.event_type == event_type,
+                    outbox_events.c.available_at <= now,
+                    outbox_events.c.processed_at.is_(None),
+                    ready_to_claim,
+                )
+                .order_by(outbox_events.c.available_at, outbox_events.c.event_id)
+                .limit(1)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if candidate is None:
+            return None
         row = (
             self._connection.execute(
                 update(outbox_events)
                 .where(
-                    outbox_events.c.event_id == candidate,
+                    outbox_events.c.event_id == candidate["event_id"],
                     outbox_events.c.processed_at.is_(None),
+                    ready_to_claim,
                 )
                 .values(
                     claim_status=OutboxClaimStatus.CLAIMED.value,
@@ -1353,20 +1368,52 @@ class SqlAlchemyExecutionRepository:
                     claimed_at=now,
                     claim_expires_at=claim_expires_at,
                 )
-                .returning(*outbox_events.c)
+                .returning(outbox_events.c.event_id)
             )
             .mappings()
             .one_or_none()
         )
         if row is None:
             return None
-        event = self._decode_outbox_event(row)
-        decision = SqlAlchemyDecisionRepository(self._store, self._connection).get(
-            event.decision_id
+        return OutboxClaim(
+            event_id=candidate["event_id"],
+            decision_id=candidate["decision_id"],
+            case_id=candidate["case_id"],
+            analysis_id=candidate["analysis_id"],
+            event_type=candidate["event_type"],
         )
-        if decision.kind.value != "approved" or event.case_id != decision.case_id:
+
+    def validate_claimed_outbox(
+        self,
+        claim: OutboxClaim,
+    ) -> ActionPlanningRequested:
+        row = (
+            self._connection.execute(
+                select(outbox_events).where(outbox_events.c.event_id == claim.event_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RecordNotFound(
+                f"claimed outbox event does not exist: {claim.event_id}"
+            )
+        event = self._decode_outbox_event(row)
+        if (
+            row["claim_status"] != OutboxClaimStatus.CLAIMED.value
+            or row["processed_at"] is not None
+            or event.event_id != claim.event_id
+            or event.decision_id != claim.decision_id
+            or event.case_id != claim.case_id
+            or event.analysis_id != claim.analysis_id
+            or event.event_type != claim.event_type
+            or not self._store._datetime_matches(row["created_at"], event.created_at)
+            or not self._store._datetime_matches(
+                row["available_at"], event.available_at
+            )
+        ):
             raise PersistenceIntegrityError(
-                "claimed planning event conflicts with its approved Decision"
+                "claimed outbox event conflicts with its canonical payload"
             )
         return event
 
@@ -1417,7 +1464,6 @@ class SqlAlchemyExecutionRepository:
         )
         if row is None:
             raise RecordNotFound(f"outbox event does not exist: {event_id}")
-        self._decode_outbox_event(row)
         return OutboxProcessingState(
             event_id=row["event_id"],
             claim_status=OutboxClaimStatus(row["claim_status"]),

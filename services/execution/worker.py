@@ -43,24 +43,25 @@ class ActionPlanningWorker:
 
     def process_next_outbox(self) -> bool:
         with self._uow_factory() as uow:
-            event = uow.execution.claim_next_outbox("ActionPlanningRequested")
-            if event is None:
+            claim = uow.execution.claim_next_outbox("ActionPlanningRequested")
+            if claim is None:
                 return False
             try:
-                decision = uow.decisions.get(event.decision_id)
+                uow.execution.validate_claimed_outbox(claim)
+                decision = uow.decisions.get(claim.decision_id)
                 for action in self._planner(decision):
                     uow.execution.insert_action_if_absent(action)
-                uow.execution.mark_outbox_processed(event.event_id)
+                uow.execution.mark_outbox_processed(claim.event_id)
                 uow.cases.mark_action_planning_complete(decision.case_id)
                 uow.commit()
             except Exception as exc:
                 uow.rollback()
                 with self._uow_factory() as failed_uow:
                     failed_uow.execution.record_outbox_failure(
-                        event.event_id,
+                        claim.event_id,
                         error_code(exc),
                     )
-                    failed_uow.cases.mark_action_planning_failed(event.case_id)
+                    failed_uow.cases.mark_action_planning_failed(claim.case_id)
                     failed_uow.commit()
             return True
 

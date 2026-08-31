@@ -148,3 +148,11 @@ class OutboxProcessingState(FrozenModel):
     processed_at: datetime | None
     attempt_count: int
     last_error: str | None
+
+
+class OutboxClaim(FrozenModel):
+    event_id: str
+    decision_id: str
+    case_id: str
+    analysis_id: str
+    event_type: Literal["ActionPlanningRequested"] = "ActionPlanningRequested"
