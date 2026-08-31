@@ -765,7 +765,7 @@ def test_outbox_read_rejects_event_for_rejected_decision(decision_context):
         )
 
     with decision_context.uow_factory() as uow:
-        with pytest.raises(PersistenceIntegrityError, match="approved"):
+        with pytest.raises(PersistenceIntegrityError, match="rejected Decision"):
             uow.execution.list_outbox(decision_id=rejected.decision_id)
 
 
@@ -973,6 +973,22 @@ def test_rejected_decision_rejects_option_projection_material(sqlite_uow):
         )
 
 
+def test_rejected_decision_retains_immutable_analysis_comparator_trace(sqlite_uow):
+    rejected = DecisionService(sqlite_uow).record(
+        rejection_command("RL-IDEMPOTENCY-REJECTED-TRACE-SHAPE"),
+        alex_identity(effective_roles=("response_approver",)),
+    )
+
+    with sqlite_uow() as uow:
+        analysis = uow.cases.get_analysis(rejected.analysis_id)
+
+    assert rejected.comparator_trace == analysis.ranking
+    with pytest.raises(ValidationError, match="rejection Decision"):
+        rejected.__class__.model_validate(
+            {**rejected.model_dump(), "comparator_trace": None}
+        )
+
+
 def test_rejected_decision_read_rejects_forged_comparator_trace(decision_context):
     rejected = DecisionService(decision_context.uow_factory).record(
         rejection_command("RL-IDEMPOTENCY-REJECTED-TRACE"),
@@ -980,7 +996,13 @@ def test_rejected_decision_read_rejects_forged_comparator_trace(decision_context
     )
     with decision_context.uow_factory() as uow:
         ranking = uow.cases.get_analysis(rejected.analysis_id).ranking
-    forged = rejected.model_copy(update={"comparator_trace": ranking})
+    forged = rejected.model_copy(
+        update={
+            "comparator_trace": ranking.model_copy(
+                update={"policy_version": "RL-RANKING-FORGED"}
+            )
+        }
+    )
     with decision_context.store.engine.begin() as connection:
         connection.execute(
             update(decisions)
@@ -989,7 +1011,7 @@ def test_rejected_decision_read_rejects_forged_comparator_trace(decision_context
         )
 
     with decision_context.uow_factory() as uow:
-        with pytest.raises(PersistenceIntegrityError, match="invalid JSON"):
+        with pytest.raises(PersistenceIntegrityError, match="Analysis Version"):
             uow.decisions.get(rejected.decision_id)
 
 
@@ -1002,6 +1024,18 @@ def test_approved_decision_allows_exactly_one_planning_event(sqlite_uow):
     with sqlite_uow() as uow:
         with pytest.raises(IntegrityError):
             uow.execution.insert_outbox(ActionPlanningRequested.for_decision(decision))
+
+
+def test_insert_outbox_rejects_rejected_decision_before_writing(sqlite_uow):
+    rejected = DecisionService(sqlite_uow).record(
+        rejection_command("RL-IDEMPOTENCY-REJECTED-DIRECT-OUTBOX"),
+        alex_identity(effective_roles=("response_approver",)),
+    )
+
+    with sqlite_uow() as uow:
+        with pytest.raises(PersistenceIntegrityError, match="approved Decision"):
+            uow.execution.insert_outbox(ActionPlanningRequested.for_decision(rejected))
+        assert uow.execution.list_outbox(decision_id=rejected.decision_id) == ()
 
 
 def test_outbox_read_rejects_missing_planning_event(decision_context):
@@ -1018,7 +1052,7 @@ def test_outbox_read_rejects_missing_planning_event(decision_context):
 
     with decision_context.uow_factory() as uow:
         with pytest.raises(PersistenceIntegrityError, match="exactly one"):
-            uow.execution.list_outbox(decision_id=decision.decision_id)
+            uow.decisions.get(decision.decision_id)
 
 
 def test_executable_beta_requires_current_jordan_quality_satisfaction(

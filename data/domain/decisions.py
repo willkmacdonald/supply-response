@@ -259,7 +259,7 @@ class Decision(FrozenModel):
                 or self.assumptions
                 or self.constraints
                 or self.prerequisite_roles
-                or self.comparator_trace is not None
+                or self.comparator_trace is None
                 or self.approval_satisfactions
                 or self.rejection_reason is None
                 or not self.rejection_reason.strip()
@@ -342,9 +342,7 @@ class Decision(FrozenModel):
             prerequisite_roles=(
                 option.prerequisite_roles if option is not None else ()
             ),
-            comparator_trace=(
-                analysis.ranking if command.kind is DecisionKind.APPROVED else None
-            ),
+            comparator_trace=analysis.ranking,
             calculation_version=analysis.material.calculation_version,
             evidence_policy_version=analysis.material.evidence_policy_version,
             approval_policy_version=analysis.material.approval_policy_version,

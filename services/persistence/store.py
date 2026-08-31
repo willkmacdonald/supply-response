@@ -747,7 +747,12 @@ class SqlAlchemyDecisionRepository:
                 "persisted Decision contains invalid JSON"
             ) from error
 
-    def _decision_from_row(self, row) -> Decision:
+    def _decision_from_row(
+        self,
+        row,
+        *,
+        validate_outbox_cardinality: bool = True,
+    ) -> Decision:
         decision = self._decode_decision(row["payload_json"])
         if (
             decision.decision_id != row["decision_id"]
@@ -764,6 +769,8 @@ class SqlAlchemyDecisionRepository:
         self._store._require_configured_mode(decision.runtime_mode)
         self._require_analysis_lineage(decision)
         self._require_bound_satisfactions(decision)
+        if validate_outbox_cardinality:
+            self._require_outbox_cardinality(decision)
         return decision
 
     def _require_analysis_lineage(self, decision: Decision) -> None:
@@ -786,6 +793,10 @@ class SqlAlchemyDecisionRepository:
             raise PersistenceIntegrityError(
                 "Decision analysis lineage conflicts with its immutable Analysis Version"
             )
+        if analysis.ranking != decision.comparator_trace:
+            raise PersistenceIntegrityError(
+                "Decision comparator trace conflicts with its immutable Analysis Version"
+            )
         if decision.kind.value == "rejected":
             return
         option = next(
@@ -803,12 +814,31 @@ class SqlAlchemyDecisionRepository:
             or option.assumptions != decision.assumptions
             or option.blocking_codes != decision.constraints
             or option.prerequisite_roles != decision.prerequisite_roles
-            or analysis.ranking != decision.comparator_trace
         ):
             raise PersistenceIntegrityError(
                 "Decision selected option conflicts with its immutable Analysis Version"
             )
         self._require_derived_satisfactions(decision, analysis, option)
+
+    def _require_outbox_cardinality(self, decision: Decision) -> None:
+        event_types = (
+            self._connection.execute(
+                select(outbox_events.c.event_type)
+                .where(outbox_events.c.decision_id == decision.decision_id)
+                .order_by(outbox_events.c.event_id)
+            )
+            .scalars()
+            .all()
+        )
+        if decision.kind.value == "approved":
+            if event_types != ["ActionPlanningRequested"]:
+                raise PersistenceIntegrityError(
+                    "approved Decision requires exactly one ActionPlanningRequested event"
+                )
+        elif event_types:
+            raise PersistenceIntegrityError(
+                "rejected Decision cannot have outbox events"
+            )
 
     @staticmethod
     def _require_material_planner_satisfaction(
@@ -928,6 +958,24 @@ class SqlAlchemyDecisionRepository:
         if row is None:
             raise RecordNotFound(f"decision does not exist: {decision_id}")
         return self._decision_from_row(row)
+
+    def get_for_outbox_insert(self, decision_id: str) -> Decision:
+        """Validate a Decision before its same-transaction outbox insert.
+
+        The aggregate cardinality invariant deliberately waits until the
+        transaction is committed; this call occurs between Decision and outbox
+        inserts, when an approved Decision has no event yet.
+        """
+        row = (
+            self._connection.execute(
+                select(decisions).where(decisions.c.decision_id == decision_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RecordNotFound(f"decision does not exist: {decision_id}")
+        return self._decision_from_row(row, validate_outbox_cardinality=False)
 
     def get_by_idempotency_key(self, idempotency_key: str) -> Decision | None:
         row = (
@@ -1086,6 +1134,24 @@ class SqlAlchemyExecutionRepository:
         self._before_outbox_insert = before_outbox_insert
 
     def insert_outbox(self, event: ActionPlanningRequested) -> None:
+        decision = SqlAlchemyDecisionRepository(
+            self._store,
+            self._connection,
+        ).get_for_outbox_insert(event.decision_id)
+        if decision.kind.value != "approved":
+            raise PersistenceIntegrityError(
+                "outbox event requires an approved Decision"
+            )
+        if event.case_id != decision.case_id:
+            raise PersistenceIntegrityError(
+                "outbox case_id conflicts with its Decision"
+            )
+        if event.analysis_id != decision.analysis_id:
+            raise PersistenceIntegrityError(
+                "outbox analysis_id conflicts with its Decision"
+            )
+        if event.event_type != "ActionPlanningRequested":
+            raise PersistenceIntegrityError("outbox event_type is invalid")
         if self._before_outbox_insert is not None:
             self._before_outbox_insert()
         self._connection.execute(
