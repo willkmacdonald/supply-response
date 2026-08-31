@@ -32,6 +32,27 @@ export interface CaseInstance {
   scenario_effective_time: string;
   scenario_timezone: "America/Chicago";
   status: CaseStatus;
+  current_analysis_id: string | null;
+  current_decision_id: string | null;
+  display_status: string | null;
+  recorded_at: string;
+  projection_updated_at: string;
+  controls: CaseControls;
+}
+
+export interface CaseControls {
+  new_analysis: boolean;
+  decide: boolean;
+  retry_action_planning: boolean;
+  start_playback: boolean;
+}
+
+export interface RuntimeStatus {
+  runtime_mode: RuntimeMode;
+  work_iq: "synthetic";
+  operational_store: "sqlite";
+  agent_runtime: "local";
+  power_bi_available: false;
 }
 
 export interface Disruption {
@@ -183,8 +204,19 @@ export interface AuthorizationConditions {
   forbidden_external_side_effects: ExternalSideEffect[];
 }
 
+export type CaseMaterial = Pick<
+  CaseInstance,
+  | "case_id"
+  | "template_id"
+  | "purpose"
+  | "runtime_mode"
+  | "scenario_effective_time"
+  | "scenario_timezone"
+  | "status"
+>;
+
 export interface ApprovalTarget {
-  case: CaseInstance;
+  case: CaseMaterial;
   corpus: CorpusScope;
   scenario_effective_time: string;
   total_response_cost: string;
@@ -293,6 +325,8 @@ export interface AnalysisMaterial {
 export interface AnalysisVersion {
   analysis_id: string;
   case_id: string;
+  runtime_mode: RuntimeMode;
+  scenario_effective_time: string;
   analysis_started_at: string;
   retrieval_window_ends_at: string;
   created_at: string;
@@ -303,14 +337,101 @@ export interface AnalysisVersion {
   response_options: ResponseOption[];
   approval_satisfactions: ApprovalSatisfaction[];
   ranking: RankingResult;
+  recommendation: ResponseOption | null;
 }
 
-export interface CaseResponse {
-  case: {
-    case_id: string;
-    status: CaseStatus;
-  };
-  disruption: Disruption;
-  analysis: AnalysisVersion | null;
+export type DecisionInput =
+  | {
+      analysis_id: string;
+      kind: "approved";
+      selected_option_id: string;
+    }
+  | {
+      analysis_id: string;
+      kind: "rejected";
+      rejection_reason: string;
+    };
+
+export interface Decision {
+  decision_id: string;
+  case_id: string;
+  analysis_id: string;
+  analysis_material_hash: string;
+  kind: "approved" | "rejected";
   selected_option_id: string | null;
+  rejection_reason: string | null;
+  evidence_ids: string[];
+  assumptions: string[];
+  constraints: string[];
+  prerequisite_roles: string[];
+  approval_satisfactions: ApprovalSatisfaction[];
+  calculation_version: string;
+  evidence_policy_version: string;
+  approval_policy_version: string;
+  ranking_policy_version: string;
+  runtime_mode: RuntimeMode;
+  scenario_effective_time: string;
+  decided_at: string;
+  projection_updated_at: string;
+  action_planning_status: "not_applicable" | "pending" | "failed" | "complete";
+  new_analysis_available: boolean;
+}
+
+export interface ExecutionAction {
+  action_id: string;
+  case_id: string;
+  decision_id: string;
+  kind: string;
+  owner_kind: string;
+  owner_persona_id: string | null;
+  status: string;
+  created_at: string;
+  draft_artifact_id: string | null;
+  runtime_mode: RuntimeMode;
+  scenario_effective_time: string;
+  projection_updated_at: string;
+}
+
+export interface DraftArtifact {
+  artifact_id: string;
+  action_id: string;
+  decision_id: string;
+  artifact_kind: string;
+  created_at: string;
+  subject: string | null;
+  body: string | null;
+  sent: false;
+  runtime_mode: RuntimeMode;
+  scenario_effective_time: string;
+}
+
+export interface Playback {
+  playback_id: string;
+  case_id: string;
+  decision_id: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  runtime_mode: RuntimeMode;
+  scenario_effective_time: string;
+}
+
+export interface OutcomeObservation {
+  observation_id: string;
+  case_id: string;
+  decision_id: string;
+  playback_id: string | null;
+  action_id: string | null;
+  metric: string;
+  observed_value: string;
+  unit: string;
+  predicted_value: string;
+  scenario_effective_time: string;
+  scenario_timezone: "America/Chicago";
+  recorded_at: string;
+  source_reference: string;
+  kind: string;
+  synthetic: boolean;
+  display_label: string;
+  runtime_mode: RuntimeMode;
 }

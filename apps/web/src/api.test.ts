@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getCase } from "./api";
+import { api } from "./api";
 import type { AnalysisVersion, ResponseOption } from "./types";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -33,6 +33,8 @@ describe("API client", () => {
     const analysis: AnalysisVersion = {
       analysis_id: "RL-ANALYSIS-1",
       case_id: "RL-CASE-1",
+      runtime_mode: "fallback",
+      scenario_effective_time: "2026-09-01T09:00:00-05:00",
       analysis_started_at: "2026-08-31T12:00:00Z",
       retrieval_window_ends_at: "2026-08-31T12:00:01Z",
       created_at: "2026-08-31T12:00:01Z",
@@ -279,6 +281,7 @@ describe("API client", () => {
         recommended_option_id: "RL-OPTION-COMBINED",
         no_feasible_mitigation: false,
       },
+      recommendation: null,
     };
 
     expect(analysis.ranking.stages[0].threshold).toBe("500");
@@ -296,11 +299,47 @@ describe("API client", () => {
     expect(analysis.material_hash).toHaveLength(64);
   });
 
-  it("uses the backend case contract", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ok: true, json: async () => ({case: {case_id: "RL-CASE-1", status: "open"}, disruption: {}, analysis: null, selected_option_id: null})});
+  it("uses typed Task 9 routes and sends the decision idempotency header", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ok: true, json: async () => ({})});
     vi.stubGlobal("fetch", fetchMock);
-    const result = await getCase("RL-CASE-1");
-    expect(result.case.case_id).toBe("RL-CASE-1");
-    expect(fetchMock).toHaveBeenCalledOnce();
+
+    await api.runtime();
+    await api.createCase("showcase");
+    await api.analyze("RL-CASE-1");
+    await api.decide(
+      "RL-CASE-1",
+      {analysis_id: "RL-ANALYSIS-1", kind: "approved", selected_option_id: "RL-OPTION-COMBINED"},
+      "RL-WEB-DECISION-1",
+    );
+    await api.actions("RL-DECISION-1");
+    await api.startPlayback("RL-DECISION-1");
+    await api.observations("RL-DECISION-1");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "http://localhost:8000/api/runtime", undefined);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "http://localhost:8000/api/cases", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({template_id: "RL-001", purpose: "showcase"}),
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:8000/api/cases/RL-CASE-1/decisions", {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "Idempotency-Key": "RL-WEB-DECISION-1"},
+      body: JSON.stringify({
+        analysis_id: "RL-ANALYSIS-1",
+        kind: "approved",
+        selected_option_id: "RL-OPTION-COMBINED",
+      }),
+    });
+  });
+
+  it("never sends a caller-owned runtime mode override", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ok: true, json: async () => ({})});
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.createCase("rehearsal");
+
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(request.body).toBe(JSON.stringify({template_id: "RL-001", purpose: "rehearsal"}));
+    expect(request.body).not.toContain("runtime_mode");
   });
 });
