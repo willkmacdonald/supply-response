@@ -156,7 +156,13 @@ class PlaybackService:
             )
             uow.execution.insert_playback_if_absent(playback)
             uow.commit()
-            return playback
+        with self._uow_factory() as uow:
+            canonical = uow.execution.get_playback_for_decision(decision_id)
+            if canonical is None or canonical.playback_id != playback.playback_id:
+                raise PlaybackStateError(
+                    "Playback insert did not retain its canonical Decision linkage"
+                )
+            return canonical
 
     def run_to_completion(
         self,

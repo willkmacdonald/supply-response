@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier
+from threading import Barrier, local
 
 import pytest
 
@@ -7,6 +7,10 @@ from tests.execution.conftest import APPROVED_DECISION_ID, alex_identity
 
 from services.execution.playback import ImmediateClock, PlaybackService
 from services.execution.worker import ActionPlanningWorker
+from services.persistence.store import (
+    ImmutableRecordConflict,
+    SqlAlchemyExecutionRepository,
+)
 
 
 EXPECTED = {
@@ -45,17 +49,43 @@ def test_repeated_start_returns_existing_playback(playback_service):
     assert second.playback_id == first.playback_id
 
 
-def test_concurrent_start_returns_one_playback(playback_service):
-    barrier = Barrier(2)
+def test_concurrent_start_returns_one_playback(playback_service, monkeypatch):
+    insert_boundary = Barrier(2)
+    lookup_state = local()
+    original_lookup = SqlAlchemyExecutionRepository.get_playback_for_decision
+
+    def synchronized_lookup(repository, decision_id):
+        playback = original_lookup(repository, decision_id)
+        lookup_state.count = getattr(lookup_state, "count", 0) + 1
+        if lookup_state.count == 2 and playback is None:
+            insert_boundary.wait()
+        return playback
+
+    monkeypatch.setattr(
+        SqlAlchemyExecutionRepository,
+        "get_playback_for_decision",
+        synchronized_lookup,
+    )
 
     def start():
-        barrier.wait()
         return playback_service.start(APPROVED_DECISION_ID, alex_identity())
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         playbacks = tuple(executor.map(lambda _: start(), range(2)))
 
     assert len({item.playback_id for item in playbacks}) == 1
+
+
+def test_playback_conflict_does_not_accept_a_divergent_record(
+    playback_service,
+    planning_context,
+):
+    canonical = playback_service.start(APPROVED_DECISION_ID, alex_identity())
+    divergent = canonical.model_copy(update={"playback_id": "RL-PLAYBACK-DIVERGENT"})
+
+    with planning_context.uow_factory() as uow:
+        with pytest.raises(ImmutableRecordConflict, match="different Playback"):
+            uow.execution.insert_playback_if_absent(divergent)
 
 
 def test_playback_completes_an_unsent_alpha_draft(playback_service):

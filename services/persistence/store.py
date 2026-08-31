@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import Connection, Engine, insert, or_, select, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 
 from data.domain import CaseInstance, CasePurpose, CaseStatus, RuntimeMode
@@ -1962,8 +1963,9 @@ class SqlAlchemyExecutionRepository:
                     "Decision already has a different Playback"
                 )
             return False
-        self._connection.execute(
-            insert(playbacks).values(
+        result = self._connection.execute(
+            sqlite_insert(playbacks)
+            .values(
                 playback_id=playback.playback_id,
                 case_id=playback.case_id,
                 decision_id=playback.decision_id,
@@ -1972,8 +1974,16 @@ class SqlAlchemyExecutionRepository:
                 completed_at=playback.completed_at,
                 payload_json=serialize_model(playback),
             )
+            .on_conflict_do_nothing(index_elements=[playbacks.c.decision_id])
         )
-        return True
+        canonical = self.get_playback_for_decision(playback.decision_id)
+        if canonical is None:
+            raise PersistenceIntegrityError(
+                "Playback insert did not persist a canonical record"
+            )
+        if canonical.playback_id != playback.playback_id:
+            raise ImmutableRecordConflict("Decision already has a different Playback")
+        return result.rowcount == 1
 
     def get_playback(self, playback_id: str) -> Playback:
         row = (
