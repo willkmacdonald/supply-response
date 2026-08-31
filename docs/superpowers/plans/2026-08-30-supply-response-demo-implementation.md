@@ -643,7 +643,7 @@ def evaluate_approval_satisfaction(
     standing_authorizations: tuple[StandingAuthorization, ...],
     scenario_effective_time: datetime,
 ) -> tuple[ApprovalSatisfaction, ...]:
-    required = set(option.prerequisite_roles) - {"response_approver", "material_planner"}
+    required = set(option.prerequisite_roles) - {"response_approver"}
     return tuple(
         ApprovalSatisfaction.from_authorization(analysis_id, option, authorization)
         for role in sorted(required)
