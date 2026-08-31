@@ -1,7 +1,9 @@
 from .analysis import (
     CalculationMetadata,
     ExposureResult,
+    PredictedOutcome,
     ProjectionPoint,
+    ResponseOption,
     TimedQuantity,
 )
 from .cases import CaseInstance, CaseStatus, DemoTemplate
@@ -40,12 +42,14 @@ __all__ = [
     "InventoryTransfer",
     "Money",
     "Part",
+    "PredictedOutcome",
     "ProductionOrder",
     "ProjectionPoint",
     "PurchaseOrder",
     "QualificationStatus",
     "QualityQualification",
     "RuntimeMode",
+    "ResponseOption",
     "serialize_money",
     "Supplier",
     "SupplierPart",

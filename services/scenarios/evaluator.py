@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from data.schemas.models import (
+from data.domain import (
     Disruption,
     QualityQualification,
     QualificationStatus,
+)
+from data.schemas.models import (
     ResponseScenario,
 )
 from services.policy.thresholds import requires_finance_approval

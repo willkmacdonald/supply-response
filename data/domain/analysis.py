@@ -42,3 +42,27 @@ class ExposureResult(FrozenModel):
     response_cost: Money = Decimal("0")
     revenue_protected: Money = Decimal("0")
     remaining_uncertainty: tuple[str, ...] = ()
+
+
+class PredictedOutcome(FrozenModel):
+    uncovered_part_demand: int
+    otif_loss_percentage: int
+    revenue_at_risk: Decimal
+    margin_at_risk: Decimal
+    response_cost: Decimal
+    protected_customer_order_ids: tuple[str, ...] = ()
+
+
+class ResponseOption(FrozenModel):
+    option_id: str
+    name: str
+    executable: bool
+    active_mitigation: bool
+    predicted: PredictedOutcome | None
+    assumptions: tuple[str, ...] = ()
+    evidence_ids: tuple[str, ...] = ()
+    blocking_codes: tuple[str, ...] = ()
+    prerequisite_roles: tuple[str, ...] = ()
+    source_data_lineage: tuple[str, ...] = ()
+    approval_burden: int = 0
+    execution_risk: int = 0
