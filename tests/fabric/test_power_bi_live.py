@@ -37,14 +37,20 @@ def _require_success(response):
     return response.json()
 
 
-def _normalized_row(payload: dict[str, object]) -> dict[str, object]:
+def _normalized_rows(payload: dict[str, object]) -> list[dict[str, object]]:
     results = payload["results"]
     assert isinstance(results, list) and len(results) == 1
     tables = results[0]["tables"]
     assert isinstance(tables, list) and len(tables) == 1
     rows = tables[0]["rows"]
-    assert isinstance(rows, list) and len(rows) == 1
-    return {key.strip("[]"): value for key, value in rows[0].items()}
+    assert isinstance(rows, list)
+    return [{key.strip("[]"): value for key, value in row.items()} for row in rows]
+
+
+def _normalized_row(payload: dict[str, object]) -> dict[str, object]:
+    rows = _normalized_rows(payload)
+    assert len(rows) == 1
+    return rows[0]
 
 
 def test_latest_showcase_decision_reaches_power_bi_within_sixty_seconds() -> None:
@@ -104,11 +110,35 @@ def test_latest_showcase_decision_reaches_power_bi_within_sixty_seconds() -> Non
 ROW(
   "case_id", CALCULATE(SELECTEDVALUE(CaseCommandCenter[case_id]), CaseCommandCenter[case_id] = "{case["case_id"]}"),
   "decision_id", CALCULATE(SELECTEDVALUE(ActionOutcomes[decision_id]), ActionOutcomes[decision_id] = "{decision["decision_id"]}"),
+  "current_decision_id", CaseCommandCenter[Current Decision ID],
   "selected_option_id", CALCULATE(SELECTEDVALUE(ActionOutcomes[selected_option_id]), ActionOutcomes[decision_id] = "{decision["decision_id"]}"),
   "action_count", CALCULATE(COUNTROWS(ActionOutcomes), ActionOutcomes[decision_id] = "{decision["decision_id"]}", ActionOutcomes[record_type] = "action"),
+  "action_completion", ActionOutcomes[Action Completion %],
   "simulated_observation_count", CALCULATE(COUNTROWS(ActionOutcomes), ActionOutcomes[decision_id] = "{decision["decision_id"]}", ActionOutcomes[observation_kind] = "simulated"),
-  "scenario_effective_time", CALCULATE(MAX(ActionOutcomes[scenario_effective_time]), ActionOutcomes[decision_id] = "{decision["decision_id"]}"),
-  "projection_refresh_time", CALCULATE(MAX(ActionOutcomes[projection_updated_at]), ActionOutcomes[decision_id] = "{decision["decision_id"]}")
+  "observation_kind", CALCULATE(SELECTEDVALUE(ActionOutcomes[observation_kind]), ActionOutcomes[decision_id] = "{decision["decision_id"]}", ActionOutcomes[record_type] = "observation"),
+  "scenario_effective_time", ActionOutcomes[Scenario Effective Time],
+  "projection_refresh_time", ActionOutcomes[Projection Refresh Time]
+)'''
+    variance_dax = f'''EVALUATE
+UNION(
+  ROW(
+    "metric", "response_cost",
+    "relative_variance", CALCULATE(
+      ActionOutcomes[Observed Variance],
+      ActionOutcomes[decision_id] = "{decision["decision_id"]}",
+      ActionOutcomes[record_type] = "observation",
+      ActionOutcomes[metric] = "response_cost"
+    )
+  ),
+  ROW(
+    "metric", "remaining_alpha_recovery_date",
+    "relative_variance", CALCULATE(
+      ActionOutcomes[Observed Variance],
+      ActionOutcomes[decision_id] = "{decision["decision_id"]}",
+      ActionOutcomes[record_type] = "observation",
+      ActionOutcomes[metric] = "remaining_alpha_recovery_date"
+    )
+  )
 )'''
 
     deadline = time.monotonic() + 60
@@ -136,10 +166,30 @@ ROW(
                 break
             time.sleep(5)
 
+        variance_payload = _require_success(
+            power_bi.post(
+                query_url,
+                headers={"Authorization": f"Bearer {token.token}"},
+                json={
+                    "queries": [{"query": variance_dax}],
+                    "serializerSettings": {"includeNulls": True},
+                },
+            )
+        )
+        variance_rows = {
+            str(row["metric"]): row.get("relative_variance")
+            for row in _normalized_rows(variance_payload)
+        }
+
     assert last_row["case_id"] == case["case_id"]
     assert last_row["decision_id"] == decision["decision_id"]
+    assert last_row["current_decision_id"] == decision["decision_id"]
     assert last_row["selected_option_id"] == selected_option_id
     assert last_row["action_count"] == 5
+    assert last_row["action_completion"] == 1
     assert last_row["simulated_observation_count"] == 10
+    assert last_row["observation_kind"] == "simulated"
     assert last_row["scenario_effective_time"] == decision["scenario_effective_time"]
     assert last_row["projection_refresh_time"] is not None
+    assert variance_rows["response_cost"] == pytest.approx((25000 - 24750) / 24750)
+    assert variance_rows["remaining_alpha_recovery_date"] is None

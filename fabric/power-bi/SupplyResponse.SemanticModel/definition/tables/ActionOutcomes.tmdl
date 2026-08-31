@@ -79,9 +79,35 @@ table ActionOutcomes
 
   measure 'Observed Variance' =
       VAR DecisionId = [Current Decision ID]
-      VAR Observations = FILTER(ALL(ActionOutcomes), ActionOutcomes[decision_id] = DecisionId && ActionOutcomes[record_type] = "observation")
-      RETURN AVERAGEX(Observations, VALUE(ActionOutcomes[observed_value]) - VALUE(ActionOutcomes[predicted_value]))
-    formatString: 0.00;-0.00;0.00
+      VAR RecordType = SELECTEDVALUE(ActionOutcomes[record_type])
+      VAR MetricName = SELECTEDVALUE(ActionOutcomes[metric])
+      VAR SupportedMetric =
+          MetricName IN {
+              "alpha_expedited_quantity",
+              "dallas_transfer_quantity",
+              "total_response_arranged_supply",
+              "uncovered_part_demand",
+              "response_cost",
+              "protected_customer_orders",
+              "revenue_protected",
+              "margin_protected",
+              "otif_loss_percentage"
+          }
+      VAR PredictedText = CALCULATE(SELECTEDVALUE(ActionOutcomes[predicted_value]), ActionOutcomes[decision_id] = DecisionId)
+      VAR ObservedText = CALCULATE(SELECTEDVALUE(ActionOutcomes[observed_value]), ActionOutcomes[decision_id] = DecisionId)
+      VAR Predicted = IFERROR(VALUE(PredictedText), BLANK())
+      VAR Observed = IFERROR(VALUE(ObservedText), BLANK())
+      RETURN
+          IF(
+              RecordType <> "observation"
+                  || NOT SupportedMetric
+                  || ISBLANK(Predicted)
+                  || ISBLANK(Observed)
+                  || Predicted = 0,
+              BLANK(),
+              DIVIDE(Observed - Predicted, ABS(Predicted))
+          )
+    formatString: 0.00%;-0.00%;0.00%
 
   measure 'Projection Refresh Time' =
       VAR DecisionId = [Current Decision ID]

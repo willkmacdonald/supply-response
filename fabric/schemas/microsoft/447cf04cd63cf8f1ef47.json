@@ -1,0 +1,81 @@
+{
+  "$id": "https://developer.microsoft.com/json-schemas/fabric/item/report/definitionProperties/2.0.0/schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "DatasetReference": {
+      "additionalProperties": false,
+      "description": "The DatasetReference defines the semantic model that is bound to this report. It is required to have exactly one of either the byPath or byConnection properties. The byConnection property would typically be used for LiveConnect scenarios whereas byPath would point at a local semantic model.",
+      "properties": {
+        "byConnection": {
+          "$ref": "#/definitions/ReportDatasetReferenceByConnection"
+        },
+        "byPath": {
+          "$ref": "#/definitions/ReportDatasetReferenceByPath"
+        }
+      },
+      "title": "DatasetReference",
+      "type": "object"
+    },
+    "ReportDatasetReferenceByConnection": {
+      "additionalProperties": false,
+      "description": "Provides a reference to a remote semantic model using a connection string. The connection string must point to a semantic model hosted in the Microsoft Fabric service.  Connections to other Analysis Services semantic models must use a byPath reference to a semantic model definition containing a modelReference.json file.",
+      "properties": {
+        "connectionString": {
+          "description": "The connection string referring to the remote semantic model.",
+          "title": "ConnectionString",
+          "type": "string"
+        }
+      },
+      "required": [
+        "connectionString"
+      ],
+      "title": "ByConnection",
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "ReportDatasetReferenceByPath": {
+      "additionalProperties": false,
+      "description": "Provides a reference to a local dataset artifact definition.",
+      "properties": {
+        "path": {
+          "description": "A relative path from this file to the target semantic model artifact folder. Uses \u2018/\u2019 as a directory separator.",
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "ByPath",
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "description": "The ReportDefinition is stored as definition.pbir. It contains metadata about the overall file structure, holds core settings, and holds a reference to the semantic model used by this report. This file is required.",
+  "properties": {
+    "$schema": {
+      "pattern": "^https://developer.microsoft.com/json-schemas/fabric/item/report/definitionProperties/2.[0-9]+.[0-9]+/schema.json$",
+      "type": "string"
+    },
+    "datasetReference": {
+      "$ref": "#/definitions/DatasetReference"
+    },
+    "version": {
+      "description": "Version of the report artifact file format.  This also serves as the version number for the .pbir file format.",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "$schema",
+    "version",
+    "datasetReference"
+  ],
+  "title": "ReportDefinition",
+  "type": "object"
+}

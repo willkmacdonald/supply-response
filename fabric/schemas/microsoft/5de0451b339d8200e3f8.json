@@ -1,0 +1,160 @@
+{
+  "$id": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/formattingObjectDefinitions/1.4.0/schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "DataRepetitionSelector": {
+      "additionalProperties": false,
+      "properties": {
+        "dataViewWildcard": {
+          "$ref": "#/definitions/DataViewWildcard",
+          "description": "Matches all instances or all totals or both."
+        },
+        "roles": {
+          "description": "Matches against all fields in a role.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "scopeId": {
+          "$ref": "../../semanticQuery/1.3.0/schema.json#/definitions/QueryExpressionContainer",
+          "description": "Defines the intersection of scopes. For example - product color = red."
+        },
+        "total": {
+          "description": "Matches against the totals and subtotals.",
+          "items": {
+            "$ref": "../../semanticQuery/1.3.0/schema.json#/definitions/QueryExpressionContainer"
+          },
+          "type": "array"
+        },
+        "wildcard": {
+          "description": "Defines a match against all instances of a given DataView scope. Does not match Subtotals.\nDeprecated: - Use roles instead.",
+          "items": {
+            "$ref": "../../semanticQuery/1.3.0/schema.json#/definitions/QueryExpressionContainer"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "DataViewObjectDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "properties": {
+          "$ref": "#/definitions/DataViewObjectPropertyDefinitions"
+        },
+        "selector": {
+          "$ref": "#/definitions/Selector"
+        }
+      },
+      "required": [
+        "properties"
+      ],
+      "type": "object"
+    },
+    "DataViewObjectDefinitions": {
+      "additionalProperties": {
+        "items": {
+          "$ref": "#/definitions/DataViewObjectDefinition"
+        },
+        "type": "array"
+      },
+      "type": "object"
+    },
+    "DataViewObjectPropertyDefinitions": {
+      "additionalProperties": {},
+      "type": "object"
+    },
+    "DataViewWildcard": {
+      "additionalProperties": false,
+      "properties": {
+        "matchingOption": {
+          "$ref": "#/definitions/DataViewWildcardMatchingOption",
+          "description": "Defines the matching option to use."
+        }
+      },
+      "required": [
+        "matchingOption"
+      ],
+      "type": "object"
+    },
+    "DataViewWildcardMatchingOption": {
+      "anyOf": [
+        {
+          "const": 0,
+          "description": "Match Identities and Totals (default)"
+        },
+        {
+          "const": 1,
+          "description": "Match Instances with Identities only"
+        },
+        {
+          "const": 2,
+          "description": "Match Totals only"
+        }
+      ],
+      "type": "number"
+    },
+    "Selector": {
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "description": "Scope is defined by data bound to the visual.",
+          "items": {
+            "$ref": "#/definitions/DataRepetitionSelector"
+          },
+          "type": "array"
+        },
+        "hierarchyMatching": {
+          "anyOf": [
+            {
+              "const": 0,
+              "description": "Only leaf levels are matched."
+            },
+            {
+              "const": 1,
+              "description": "All levels are matched."
+            }
+          ],
+          "default": "`HierarchyMatching.Full` - Only leaf levels are matched.\nUses the values array which exits only for the last level {@link DataViewMatrixNode.values }\n\n2. {@link `HierarchyMatching.Partial`} - Can match any specific level. Which works two different ways:\n\n- Getting the value from the subtotal if we match the whole hierarchy.\n\n- Getting the value from scoped values if match specific level {@link DataViewMatrixNode.nodeValues }.\n\n(Using {@link DataViewScopeWildcard }).",
+          "description": "Describes how the selector matches hierarchy values.\nThis also changes how the query is generated for {@link DataViewScopeWildcard} selectors.\nNow those selectors can produce scopedValues for the level those match.\n\nThere are two ways that we can match values in the hierarchy:\n1.",
+          "type": "number"
+        },
+        "highlightMatching": {
+          "anyOf": [
+            {
+              "const": 0,
+              "description": "Only non-highlighted value will be selected, even if a highlighted value exists."
+            },
+            {
+              "const": 1,
+              "description": "Non-highlighted values are selected. If highlighted values exist, they are selected as well."
+            },
+            {
+              "const": 2,
+              "description": "If a highlighted value exists, it's selected. Otherwise, the non-highlighted value is selected."
+            }
+          ],
+          "default": 0,
+          "description": "Describes how the Selector should behave towards Highlighted Values within the Scope matched by that Selector.",
+          "type": "number"
+        },
+        "id": {
+          "description": "User defined scope.",
+          "type": "string"
+        },
+        "metadata": {
+          "description": "Defines the scope to a specific field.",
+          "type": "string"
+        },
+        "order": {
+          "description": "Specifies a user-defined ordering of identical properties.\nSelector constructors should strive to monitonically increase this number across identical properties differing by id.",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "description": "Defines shared definitions for report object formatting.",
+  "title": "Formatting Object Definitions"
+}

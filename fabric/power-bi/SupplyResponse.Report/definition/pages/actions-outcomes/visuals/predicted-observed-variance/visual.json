@@ -2,11 +2,36 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
   "name": "predicted-observed-variance",
   "position": {"x": 632, "y": 184, "z": 4, "width": 624, "height": 504, "tabOrder": 4},
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "FilterPredictedObservedVarianceRecordType",
+        "field": {"Column": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "record_type"}},
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [{"Name": "a", "Entity": "ActionOutcomes", "Type": 0}],
+          "Where": [{"Condition": {"In": {"Expressions": [{"Column": {"Expression": {"SourceRef": {"Source": "a"}}, "Property": "record_type"}}], "Values": [[{"Literal": {"Value": "'observation'"}}]]}}}]
+        },
+        "howCreated": "User",
+        "isHiddenInViewMode": true,
+        "isLockedInViewMode": true
+      }
+    ]
+  },
   "visual": {
     "visualType": "clusteredColumnChart",
     "query": {
       "queryState": {
         "Category": {
+          "projections": [
+            {
+              "field": {"Column": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "metric"}},
+              "queryRef": "ActionOutcomes.metric"
+            }
+          ]
+        },
+        "Series": {
           "projections": [
             {
               "field": {"Column": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "observation_kind"}},

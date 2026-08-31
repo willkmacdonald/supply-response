@@ -1,0 +1,935 @@
+{
+  "$id": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualConfiguration/2.3.0/schema.embedded.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "AIDecompositionMethod": {
+      "enum": [
+        "BestSplit",
+        "MaxSplit",
+        "MinSplit"
+      ],
+      "type": "string"
+    },
+    "AILevelInformation": {
+      "additionalProperties": false,
+      "properties": {
+        "disabled": {
+          "description": "Is the level disabled.",
+          "type": "boolean"
+        },
+        "method": {
+          "$ref": "#/definitions/AIDecompositionMethod",
+          "description": "Type of expansion."
+        }
+      },
+      "required": [
+        "method"
+      ],
+      "type": "object"
+    },
+    "Background": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {},
+        "show": {},
+        "transparency": {}
+      },
+      "type": "object"
+    },
+    "Border": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {},
+        "radius": {},
+        "show": {},
+        "width": {}
+      },
+      "type": "object"
+    },
+    "Divider": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {},
+        "ignorePadding": {},
+        "show": {},
+        "style": {},
+        "width": {}
+      },
+      "type": "object"
+    },
+    "DropShadow": {
+      "additionalProperties": false,
+      "properties": {
+        "angle": {},
+        "color": {},
+        "position": {},
+        "preset": {},
+        "shadowBlur": {},
+        "shadowDistance": {},
+        "shadowSpread": {},
+        "show": {},
+        "transparency": {}
+      },
+      "type": "object"
+    },
+    "ExpansionState": {
+      "additionalProperties": false,
+      "properties": {
+        "levels": {
+          "description": "Describes the fields participating in the expansion",
+          "items": {
+            "$ref": "#/definitions/LevelExpansionState"
+          },
+          "type": "array"
+        },
+        "roles": {
+          "description": "Visual roles (projection names) that have individual points expanded.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "root": {
+          "$ref": "#/definitions/RootExpansionState",
+          "description": "Defines the specific values that are expanded for each field in the hierarchy"
+        }
+      },
+      "required": [
+        "roles"
+      ],
+      "type": "object"
+    },
+    "LevelExpansionState": {
+      "additionalProperties": false,
+      "properties": {
+        "AIInformation": {
+          "$ref": "#/definitions/AILevelInformation",
+          "description": "More information about how the expansion is done (used for decomposition tree)"
+        },
+        "identityKeys": {
+          "description": "Describes the fields in the visual.",
+          "items": {
+            "$ref": "../../semanticQuery/1.4.0/schema.json#/definitions/QueryExpressionContainer"
+          },
+          "type": "array"
+        },
+        "isCollapsed": {
+          "description": "True if the entire field isn't expanded (i.e. false if only specific instances are expanded).",
+          "type": "boolean"
+        },
+        "isLocked": {
+          "description": "Is the field locked (used for decomposition tree)",
+          "type": "boolean"
+        },
+        "isPinned": {
+          "description": "Is the field pinned.",
+          "type": "boolean"
+        },
+        "queryRefs": {
+          "description": "Which fields in the query does this relate to - must match a queryRef in the query.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "queryRefs"
+      ],
+      "type": "object"
+    },
+    "LockAspect": {
+      "additionalProperties": false,
+      "properties": {
+        "show": {}
+      },
+      "type": "object"
+    },
+    "NodeExpansionState": {
+      "additionalProperties": false,
+      "properties": {
+        "children": {
+          "description": "Child values in the hierarchy that are expanded",
+          "items": {
+            "$ref": "#/definitions/NodeExpansionState"
+          },
+          "type": "array"
+        },
+        "identityValues": {
+          "description": "Describes the instances that are expanded.\nMust by Literal expressions.",
+          "items": {
+            "$ref": "../../semanticQuery/1.4.0/schema.json#/definitions/QueryExpressionContainer"
+          },
+          "type": "array"
+        },
+        "isToggled": {
+          "default": false,
+          "description": "True if the value is expanded.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "identityValues"
+      ],
+      "type": "object"
+    },
+    "Padding": {
+      "additionalProperties": false,
+      "properties": {
+        "bottom": {},
+        "left": {},
+        "right": {},
+        "top": {}
+      },
+      "type": "object"
+    },
+    "ProjectionState": {
+      "additionalProperties": false,
+      "properties": {
+        "fieldParameters": {
+          "description": "Defines any field parameters used as projections.",
+          "items": {
+            "$ref": "#/definitions/RoleFieldParameter"
+          },
+          "type": "array"
+        },
+        "projections": {
+          "description": "Defines the fields and their properties for this visual role.",
+          "items": {
+            "$ref": "#/definitions/RoleProjection"
+          },
+          "type": "array"
+        },
+        "showAll": {
+          "description": "Show all values for all fields in this projection.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "projections"
+      ],
+      "type": "object"
+    },
+    "Query": {
+      "additionalProperties": false,
+      "properties": {
+        "isDrillDisabled": {
+          "description": "Should drill be allowed in the visual - only used by specific custom visuals.",
+          "type": "boolean"
+        },
+        "options": {
+          "$ref": "#/definitions/VisualQueryOptions",
+          "description": "Specific options to apply when running the query. Applies to certain visuals only."
+        },
+        "queryState": {
+          "additionalProperties": {
+            "$ref": "#/definitions/ProjectionState"
+          },
+          "description": "Describes how the data should be arranged and used in the visual.",
+          "type": "object"
+        },
+        "sortDefinition": {
+          "$ref": "#/definitions/SortDefinition",
+          "description": "Defines how the data should be sorted in a visual"
+        }
+      },
+      "required": [
+        "queryState"
+      ],
+      "type": "object"
+    },
+    "QuerySort": {
+      "additionalProperties": false,
+      "properties": {
+        "direction": {
+          "$ref": "#/definitions/SortDirection",
+          "description": "Direction of sort - ascending or descending."
+        },
+        "field": {
+          "$ref": "../../semanticQuery/1.4.0/schema.json#/definitions/QueryExpressionContainer",
+          "description": "Field to sort by"
+        }
+      },
+      "required": [
+        "direction",
+        "field"
+      ],
+      "type": "object"
+    },
+    "RoleFieldParameter": {
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "description": "Index at which parameter fields begin in the projections list.\nThis represents the position in the field well where the field parameter is located.\nA field well can contain either projections or field parameters.\nWhen this index is changed, it affects where the field parameter's projected fields will be inserted\nin the projections list.",
+          "type": "number"
+        },
+        "length": {
+          "description": "Number of projections that will be populated starting from the field parameter's index position.\nThis indicates how many fields the parameter will project into when evaluated.\n\nThis value will be re-computed when the parameter is evaluated, which is when the visual is rendered.",
+          "minLength": 0,
+          "type": "number"
+        },
+        "parameterExpr": {
+          "$ref": "../../semanticQuery/1.4.0/schema.json#/definitions/QueryExpressionContainer",
+          "description": "Defines the parameter field.\nThis contains the DAX expression (in semantic model) that defines what fields will be projected in the field well from the parameter."
+        },
+        "sortDirection": {
+          "anyOf": [
+            {
+              "const": "Ascending",
+              "description": "Sort smallest to biggest."
+            },
+            {
+              "const": "Descending",
+              "description": "Sort biggest to smallest."
+            }
+          ],
+          "description": "If the sort direction is set, the visual is sorted by this field parameter.\nThe implication of a visual being sorted by a field parameter is as follows:\n- If none of the newly projected fields exist in the sort list, apply the parameter sort direction to the first projected field and add it to the end of the sort list.\n- If all the projected fields in the sort list have the opposite sort direction as the parameter's sort direction, flip the parameter's sort direction.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "parameterExpr"
+      ],
+      "type": "object"
+    },
+    "RoleProjection": {
+      "additionalProperties": false,
+      "properties": {
+        "active": {
+          "description": "Is the field currently active in the visual - used as part of drill operations.",
+          "type": "boolean"
+        },
+        "displayName": {
+          "description": "An override for display name - by default it is the field name in the semantic model.",
+          "type": "string"
+        },
+        "field": {
+          "$ref": "../../semanticQuery/1.4.0/schema.json#/definitions/QueryExpressionContainer",
+          "description": "The data field from the semantic model."
+        },
+        "format": {
+          "description": "format string scoped to the visual.",
+          "maxLength": 255,
+          "type": "string"
+        },
+        "hidden": {
+          "description": "Is the field visible in the visual - used as part of visual calculations.",
+          "type": "boolean"
+        },
+        "nativeQueryRef": {
+          "description": "Native reference name for this field - unique per visual, used for referencing fields in visual calculations.",
+          "type": "string"
+        },
+        "queryRef": {
+          "description": "A unique name for this field - unique per visual.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "queryRef"
+      ],
+      "type": "object"
+    },
+    "RootExpansionState": {
+      "additionalProperties": false,
+      "properties": {
+        "children": {
+          "description": "Child values in the hierarchy that are expanded",
+          "items": {
+            "$ref": "#/definitions/NodeExpansionState"
+          },
+          "type": "array"
+        },
+        "identityValues": {
+          "description": "Describes the instances that are expanded.\nOptional for the root expansion state.\nMust by Literal expressions.",
+          "items": {
+            "$ref": "../../semanticQuery/1.4.0/schema.json#/definitions/QueryExpressionContainer"
+          },
+          "type": "array"
+        },
+        "isToggled": {
+          "default": false,
+          "description": "True if the value is expanded.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "SortDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "isDefaultSort": {
+          "description": "If the sort if explicitly set by user, then this will be false, Power BI can update the sort to match\nthe visual in this case.",
+          "type": "boolean"
+        },
+        "sort": {
+          "description": "Defines the fields the data is sorted by.",
+          "items": {
+            "$ref": "#/definitions/QuerySort"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "SortDirection": {
+      "anyOf": [
+        {
+          "const": "Ascending",
+          "description": "Sort smallest to biggest."
+        },
+        {
+          "const": "Descending",
+          "description": "Sort biggest to smallest."
+        }
+      ],
+      "type": "string"
+    },
+    "Spacing": {
+      "additionalProperties": false,
+      "properties": {
+        "customizeSpacing": {},
+        "spaceBelowSubTitle": {},
+        "spaceBelowTitle": {},
+        "spaceBelowTitleArea": {},
+        "verticalSpacing": {}
+      },
+      "type": "object"
+    },
+    "StylePreset": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {}
+      },
+      "type": "object"
+    },
+    "SubTitle": {
+      "additionalProperties": false,
+      "properties": {
+        "alignment": {},
+        "bold": {},
+        "fontColor": {},
+        "fontFamily": {},
+        "fontSize": {},
+        "heading": {},
+        "italic": {},
+        "show": {},
+        "text": {},
+        "titleWrap": {},
+        "underline": {}
+      },
+      "type": "object"
+    },
+    "Title": {
+      "additionalProperties": false,
+      "properties": {
+        "alignment": {},
+        "background": {},
+        "bold": {},
+        "fontColor": {},
+        "fontFamily": {},
+        "fontSize": {},
+        "heading": {},
+        "italic": {},
+        "show": {},
+        "text": {},
+        "titleWrap": {},
+        "underline": {}
+      },
+      "type": "object"
+    },
+    "VisualContainerFormattingObjects": {
+      "additionalProperties": false,
+      "properties": {
+        "background": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "properties": {
+                "$ref": "#/definitions/Background",
+                "description": "Describes the properties of the object to apply formatting changes to."
+              },
+              "selector": {
+                "$ref": "../../formattingObjectDefinitions/1.5.0/schema.json#/definitions/Selector",
+                "description": "Defines the scope at which to apply the formatting for this object.\nCan also define rules for matching highlighted values and how multiple definitions for the same property should be ordered."
+              }
+            },
+            "required": [
+              "properties"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "border": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "properties": {
+                "$ref": "#/definitions/Border",
+                "description": "Describes the properties of the object to apply formatting changes to."
+              },
+              "selector": {
+                "$ref": "../../formattingObjectDefinitions/1.5.0/schema.json#/definitions/Selector",
+                "description": "Defines the scope at which to apply the formatting for this object.\nCan also define rules for matching highlighted values and how multiple definitions for the same property should be ordered."
+              }
+            },
+            "required": [
+              "properties"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "divider": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "properties": {
+                "$ref": "#/definitions/Divider",
+                "description": "Describes the properties of the object to apply formatting changes to."
+              },
+              "selector": {
+                "$ref": "../../formattingObjectDefinitions/1.5.0/schema.json#/definitions/Selector",
+                "description": "Defines the scope at which to apply the formatting for this object.\nCan also define rules for matching highlighted values and how multiple definitions for the same property should be ordered."
+              }
+            },
+            "required": [
+              "properties"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "dropShadow": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "properties": {
+                "$ref": "#/definitions/DropShadow",
+                "description": "Describes the properties of the object to apply formatting changes to."
+              },
+              "selector": {
+                "$ref": "../../formattingObjectDefinitions/1.5.0/schema.json#/definitions/Selector",
+                "description": "Defines the scope at which to apply the formatting for this object.\nCan also define rules for matching highlighted values and how multiple definitions for the same property should be ordered."
+              }
+            },
+            "required": [
+              "properties"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "general": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "properties": {
+                "$ref": "#/definitions/VisualContainerGeneralFormattingObjects",
+                "description": "Describes the properties of the object to apply formatting changes to."
+              },
+              "selector": {
+                "$ref": "../../formattingObjectDefinitions/1.5.0/schema.json#/definitions/Selector",
+                "description": "Defines the scope at which to apply the formatting for this object.\nCan also define rules for matching highlighted values and how multiple definitions for the same property should be ordered."
+              }
+            },
+            "required": [
+              "properties"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "lockAspect": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "properties": {
+                "$ref": "#/definitions/LockAspect",
+                "description": "Describes the properties of the object to apply formatting changes to."
+              },
+              "selector": {
+                "$ref": "../../formattingObjectDefinitions/1.5.0/schema.json#/definitions/Selector",
+                "description": "Defines the scope at which to apply the formatting for this object.\nCan also define rules for matching highlighted values and how multiple definitions for the same property should be ordered."
+              }
+            },
+            "required": [
+              "properties"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "padding": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "properties": {
+                "$ref": "#/definitions/Padding",
+                "description": "Describes the properties of the object to apply formatting changes to."
+              },
+              "selector": {
+                "$ref": "../../formattingObjectDefinitions/1.5.0/schema.json#/definitions/Selector",
+                "description": "Defines the scope at which to apply the formatting for this object.\nCan also define rules for matching highlighted values and how multiple definitions for the same property should be ordered."
+              }
+            },
+            "required": [
+              "properties"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "spacing": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "properties": {
+                "$ref": "#/definitions/Spacing",
+                "description": "Describes the properties of the object to apply formatting changes to."
+              },
+              "selector": {
+                "$ref": "../../formattingObjectDefinitions/1.5.0/schema.json#/definitions/Selector",
+                "description": "Defines the scope at which to apply the formatting for this object.\nCan also define rules for matching highlighted values and how multiple definitions for the same property should be ordered."
+              }
+            },
+            "required": [
+              "properties"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "stylePreset": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "properties": {
+                "$ref": "#/definitions/StylePreset",
+                "description": "Describes the properties of the object to apply formatting changes to."
+              },
+              "selector": {
+                "$ref": "../../formattingObjectDefinitions/1.5.0/schema.json#/definitions/Selector",
+                "description": "Defines the scope at which to apply the formatting for this object.\nCan also define rules for matching highlighted values and how multiple definitions for the same property should be ordered."
+              }
+            },
+            "required": [
+              "properties"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "subTitle": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "properties": {
+                "$ref": "#/definitions/SubTitle",
+                "description": "Describes the properties of the object to apply formatting changes to."
+              },
+              "selector": {
+                "$ref": "../../formattingObjectDefinitions/1.5.0/schema.json#/definitions/Selector",
+                "description": "Defines the scope at which to apply the formatting for this object.\nCan also define rules for matching highlighted values and how multiple definitions for the same property should be ordered."
+              }
+            },
+            "required": [
+              "properties"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "title": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "properties": {
+                "$ref": "#/definitions/Title",
+                "description": "Describes the properties of the object to apply formatting changes to."
+              },
+              "selector": {
+                "$ref": "../../formattingObjectDefinitions/1.5.0/schema.json#/definitions/Selector",
+                "description": "Defines the scope at which to apply the formatting for this object.\nCan also define rules for matching highlighted values and how multiple definitions for the same property should be ordered."
+              }
+            },
+            "required": [
+              "properties"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "visualHeader": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "properties": {
+                "$ref": "#/definitions/VisualHeader",
+                "description": "Describes the properties of the object to apply formatting changes to."
+              },
+              "selector": {
+                "$ref": "../../formattingObjectDefinitions/1.5.0/schema.json#/definitions/Selector",
+                "description": "Defines the scope at which to apply the formatting for this object.\nCan also define rules for matching highlighted values and how multiple definitions for the same property should be ordered."
+              }
+            },
+            "required": [
+              "properties"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "visualHeaderTooltip": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "properties": {
+                "$ref": "#/definitions/VisualHeaderTooltip",
+                "description": "Describes the properties of the object to apply formatting changes to."
+              },
+              "selector": {
+                "$ref": "../../formattingObjectDefinitions/1.5.0/schema.json#/definitions/Selector",
+                "description": "Defines the scope at which to apply the formatting for this object.\nCan also define rules for matching highlighted values and how multiple definitions for the same property should be ordered."
+              }
+            },
+            "required": [
+              "properties"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "visualLink": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "properties": {
+                "$ref": "#/definitions/VisualLink",
+                "description": "Describes the properties of the object to apply formatting changes to."
+              },
+              "selector": {
+                "$ref": "../../formattingObjectDefinitions/1.5.0/schema.json#/definitions/Selector",
+                "description": "Defines the scope at which to apply the formatting for this object.\nCan also define rules for matching highlighted values and how multiple definitions for the same property should be ordered."
+              }
+            },
+            "required": [
+              "properties"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "visualTooltip": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "properties": {
+                "$ref": "#/definitions/VisualTooltip",
+                "description": "Describes the properties of the object to apply formatting changes to."
+              },
+              "selector": {
+                "$ref": "../../formattingObjectDefinitions/1.5.0/schema.json#/definitions/Selector",
+                "description": "Defines the scope at which to apply the formatting for this object.\nCan also define rules for matching highlighted values and how multiple definitions for the same property should be ordered."
+              }
+            },
+            "required": [
+              "properties"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "VisualContainerGeneralFormattingObjects": {
+      "additionalProperties": false,
+      "properties": {
+        "allowBinnedLineSample": {},
+        "allowOverlappingPointsSample": {},
+        "altText": {},
+        "height": {},
+        "keepLayerOrder": {},
+        "width": {},
+        "x": {},
+        "y": {}
+      },
+      "type": "object"
+    },
+    "VisualHeader": {
+      "additionalProperties": false,
+      "properties": {
+        "background": {},
+        "border": {},
+        "foreground": {},
+        "show": {},
+        "showCommentButton": {},
+        "showCopyVisualImageButton": {},
+        "showDrillDownExpandButton": {},
+        "showDrillDownLevelButton": {},
+        "showDrillRoleSelector": {},
+        "showDrillToggleButton": {},
+        "showDrillUpButton": {},
+        "showFilterRestatementButton": {},
+        "showFocusModeButton": {},
+        "showFollowVisualButton": {},
+        "showOptionsMenu": {},
+        "showPersonalizeVisualButton": {},
+        "showPinButton": {},
+        "showSeeDataLayoutToggleButton": {},
+        "showSetAlertButton": {},
+        "showSmartNarrativeButton": {},
+        "showTooltipButton": {},
+        "showVisualErrorButton": {},
+        "showVisualInformationButton": {},
+        "showVisualWarningButton": {},
+        "transparency": {}
+      },
+      "type": "object"
+    },
+    "VisualHeaderTooltip": {
+      "additionalProperties": false,
+      "properties": {
+        "background": {},
+        "bold": {},
+        "fontFamily": {},
+        "fontSize": {},
+        "italic": {},
+        "section": {},
+        "text": {},
+        "themedBackground": {},
+        "themedTitleFontColor": {},
+        "titleFontColor": {},
+        "transparency": {},
+        "type": {},
+        "underline": {}
+      },
+      "type": "object"
+    },
+    "VisualLink": {
+      "additionalProperties": false,
+      "properties": {
+        "bookmark": {},
+        "dataFunction": {},
+        "disabledTooltip": {},
+        "drillthroughSection": {},
+        "enabledTooltip": {},
+        "navigationSection": {},
+        "qna": {},
+        "show": {},
+        "showDefaultTooltip": {},
+        "suppressDefaultTooltip": {},
+        "tooltip": {},
+        "tooltipPlaceholderText": {},
+        "type": {},
+        "webUrl": {}
+      },
+      "type": "object"
+    },
+    "VisualQueryOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "allowBinnedLineSample": {
+          "description": "A better sampling for line charts.",
+          "type": "boolean"
+        },
+        "allowOverlappingPointsSample": {
+          "description": "A better sampling for scatter charts.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "VisualSyncGroup": {
+      "additionalProperties": false,
+      "properties": {
+        "fieldChanges": {
+          "description": "Should synced visuals update when fields change.",
+          "type": "boolean"
+        },
+        "filterChanges": {
+          "description": "Should synced visuals update when filters change.",
+          "type": "boolean"
+        },
+        "groupName": {
+          "description": "Unique name for the sync group.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "groupName"
+      ],
+      "type": "object"
+    },
+    "VisualTooltip": {
+      "additionalProperties": false,
+      "properties": {
+        "actionFontColor": {},
+        "background": {},
+        "bold": {},
+        "fontFamily": {},
+        "fontSize": {},
+        "italic": {},
+        "section": {},
+        "show": {},
+        "themedBackground": {},
+        "themedTitleFontColor": {},
+        "themedValueFontColor": {},
+        "titleFontColor": {},
+        "transparency": {},
+        "type": {},
+        "underline": {},
+        "valueFontColor": {}
+      },
+      "type": "object"
+    }
+  },
+  "description": "Defines the configuration of visuals.",
+  "properties": {
+    "autoSelectVisualType": {
+      "description": "VisualType is automatically picked by the system based on the data used in the visual.",
+      "type": "boolean"
+    },
+    "drillFilterOtherVisuals": {
+      "description": "When another visual is drilled, if visual interactions are enabled between the two visuals,\nthen this property specifies if that drill should be applied as a filter to this visual.\nOverrides the default setting of the report.",
+      "type": "boolean"
+    },
+    "expansionStates": {
+      "description": "Defines the specific data points that are expanded.",
+      "items": {
+        "$ref": "#/definitions/ExpansionState"
+      },
+      "type": "array"
+    },
+    "objects": {
+      "$ref": "../../formattingObjectDefinitions/1.5.0/schema.json#/definitions/DataViewObjectDefinitions",
+      "description": "Specifies the formatting to be set for different \"objects\" of the visual."
+    },
+    "query": {
+      "$ref": "#/definitions/Query",
+      "description": "Defines the data to be plotted in the visual."
+    },
+    "syncGroup": {
+      "$ref": "#/definitions/VisualSyncGroup",
+      "description": "Defines the sync group that this visual is part of.\nOnly applies to slicer visuals."
+    },
+    "visualContainerObjects": {
+      "$ref": "#/definitions/VisualContainerFormattingObjects",
+      "description": "Specifies the formatting to be set for different \"objects\" of the container."
+    },
+    "visualType": {
+      "description": "Name of the visual.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "visualType"
+  ],
+  "title": "Visual configuration",
+  "type": "object"
+}

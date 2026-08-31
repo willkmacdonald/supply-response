@@ -2,6 +2,23 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
   "name": "action-status",
   "position": {"x": 24, "y": 184, "z": 3, "width": 584, "height": 504, "tabOrder": 3},
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "FilterActionStatusRecordType",
+        "field": {"Column": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "record_type"}},
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [{"Name": "a", "Entity": "ActionOutcomes", "Type": 0}],
+          "Where": [{"Condition": {"In": {"Expressions": [{"Column": {"Expression": {"SourceRef": {"Source": "a"}}, "Property": "record_type"}}], "Values": [[{"Literal": {"Value": "'action'"}}]]}}}]
+        },
+        "howCreated": "User",
+        "isHiddenInViewMode": true,
+        "isLockedInViewMode": true
+      }
+    ]
+  },
   "visual": {
     "visualType": "tableEx",
     "query": {

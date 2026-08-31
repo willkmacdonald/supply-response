@@ -1,0 +1,56 @@
+{
+  "$id": "https://developer.microsoft.com/json-schemas/fabric/item/semanticModel/definitionProperties/1.0.0/schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "DatasetSettings": {
+      "additionalProperties": false,
+      "description": "Settings for this semantic model that do not impact the behavior of the data model itself. Instead, these settings control the behavior of other Power BI features associated with the semantic model.",
+      "properties": {
+        "qnaEnabled": {
+          "description": "Whether Q&A is enabled for this semantic model.",
+          "title": "QnaEnabled",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "qnaLsdlSharingPermissions": {
+          "description": "Describes how the linguistic schema (LSDL) can be shared with other users within the same tenant. Allowed values are 0 (LSDL can be shared with users with read permission) and 1 (LSDL can be shared with all users).",
+          "enum": [
+            0,
+            1
+          ],
+          "title": "QnaLsdlSharingPermissions",
+          "type": "integer"
+        }
+      },
+      "title": "Settings",
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "description": "The DatasetDefinition stored as definition.pbism holds information about the overall semantic model definition. This file is required.",
+  "properties": {
+    "$schema": {
+      "pattern": "^https://developer.microsoft.com/json-schemas/fabric/item/semanticModel/definitionProperties/1.[0-9]+.[0-9]+/schema.json$",
+      "type": "string"
+    },
+    "settings": {
+      "$ref": "#/definitions/DatasetSettings"
+    },
+    "version": {
+      "description": "Version of the semantic model item file format. This also serves as the version number for the .pbism file format.",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "$schema",
+    "version"
+  ],
+  "title": "DatasetDefinition",
+  "type": "object"
+}

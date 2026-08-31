@@ -1,0 +1,81 @@
+{
+  "$id": "https://developer.microsoft.com/json-schemas/fabric/pbip/pbipProperties/1.0.0/schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "ArtifactShortcutContainer": {
+      "additionalProperties": false,
+      "properties": {
+        "report": {
+          "$ref": "#/definitions/ArtifactShortcutReportReference"
+        }
+      },
+      "required": [
+        "report"
+      ],
+      "type": "object"
+    },
+    "ArtifactShortcutReportReference": {
+      "additionalProperties": false,
+      "description": "Describes a reference to a report item.",
+      "properties": {
+        "path": {
+          "description": "The path to the report item. This must be a relative path and \u2018/\u2019 must be used as the directory separator.",
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "Report",
+      "type": "object"
+    },
+    "ArtifactShortcutSettings": {
+      "additionalProperties": false,
+      "description": "Holds settings applied when opening this item shortcut.",
+      "properties": {
+        "enableAutoRecovery": {
+          "description": "Whether Power BI Desktop should periodically save a copy of the open report and semantic model to guard against the program closing unexpectedly.",
+          "title": "EnableAutoRecovery",
+          "type": "boolean"
+        }
+      },
+      "title": "Settings",
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "description": "The ItemShortcut is a file that ends in a .pbip extension. It is the default shortcut for opening up pbip based items and holds a link to the report path as well as other settings. This file is optional.",
+  "properties": {
+    "$schema": {
+      "pattern": "^https://developer.microsoft.com/json-schemas/fabric/pbip/pbipProperties/1.[0-9]+.[0-9]+/schema.json$",
+      "type": "string"
+    },
+    "artifacts": {
+      "description": "The items referenced by this shortcut file.",
+      "items": {
+        "$ref": "#/definitions/ArtifactShortcutContainer"
+      },
+      "title": "Artifacts",
+      "type": "array"
+    },
+    "settings": {
+      "$ref": "#/definitions/ArtifactShortcutSettings"
+    },
+    "version": {
+      "description": "The version of the item shortcut contents. Semantically, it is a version of the 'project'.",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "$schema",
+    "version",
+    "artifacts"
+  ],
+  "title": "ItemShortcut",
+  "type": "object"
+}

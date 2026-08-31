@@ -1,0 +1,56 @@
+{
+  "$id": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Configuration file used by fabric Git integration on items in Git repositories",
+  "properties": {
+    "$schema": {
+      "description": "Link to json schema in json repository",
+      "type": "string"
+    },
+    "config": {
+      "properties": {
+        "logicalId": {
+          "description": "Logical ID of the item",
+          "type": "string"
+        },
+        "version": {
+          "description": "The version of the metadata",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "logicalId"
+      ],
+      "type": "object"
+    },
+    "metadata": {
+      "properties": {
+        "description": {
+          "description": "Verbal description of the item, as written by the author",
+          "type": "string"
+        },
+        "displayName": {
+          "description": "How the item is listed in the UI",
+          "type": "string"
+        },
+        "type": {
+          "description": "The type of the item",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "displayName"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "$schema",
+    "metadata",
+    "config"
+  ],
+  "title": "Fabric item Git integration configuration",
+  "type": "object"
+}

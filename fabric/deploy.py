@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
 import json
 import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from typing import Any, NoReturn
@@ -14,6 +16,14 @@ from uuid import UUID
 
 
 POWER_BI = Path(__file__).resolve().parent / "power-bi"
+SCHEMA_CATALOG = Path(__file__).resolve().parent / "schemas" / "microsoft"
+TMDL_VALIDATOR = (
+    Path(__file__).resolve().parents[1]
+    / "tests"
+    / "fabric"
+    / "tmdl-validator"
+    / "TmdlValidator.csproj"
+)
 REQUIRED_ENVIRONMENT = (
     "SUPPLY_RESPONSE_ALLOWED_TENANT_ID",
     "SUPPLY_RESPONSE_FABRIC_WORKSPACE_ID",
@@ -21,6 +31,20 @@ REQUIRED_ENVIRONMENT = (
     "FABRIC_SQL_DATABASE",
 )
 EXPECTED_PAGE_ORDER = ("command-center", "actions-outcomes")
+EXPECTED_PUBLISH_ITEMS = (
+    ("SemanticModel", "SupplyResponse"),
+    ("Report", "SupplyResponse"),
+)
+EXPECTED_PLATFORM = {
+    "SupplyResponse.SemanticModel": {
+        "type": "SemanticModel",
+        "logicalId": "1808b468-5fe3-542e-9004-ae82d8cbd452",
+    },
+    "SupplyResponse.Report": {
+        "type": "Report",
+        "logicalId": "8ff233ca-a127-5ff7-a559-cfbbb6fc8046",
+    },
+}
 EXPECTED_QUERY_REFS = {
     "command-center": {
         "CaseCommandCenter.case_id",
@@ -36,6 +60,7 @@ EXPECTED_QUERY_REFS = {
         "ActionOutcomes.decision_id",
         "ActionOutcomes.action_kind",
         "ActionOutcomes.action_status",
+        "ActionOutcomes.metric",
         "ActionOutcomes.observation_kind",
         "ActionOutcomes.Observed Variance",
         "ActionOutcomes.Projection Refresh Time",
@@ -100,17 +125,214 @@ def _query_refs(value: object) -> list[str]:
     return []
 
 
+def _validate_offline_json_schemas(repository: Path) -> None:
+    try:
+        from jsonschema import Draft7Validator
+        from referencing import Registry, Resource
+        from referencing.jsonschema import DRAFT7
+    except ImportError as error:
+        raise PreflightError(
+            "offline schema validation requires the fabric-deploy dependency group"
+        ) from error
+
+    manifest_path = SCHEMA_CATALOG / "manifest.json"
+    manifest = _load_json(manifest_path)
+    entries = manifest.get("schemas")
+    if not isinstance(entries, dict) or not entries:
+        raise PreflightError("Microsoft schema manifest is empty or invalid")
+
+    registry = Registry()
+    schemas: dict[str, dict[str, Any]] = {}
+    expected_files: set[str] = set()
+    for url, entry in entries.items():
+        if not isinstance(url, str) or not isinstance(entry, dict):
+            raise PreflightError("Microsoft schema manifest entry is invalid")
+        filename = entry.get("file")
+        expected_digest = entry.get("sha256")
+        if not isinstance(filename, str) or not isinstance(expected_digest, str):
+            raise PreflightError(
+                f"Microsoft schema manifest metadata is invalid: {url}"
+            )
+        if Path(filename).name != filename:
+            raise PreflightError(f"Microsoft schema manifest path is invalid: {url}")
+        expected_files.add(filename)
+        schema_path = SCHEMA_CATALOG / filename
+        try:
+            content = schema_path.read_bytes()
+        except OSError as error:
+            raise PreflightError(
+                f"vendored Microsoft schema is missing: {url}"
+            ) from error
+        if hashlib.sha256(content).hexdigest() != expected_digest:
+            raise PreflightError(f"vendored Microsoft schema integrity failed: {url}")
+        schema = _load_json(schema_path)
+        schemas[url] = schema
+        resource = Resource.from_contents(schema, default_specification=DRAFT7)
+        registry = registry.with_resource(url, resource)
+        schema_id = schema.get("$id")
+        if isinstance(schema_id, str):
+            registry = registry.with_resource(schema_id, resource)
+
+    actual_files = {
+        path.name
+        for path in SCHEMA_CATALOG.glob("*.json")
+        if path.name != "manifest.json"
+    }
+    if actual_files != expected_files:
+        raise PreflightError(
+            "vendored Microsoft schema catalog does not match manifest"
+        )
+
+    json_files = sorted(
+        path
+        for path in repository.rglob("*")
+        if path.is_file()
+        and (
+            path.name == ".platform"
+            or path.suffix in {".json", ".pbip", ".pbir", ".pbism"}
+        )
+    )
+    if not json_files:
+        raise PreflightError("Power BI package contains no JSON artifacts")
+    for path in json_files:
+        instance = _load_json(path)
+        schema_url = instance.get("$schema")
+        if not isinstance(schema_url, str) or schema_url not in schemas:
+            raise PreflightError(
+                f"artifact does not declare a pinned Microsoft schema: {path}"
+            )
+        errors = sorted(
+            Draft7Validator(schemas[schema_url], registry=registry).iter_errors(
+                instance
+            ),
+            key=lambda error: tuple(str(part) for part in error.absolute_path),
+        )
+        if errors:
+            location = "/".join(str(part) for part in errors[0].absolute_path)
+            raise PreflightError(
+                f"Microsoft schema validation failed for {path} at {location or '<root>'}: "
+                f"{errors[0].message}"
+            )
+
+
+def _validate_item_references(repository: Path) -> None:
+    pbip = _load_json(repository / "SupplyResponse.pbip")
+    artifacts = pbip.get("artifacts")
+    if not isinstance(artifacts, list) or len(artifacts) != 1:
+        raise PreflightError("PBIP must reference exactly one report")
+    report = artifacts[0].get("report") if isinstance(artifacts[0], dict) else None
+    report_path = report.get("path") if isinstance(report, dict) else None
+    if (
+        report_path != "SupplyResponse.Report"
+        or not (repository / report_path).is_dir()
+    ):
+        raise PreflightError("PBIP report path reference is broken")
+
+    pbir_path = repository / report_path / "definition.pbir"
+    pbir = _load_json(pbir_path)
+    dataset_reference = pbir.get("datasetReference")
+    by_path = (
+        dataset_reference.get("byPath") if isinstance(dataset_reference, dict) else None
+    )
+    semantic_path = by_path.get("path") if isinstance(by_path, dict) else None
+    expected_semantic = "../SupplyResponse.SemanticModel"
+    if semantic_path != expected_semantic:
+        raise PreflightError("PBIR datasetReference path is broken")
+    resolved_semantic = (pbir_path.parent / semantic_path).resolve()
+    if resolved_semantic != (repository / "SupplyResponse.SemanticModel").resolve():
+        raise PreflightError(
+            "PBIR datasetReference does not resolve to the semantic model"
+        )
+
+    for directory, expected in EXPECTED_PLATFORM.items():
+        platform = _load_json(repository / directory / ".platform")
+        metadata = platform.get("metadata")
+        config = platform.get("config")
+        if (
+            not isinstance(metadata, dict)
+            or metadata.get("type") != expected["type"]
+            or metadata.get("displayName") != "SupplyResponse"
+            or not isinstance(config, dict)
+            or config.get("version") != "2.0"
+            or config.get("logicalId") != expected["logicalId"]
+        ):
+            raise PreflightError(f"invalid stable .platform metadata: {directory}")
+
+
+def _discover_publish_items(repository: Path) -> tuple[tuple[str, str], ...]:
+    try:
+        workspace_module = importlib.import_module("fabric_cicd.fabric_workspace")
+        publisher_module = importlib.import_module("fabric_cicd._items._base_publisher")
+        workspace = object.__new__(workspace_module.FabricWorkspace)
+        workspace.repository_directory = repository.resolve()
+        workspace.item_type_in_scope = ["SemanticModel", "Report"]
+        workspace.repository_items = {}
+        workspace.repository_folders = {}
+        workspace.deployed_items = {}
+        workspace.bulk_publish_enabled = False
+        workspace._refresh_repository_items()
+        discovered: list[tuple[str, str]] = []
+        for _, item_type in publisher_module.ItemPublisher.get_item_types_to_publish(
+            workspace
+        ):
+            discovered.extend(
+                (item_type.value, name)
+                for name in sorted(workspace.repository_items[item_type.value])
+            )
+        return tuple(discovered)
+    except Exception as error:
+        raise PreflightError(
+            f"fabric-cicd repository discovery failed: {error}"
+        ) from error
+
+
+def _validate_tmdl(semantic_definition: Path) -> None:
+    if shutil.which("dotnet") is None:
+        raise PreflightError("dotnet is required for offline TOM/TMDL validation")
+    with tempfile.TemporaryDirectory(
+        prefix="supply-response-dotnet-preflight-"
+    ) as dotnet_home:
+        environment = os.environ.copy()
+        environment["DOTNET_CLI_HOME"] = dotnet_home
+        environment["DOTNET_NOLOGO"] = "1"
+        environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1"
+        result = subprocess.run(
+            [
+                "dotnet",
+                "run",
+                "--no-restore",
+                "--project",
+                str(TMDL_VALIDATOR),
+                "--",
+                str(semantic_definition),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=environment,
+        )
+    if result.returncode != 0:
+        detail = (result.stdout + result.stderr).strip()
+        raise PreflightError(
+            "TOM/TMDL validation failed; run dotnet restore for the validator first: "
+            + detail
+        )
+
+
 def _validate_project() -> None:
     semantic_definition = POWER_BI / "SupplyResponse.SemanticModel" / "definition"
     report_definition = POWER_BI / "SupplyResponse.Report" / "definition"
     required = (
         POWER_BI / "SupplyResponse.pbip",
+        POWER_BI / "SupplyResponse.SemanticModel" / ".platform",
         POWER_BI / "SupplyResponse.SemanticModel" / "definition.pbism",
         semantic_definition / "model.tmdl",
         semantic_definition / "expressions.tmdl",
         semantic_definition / "relationships.tmdl",
         semantic_definition / "tables" / "CaseCommandCenter.tmdl",
         semantic_definition / "tables" / "ActionOutcomes.tmdl",
+        POWER_BI / "SupplyResponse.Report" / ".platform",
         POWER_BI / "SupplyResponse.Report" / "definition.pbir",
         report_definition / "version.json",
         report_definition / "report.json",
@@ -213,6 +435,16 @@ def _staged_repository(values: dict[str, str], target: Path) -> Path:
 
 
 def _validate_staged_repository(repository: Path, values: dict[str, str]) -> None:
+    _validate_offline_json_schemas(repository)
+    _validate_item_references(repository)
+    discovered = _discover_publish_items(repository)
+    if discovered != EXPECTED_PUBLISH_ITEMS:
+        raise PreflightError(
+            "fabric-cicd must discover exactly SemanticModel then Report; "
+            f"found {discovered!r}"
+        )
+    _validate_tmdl(repository / "SupplyResponse.SemanticModel" / "definition")
+
     expressions = (
         repository / "SupplyResponse.SemanticModel" / "definition" / "expressions.tmdl"
     )
