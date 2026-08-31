@@ -52,9 +52,9 @@ class DecisionRequest(StrictRequest):
 class RuntimeResponse(BaseModel):
     runtime_mode: RuntimeMode
     work_iq: Literal["synthetic"]
-    operational_store: Literal["sqlite"]
+    operational_store: Literal["sqlite", "fabric_sql"]
     agent_runtime: Literal["local"]
-    power_bi_available: Literal[False]
+    power_bi_available: bool
 
 
 class CaseControls(BaseModel):

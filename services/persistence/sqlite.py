@@ -1,11 +1,35 @@
-from sqlalchemy import Engine, create_engine, event
+from sqlalchemy import Connection, Engine, create_engine, event
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import make_url
 
 from data.domain import RuntimeMode
-from services.persistence.store import SqlAlchemyStore
-from services.persistence.tables import metadata
+from data.domain.execution import Playback
+from services.persistence.store import SqlAlchemyStore, serialize_model
+from services.persistence.tables import metadata, playbacks
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
+
+
+class SqliteStore(SqlAlchemyStore):
+    def _insert_playback_if_absent(
+        self,
+        connection: Connection,
+        playback: Playback,
+    ) -> bool:
+        result = connection.execute(
+            sqlite_insert(playbacks)
+            .values(
+                playback_id=playback.playback_id,
+                case_id=playback.case_id,
+                decision_id=playback.decision_id,
+                status=playback.status.value,
+                started_at=playback.started_at,
+                completed_at=playback.completed_at,
+                payload_json=serialize_model(playback),
+            )
+            .on_conflict_do_nothing(index_elements=[playbacks.c.decision_id])
+        )
+        return result.rowcount == 1
 
 
 def build_sqlite_engine(database_url: str) -> Engine:
@@ -41,4 +65,4 @@ def sqlite_store(
 ) -> SqlAlchemyStore:
     engine = build_sqlite_engine(database_url)
     metadata.create_all(engine)
-    return SqlAlchemyStore(engine, runtime_mode=runtime_mode)
+    return SqliteStore(engine, runtime_mode=runtime_mode)

@@ -1,6 +1,6 @@
 # Supply Response
 
-Portable-core scaffold for the Supply Response prototype. This first repository increment intentionally implements **no Azure, Fabric, Foundry, Work IQ, Fabric IQ, or other external-service integrations**.
+Portable-core scaffold for the Supply Response prototype. Local fallback mode remains self-contained; Fabric SQL Database persistence is available only through explicit live configuration, while other Microsoft cloud integrations remain deferred.
 
 ## Implemented now
 
@@ -12,11 +12,12 @@ Portable-core scaffold for the Supply Response prototype. This first repository 
 - Initial scenario contracts and deterministic Supplier Beta qualification constraint.
 - Proposed case/scenario/approval/dashboard API routes.
 - Durable local SQLite case, Decision, action, playback, and observation storage.
+- Opt-in Fabric SQL Database persistence with Entra token authentication and read-only analytics views.
 - Pytest and Vitest coverage.
 
 ## Repository layout
 
-The structure follows the project brief. Integration folders are retained as placeholders so later work can be added without reorganizing the repository.
+The structure follows the project brief. Remaining integration folders are retained as extension points so later work can be added without reorganizing the repository.
 
 ```text
 supply-response/
@@ -66,6 +67,7 @@ supply-response/
 
 - Python **3.12**
 - Node.js 20+ and npm
+- ODBC Driver 18 for SQL Server (only for opt-in Fabric SQL live mode)
 
 ### Backend
 
@@ -150,7 +152,7 @@ Results include calculation version, timestamp, assumptions, and source-data lin
 - Azure hosting/deployment
 - Microsoft Foundry agents / Agent Framework
 - Work IQ
-- Fabric tables, SQL endpoint, semantic model, and Power BI
+- Fabric semantic model and Power BI live journeys
 - Fabric IQ ontology/MCP
 - Managed identity and tenant configuration
 - Real email, Teams, supplier, ERP, or customer data

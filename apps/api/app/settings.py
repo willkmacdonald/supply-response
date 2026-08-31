@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,15 +15,32 @@ class Settings(BaseSettings):
     )
 
     runtime_mode: RuntimeMode
-    database_url: str
+    database_url: str | None = None
     scenario_effective_time: datetime = SCENARIO_EFFECTIVE_TIME
     allowed_tenant_id: str | None = None
+    fabric_sql_server: str | None = None
+    fabric_sql_database: str | None = None
+    credential_mode: Literal["azure_cli", "managed_identity"] | None = None
     tenant_domain: str = "willmacdonald.com"
     frontend_origin: str = "http://localhost:5173"
     automated_test_faults_enabled: bool = False
 
     @model_validator(mode="after")
     def validate_mode_specific_settings(self) -> "Settings":
-        if self.runtime_mode is RuntimeMode.LIVE and not self.allowed_tenant_id:
-            raise ValueError("live mode requires SUPPLY_RESPONSE_ALLOWED_TENANT_ID")
+        if self.runtime_mode is RuntimeMode.FALLBACK:
+            if not self.database_url:
+                raise ValueError("fallback mode requires SUPPLY_RESPONSE_DATABASE_URL")
+            return self
+
+        missing: list[str] = []
+        if self.credential_mode in (None, "azure_cli") and not self.allowed_tenant_id:
+            missing.append("SUPPLY_RESPONSE_ALLOWED_TENANT_ID")
+        if not self.fabric_sql_server:
+            missing.append("SUPPLY_RESPONSE_FABRIC_SQL_SERVER")
+        if not self.fabric_sql_database:
+            missing.append("SUPPLY_RESPONSE_FABRIC_SQL_DATABASE")
+        if self.credential_mode is None:
+            missing.append("SUPPLY_RESPONSE_CREDENTIAL_MODE")
+        if missing:
+            raise ValueError(f"live mode requires {', '.join(missing)}")
         return self

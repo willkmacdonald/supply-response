@@ -23,6 +23,7 @@ from services.execution.planner import plan_actions
 from services.execution.playback import PlaybackClock, PlaybackService, RealClock
 from services.execution.worker import ActionPlanningWorker, ExecutionService
 from services.persistence.sqlite import sqlite_store
+from services.persistence.fabric_sql import fabric_store
 from services.persistence.store import SqlAlchemyStore
 from services.persistence.tables import (
     action_projection,
@@ -30,6 +31,7 @@ from services.persistence.tables import (
     case_projection,
     playbacks,
 )
+from integrations.fabric.health import check_fabric_health
 
 
 def fallback_identity() -> IdentitySnapshot:
@@ -58,6 +60,9 @@ class ApplicationServices:
     clock: Callable[[], datetime]
     identity: IdentitySnapshot
     test_faults: AutomatedTestFaults
+    operational_store: Literal["sqlite", "fabric_sql"]
+    power_bi_available: bool
+    fabric_schema_version: int | None = None
 
     @property
     def uow_factory(self) -> UnitOfWorkFactory:
@@ -151,13 +156,23 @@ def build_composition(
     playback_clock: PlaybackClock | None = None,
     planner=plan_actions,
 ) -> ApplicationServices:
-    if settings.runtime_mode is not RuntimeMode.FALLBACK:
-        raise RuntimeError("live runtime composition is not available in this build")
     now = clock or (lambda: datetime.now(UTC))
-    store = sqlite_store(
-        settings.database_url,
-        runtime_mode=RuntimeMode.FALLBACK,
-    )
+    if settings.runtime_mode is RuntimeMode.FALLBACK:
+        if settings.database_url is None:
+            raise RuntimeError("fallback database URL is not configured")
+        store = sqlite_store(
+            settings.database_url,
+            runtime_mode=RuntimeMode.FALLBACK,
+        )
+        operational_store: Literal["sqlite", "fabric_sql"] = "sqlite"
+        power_bi_available = False
+        fabric_schema_version = None
+    else:
+        store = fabric_store(settings)
+        fabric_health = check_fabric_health(store.engine)
+        operational_store = fabric_health.operational_store
+        power_bi_available = fabric_health.power_bi_available
+        fabric_schema_version = fabric_health.schema_version
     uow_factory = cast(UnitOfWorkFactory, store.uow_factory)
     active_playback_clock = playback_clock or RealClock()
     test_faults = AutomatedTestFaults(settings.automated_test_faults_enabled)
@@ -184,6 +199,9 @@ def build_composition(
         clock=now,
         identity=fallback_identity(),
         test_faults=test_faults,
+        operational_store=operational_store,
+        power_bi_available=power_bi_available,
+        fabric_schema_version=fabric_schema_version,
     )
 
 

@@ -7,7 +7,6 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import Connection, Engine, insert, or_, select, update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 
 from data.domain import CaseInstance, CasePurpose, CaseStatus, RuntimeMode
@@ -102,6 +101,14 @@ class SqlAlchemyStore:
                 f"store is configured for {self.runtime_mode.value}, "
                 f"not {runtime_mode.value}"
             )
+
+    def _insert_playback_if_absent(
+        self,
+        connection: Connection,
+        playback: Playback,
+    ) -> bool:
+        """Perform the physical database's atomic insert-if-absent operation."""
+        raise NotImplementedError
 
     @staticmethod
     def _datetime_matches(stored: datetime, expected: datetime) -> bool:
@@ -2003,18 +2010,9 @@ class SqlAlchemyExecutionRepository:
                     "Decision already has a different Playback"
                 )
             return False
-        result = self._connection.execute(
-            sqlite_insert(playbacks)
-            .values(
-                playback_id=playback.playback_id,
-                case_id=playback.case_id,
-                decision_id=playback.decision_id,
-                status=playback.status.value,
-                started_at=playback.started_at,
-                completed_at=playback.completed_at,
-                payload_json=serialize_model(playback),
-            )
-            .on_conflict_do_nothing(index_elements=[playbacks.c.decision_id])
+        inserted = self._store._insert_playback_if_absent(
+            self._connection,
+            playback,
         )
         canonical = self.get_playback_for_decision(playback.decision_id)
         if canonical is None:
@@ -2023,7 +2021,7 @@ class SqlAlchemyExecutionRepository:
             )
         if canonical.playback_id != playback.playback_id:
             raise ImmutableRecordConflict("Decision already has a different Playback")
-        return result.rowcount == 1
+        return inserted
 
     def get_playback(self, playback_id: str) -> Playback:
         row = (
@@ -2244,8 +2242,14 @@ class SqlAlchemyUnitOfWork:
 
 
 def build_store(settings: Settings) -> CaseStore:
+    if settings.runtime_mode is RuntimeMode.LIVE:
+        from services.persistence.fabric_sql import fabric_store
+
+        return fabric_store(settings)
     from services.persistence.sqlite import sqlite_store
 
+    if settings.database_url is None:
+        raise ValueError("fallback database URL is not configured")
     return sqlite_store(
         settings.database_url,
         runtime_mode=settings.runtime_mode,

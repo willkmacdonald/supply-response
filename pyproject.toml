@@ -9,9 +9,11 @@ description = "Portable core for the Supply Response prototype"
 requires-python = ">=3.12,<3.14"
 dependencies = [
   "alembic>=1.16,<2",
+  "azure-identity>=1.23,<2",
   "fastapi>=0.116,<1",
   "pydantic>=2.11,<3",
   "pydantic-settings>=2.10,<3",
+  "pyodbc>=5.2,<6",
   "sqlalchemy>=2.0,<3",
   "uvicorn[standard]>=0.35,<1",
 ]
@@ -23,9 +25,12 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["apps", "services", "data"]
+packages = ["apps", "services", "data", "integrations"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+  "fabric_live: requires an explicitly configured live Fabric SQL Database",
+]
