@@ -553,12 +553,7 @@ class SqlAlchemyStore:
         *,
         purpose: CasePurpose | None = None,
     ) -> tuple[CaseInstance, ...]:
-        statement = select(case_projection).where(
-            case_projection.c.runtime_mode == self.runtime_mode.value
-        )
-        if purpose is not None:
-            statement = statement.where(case_projection.c.purpose == purpose.value)
-        statement = statement.order_by(case_projection.c.case_id)
+        statement = select(case_projection).order_by(case_projection.c.case_id)
         with self.engine.connect() as connection:
             rows = connection.execute(statement).mappings().all()
             cases: list[CaseInstance] = []
@@ -569,6 +564,10 @@ class SqlAlchemyStore:
                 )
                 stored_case = self._stored_case(connection, case.case_id)
                 self._require_case_projection_integrity(row, case, stored_case)
+                if case.runtime_mode is not self.runtime_mode:
+                    continue
+                if purpose is not None and case.purpose is not purpose:
+                    continue
                 cases.append(case)
             return tuple(cases)
 

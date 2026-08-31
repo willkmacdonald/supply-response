@@ -6,7 +6,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from pydantic import ValidationError
-from sqlalchemy import create_engine, inspect, select, update
+from sqlalchemy import create_engine, inspect, select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from apps.api.app.settings import Settings
@@ -317,6 +317,36 @@ def test_list_cases_filters_by_purpose(tmp_path):
     assert store.list_cases() == (automated, showcase)
 
 
+def test_list_cases_rejects_runtime_index_filter_evasion(tmp_path):
+    store = sqlite_store(f"sqlite:///{tmp_path / 'list-runtime-tamper.db'}")
+    case, snapshot = fallback_rl001_case("RL-CASE-LIST-RUNTIME-TAMPER")
+    store.create_case(case, snapshot)
+    with store.engine.begin() as connection:
+        connection.execute(
+            update(case_projection)
+            .where(case_projection.c.case_id == case.case_id)
+            .values(runtime_mode=RuntimeMode.LIVE.value)
+        )
+
+    with pytest.raises(PersistenceIntegrityError, match="case projection"):
+        store.list_cases()
+
+
+def test_list_cases_rejects_purpose_index_filter_evasion(tmp_path):
+    store = sqlite_store(f"sqlite:///{tmp_path / 'list-purpose-tamper.db'}")
+    case, snapshot = fallback_rl001_case("RL-CASE-LIST-PURPOSE-TAMPER")
+    store.create_case(case, snapshot)
+    with store.engine.begin() as connection:
+        connection.execute(
+            update(case_projection)
+            .where(case_projection.c.case_id == case.case_id)
+            .values(purpose=CasePurpose.AUTOMATED_TEST.value)
+        )
+
+    with pytest.raises(PersistenceIntegrityError, match="case projection"):
+        store.list_cases(purpose=CasePurpose.SHOWCASE)
+
+
 def test_analysis_survives_reconstruction_with_nested_records(tmp_path):
     url = f"sqlite:///{tmp_path / 'analysis.db'}"
     first = sqlite_store(url)
@@ -548,9 +578,87 @@ def test_alembic_upgrade_and_downgrade_manage_shared_schema(tmp_path):
     assert inspect(engine).get_table_names() == ["alembic_version"]
 
 
+def test_alembic_upgrade_path_adds_pointer_foreign_keys_after_original_0001(
+    tmp_path,
+):
+    database_url = f"sqlite:///{tmp_path / 'upgrade-path.db'}"
+    config = Config("migrations/alembic.ini")
+    config.set_main_option("sqlalchemy.url", database_url)
+
+    command.upgrade(config, "0001_closed_loop_schema")
+
+    engine = create_engine(database_url)
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one()
+            == "0001_closed_loop_schema"
+        )
+    original_foreign_keys = {
+        tuple(item["constrained_columns"])
+        for item in inspect(engine).get_foreign_keys("case_projection")
+    }
+    assert ("current_analysis_id",) not in original_foreign_keys
+    assert ("current_decision_id",) not in original_foreign_keys
+    original_store = sqlite_store(database_url)
+    original_case, original_snapshot = fallback_rl001_case("RL-CASE-ORIGINAL-0001")
+    original_store.create_case(original_case, original_snapshot)
+    original_store.engine.dispose()
+
+    command.upgrade(config, "head")
+
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one()
+            == "0002_case_projection_pointer_fks"
+        )
+    head_foreign_keys = {
+        tuple(item["constrained_columns"])
+        for item in inspect(engine).get_foreign_keys("case_projection")
+    }
+    assert ("current_analysis_id",) in head_foreign_keys
+    assert ("current_decision_id",) in head_foreign_keys
+    migrated_store = sqlite_store(database_url)
+    assert migrated_store.get_case(original_case.case_id) == original_case
+    assert migrated_store.list_cases() == (original_case,)
+    case, snapshot = fallback_rl001_case("RL-CASE-UPGRADE-PATH")
+    migrated_store.create_case(case, snapshot)
+    for column_name in ("current_analysis_id", "current_decision_id"):
+        with pytest.raises(IntegrityError), migrated_store.engine.begin() as connection:
+            connection.execute(
+                update(case_projection)
+                .where(case_projection.c.case_id == case.case_id)
+                .values({column_name: "RL-MISSING"})
+            )
+    migrated_store.engine.dispose()
+
+    command.downgrade(config, "0001_closed_loop_schema")
+
+    downgraded_foreign_keys = {
+        tuple(item["constrained_columns"])
+        for item in inspect(engine).get_foreign_keys("case_projection")
+    }
+    assert ("current_analysis_id",) not in downgraded_foreign_keys
+    assert ("current_decision_id",) not in downgraded_foreign_keys
+
+    command.downgrade(config, "base")
+    assert inspect(engine).get_table_names() == ["alembic_version"]
+
+
 def test_initial_migration_is_frozen_from_runtime_metadata():
     revision = Path("migrations/versions/0001_closed_loop_schema.py").read_text(
         encoding="utf-8"
     )
+
+    assert "services.persistence.tables" not in revision
+
+
+def test_pointer_migration_is_frozen_from_runtime_metadata():
+    revision = Path(
+        "migrations/versions/0002_case_projection_pointer_fks.py"
+    ).read_text(encoding="utf-8")
 
     assert "services.persistence.tables" not in revision
