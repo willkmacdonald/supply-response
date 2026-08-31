@@ -84,14 +84,14 @@ Foundry Agent Service is not Foundry IQ. Requiring Foundry-hosted agents does no
 
 ## Architecture Decision Records
 
-- [ADR 0001: Isolate runtime provenance by Disruption Case](../../adr/0001-isolate-runtime-provenance-by-case.md)
+- [ADR 0001: Isolate runtime provenance by Case Instance](../../adr/0001-isolate-runtime-provenance-by-case.md)
 - [ADR 0002: Preserve Decisions and create downstream work through a transactional outbox](../../adr/0002-immutable-decisions-with-transactional-outbox.md)
 - [ADR 0003: Keep decision authority deterministic and use thresholded lexicographic ranking](../../adr/0003-use-deterministic-thresholded-lexicographic-ranking.md)
 - [ADR 0004: Map portable Demo Personas to tenant identities](../../adr/0004-map-portable-demo-personas-to-tenant-identities.md)
 
 ## Runtime Modes and Provenance
 
-The application has exactly two explicit runtime modes. Runtime mode is immutable for a Disruption Case. Switching modes creates a new Case Instance; state never merges implicitly.
+The application has exactly two explicit runtime modes. Runtime mode is immutable for a Case Instance. Switching modes creates a new Case Instance; state never merges implicitly.
 
 ### Live mode
 
