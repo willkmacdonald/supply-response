@@ -63,38 +63,47 @@ export function AuthProvider({
   const [ready, setReady] = useState(config === null);
   const [authFailure, setAuthFailure] = useState(false);
   const interactiveRedirect = useRef<Promise<void> | null>(null);
+  const initializationAttempt = useRef(0);
+
+  const initializeAuth = useCallback(async () => {
+    if (!client) return;
+    const attempt = ++initializationAttempt.current;
+    setReady(false);
+    setAuthFailure(false);
+    try {
+      await client.initialize();
+      const redirect = await client.handleRedirectPromise();
+      const resolved = redirect?.account ?? client.getActiveAccount() ?? client.getAllAccounts()[0] ?? null;
+      if (attempt !== initializationAttempt.current) return;
+      client.setActiveAccount(resolved);
+      setAccount(resolved);
+      setReady(true);
+    } catch {
+      if (attempt !== initializationAttempt.current) return;
+      setAuthFailure(true);
+      setReady(false);
+    }
+  }, [client]);
 
   useEffect(() => {
     if (!client) return;
-    setReady(false);
-    setAuthFailure(false);
-    let active = true;
-    void (async () => {
-      try {
-        await client.initialize();
-        const redirect = await client.handleRedirectPromise();
-        const resolved = redirect?.account ?? client.getActiveAccount() ?? client.getAllAccounts()[0] ?? null;
-        if (!active) return;
-        client.setActiveAccount(resolved);
-        setAccount(resolved);
-        setReady(true);
-      } catch {
-        if (!active) return;
-        setAuthFailure(true);
-        setReady(false);
-      }
-    })();
-    return () => { active = false; };
-  }, [client]);
+    void initializeAuth();
+    return () => { initializationAttempt.current += 1; };
+  }, [client, initializeAuth]);
 
   const signIn = useCallback(async () => {
     if (!client || !config) return;
     setAuthFailure(false);
-    if (!interactiveRedirect.current) {
-      interactiveRedirect.current = client.loginRedirect({scopes: [config.apiScope]})
-        .finally(() => { interactiveRedirect.current = null; });
+    try {
+      if (!interactiveRedirect.current) {
+        interactiveRedirect.current = client.loginRedirect({scopes: [config.apiScope]})
+          .finally(() => { interactiveRedirect.current = null; });
+      }
+      await interactiveRedirect.current;
+    } catch {
+      setAuthFailure(true);
+      setReady(false);
     }
-    await interactiveRedirect.current;
   }, [client, config]);
 
   const getAccessToken = useCallback(async (): Promise<string | null> => {
@@ -129,7 +138,7 @@ export function AuthProvider({
 
   return <AuthContext.Provider value={value}>
     {authFailure
-      ? <div role="alert">Secure sign-in failed. <button onClick={() => void signIn()}>Retry sign-in</button></div>
+      ? <div role="alert">Secure sign-in failed. <button onClick={() => void initializeAuth()}>Retry sign-in</button></div>
       : ready ? children : <p role="status">Completing secure sign-in…</p>}
   </AuthContext.Provider>;
 }

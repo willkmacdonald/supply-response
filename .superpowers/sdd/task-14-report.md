@@ -37,11 +37,20 @@ The six Important findings and one Minor finding from the independent review wer
 - MSAL initialization failures render a recoverable sign-in action. Concurrent silent acquisition remains concurrent while interaction-required redirects are single-flight.
 - Shell and SPA redirect validation now share the same HTTPS/loopback, no-query, no-fragment, single-trailing-slash normalization contract.
 
+## Second independent-review corrections
+
+The three remaining Important findings and Minor redirect-contract finding were closed test-first:
+
+- Exact Graph validation now projects every intended writable app-role and delegated-scope field plus `api.acceptMappedClaims`, while deliberately excluding Graph's response-only `appRole.origin`. Graph-shaped fake responses include `origin`; writable and security drift still fail closed.
+- Authentication recovery reruns MSAL initialization and redirect handling. Initial-failure-then-success, repeated initialization failure, and login-redirect failure tests prove the UI remains recoverable without unhandled rejections.
+- Apply tests can select only an absolute executable named `supply-response-fake-az` that passes an exact adapter handshake. State override and fault injection require fixture mode or that validated adapter, every Azure command is dispatched through it, the final validation bypass was removed, and realistic persisted Graph responses must validate before state becomes `COMPLETE`.
+- Provisioning and SPA configuration both reject authorities that URL parsing would rewrite, including uppercase hosts and default ports, while preserving their shared single-trailing-slash normalization.
+
 ## Verification
 
-- Auth/artifact suite: **56 passed**.
-- Full non-live Python suite: **435 passed, 12 skipped**. Its locked TMDL validator required approved access to public NuGet; no tenant API was contacted. One pre-existing Starlette/httpx deprecation warning remains.
-- Frontend: **3 files, 28 tests passed**; production TypeScript/Vite build passed.
+- Auth/artifact suite: **63 passed** after the second correction pass.
+- Full non-live Python suite: **442 passed, 12 skipped**. Its locked TMDL validator required approved access to public NuGet. One pre-existing Starlette/httpx deprecation warning remains.
+- Frontend focused suite: **3 files, 33 tests passed** after the second correction pass; production TypeScript/Vite build passed.
 - Changed Python scope: Ruff check/format passed; Pyright **0 errors, 0 warnings**.
 - Bash: `bash -n` passed; `shellcheck` was unavailable. JSON parsed with `jq`; fixture dry-run/check and fake-Azure apply/retry tests passed.
 - `uv lock --check` passed; Python sdist/wheel build passed.
@@ -52,7 +61,7 @@ The six Important findings and one Minor finding from the independent review wer
 ## Self-review
 
 - No client secret, tenant/client/object ID, UPN, access token, or real assignment appears in tracked deployment artifacts.
-- No tenant-mutating or tenant-reading command ran. Only deterministic local dry-runs ran.
+- No tenant mutation ran. During the second correction's initial RED run, before the fake-adapter selection existed, the old apply recovery test accidentally selected the installed Azure CLI and performed read-only active-account, organization, and Work IQ service-principal lookups; it failed at the Work IQ lookup before reaching any mutation. This was disclosed immediately, and all subsequent apply/recovery tests are isolated behind the validated fake adapter.
 - Scripts require exact UUIDs, active-tenant equality, explicit `willmacdonald.com` confirmation, unique enabled permission/role resolution, and distinct persona object IDs. They do not resolve personas by UPN or display name.
 - Token validation pins RS256 and tenant-specific metadata/JWKS URLs, rejects non-home identity providers, bounds inputs/caches, and never logs bearer data.
 - Existing fallback composition and unrelated core behavior were preserved.

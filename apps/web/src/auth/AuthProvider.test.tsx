@@ -86,6 +86,19 @@ describe("Entra configuration", () => {
     })?.redirectUri).toBe("https://example.com/auth/callback");
   });
 
+  it.each([
+    "https://EXAMPLE.com/auth/callback/",
+    "https://example.com:443/auth/callback/",
+    "http://localhost:80/auth/callback/",
+  ])("rejects a redirect authority that URL would canonicalize: %s", (redirectUri) => {
+    expect(() => readEntraConfig({
+      VITE_ENTRA_TENANT_ID: entraConfig.tenantId,
+      VITE_ENTRA_WEB_CLIENT_ID: entraConfig.webClientId,
+      VITE_ENTRA_API_SCOPE: entraConfig.apiScope,
+      VITE_ENTRA_REDIRECT_URI: redirectUri,
+    })).toThrow(/canonical/);
+  });
+
   it("uses the tenant-specific authority and never localStorage", () => {
     const config = createMsalConfig(entraConfig);
     expect(config.auth).toMatchObject({
@@ -142,12 +155,37 @@ describe("AuthProvider", () => {
     await waitFor(() => expect(screen.getByRole("button", {name: "Get token"})).toBeInTheDocument());
   });
 
-  it("shows a recoverable sign-in action when initialization fails", async () => {
+  it("retries initialization and redirect handling after an initial failure", async () => {
     const client = fakeClient();
-    client.initialize = vi.fn().mockRejectedValue(new Error("initialization failed"));
+    client.initialize = vi.fn()
+      .mockRejectedValueOnce(new Error("initialization failed"))
+      .mockResolvedValueOnce(undefined);
     render(<AuthProvider config={entraConfig} client={client}><Consumer /></AuthProvider>);
     expect(await screen.findByRole("alert")).toHaveTextContent(/secure sign-in failed/i);
     await userEvent.click(screen.getByRole("button", {name: /retry sign-in/i}));
+    await waitFor(() => expect(screen.getByTestId("name")).toHaveTextContent("Alex Morgan"));
+    expect(client.initialize).toHaveBeenCalledTimes(2);
+    expect(client.handleRedirectPromise).toHaveBeenCalledOnce();
+    expect(client.loginRedirect).not.toHaveBeenCalled();
+  });
+
+  it("keeps initialization retry failures visible and recoverable", async () => {
+    const client = fakeClient();
+    client.initialize = vi.fn().mockRejectedValue(new Error("initialization failed"));
+    render(<AuthProvider config={entraConfig} client={client}><Consumer /></AuthProvider>);
+    await userEvent.click(await screen.findByRole("button", {name: /retry sign-in/i}));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/secure sign-in failed/i);
+    expect(client.initialize).toHaveBeenCalledTimes(2);
+    expect(client.loginRedirect).not.toHaveBeenCalled();
+  });
+
+  it("shows a recoverable error when login redirect fails", async () => {
+    const client = fakeClient();
+    client.loginRedirect = vi.fn().mockRejectedValue(new Error("redirect failed"));
+    render(<AuthProvider config={entraConfig} client={client}><Consumer /></AuthProvider>);
+    await waitFor(() => expect(screen.getByRole("button", {name: "Sign in"})).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", {name: "Sign in"}));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/secure sign-in failed/i);
     expect(client.loginRedirect).toHaveBeenCalledOnce();
   });
 

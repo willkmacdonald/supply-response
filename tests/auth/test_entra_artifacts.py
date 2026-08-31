@@ -139,15 +139,34 @@ def test_configure_normalizes_a_single_trailing_slash():
     assert "redirect=https://example.com/auth/callback" in result.stdout
 
 
+@pytest.mark.parametrize(
+    "redirect",
+    [
+        "https://EXAMPLE.com/auth/callback/",
+        "https://example.com:443/auth/callback/",
+        "http://localhost:80/auth/callback/",
+    ],
+)
+def test_configure_rejects_redirect_authorities_the_spa_would_canonicalize(redirect):
+    env = _env()
+    env["SUPPLY_RESPONSE_REDIRECT_URI"] = redirect
+    result = run("configure.sh", "configure.json", env=env)
+    assert result.returncode != 0
+    assert "canonical" in result.stderr.lower()
+
+
 def _fake_az(tmp_path: Path) -> tuple[Path, Path]:
     state = tmp_path / "fake-az-state"
-    executable = tmp_path / "az"
+    executable = tmp_path / "supply-response-fake-az"
     executable.write_text(
         """#!/usr/bin/env python3
 import json, os, pathlib, sys
 state = pathlib.Path(os.environ["FAKE_AZ_STATE"])
 state.mkdir(exist_ok=True)
 args = sys.argv[1:]
+if args == ["__supply_response_fake_adapter_probe__"]:
+    print("SUPPLY_RESPONSE_FAKE_AZ_V1")
+    sys.exit(0)
 counter = state / "mutations"
 creates = state / "creates"
 mutations = int(counter.read_text()) if counter.exists() else 0
@@ -170,17 +189,29 @@ elif args[:3] == ["ad", "app", "create"]:
     creates.write_text(str(int(creates.read_text()) + 1 if creates.exists() else 1))
     name = args[args.index("--display-name") + 1]
     api = name.endswith("API")
-    print(json.dumps({"appId":"22222222-2222-4222-8222-222222222222" if api else "33333333-3333-4333-8333-333333333333", "id":"77777777-7777-4777-8777-777777777777" if api else "88888888-8888-4888-8888-888888888888"}))
+    record = {"appId":"22222222-2222-4222-8222-222222222222" if api else "33333333-3333-4333-8333-333333333333", "id":"77777777-7777-4777-8777-777777777777" if api else "88888888-8888-4888-8888-888888888888"}
+    (state / ("app-" + record["appId"] + ".json")).write_text(json.dumps(record))
+    print(json.dumps(record))
 elif args[:3] == ["ad", "app", "show"]:
     client = args[args.index("--id") + 1]
-    object_id = "77777777-7777-4777-8777-777777777777" if client.startswith("2222") else "88888888-8888-4888-8888-888888888888"
-    print(json.dumps({"appId":client,"id":object_id}))
+    record = state / ("app-" + client + ".json")
+    if not record.exists(): sys.exit(1)
+    document = json.loads(record.read_text())
+    if os.environ.get("FAKE_AZ_DRIFT") == "1" and "signInAudience" in document:
+        document["signInAudience"] = "AzureADMultipleOrgs"
+    print(json.dumps(document))
 elif args[:2] == ["rest", "--method"] and "PATCH" in args:
     body = args[args.index("--body") + 1]
     payload = json.loads(pathlib.Path(body[1:]).read_text())
     forbidden = {"origin", "publisherDomain", "verifiedPublisher", "createdDateTime"}
     assert not forbidden.intersection(payload)
     assert all(not forbidden.intersection(role) for role in payload.get("appRoles", []))
+    object_id = args[args.index("--uri") + 1].rsplit("/", 1)[-1]
+    client = "22222222-2222-4222-8222-222222222222" if object_id.startswith("7777") else "33333333-3333-4333-8333-333333333333"
+    payload.update({"appId": client, "id": object_id})
+    for role in payload.get("appRoles", []):
+        role["origin"] = "Application"
+    (state / ("app-" + client + ".json")).write_text(json.dumps(payload))
     mutate()
 elif args[:3] == ["ad", "sp", "show"]:
     client = args[args.index("--id") + 1]
@@ -207,18 +238,17 @@ else:
 def test_configure_apply_persists_progress_and_reuses_apps_after_each_failure(
     tmp_path, failure_boundary
 ):
-    _, state = _fake_az(tmp_path)
+    adapter, state = _fake_az(tmp_path)
     env = _env()
     env.pop("SUPPLY_RESPONSE_API_CLIENT_ID")
     env.pop("SUPPLY_RESPONSE_WEB_CLIENT_ID")
     env.update(
         {
-            "PATH": f"{tmp_path}:{env['PATH']}",
             "FAKE_AZ_STATE": str(state),
             "SUPPLY_RESPONSE_TEST_MODE": "1",
+            "SUPPLY_RESPONSE_TEST_AZ_ADAPTER": str(adapter),
             "SUPPLY_RESPONSE_INJECT_FAILURE_AFTER": failure_boundary,
             "SUPPLY_RESPONSE_ENTRA_STATE_FILE": str(tmp_path / ".env.tenant"),
-            "SUPPLY_RESPONSE_SKIP_FINAL_CHECK": "1",
         }
     )
     first = subprocess.run(
@@ -247,6 +277,68 @@ def test_configure_apply_persists_progress_and_reuses_apps_after_each_failure(
     assert second.returncode == 0, second.stderr
     assert "SUPPLY_RESPONSE_ENTRA_STATE=COMPLETE" in state_file.read_text()
     assert (state / "creates").read_text() == "2"
+
+
+def test_apply_test_controls_require_the_exact_fake_adapter(tmp_path):
+    fake_real_az = tmp_path / "az"
+    called = tmp_path / "called"
+    fake_real_az.write_text(
+        f"#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> {called}\nexit 2\n"
+    )
+    fake_real_az.chmod(fake_real_az.stat().st_mode | stat.S_IXUSR)
+    env = _env()
+    env.update(
+        {
+            "SUPPLY_RESPONSE_TEST_MODE": "1",
+            "SUPPLY_RESPONSE_TEST_AZ_ADAPTER": str(fake_real_az),
+            "SUPPLY_RESPONSE_ENTRA_STATE_FILE": str(tmp_path / ".env.tenant"),
+            "SUPPLY_RESPONSE_INJECT_FAILURE_AFTER": "api_app",
+        }
+    )
+    result = subprocess.run(
+        [str(ENTRA / "configure.sh"), "--apply"],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "fake adapter" in result.stderr.lower()
+    assert not called.exists()
+    assert not (tmp_path / ".env.tenant").exists()
+
+
+def test_apply_never_marks_state_complete_when_final_validation_fails(tmp_path):
+    adapter, state = _fake_az(tmp_path)
+    env = _env()
+    env.pop("SUPPLY_RESPONSE_API_CLIENT_ID")
+    env.pop("SUPPLY_RESPONSE_WEB_CLIENT_ID")
+    env.update(
+        {
+            "FAKE_AZ_STATE": str(state),
+            "FAKE_AZ_DRIFT": "1",
+            "SUPPLY_RESPONSE_TEST_MODE": "1",
+            "SUPPLY_RESPONSE_TEST_AZ_ADAPTER": str(adapter),
+            "SUPPLY_RESPONSE_ENTRA_STATE_FILE": str(tmp_path / ".env.tenant"),
+            # This legacy variable must have no effect.
+            "SUPPLY_RESPONSE_SKIP_FINAL_CHECK": "1",
+        }
+    )
+    result = subprocess.run(
+        [str(ENTRA / "configure.sh"), "--apply"],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "exactly match" in result.stderr
+    assert (
+        "SUPPLY_RESPONSE_ENTRA_STATE=INCOMPLETE"
+        in (tmp_path / ".env.tenant").read_text()
+    )
 
 
 def test_exact_check_logic_rejects_excess_permissions_roles_and_assignments():
@@ -305,6 +397,41 @@ def test_configure_check_rejects_permission_or_role_drift(tmp_path, drift):
         )
     else:
         fixture["apiApplication"]["appRoles"][0]["description"] = "Drifted role"
+    path.write_text(json.dumps(fixture))
+    result = subprocess.run(
+        [str(ENTRA / "configure.sh"), "--check", "--fixture", str(path)],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "exactly match" in result.stderr
+
+
+def test_configure_check_accepts_graph_response_only_role_origin(tmp_path):
+    path, env = _check_fixture(tmp_path)
+    fixture = json.loads(path.read_text())
+    for role in fixture["apiApplication"]["appRoles"]:
+        role["origin"] = "Application"
+    path.write_text(json.dumps(fixture))
+    result = subprocess.run(
+        [str(ENTRA / "configure.sh"), "--check", "--fixture", str(path)],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "CHECK_VALID" in result.stdout
+
+
+def test_configure_check_rejects_security_field_drift(tmp_path):
+    path, env = _check_fixture(tmp_path)
+    fixture = json.loads(path.read_text())
+    fixture["apiApplication"]["api"]["acceptMappedClaims"] = True
     path.write_text(json.dumps(fixture))
     result = subprocess.run(
         [str(ENTRA / "configure.sh"), "--check", "--fixture", str(path)],

@@ -45,7 +45,12 @@ export function readEntraConfig(env: EntraEnvironment): EntraConfig | null {
   if ((redirect.protocol !== "https:" && !isLocalhost) || redirect.search || redirect.hash) {
     throw new Error("Entra redirect URI must be exact HTTPS or loopback HTTP without query/fragment");
   }
-  return {tenantId, webClientId, apiScope, redirectUri: redirect.toString().replace(/\/$/, "")};
+  const normalizedInput = redirectUri.replace(/\/$/, "");
+  const canonicalRedirect = redirect.toString().replace(/\/$/, "");
+  if (normalizedInput !== canonicalRedirect) {
+    throw new Error("Entra redirect URI must use a canonical authority");
+  }
+  return {tenantId, webClientId, apiScope, redirectUri: canonicalRedirect};
 }
 
 export function createMsalConfig(config: EntraConfig): Configuration {

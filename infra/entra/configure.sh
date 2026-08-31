@@ -24,14 +24,33 @@ redirect_uri="${SUPPLY_RESPONSE_REDIRECT_URI:-}"
 need_uuid "SUPPLY_RESPONSE_EXPECTED_TENANT_ID" "$expected_tenant"
 need_uuid "SUPPLY_RESPONSE_WORKIQ_RESOURCE_APP_ID" "$workiq_app_id"
 [[ "$redirect_uri" != *\?* && "$redirect_uri" != *\#* ]] || die "SUPPLY_RESPONSE_REDIRECT_URI must not contain a query or fragment"
-[[ "$redirect_uri" =~ ^https://[^[:space:]]+$ || "$redirect_uri" =~ ^http://(localhost|127\.0\.0\.1)(:[0-9]+)?(/[^[:space:]]*)?$ ]] || die "SUPPLY_RESPONSE_REDIRECT_URI must be HTTPS or loopback HTTP"
+if [[ "$redirect_uri" =~ ^https://([a-z0-9.-]+)(:([0-9]+))?(/[^[:space:]]*)?$ ]]; then
+  [[ "${BASH_REMATCH[3]:-}" != "443" ]] || die "SUPPLY_RESPONSE_REDIRECT_URI must use a canonical authority"
+elif [[ "$redirect_uri" =~ ^http://(localhost|127\.0\.0\.1)(:([0-9]+))?(/[^[:space:]]*)?$ ]]; then
+  [[ "${BASH_REMATCH[3]:-}" != "80" ]] || die "SUPPLY_RESPONSE_REDIRECT_URI must use a canonical authority"
+else
+  die "SUPPLY_RESPONSE_REDIRECT_URI must use canonical lowercase HTTPS or loopback HTTP"
+fi
 redirect_uri="${redirect_uri%/}"
 [[ -n "$redirect_uri" ]] || die "SUPPLY_RESPONSE_REDIRECT_URI is invalid"
 require jq
 
+fake_adapter=0
+az_command=(az)
+if [[ -n "${SUPPLY_RESPONSE_TEST_AZ_ADAPTER:-}" ]]; then
+  adapter="$SUPPLY_RESPONSE_TEST_AZ_ADAPTER"
+  [[ "${SUPPLY_RESPONSE_TEST_MODE:-}" == "1" ]] || die "fake adapter requires explicit local test mode"
+  [[ "$adapter" == /* && -x "$adapter" && "${adapter##*/}" == "supply-response-fake-az" ]] || die "fake adapter must be an absolute executable named supply-response-fake-az"
+  [[ "$("$adapter" __supply_response_fake_adapter_probe__ 2>/dev/null)" == "SUPPLY_RESPONSE_FAKE_AZ_V1" ]] || die "fake adapter probe failed"
+  fake_adapter=1
+  az_command=("$adapter")
+fi
+[[ -z "${SUPPLY_RESPONSE_INJECT_FAILURE_AFTER:-}" || "$fake_adapter" == "1" ]] || die "fault injection requires the validated fake adapter"
+az_run() { "${az_command[@]}" "$@"; }
+
 state_file="$script_dir/.env.tenant"
 if [[ -n "${SUPPLY_RESPONSE_ENTRA_STATE_FILE:-}" ]]; then
-  [[ "${SUPPLY_RESPONSE_TEST_MODE:-}" == "1" ]] || die "state-file override is permitted only in local test mode"
+  [[ -n "$fixture" || "$fake_adapter" == "1" ]] || die "state-file override requires fixture mode or the validated fake adapter"
   state_file="$SUPPLY_RESPONSE_ENTRA_STATE_FILE"
 fi
 state_value() {
@@ -56,7 +75,7 @@ write_state() {
   mv "$state_temp" "$state_file"
 }
 maybe_inject_failure() {
-  [[ "${SUPPLY_RESPONSE_TEST_MODE:-}" == "1" ]] || return 0
+  [[ "$fake_adapter" == "1" ]] || return 0
   [[ "${SUPPLY_RESPONSE_INJECT_FAILURE_AFTER:-}" != "$1" ]] || die "injected failure after $1"
 }
 
@@ -68,10 +87,10 @@ if [[ -n "$fixture" ]]; then
   workiq_json="$(jq -c '.workIqServicePrincipal' "$fixture")"
 else
   [[ "$mode" != "dry-run" ]] || die "--dry-run requires --fixture"
-  require az
-  active_tenant="$(az account show --query tenantId -o tsv)"
-  organization_json="$(az rest --method GET --uri 'https://graph.microsoft.com/v1.0/organization?$select=id,verifiedDomains' --query 'value[0]' -o json)"
-  workiq_json="$(az ad sp show --id "$workiq_app_id" -o json)"
+  [[ "$fake_adapter" == "1" ]] || require az
+  active_tenant="$(az_run account show --query tenantId -o tsv)"
+  organization_json="$(az_run rest --method GET --uri 'https://graph.microsoft.com/v1.0/organization?$select=id,verifiedDomains' --query 'value[0]' -o json)"
+  workiq_json="$(az_run ad sp show --id "$workiq_app_id" -o json)"
 fi
 need_uuid "active Azure tenant" "$active_tenant"
 [[ "$active_tenant" == "$expected_tenant" ]] || die "active tenant does not match SUPPLY_RESPONSE_EXPECTED_TENANT_ID"
@@ -96,7 +115,7 @@ make_payloads() {
   jq -e '[.. | objects | keys[]] | any(. == "origin" or . == "publisherDomain" or . == "verifiedPublisher" or . == "createdDateTime") | not' "$api_payload" >/dev/null || die "API PATCH payload contains a Graph read-only field"
 }
 canonical_api_contract() {
-  jq -Sc '{signInAudience,identifierUris,api:{requestedAccessTokenVersion:.api.requestedAccessTokenVersion,oauth2PermissionScopes:(.api.oauth2PermissionScopes|sort_by(.id))},appRoles:(.appRoles|sort_by(.id)),requiredResourceAccess:(.requiredResourceAccess|map(.resourceAccess|=sort_by(.id))|sort_by(.resourceAppId)),isFallbackPublicClient,web:{redirectUris:.web.redirectUris}}'
+  jq -Sc '{signInAudience,identifierUris,api:{acceptMappedClaims:(.api.acceptMappedClaims // null),requestedAccessTokenVersion:.api.requestedAccessTokenVersion,oauth2PermissionScopes:(.api.oauth2PermissionScopes|map({adminConsentDescription,adminConsentDisplayName,id,isEnabled,type,userConsentDescription,userConsentDisplayName,value})|sort_by(.id))},appRoles:(.appRoles|map({allowedMemberTypes,description,displayName,id,isEnabled,value})|sort_by(.id)),requiredResourceAccess:(.requiredResourceAccess|map(.resourceAccess|=sort_by(.id))|sort_by(.resourceAppId)),isFallbackPublicClient,web:{redirectUris:.web.redirectUris}}'
 }
 canonical_web_contract() {
   jq -Sc '{signInAudience,spa:{redirectUris:.spa.redirectUris},requiredResourceAccess:(.requiredResourceAccess|map(.resourceAccess|=sort_by(.id))|sort_by(.resourceAppId)),isFallbackPublicClient}'
@@ -107,7 +126,7 @@ validate_apps() {
   if [[ -n "$fixture" ]]; then
     api_json="$(jq -ce '.apiApplication' "$fixture")"; web_json="$(jq -ce '.webApplication' "$fixture")"
   else
-    api_json="$(az ad app show --id "$api_client_id" -o json)"; web_json="$(az ad app show --id "$web_client_id" -o json)"
+    api_json="$(az_run ad app show --id "$api_client_id" -o json)"; web_json="$(az_run ad app show --id "$web_client_id" -o json)"
   fi
   make_payloads
   expected="$(canonical_api_contract <"$api_payload")"; actual="$(canonical_api_contract <<<"$api_json")"
@@ -130,17 +149,17 @@ if [[ "$mode" == "check" ]]; then
 fi
 
 if [[ -n "$api_client_id" ]]; then
-  need_uuid "API client ID" "$api_client_id"; api_record="$(az ad app show --id "$api_client_id" -o json)"
+  need_uuid "API client ID" "$api_client_id"; api_record="$(az_run ad app show --id "$api_client_id" -o json)"
 else
-  api_record="$(az ad app create --display-name "Supply Response API" --sign-in-audience AzureADMyOrg -o json)"
+  api_record="$(az_run ad app create --display-name "Supply Response API" --sign-in-audience AzureADMyOrg -o json)"
   api_client_id="$(jq -r '.appId' <<<"$api_record")"; need_uuid "API client ID" "$api_client_id"
   write_state INCOMPLETE; maybe_inject_failure api_app
 fi
 api_object_id="$(jq -r '.id' <<<"$api_record")"; need_uuid "API object ID" "$api_object_id"
 if [[ -n "$web_client_id" ]]; then
-  need_uuid "Web client ID" "$web_client_id"; web_record="$(az ad app show --id "$web_client_id" -o json)"
+  need_uuid "Web client ID" "$web_client_id"; web_record="$(az_run ad app show --id "$web_client_id" -o json)"
 else
-  web_record="$(az ad app create --display-name "Supply Response Web" --sign-in-audience AzureADMyOrg -o json)"
+  web_record="$(az_run ad app create --display-name "Supply Response Web" --sign-in-audience AzureADMyOrg -o json)"
   web_client_id="$(jq -r '.appId' <<<"$web_record")"; need_uuid "Web client ID" "$web_client_id"
   write_state INCOMPLETE; maybe_inject_failure web_app
 fi
@@ -148,18 +167,14 @@ web_object_id="$(jq -r '.id' <<<"$web_record")"; need_uuid "Web object ID" "$web
 
 write_state INCOMPLETE; make_payloads
 trap 'rm -f "${api_payload:-}" "${web_payload:-}"' EXIT
-az rest --method PATCH --uri "https://graph.microsoft.com/v1.0/applications/$api_object_id" --headers Content-Type=application/json --body "@$api_payload" >/dev/null
+az_run rest --method PATCH --uri "https://graph.microsoft.com/v1.0/applications/$api_object_id" --headers Content-Type=application/json --body "@$api_payload" >/dev/null
 maybe_inject_failure api_patch
-az rest --method PATCH --uri "https://graph.microsoft.com/v1.0/applications/$web_object_id" --headers Content-Type=application/json --body "@$web_payload" >/dev/null
+az_run rest --method PATCH --uri "https://graph.microsoft.com/v1.0/applications/$web_object_id" --headers Content-Type=application/json --body "@$web_payload" >/dev/null
 maybe_inject_failure web_patch
-if ! az ad sp show --id "$api_client_id" >/dev/null 2>&1; then az ad sp create --id "$api_client_id" >/dev/null; fi
+if ! az_run ad sp show --id "$api_client_id" >/dev/null 2>&1; then az_run ad sp create --id "$api_client_id" >/dev/null; fi
 maybe_inject_failure api_sp
-if ! az ad sp show --id "$web_client_id" >/dev/null 2>&1; then az ad sp create --id "$web_client_id" >/dev/null; fi
+if ! az_run ad sp show --id "$web_client_id" >/dev/null 2>&1; then az_run ad sp create --id "$web_client_id" >/dev/null; fi
 maybe_inject_failure web_sp
-if [[ "${SUPPLY_RESPONSE_SKIP_FINAL_CHECK:-}" == "1" ]]; then
-  [[ "${SUPPLY_RESPONSE_TEST_MODE:-}" == "1" ]] || die "final validation cannot be skipped outside local test mode"
-else
-  validate_apps
-fi
+validate_apps
 write_state COMPLETE
 echo "APPLY_COMPLETE; admin consent and persona assignments remain separate approval-gated steps"
