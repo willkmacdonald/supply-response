@@ -57,6 +57,9 @@ def test_cleanup_validation_accepts_only_the_generated_database_shape(tmp_path):
         "traversal",
         "nested",
         "bad_basename",
+        "nil_uuid",
+        "wrong_version",
+        "wrong_variant",
         "symlink_parent",
         "outside_repository",
     ],
@@ -83,6 +86,12 @@ def test_cleanup_validation_rejects_unsafe_paths_without_deleting_sentinels(
         database_path = nested / VALID_NAME
     elif case == "bad_basename":
         database_path = temporary / VALID_NAME.replace(".db", "Xdb")
+    elif case == "nil_uuid":
+        database_path = temporary / "e2e-00000000-0000-0000-0000-000000000000.db"
+    elif case == "wrong_version":
+        database_path = temporary / "e2e-12345678-1234-3abc-8def-1234567890ab.db"
+    elif case == "wrong_variant":
+        database_path = temporary / "e2e-12345678-1234-4abc-7def-1234567890ab.db"
     elif case == "symlink_parent":
         database_path = temporary / VALID_NAME
     else:

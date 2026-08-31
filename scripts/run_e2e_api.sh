@@ -12,7 +12,7 @@ validate_database_path() {
 
   [[ "${database_path}" == /* ]] || return 1
   [[ "${database_parent}" == "${repository_root}/.tmp" ]] || return 1
-  [[ "${database_basename}" =~ ^e2e-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.db$ ]] || return 1
+  [[ "${database_basename}" =~ ^e2e-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.db$ ]] || return 1
   [[ -d "${database_parent}" && ! -L "${database_parent}" ]] || return 1
   physical_parent="$(cd -P -- "${database_parent}" && pwd -P)" || return 1
   [[ "${physical_parent}" == "${repository_root}/.tmp" ]] || return 1
