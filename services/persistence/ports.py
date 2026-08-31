@@ -4,7 +4,14 @@ from typing import Protocol, runtime_checkable
 from data.domain import CaseInstance, CasePurpose
 from data.domain.analysis import AnalysisVersion
 from data.domain.decisions import ApprovalSatisfaction, CaseProjection, Decision
-from data.domain.execution import ActionPlanningRequested
+from data.domain.execution import (
+    ActionPlanningRequested,
+    DraftArtifact,
+    ExecutionAction,
+    ExecutionAttempt,
+    ExecutionStatusEvent,
+    OutboxProcessingState,
+)
 from data.synthetic.rl001 import OperationalSnapshot
 
 
@@ -27,6 +34,10 @@ class CaseStore(Protocol):
     def set_current_decision(self, case_id: str, decision_id: str) -> None: ...
 
     def mark_rejected(self, case_id: str, decision_id: str) -> None: ...
+
+    def mark_action_planning_complete(self, case_id: str) -> None: ...
+
+    def mark_action_planning_failed(self, case_id: str) -> None: ...
 
     def save_case_projection(self, case: CaseInstance) -> None: ...
 
@@ -66,6 +77,42 @@ class ExecutionStore(Protocol):
         *,
         decision_id: str,
     ) -> tuple[ActionPlanningRequested, ...]: ...
+
+    def claim_next_outbox(
+        self,
+        event_type: str,
+    ) -> ActionPlanningRequested | None: ...
+
+    def mark_outbox_processed(self, event_id: str) -> None: ...
+
+    def record_outbox_failure(self, event_id: str, error_code: str) -> None: ...
+
+    def get_outbox_state(self, event_id: str) -> OutboxProcessingState: ...
+
+    def insert_action_if_absent(self, action: ExecutionAction) -> bool: ...
+
+    def get_action(self, action_id: str) -> ExecutionAction: ...
+
+    def list_actions(self, *, decision_id: str) -> tuple[ExecutionAction, ...]: ...
+
+    def get_draft_artifact(self, action_id: str) -> DraftArtifact: ...
+
+    def insert_attempt(self, attempt: ExecutionAttempt) -> None: ...
+
+    def update_attempt(self, attempt: ExecutionAttempt) -> None: ...
+
+    def get_attempt(self, attempt_id: str) -> ExecutionAttempt: ...
+
+    def list_attempts(self, action_id: str) -> tuple[ExecutionAttempt, ...]: ...
+
+    def update_action_projection(self, action: ExecutionAction) -> None: ...
+
+    def append_status_event(self, event: ExecutionStatusEvent) -> None: ...
+
+    def list_status_events(
+        self,
+        action_id: str,
+    ) -> tuple[ExecutionStatusEvent, ...]: ...
 
 
 class UnitOfWork(Protocol):

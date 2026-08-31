@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Callable
+from uuid import uuid4
 
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import Connection, Engine, insert, select, update
+from sqlalchemy import Connection, Engine, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from data.domain import CaseInstance, CasePurpose, CaseStatus, RuntimeMode
@@ -14,7 +15,18 @@ from data.domain.decisions import (
     CaseProjection,
     Decision,
 )
-from data.domain.execution import ActionPlanningRequested
+from data.domain.execution import (
+    ALLOWED_TRANSITIONS,
+    ActionPlanningRequested,
+    DraftArtifact,
+    ExecutionAction,
+    ExecutionActionKind,
+    ExecutionAttempt,
+    ExecutionStatus,
+    ExecutionStatusEvent,
+    OutboxClaimStatus,
+    OutboxProcessingState,
+)
 from data.synthetic.rl001 import OperationalSnapshot
 from services.analysis.service import (
     analysis_material_hash,
@@ -27,7 +39,12 @@ from services.persistence.tables import (
     case_instances,
     case_projection,
     decisions,
+    draft_artifacts,
     evidence_items,
+    execution_actions,
+    execution_attempts,
+    execution_events,
+    action_projection,
     operational_snapshots,
     outbox_events,
 )
@@ -632,6 +649,16 @@ class SqlAlchemyStore:
             uow.cases.mark_rejected(case_id, decision_id)
             uow.commit()
 
+    def mark_action_planning_complete(self, case_id: str) -> None:
+        with self.uow_factory() as uow:
+            uow.cases.mark_action_planning_complete(case_id)
+            uow.commit()
+
+    def mark_action_planning_failed(self, case_id: str) -> None:
+        with self.uow_factory() as uow:
+            uow.cases.mark_action_planning_failed(case_id)
+            uow.commit()
+
 
 class SqlAlchemyCaseRepository:
     def __init__(self, store: SqlAlchemyStore, connection: Connection) -> None:
@@ -682,11 +709,26 @@ class SqlAlchemyCaseRepository:
         stored_case = self._store._stored_case(self._connection, case_id)
         self._store._require_case_projection_integrity(row, case, stored_case)
         self._store._require_configured_mode(case.runtime_mode)
+        display_status = None
+        if (
+            case.status is CaseStatus.ACTION_PLANNING
+            and row["current_decision_id"] is not None
+        ):
+            last_error = self._connection.scalar(
+                select(outbox_events.c.last_error).where(
+                    outbox_events.c.decision_id == row["current_decision_id"],
+                    outbox_events.c.event_type == "ActionPlanningRequested",
+                    outbox_events.c.processed_at.is_(None),
+                )
+            )
+            if last_error is not None:
+                display_status = "Approved — action planning failed"
         return CaseProjection(
             case=case,
             current_analysis_id=row["current_analysis_id"],
             current_analysis_hash=row["current_analysis_hash"],
             current_decision_id=row["current_decision_id"],
+            display_status=display_status,
         )
 
     def _set_decision_projection(
@@ -724,6 +766,27 @@ class SqlAlchemyCaseRepository:
             decision_id,
             status=CaseStatus.DECISION_REJECTED,
         )
+
+    def _set_case_status(self, case_id: str, status: CaseStatus) -> None:
+        projection = self.get_projection(case_id)
+        changed = projection.case.model_copy(update={"status": status})
+        result = self._connection.execute(
+            update(case_projection)
+            .where(case_projection.c.case_id == case_id)
+            .values(
+                status=status.value,
+                updated_at=datetime.now(UTC),
+                payload_json=serialize_model(changed),
+            )
+        )
+        if result.rowcount != 1:
+            raise RecordNotFound(f"case projection does not exist: {case_id}")
+
+    def mark_action_planning_complete(self, case_id: str) -> None:
+        self._set_case_status(case_id, CaseStatus.EXECUTING)
+
+    def mark_action_planning_failed(self, case_id: str) -> None:
+        self._set_case_status(case_id, CaseStatus.ACTION_PLANNING)
 
 
 class SqlAlchemyDecisionRepository:
@@ -1195,7 +1258,6 @@ class SqlAlchemyExecutionRepository:
                 event.event_id != row["event_id"]
                 or event.decision_id != row["decision_id"]
                 or event.event_type != row["event_type"]
-                or event.claim_status.value != row["claim_status"]
                 or not self._store._datetime_matches(
                     row["created_at"], event.created_at
                 )
@@ -1230,6 +1292,544 @@ class SqlAlchemyExecutionRepository:
                 "rejected Decision cannot have outbox events"
             )
         return tuple(events)
+
+    @staticmethod
+    def _decode_outbox_event(row) -> ActionPlanningRequested:
+        try:
+            event = ActionPlanningRequested.model_validate_json(row["payload_json"])
+        except (ValidationError, ValueError) as error:
+            raise PersistenceIntegrityError(
+                "persisted outbox event contains invalid JSON"
+            ) from error
+        if (
+            event.event_id != row["event_id"]
+            or event.decision_id != row["decision_id"]
+            or event.event_type != row["event_type"]
+        ):
+            raise PersistenceIntegrityError(
+                "outbox columns conflict with canonical event JSON"
+            )
+        return event
+
+    def claim_next_outbox(
+        self,
+        event_type: str,
+    ) -> ActionPlanningRequested | None:
+        if event_type != "ActionPlanningRequested":
+            raise ValueError("unsupported outbox event type")
+        now = datetime.now(UTC)
+        claim_expires_at = now + timedelta(minutes=5)
+        candidate = (
+            select(outbox_events.c.event_id)
+            .where(
+                outbox_events.c.event_type == event_type,
+                outbox_events.c.available_at <= now,
+                outbox_events.c.processed_at.is_(None),
+                or_(
+                    outbox_events.c.claim_status == OutboxClaimStatus.PENDING.value,
+                    (
+                        (
+                            outbox_events.c.claim_status
+                            == OutboxClaimStatus.CLAIMED.value
+                        )
+                        & (outbox_events.c.claim_expires_at < now)
+                    ),
+                ),
+            )
+            .order_by(outbox_events.c.available_at, outbox_events.c.event_id)
+            .limit(1)
+            .scalar_subquery()
+        )
+        row = (
+            self._connection.execute(
+                update(outbox_events)
+                .where(
+                    outbox_events.c.event_id == candidate,
+                    outbox_events.c.processed_at.is_(None),
+                )
+                .values(
+                    claim_status=OutboxClaimStatus.CLAIMED.value,
+                    claimed_by="RL-EXECUTION-PLANNER",
+                    claimed_at=now,
+                    claim_expires_at=claim_expires_at,
+                )
+                .returning(*outbox_events.c)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            return None
+        event = self._decode_outbox_event(row)
+        decision = SqlAlchemyDecisionRepository(self._store, self._connection).get(
+            event.decision_id
+        )
+        if decision.kind.value != "approved" or event.case_id != decision.case_id:
+            raise PersistenceIntegrityError(
+                "claimed planning event conflicts with its approved Decision"
+            )
+        return event
+
+    def mark_outbox_processed(self, event_id: str) -> None:
+        result = self._connection.execute(
+            update(outbox_events)
+            .where(
+                outbox_events.c.event_id == event_id,
+                outbox_events.c.claim_status == OutboxClaimStatus.CLAIMED.value,
+                outbox_events.c.processed_at.is_(None),
+            )
+            .values(
+                claim_status=OutboxClaimStatus.PROCESSED.value,
+                processed_at=datetime.now(UTC),
+                claim_expires_at=None,
+                last_error=None,
+            )
+        )
+        if result.rowcount != 1:
+            raise RecordNotFound(f"claimed outbox event does not exist: {event_id}")
+
+    def record_outbox_failure(self, event_id: str, error_code: str) -> None:
+        result = self._connection.execute(
+            update(outbox_events)
+            .where(
+                outbox_events.c.event_id == event_id,
+                outbox_events.c.processed_at.is_(None),
+            )
+            .values(
+                claim_status=OutboxClaimStatus.PENDING.value,
+                claimed_by=None,
+                claimed_at=None,
+                claim_expires_at=None,
+                attempt_count=outbox_events.c.attempt_count + 1,
+                last_error=error_code,
+            )
+        )
+        if result.rowcount != 1:
+            raise RecordNotFound(f"outbox event does not exist: {event_id}")
+
+    def get_outbox_state(self, event_id: str) -> OutboxProcessingState:
+        row = (
+            self._connection.execute(
+                select(outbox_events).where(outbox_events.c.event_id == event_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RecordNotFound(f"outbox event does not exist: {event_id}")
+        self._decode_outbox_event(row)
+        return OutboxProcessingState(
+            event_id=row["event_id"],
+            claim_status=OutboxClaimStatus(row["claim_status"]),
+            processed_at=row["processed_at"],
+            attempt_count=row["attempt_count"],
+            last_error=row["last_error"],
+        )
+
+    @staticmethod
+    def _decode_action(payload: str, *, record_name: str) -> ExecutionAction:
+        try:
+            return ExecutionAction.model_validate_json(payload)
+        except (ValidationError, ValueError) as error:
+            raise PersistenceIntegrityError(
+                f"{record_name} contains invalid Execution Action JSON"
+            ) from error
+
+    def _immutable_action(self, action_id: str) -> ExecutionAction:
+        row = (
+            self._connection.execute(
+                select(execution_actions).where(
+                    execution_actions.c.action_id == action_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RecordNotFound(f"execution action does not exist: {action_id}")
+        action = self._decode_action(
+            row["payload_json"],
+            record_name="immutable action record",
+        )
+        if (
+            action.action_id != row["action_id"]
+            or action.case_id != row["case_id"]
+            or action.decision_id != row["decision_id"]
+            or action.kind.value != row["action_kind"]
+            or action.status.value != row["status"]
+            or action.status is not ExecutionStatus.PLANNED
+            or not self._store._datetime_matches(row["created_at"], action.created_at)
+        ):
+            raise PersistenceIntegrityError(
+                "action columns conflict with canonical immutable JSON"
+            )
+        return action
+
+    def insert_action_if_absent(self, action: ExecutionAction) -> bool:
+        if action.status is not ExecutionStatus.PLANNED:
+            raise ValueError("new execution actions must be planned")
+        decision = SqlAlchemyDecisionRepository(self._store, self._connection).get(
+            action.decision_id
+        )
+        if decision.kind.value != "approved" or action.case_id != decision.case_id:
+            raise PersistenceIntegrityError(
+                "Execution Action must match an approved Decision"
+            )
+        existing = self._connection.scalar(
+            select(execution_actions.c.action_id).where(
+                execution_actions.c.action_id == action.action_id
+            )
+        )
+        if existing is not None:
+            if self._immutable_action(action.action_id) != action:
+                raise ImmutableRecordConflict(
+                    f"execution action ID conflicts: {action.action_id}"
+                )
+            return False
+
+        self._connection.execute(
+            insert(execution_actions).values(
+                action_id=action.action_id,
+                case_id=action.case_id,
+                decision_id=action.decision_id,
+                action_kind=action.kind.value,
+                status=action.status.value,
+                created_at=action.created_at,
+                payload_json=serialize_model(action),
+            )
+        )
+        self._connection.execute(
+            insert(action_projection).values(
+                action_id=action.action_id,
+                case_id=action.case_id,
+                decision_id=action.decision_id,
+                status=action.status.value,
+                current_attempt=0,
+                payload_json=serialize_model(action),
+            )
+        )
+        initial_event = ExecutionStatusEvent(
+            execution_event_id=f"RL-EXECUTION-EVENT-{uuid4()}",
+            action_id=action.action_id,
+            decision_id=action.decision_id,
+            sequence_number=1,
+            from_status=None,
+            to_status=ExecutionStatus.PLANNED,
+            occurred_at=action.created_at,
+        )
+        self.append_status_event(initial_event)
+        if action.draft_artifact_id is not None:
+            artifact = DraftArtifact(
+                artifact_id=action.draft_artifact_id,
+                action_id=action.action_id,
+                decision_id=action.decision_id,
+                created_at=action.created_at,
+            )
+            self._connection.execute(
+                insert(draft_artifacts).values(
+                    artifact_id=artifact.artifact_id,
+                    action_id=artifact.action_id,
+                    decision_id=artifact.decision_id,
+                    artifact_kind=artifact.artifact_kind,
+                    created_at=artifact.created_at,
+                    payload_json=serialize_model(artifact),
+                )
+            )
+        return True
+
+    def get_action(self, action_id: str) -> ExecutionAction:
+        immutable = self._immutable_action(action_id)
+        row = (
+            self._connection.execute(
+                select(action_projection).where(
+                    action_projection.c.action_id == action_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise PersistenceIntegrityError(
+                f"action projection is missing: {action_id}"
+            )
+        projected = self._decode_action(
+            row["payload_json"],
+            record_name="action projection",
+        )
+        if (
+            projected.action_id != row["action_id"]
+            or projected.case_id != row["case_id"]
+            or projected.decision_id != row["decision_id"]
+            or projected.status.value != row["status"]
+            or projected.model_copy(update={"status": ExecutionStatus.PLANNED})
+            != immutable
+        ):
+            raise PersistenceIntegrityError(
+                "action projection conflicts with its immutable Action"
+            )
+        return projected
+
+    def list_actions(self, *, decision_id: str) -> tuple[ExecutionAction, ...]:
+        action_ids = (
+            self._connection.execute(
+                select(execution_actions.c.action_id).where(
+                    execution_actions.c.decision_id == decision_id
+                )
+            )
+            .scalars()
+            .all()
+        )
+        actions = [self.get_action(action_id) for action_id in action_ids]
+        order = {kind.value: index for index, kind in enumerate(ExecutionActionKind)}
+        return tuple(sorted(actions, key=lambda action: order[action.kind.value]))
+
+    def get_draft_artifact(self, action_id: str) -> DraftArtifact:
+        row = (
+            self._connection.execute(
+                select(draft_artifacts).where(draft_artifacts.c.action_id == action_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RecordNotFound(
+                f"Draft Artifact does not exist for action: {action_id}"
+            )
+        try:
+            artifact = DraftArtifact.model_validate_json(row["payload_json"])
+        except (ValidationError, ValueError) as error:
+            raise PersistenceIntegrityError(
+                "persisted Draft Artifact contains invalid JSON"
+            ) from error
+        if (
+            artifact.artifact_id != row["artifact_id"]
+            or artifact.action_id != row["action_id"]
+            or artifact.decision_id != row["decision_id"]
+            or artifact.artifact_kind != row["artifact_kind"]
+            or not self._store._datetime_matches(row["created_at"], artifact.created_at)
+            or artifact.sent is not False
+        ):
+            raise PersistenceIntegrityError(
+                "Draft Artifact columns conflict with canonical unsent JSON"
+            )
+        return artifact
+
+    @staticmethod
+    def _decode_attempt(payload: str) -> ExecutionAttempt:
+        try:
+            return ExecutionAttempt.model_validate_json(payload)
+        except (ValidationError, ValueError) as error:
+            raise PersistenceIntegrityError(
+                "persisted Execution Attempt contains invalid JSON"
+            ) from error
+
+    def _attempt_from_row(self, row) -> ExecutionAttempt:
+        attempt = self._decode_attempt(row["payload_json"])
+        if (
+            attempt.attempt_id != row["attempt_id"]
+            or attempt.action_id != row["action_id"]
+            or attempt.decision_id != row["decision_id"]
+            or attempt.attempt_number != row["attempt_number"]
+            or attempt.status.value != row["status"]
+            or not self._store._datetime_matches(row["started_at"], attempt.started_at)
+            or (attempt.completed_at is None and row["completed_at"] is not None)
+            or (
+                attempt.completed_at is not None
+                and (
+                    row["completed_at"] is None
+                    or not self._store._datetime_matches(
+                        row["completed_at"], attempt.completed_at
+                    )
+                )
+            )
+        ):
+            raise PersistenceIntegrityError(
+                "Execution Attempt columns conflict with canonical JSON"
+            )
+        return attempt
+
+    def insert_attempt(self, attempt: ExecutionAttempt) -> None:
+        action = self.get_action(attempt.action_id)
+        existing = self.list_attempts(attempt.action_id)
+        if (
+            attempt.decision_id != action.decision_id
+            or attempt.attempt_number != len(existing) + 1
+            or attempt.status is not ExecutionStatus.IN_PROGRESS
+            or attempt.completed_at is not None
+        ):
+            raise PersistenceIntegrityError("Execution Attempt is inconsistent")
+        self._connection.execute(
+            insert(execution_attempts).values(
+                attempt_id=attempt.attempt_id,
+                action_id=attempt.action_id,
+                decision_id=attempt.decision_id,
+                attempt_number=attempt.attempt_number,
+                status=attempt.status.value,
+                started_at=attempt.started_at,
+                completed_at=attempt.completed_at,
+                payload_json=serialize_model(attempt),
+            )
+        )
+        self._connection.execute(
+            update(action_projection)
+            .where(action_projection.c.action_id == attempt.action_id)
+            .values(current_attempt=attempt.attempt_number)
+        )
+
+    def update_attempt(self, attempt: ExecutionAttempt) -> None:
+        previous = self.get_attempt(attempt.attempt_id)
+        if (
+            previous.status is not ExecutionStatus.IN_PROGRESS
+            or attempt.action_id != previous.action_id
+            or attempt.decision_id != previous.decision_id
+            or attempt.attempt_number != previous.attempt_number
+            or attempt.started_at != previous.started_at
+            or attempt.status
+            not in {
+                ExecutionStatus.COMPLETED,
+                ExecutionStatus.FAILED,
+                ExecutionStatus.CANCELLED,
+            }
+            or attempt.completed_at is None
+        ):
+            raise PersistenceIntegrityError(
+                "Execution Attempt update would rewrite immutable attempt history"
+            )
+        self._connection.execute(
+            update(execution_attempts)
+            .where(execution_attempts.c.attempt_id == attempt.attempt_id)
+            .values(
+                status=attempt.status.value,
+                completed_at=attempt.completed_at,
+                payload_json=serialize_model(attempt),
+            )
+        )
+
+    def get_attempt(self, attempt_id: str) -> ExecutionAttempt:
+        row = (
+            self._connection.execute(
+                select(execution_attempts).where(
+                    execution_attempts.c.attempt_id == attempt_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RecordNotFound(f"Execution Attempt does not exist: {attempt_id}")
+        return self._attempt_from_row(row)
+
+    def list_attempts(self, action_id: str) -> tuple[ExecutionAttempt, ...]:
+        rows = (
+            self._connection.execute(
+                select(execution_attempts)
+                .where(execution_attempts.c.action_id == action_id)
+                .order_by(execution_attempts.c.attempt_number)
+            )
+            .mappings()
+            .all()
+        )
+        return tuple(self._attempt_from_row(row) for row in rows)
+
+    def update_action_projection(self, action: ExecutionAction) -> None:
+        immutable = self._immutable_action(action.action_id)
+        if action.model_copy(update={"status": ExecutionStatus.PLANNED}) != immutable:
+            raise ImmutableRecordConflict(
+                "action projection cannot change immutable Action fields"
+            )
+        result = self._connection.execute(
+            update(action_projection)
+            .where(action_projection.c.action_id == action.action_id)
+            .values(
+                status=action.status.value,
+                updated_at=datetime.now(UTC),
+                payload_json=serialize_model(action),
+            )
+        )
+        if result.rowcount != 1:
+            raise RecordNotFound(
+                f"action projection does not exist: {action.action_id}"
+            )
+
+    def append_status_event(self, event: ExecutionStatusEvent) -> None:
+        action = self._immutable_action(event.action_id)
+        existing = self.list_status_events(event.action_id)
+        if (
+            event.decision_id != action.decision_id
+            or event.sequence_number != len(existing) + 1
+        ):
+            raise PersistenceIntegrityError(
+                "Execution Status Event sequence or lineage is inconsistent"
+            )
+        if not existing:
+            if (
+                event.from_status is not None
+                or event.to_status is not ExecutionStatus.PLANNED
+            ):
+                raise PersistenceIntegrityError(
+                    "first Execution Status Event must establish planned state"
+                )
+        else:
+            from_status = event.from_status
+            if (
+                from_status is None
+                or from_status is not existing[-1].to_status
+                or event.to_status not in ALLOWED_TRANSITIONS[from_status]
+            ):
+                raise PersistenceIntegrityError(
+                    "Execution Status Event violates the transition graph"
+                )
+        self._connection.execute(
+            insert(execution_events).values(
+                execution_event_id=event.execution_event_id,
+                action_id=event.action_id,
+                decision_id=event.decision_id,
+                event_type="ExecutionStatusChanged",
+                occurred_at=event.occurred_at,
+                payload_json=serialize_model(event),
+            )
+        )
+
+    def list_status_events(
+        self,
+        action_id: str,
+    ) -> tuple[ExecutionStatusEvent, ...]:
+        rows = (
+            self._connection.execute(
+                select(execution_events).where(
+                    execution_events.c.action_id == action_id
+                )
+            )
+            .mappings()
+            .all()
+        )
+        events: list[ExecutionStatusEvent] = []
+        for row in rows:
+            try:
+                event = ExecutionStatusEvent.model_validate_json(row["payload_json"])
+            except (ValidationError, ValueError) as error:
+                raise PersistenceIntegrityError(
+                    "persisted Execution Status Event contains invalid JSON"
+                ) from error
+            if (
+                event.execution_event_id != row["execution_event_id"]
+                or event.action_id != row["action_id"]
+                or event.decision_id != row["decision_id"]
+                or row["event_type"] != "ExecutionStatusChanged"
+                or not self._store._datetime_matches(
+                    row["occurred_at"], event.occurred_at
+                )
+            ):
+                raise PersistenceIntegrityError(
+                    "Execution Status Event columns conflict with canonical JSON"
+                )
+            events.append(event)
+        ordered = tuple(sorted(events, key=lambda event: event.sequence_number))
+        if [event.sequence_number for event in ordered] != list(
+            range(1, len(ordered) + 1)
+        ):
+            raise PersistenceIntegrityError("Execution Status Event history has gaps")
+        return ordered
 
 
 class SqlAlchemyUnitOfWork:

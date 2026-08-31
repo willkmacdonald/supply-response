@@ -192,6 +192,7 @@ class CaseProjection(FrozenModel):
     current_analysis_id: str | None = None
     current_analysis_hash: str | None = None
     current_decision_id: str | None = None
+    display_status: str | None = None
 
 
 class Decision(FrozenModel):
