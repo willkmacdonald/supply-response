@@ -86,6 +86,12 @@ class ExecutionStore(Protocol):
         event_type: str,
     ) -> OutboxClaim | None: ...
 
+    def claim_outbox_for_decision(
+        self,
+        event_type: str,
+        decision_id: str,
+    ) -> OutboxClaim | None: ...
+
     def validate_claimed_outbox(
         self,
         claim: OutboxClaim,

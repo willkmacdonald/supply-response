@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.app.main import create_app
@@ -166,6 +167,29 @@ def test_decision_idempotency_reuses_only_the_same_request(client):
     assert conflict.json()["detail"] == {"code": "IDEMPOTENCY_KEY_CONFLICT"}
 
 
+def test_idempotent_decision_replay_precedes_stale_analysis_validation(client):
+    case_id, first_analysis = create_and_analyze(client)
+    first = approve(
+        client,
+        case_id,
+        first_analysis["analysis_id"],
+        key="RL-API-REPLAY-BEFORE-STALE",
+    )
+    assert first.status_code == 201
+    newer_analysis = client.post(f"/api/cases/{case_id}/analysis")
+    assert newer_analysis.status_code == 201
+
+    replay = approve(
+        client,
+        case_id,
+        first_analysis["analysis_id"],
+        key="RL-API-REPLAY-BEFORE-STALE",
+    )
+
+    assert replay.status_code == 201
+    assert replay.json()["decision_id"] == first.json()["decision_id"]
+
+
 def test_decision_rejects_caller_owned_identity_and_provenance(client):
     case_id, analysis = create_and_analyze(client)
     response = client.post(
@@ -247,6 +271,137 @@ def test_planning_failure_is_visible_and_retryable(tmp_path):
         )
 
 
+def test_planning_retry_claims_only_the_requested_decision(tmp_path):
+    def fail_planning(decision):
+        del decision
+        raise RuntimeError("internal planning detail")
+
+    api = create_app(
+        Settings(
+            runtime_mode=RuntimeMode.FALLBACK,
+            database_url=f"sqlite:///{tmp_path / 'targeted-retry.db'}",
+        ),
+        planner=fail_planning,
+        clock=lambda: datetime.now(UTC),
+    )
+    with TestClient(api) as client:
+        first_case_id, first_analysis = create_and_analyze(client)
+        first = approve(
+            client,
+            first_case_id,
+            first_analysis["analysis_id"],
+            key="RL-API-PENDING-A",
+        ).json()
+        second_case_id, second_analysis = create_and_analyze(client)
+        second = approve(
+            client,
+            second_case_id,
+            second_analysis["analysis_id"],
+            key="RL-API-FAILED-B",
+        ).json()
+        services = api.state.services
+        assert (
+            services.planning_worker.process_decision_outbox(second["decision_id"])
+            is True
+        )
+        assert (
+            client.get(f"/api/decisions/{first['decision_id']}").json()[
+                "action_planning_status"
+            ]
+            == "pending"
+        )
+        assert (
+            client.get(f"/api/decisions/{second['decision_id']}").json()[
+                "action_planning_status"
+            ]
+            == "failed"
+        )
+
+        services.planning_worker = ActionPlanningWorker(services.uow_factory)
+        retried = client.post(f"/api/decisions/{second['decision_id']}/actions/retry")
+
+        assert retried.status_code == 200
+        assert retried.json()["action_planning_status"] == "complete"
+        assert (
+            client.get(f"/api/decisions/{first['decision_id']}").json()[
+                "action_planning_status"
+            ]
+            == "pending"
+        )
+        assert client.get(f"/api/decisions/{first['decision_id']}/actions").json() == []
+        assert (
+            len(client.get(f"/api/decisions/{second['decision_id']}/actions").json())
+            == 5
+        )
+
+
+@pytest.mark.parametrize(
+    "identity_update",
+    [
+        {"effective_roles": ("material_planner",)},
+        {"persona_id": "RL-PERSONA-IMPOSTOR"},
+    ],
+)
+def test_planning_retry_requires_server_owned_response_approver(
+    tmp_path,
+    identity_update,
+):
+    def fail_planning(decision):
+        del decision
+        raise RuntimeError("internal planning detail")
+
+    api = create_app(
+        Settings(
+            runtime_mode=RuntimeMode.FALLBACK,
+            database_url=f"sqlite:///{tmp_path / 'authorized-retry.db'}",
+        ),
+        planner=fail_planning,
+        clock=lambda: datetime.now(UTC),
+    )
+    with TestClient(api) as client:
+        case_id, analysis = create_and_analyze(client)
+        decision = approve(client, case_id, analysis["analysis_id"]).json()
+        services = api.state.services
+        assert services.planning_worker.process_next_outbox() is True
+        services.identity = services.identity.model_copy(update=identity_update)
+
+        forbidden = client.post(
+            f"/api/decisions/{decision['decision_id']}/actions/retry"
+        )
+
+        assert forbidden.status_code == 403
+        assert forbidden.json()["detail"] == {
+            "code": "ROLE_REQUIRED",
+            "role": "response_approver",
+        }
+
+
+def test_planning_retry_rejects_caller_owned_identity_snapshot(tmp_path):
+    def fail_planning(decision):
+        del decision
+        raise RuntimeError("internal planning detail")
+
+    api = create_app(
+        Settings(
+            runtime_mode=RuntimeMode.FALLBACK,
+            database_url=f"sqlite:///{tmp_path / 'retry-body.db'}",
+        ),
+        planner=fail_planning,
+        clock=lambda: datetime.now(UTC),
+    )
+    with TestClient(api) as client:
+        case_id, analysis = create_and_analyze(client)
+        decision = approve(client, case_id, analysis["analysis_id"]).json()
+        assert api.state.services.planning_worker.process_next_outbox() is True
+
+        response = client.post(
+            f"/api/decisions/{decision['decision_id']}/actions/retry",
+            json={"identity": {"effective_roles": ["response_approver"]}},
+        )
+
+        assert response.status_code == 422
+
+
 def test_playback_requires_an_explicit_authorized_server_identity(client, services):
     case_id, analysis = create_and_analyze(client)
     decision = approve(client, case_id, analysis["analysis_id"]).json()
@@ -325,3 +480,26 @@ def test_dashboard_cases_reports_persisted_projection_timestamps(client, service
     assert item["recommended_option_id"] == "RL-OPTION-COMBINED"
     assert item["selected_option_id"] == "RL-OPTION-COMBINED"
     assert item["action_count"] == 5
+
+
+def test_analysis_runs_through_the_startup_composed_service(client, services):
+    created = client.post(
+        "/api/cases",
+        json={"template_id": "RL-001", "purpose": "automated_test"},
+    )
+    case_id = created.json()["case_id"]
+    composed = services.analysis_service
+    calls = []
+
+    class RecordingAnalysisService:  # allowed - composition wiring test double
+        def create(self, requested_case_id):
+            calls.append(requested_case_id)
+            return composed.create(requested_case_id)
+
+    services.analysis_service = RecordingAnalysisService()
+
+    response = client.post(f"/api/cases/{case_id}/analysis")
+
+    assert response.status_code == 201
+    assert calls == [case_id]
+    assert response.json()["recommendation"]["option_id"] == "RL-OPTION-COMBINED"

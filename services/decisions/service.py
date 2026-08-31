@@ -32,6 +32,19 @@ class DecisionError(RuntimeError):
 class DecisionPolicyViolation(DecisionError):
     """Raised when current state does not authorize a Decision."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "DECISION_POLICY_VIOLATION",
+        role: str | None = None,
+        blocking_codes: tuple[str, ...] = (),
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.role = role
+        self.blocking_codes = blocking_codes
+
 
 class IdempotencyKeyConflict(DecisionError):
     """Raised when an idempotency key is reused for another request."""
@@ -71,17 +84,25 @@ class DecisionPolicy:
             or actor.source_id != "RL-ENTRA-ALEX"
         ):
             raise DecisionPolicyViolation(
-                "Decision requires the server-owned Alex identity"
+                "Decision requires the server-owned Alex identity",
+                code="ROLE_REQUIRED",
+                role="response_approver",
             )
         if "response_approver" not in actor.effective_roles:
             raise DecisionPolicyViolation(
-                "Decision requires the response_approver role"
+                "Decision requires the response_approver role",
+                code="ROLE_REQUIRED",
+                role="response_approver",
             )
         if (
             command.kind is DecisionKind.APPROVED
             and "material_planner" not in actor.effective_roles
         ):
-            raise DecisionPolicyViolation("Approval requires the material_planner role")
+            raise DecisionPolicyViolation(
+                "Approval requires the material_planner role",
+                code="ROLE_REQUIRED",
+                role="material_planner",
+            )
 
     @staticmethod
     def _require_current_analysis(
@@ -91,15 +112,22 @@ class DecisionPolicy:
         analysis: AnalysisVersion,
     ) -> None:
         if analysis.analysis_id != command.analysis_id:
-            raise DecisionPolicyViolation("Decision analysis_id is inconsistent")
+            raise DecisionPolicyViolation(
+                "Decision analysis_id is inconsistent",
+                code="STALE_ANALYSIS",
+            )
         if analysis.case_id != command.case_id or case.case_id != command.case_id:
-            raise DecisionPolicyViolation("Decision case and analysis are inconsistent")
+            raise DecisionPolicyViolation(
+                "Decision case and analysis are inconsistent",
+                code="STALE_ANALYSIS",
+            )
         if (
             projection.current_analysis_id != analysis.analysis_id
             or projection.current_analysis_hash != analysis.material_hash
         ):
             raise DecisionPolicyViolation(
-                "Decision must use the current analysis and material hash"
+                "Decision must use the current analysis and material hash",
+                code="STALE_ANALYSIS",
             )
         if (
             analysis.material.case_id != case.case_id
@@ -109,7 +137,8 @@ class DecisionPolicy:
             or analysis.material.scenario_effective_time != case.scenario_effective_time
         ):
             raise DecisionPolicyViolation(
-                "Current analysis provenance does not match the Case Instance"
+                "Current analysis provenance does not match the Case Instance",
+                code="STALE_ANALYSIS",
             )
 
     @staticmethod
@@ -127,7 +156,8 @@ class DecisionPolicy:
         )
         if option is None:
             raise DecisionPolicyViolation(
-                "Selected option is not part of the current analysis"
+                "Selected option is not part of the current analysis",
+                code="OPTION_NOT_IN_ANALYSIS",
             )
         material_option = next(
             (
@@ -145,7 +175,11 @@ class DecisionPolicy:
                 "Selected option snapshot conflicts with immutable analysis material"
             )
         if not option.executable or option.predicted is None or option.blocking_codes:
-            raise DecisionPolicyViolation("Selected option is not executable")
+            raise DecisionPolicyViolation(
+                "Selected option is not executable",
+                code="OPTION_NOT_EXECUTABLE",
+                blocking_codes=option.blocking_codes,
+            )
         if option.option_id not in analysis.ranking.eligible_option_ids:
             raise DecisionPolicyViolation(
                 "Selected option is absent from the ranking eligibility trace"

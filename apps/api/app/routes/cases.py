@@ -12,9 +12,7 @@ from apps.api.app.contracts import (
 )
 from apps.api.app.dependencies import ApplicationServices, get_services
 from data.domain import CaseStatus
-from data.domain.decisions import CorpusScope, StandingAuthorization
-from data.synthetic.rl001 import build_rl001_evidence, instantiate_rl001
-from services.analysis.service import AnalyzeCaseCommand, analyze_case
+from data.synthetic.rl001 import instantiate_rl001
 from services.persistence.store import RecordNotFound
 
 
@@ -113,37 +111,13 @@ def create_analysis(
     case_id: str,
     services: ApplicationServices = Depends(get_services),
 ) -> AnalysisResponse:
-    projection = _projection(services, case_id)
-    case = projection.case
-    _, snapshot = instantiate_rl001(
-        case_id=case.case_id,
-        purpose=case.purpose,
-        runtime_mode=case.runtime_mode,
-    )
-    analysis_id = f"RL-ANALYSIS-{uuid4()}"
-    started_at = services.clock()
-    created_at = max(services.clock(), started_at)
-    analysis = analyze_case(
-        AnalyzeCaseCommand(
-            analysis_id=analysis_id,
-            case=case,
-            corpus=CorpusScope.DEMO_CORPUS,
-            operational_snapshot=snapshot,
-            evidence_items=build_rl001_evidence(
-                snapshot,
-                analysis_id=analysis_id,
-                retrieved_at=started_at,
-            ),
-            standing_authorizations=(StandingAuthorization.taylor_rl001(),),
-            analysis_started_at=started_at,
-            created_at=created_at,
-            calculation_version="rl001-options-v1",
-        )
-    )
-    services.store.save_analysis(analysis)
-    services.store.save_case_projection(
-        case.model_copy(update={"status": CaseStatus.AWAITING_DECISION})
-    )
+    try:
+        analysis = services.analysis_service.create(case_id)
+    except RecordNotFound:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "CASE_NOT_FOUND", "case_id": case_id},
+        ) from None
     return analysis_response(analysis)
 
 

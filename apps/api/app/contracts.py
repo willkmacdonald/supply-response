@@ -20,6 +20,10 @@ class StrictRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ServerMutationRequest(StrictRequest):
+    pass
+
+
 class CreateCaseRequest(StrictRequest):
     template_id: Literal["RL-001"]
     purpose: CasePurpose

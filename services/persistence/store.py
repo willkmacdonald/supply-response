@@ -1323,6 +1323,21 @@ class SqlAlchemyExecutionRepository:
         self,
         event_type: str,
     ) -> OutboxClaim | None:
+        return self._claim_outbox(event_type, decision_id=None)
+
+    def claim_outbox_for_decision(
+        self,
+        event_type: str,
+        decision_id: str,
+    ) -> OutboxClaim | None:
+        return self._claim_outbox(event_type, decision_id=decision_id)
+
+    def _claim_outbox(
+        self,
+        event_type: str,
+        *,
+        decision_id: str | None,
+    ) -> OutboxClaim | None:
         if event_type != "ActionPlanningRequested":
             raise ValueError("unsupported outbox event type")
         now = datetime.now(UTC)
@@ -1334,6 +1349,14 @@ class SqlAlchemyExecutionRepository:
                 & (outbox_events.c.claim_expires_at < now)
             ),
         )
+        filters = [
+            outbox_events.c.event_type == event_type,
+            outbox_events.c.available_at <= now,
+            outbox_events.c.processed_at.is_(None),
+            ready_to_claim,
+        ]
+        if decision_id is not None:
+            filters.append(outbox_events.c.decision_id == decision_id)
         candidate = (
             self._connection.execute(
                 select(
@@ -1347,12 +1370,7 @@ class SqlAlchemyExecutionRepository:
                     decisions,
                     decisions.c.decision_id == outbox_events.c.decision_id,
                 )
-                .where(
-                    outbox_events.c.event_type == event_type,
-                    outbox_events.c.available_at <= now,
-                    outbox_events.c.processed_at.is_(None),
-                    ready_to_claim,
-                )
+                .where(*filters)
                 .order_by(outbox_events.c.available_at, outbox_events.c.event_id)
                 .limit(1)
             )

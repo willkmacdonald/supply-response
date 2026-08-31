@@ -42,8 +42,21 @@ class ActionPlanningWorker:
         self._planner = planner
 
     def process_next_outbox(self) -> bool:
+        return self._process_outbox(decision_id=None)
+
+    def process_decision_outbox(self, decision_id: str) -> bool:
+        return self._process_outbox(decision_id=decision_id)
+
+    def _process_outbox(self, *, decision_id: str | None) -> bool:
         with self._uow_factory() as uow:
-            claim = uow.execution.claim_next_outbox("ActionPlanningRequested")
+            claim = (
+                uow.execution.claim_next_outbox("ActionPlanningRequested")
+                if decision_id is None
+                else uow.execution.claim_outbox_for_decision(
+                    "ActionPlanningRequested",
+                    decision_id,
+                )
+            )
             if claim is None:
                 return False
             try:

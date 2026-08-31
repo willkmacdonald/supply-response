@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Body, Depends, Header, HTTPException
 
-from apps.api.app.contracts import DecisionRequest, DecisionResponse
+from apps.api.app.contracts import (
+    DecisionRequest,
+    DecisionResponse,
+    ServerMutationRequest,
+)
 from apps.api.app.dependencies import (
     ApplicationServices,
     get_server_identity,
@@ -15,6 +19,7 @@ from data.domain.decisions import (
     IdentitySnapshot,
     RecordDecisionCommand,
 )
+from data.domain.evidence import IdentitySource
 from services.decisions.service import (
     DecisionPolicyViolation,
     IdempotencyKeyConflict,
@@ -73,11 +78,46 @@ def decision_response(
 
 
 def _require_role(actor: IdentitySnapshot, role: str) -> None:
-    if role not in actor.effective_roles:
+    if (
+        actor.persona_id != "RL-PERSONA-ALEX"
+        or actor.identity_source is not IdentitySource.ENTRA
+        or actor.source_id != "RL-ENTRA-ALEX"
+        or role not in actor.effective_roles
+    ):
         raise HTTPException(
             status_code=403,
             detail={"code": "ROLE_REQUIRED", "role": role},
         )
+
+
+def _policy_http_error(
+    error: DecisionPolicyViolation,
+) -> HTTPException:
+    if error.code == "ROLE_REQUIRED" and error.role is not None:
+        return HTTPException(
+            status_code=403,
+            detail={"code": "ROLE_REQUIRED", "role": error.role},
+        )
+    if error.code == "STALE_ANALYSIS":
+        return HTTPException(
+            status_code=409,
+            detail={
+                "code": "STALE_ANALYSIS",
+                "message": "Create a new Analysis Version before deciding.",
+            },
+        )
+    if error.code == "OPTION_NOT_EXECUTABLE":
+        return HTTPException(
+            status_code=409,
+            detail={
+                "code": "OPTION_NOT_EXECUTABLE",
+                "blocking_codes": list(error.blocking_codes),
+            },
+        )
+    return HTTPException(
+        status_code=409,
+        detail={"code": error.code, "message": str(error)},
+    )
 
 
 @router.post(
@@ -92,66 +132,34 @@ def record_decision(
     services: ApplicationServices = Depends(get_services),
     actor: IdentitySnapshot = Depends(get_server_identity),
 ) -> DecisionResponse:
-    projection = _projection(services, case_id)
-    _require_role(actor, "response_approver")
     kind = DecisionKind(request.kind)
-    if kind is DecisionKind.APPROVED:
-        _require_role(actor, "material_planner")
+    command = RecordDecisionCommand(
+        case_id=case_id,
+        analysis_id=request.analysis_id,
+        selected_option_id=request.selected_option_id,
+        kind=kind,
+        idempotency_key=idempotency_key,
+        rejection_reason=request.rejection_reason,
+    )
 
-    if projection.current_analysis_id != request.analysis_id:
+    try:
+        decision = services.decision_service.record(command, actor)
+    except IdempotencyKeyConflict:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "IDEMPOTENCY_KEY_CONFLICT"},
+        ) from None
+    except RecordNotFound:
+        _projection(services, case_id)
         raise HTTPException(
             status_code=409,
             detail={
                 "code": "STALE_ANALYSIS",
                 "message": "Create a new Analysis Version before deciding.",
             },
-        )
-    analysis = services.store.get_analysis(request.analysis_id)
-    if kind is DecisionKind.APPROVED:
-        option = next(
-            (
-                item
-                for item in analysis.response_options
-                if item.option_id == request.selected_option_id
-            ),
-            None,
-        )
-        if option is None:
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "OPTION_NOT_IN_ANALYSIS"},
-            )
-        if not option.executable or option.predicted is None or option.blocking_codes:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "OPTION_NOT_EXECUTABLE",
-                    "blocking_codes": list(option.blocking_codes),
-                },
-            )
-
-    try:
-        decision = services.decision_service.record(
-            RecordDecisionCommand(
-                case_id=case_id,
-                analysis_id=request.analysis_id,
-                selected_option_id=request.selected_option_id,
-                kind=kind,
-                idempotency_key=idempotency_key,
-                rejection_reason=request.rejection_reason,
-            ),
-            actor,
-        )
-    except IdempotencyKeyConflict:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "IDEMPOTENCY_KEY_CONFLICT"},
         ) from None
     except DecisionPolicyViolation as error:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "DECISION_POLICY_VIOLATION", "message": str(error)},
-        ) from None
+        raise _policy_http_error(error) from None
     return decision_response(services, decision)
 
 
@@ -172,13 +180,17 @@ def get_decision(
 )
 def retry_action_planning(
     decision_id: str,
+    request: ServerMutationRequest | None = Body(default=None),
     services: ApplicationServices = Depends(get_services),
+    actor: IdentitySnapshot = Depends(get_server_identity),
 ) -> DecisionResponse:
+    del request
+    _require_role(actor, "response_approver")
     decision = _decision(services, decision_id)
     if services.planning_status(decision_id, decision.kind) != "failed":
         raise HTTPException(
             status_code=409,
             detail={"code": "ACTION_PLANNING_RETRY_NOT_AVAILABLE"},
         )
-    services.planning_worker.process_next_outbox()
+    services.planning_worker.process_decision_outbox(decision_id)
     return decision_response(services, decision)

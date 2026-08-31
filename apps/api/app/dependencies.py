@@ -5,16 +5,18 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, Protocol, cast
 
 from fastapi import Request
 from sqlalchemy import select
 
 from apps.api.app.settings import Settings
 from data.domain import RuntimeMode
+from data.domain.analysis import AnalysisVersion
 from data.domain.decisions import DecisionKind, IdentitySnapshot
 from data.domain.evidence import IdentitySource
 from services.decisions.service import DecisionService, UnitOfWorkFactory
+from services.analysis.application import FallbackAnalysisApplicationService
 from services.execution.planner import plan_actions
 from services.execution.playback import PlaybackClock, PlaybackService, RealClock
 from services.execution.worker import ActionPlanningWorker
@@ -37,10 +39,15 @@ def fallback_identity() -> IdentitySnapshot:
     )
 
 
+class AnalysisApplicationService(Protocol):
+    def create(self, case_id: str) -> AnalysisVersion: ...
+
+
 @dataclass
 class ApplicationServices:
     settings: Settings
     store: SqlAlchemyStore
+    analysis_service: AnalysisApplicationService
     decision_service: DecisionService
     planning_worker: ActionPlanningWorker
     playback_service: PlaybackService
@@ -142,6 +149,7 @@ def build_composition(
     return ApplicationServices(
         settings=settings,
         store=store,
+        analysis_service=FallbackAnalysisApplicationService(store, clock=now),
         decision_service=DecisionService(uow_factory, clock=now),
         planning_worker=ActionPlanningWorker(uow_factory, planner=planner),
         playback_service=PlaybackService(
