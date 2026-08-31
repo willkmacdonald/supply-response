@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 
-from data.schemas.models import (
+from data.domain import (
     BomComponent,
     Customer,
     CustomerOrder,
@@ -295,7 +295,7 @@ def generate_dataset(
             qualification_id="RL-QUAL-BETA",
             supplier_id="RL-SUP-BETA",
             part_id="RL-MAT-10247",
-            status=QualificationStatus.NOT_APPROVED,
+            status=QualificationStatus.PENDING,
             effective_date=None,
             evidence_ref="RL-QUALITY-001",
             audit_complete=False,
