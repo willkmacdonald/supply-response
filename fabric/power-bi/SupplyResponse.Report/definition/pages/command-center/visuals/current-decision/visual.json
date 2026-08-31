@@ -1,0 +1,52 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "current-decision",
+  "position": {"x": 756, "y": 24, "z": 3, "width": 244, "height": 132, "tabOrder": 3},
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "FilterCurrentDecisionLatestCase",
+        "field": {"Column": {"Expression": {"SourceRef": {"Entity": "CaseCommandCenter"}}, "Property": "case_id"}},
+        "type": "Advanced",
+        "filter": {
+          "Version": 2,
+          "From": [{"Name": "c", "Entity": "CaseCommandCenter", "Type": 0}],
+          "Where": [
+            {
+              "Condition": {
+                "Comparison": {
+                  "ComparisonKind": 0,
+                  "Left": {"Column": {"Expression": {"SourceRef": {"Source": "c"}}, "Property": "case_id"}},
+                  "Right": {"Measure": {"Expression": {"SourceRef": {"Source": "c"}}, "Property": "Latest Showcase Case"}}
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User",
+        "isHiddenInViewMode": true,
+        "isLockedInViewMode": true
+      }
+    ]
+  },
+  "visual": {
+    "visualType": "multiRowCard",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {"Measure": {"Expression": {"SourceRef": {"Entity": "CaseCommandCenter"}}, "Property": "Current Decision ID"}},
+              "queryRef": "CaseCommandCenter.Current Decision ID"
+            },
+            {
+              "field": {"Column": {"Expression": {"SourceRef": {"Entity": "CaseCommandCenter"}}, "Property": "status"}},
+              "queryRef": "CaseCommandCenter.status",
+              "displayName": "Decision Status"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

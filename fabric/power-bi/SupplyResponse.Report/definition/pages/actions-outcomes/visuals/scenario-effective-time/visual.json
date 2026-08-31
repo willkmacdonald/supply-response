@@ -1,0 +1,21 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "scenario-effective-time",
+  "position": {"x": 960, "y": 24, "z": 5, "width": 296, "height": 132, "tabOrder": 5},
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": [
+            {
+              "field": {"Measure": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "Scenario Effective Time"}},
+              "queryRef": "ActionOutcomes.Scenario Effective Time",
+              "displayName": "Scenario Effective Time"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

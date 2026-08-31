@@ -1,0 +1,29 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "predicted-observed-variance",
+  "position": {"x": 632, "y": 184, "z": 4, "width": 624, "height": 504, "tabOrder": 4},
+  "visual": {
+    "visualType": "clusteredColumnChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {"Column": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "observation_kind"}},
+              "queryRef": "ActionOutcomes.observation_kind"
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {"Measure": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "Observed Variance"}},
+              "queryRef": "ActionOutcomes.Observed Variance",
+              "displayName": "Predicted vs Observed Variance"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

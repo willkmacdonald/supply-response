@@ -1,0 +1,24 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "action-status",
+  "position": {"x": 24, "y": 184, "z": 3, "width": 584, "height": 504, "tabOrder": 3},
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {"Column": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "action_kind"}},
+              "queryRef": "ActionOutcomes.action_kind"
+            },
+            {
+              "field": {"Column": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "action_status"}},
+              "queryRef": "ActionOutcomes.action_status"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,103 @@
+table ActionOutcomes
+  column case_id
+    dataType: string
+    sourceColumn: case_id
+    summarizeBy: none
+
+  column decision_id
+    dataType: string
+    sourceColumn: decision_id
+    summarizeBy: none
+
+  column selected_option_id
+    dataType: string
+    sourceColumn: selected_option_id
+    summarizeBy: none
+
+  column record_type
+    dataType: string
+    sourceColumn: record_type
+    summarizeBy: none
+
+  column action_id
+    dataType: string
+    sourceColumn: action_id
+    summarizeBy: none
+
+  column action_kind
+    dataType: string
+    sourceColumn: action_kind
+    summarizeBy: none
+
+  column action_status
+    dataType: string
+    sourceColumn: action_status
+    summarizeBy: none
+
+  column metric
+    dataType: string
+    sourceColumn: metric
+    summarizeBy: none
+
+  column predicted_value
+    dataType: string
+    sourceColumn: predicted_value
+    summarizeBy: none
+
+  column observed_value
+    dataType: string
+    sourceColumn: observed_value
+    summarizeBy: none
+
+  column unit
+    dataType: string
+    sourceColumn: unit
+    summarizeBy: none
+
+  column observation_kind
+    dataType: string
+    sourceColumn: observation_kind
+    summarizeBy: none
+
+  column scenario_effective_time
+    dataType: dateTime
+    formatString: General Date
+    sourceColumn: scenario_effective_time
+    summarizeBy: none
+
+  column projection_updated_at
+    dataType: dateTime
+    formatString: General Date
+    sourceColumn: projection_updated_at
+    summarizeBy: none
+
+  measure 'Action Completion %' =
+      VAR DecisionId = [Current Decision ID]
+      VAR Actions = FILTER(ALL(ActionOutcomes), ActionOutcomes[decision_id] = DecisionId && ActionOutcomes[record_type] = "action")
+      RETURN DIVIDE(COUNTROWS(FILTER(Actions, ActionOutcomes[action_status] = "completed")), COUNTROWS(Actions))
+    formatString: 0%;-0%;0%
+
+  measure 'Observed Variance' =
+      VAR DecisionId = [Current Decision ID]
+      VAR Observations = FILTER(ALL(ActionOutcomes), ActionOutcomes[decision_id] = DecisionId && ActionOutcomes[record_type] = "observation")
+      RETURN AVERAGEX(Observations, VALUE(ActionOutcomes[observed_value]) - VALUE(ActionOutcomes[predicted_value]))
+    formatString: 0.00;-0.00;0.00
+
+  measure 'Projection Refresh Time' =
+      VAR DecisionId = [Current Decision ID]
+      RETURN CALCULATE(MAX(ActionOutcomes[projection_updated_at]), REMOVEFILTERS(ActionOutcomes), ActionOutcomes[decision_id] = DecisionId)
+    formatString: General Date
+
+  measure 'Scenario Effective Time' =
+      VAR DecisionId = [Current Decision ID]
+      RETURN CALCULATE(MAX(ActionOutcomes[scenario_effective_time]), REMOVEFILTERS(ActionOutcomes), ActionOutcomes[decision_id] = DecisionId)
+    formatString: General Date
+
+  partition ActionOutcomes = m
+    mode: directQuery
+    source =
+        Sql.Database(
+          FABRIC_SQL_SERVER,
+          FABRIC_SQL_DATABASE,
+          [Query="SELECT * FROM analytics.action_outcomes"]
+        )

@@ -20,8 +20,13 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "check-jsonschema>=0.36,<1",
   "httpx>=0.28,<1",
+  "jsonschema>=4.25,<5",
   "pytest>=8.4,<10",
+]
+fabric-deploy = [
+  "fabric-cicd>=0.1,<2; python_version == '3.12'",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -37,4 +42,5 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
   "fabric_live: requires an explicitly configured live Fabric SQL Database",
+  "power_bi_live: requires explicit API and Power BI live settings",
 ]

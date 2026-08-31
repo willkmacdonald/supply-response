@@ -1,0 +1,91 @@
+table CaseCommandCenter
+  column case_id
+    dataType: string
+    sourceColumn: case_id
+    summarizeBy: none
+
+  column purpose
+    dataType: string
+    sourceColumn: purpose
+    summarizeBy: none
+
+  column status
+    dataType: string
+    sourceColumn: status
+    summarizeBy: none
+
+  column runtime_mode
+    dataType: string
+    sourceColumn: runtime_mode
+    summarizeBy: none
+
+  column scenario_effective_time
+    dataType: dateTime
+    formatString: General Date
+    sourceColumn: scenario_effective_time
+    summarizeBy: none
+
+  column recommended_option_id
+    dataType: string
+    sourceColumn: recommended_option_id
+    summarizeBy: none
+
+  column revenue_at_risk
+    dataType: decimal
+    formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+    sourceColumn: revenue_at_risk
+    summarizeBy: sum
+
+  column otif_loss_percentage
+    dataType: int64
+    formatString: 0
+    sourceColumn: otif_loss_percentage
+    summarizeBy: sum
+
+  column decision_id
+    dataType: string
+    sourceColumn: decision_id
+    summarizeBy: none
+
+  column decision_kind
+    dataType: string
+    sourceColumn: decision_kind
+    summarizeBy: none
+
+  column decided_at
+    dataType: dateTime
+    formatString: General Date
+    sourceColumn: decided_at
+    summarizeBy: none
+
+  measure 'Latest Showcase Case' =
+      VAR LatestRow = TOPN(1, FILTER(ALL(CaseCommandCenter), CaseCommandCenter[purpose] = "showcase"), CaseCommandCenter[decided_at], DESC, CaseCommandCenter[case_id], DESC)
+      RETURN MAXX(LatestRow, CaseCommandCenter[case_id])
+
+  measure 'Current Decision ID' =
+      VAR LatestCase = [Latest Showcase Case]
+      RETURN CALCULATE(SELECTEDVALUE(CaseCommandCenter[decision_id]), REMOVEFILTERS(CaseCommandCenter), CaseCommandCenter[case_id] = LatestCase)
+
+  measure 'Revenue At Risk' =
+      VAR LatestCase = [Latest Showcase Case]
+      RETURN CALCULATE(MAX(CaseCommandCenter[revenue_at_risk]), REMOVEFILTERS(CaseCommandCenter), CaseCommandCenter[case_id] = LatestCase)
+    formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+
+  measure 'OTIF Loss %' =
+      VAR LatestCase = [Latest Showcase Case]
+      RETURN CALCULATE(MAX(CaseCommandCenter[otif_loss_percentage]), REMOVEFILTERS(CaseCommandCenter), CaseCommandCenter[case_id] = LatestCase) / 100
+    formatString: 0.0%;-0.0%;0.0%
+
+  measure 'Scenario Effective Time' =
+      VAR LatestCase = [Latest Showcase Case]
+      RETURN CALCULATE(MAX(CaseCommandCenter[scenario_effective_time]), REMOVEFILTERS(CaseCommandCenter), CaseCommandCenter[case_id] = LatestCase)
+    formatString: General Date
+
+  partition CaseCommandCenter = m
+    mode: directQuery
+    source =
+        Sql.Database(
+          FABRIC_SQL_SERVER,
+          FABRIC_SQL_DATABASE,
+          [Query="SELECT * FROM analytics.case_command_center"]
+        )

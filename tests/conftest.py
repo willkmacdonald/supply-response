@@ -18,5 +18,5 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         return
     skip = pytest.mark.skip(reason="Fabric SQL live settings are not configured")
     for item in items:
-        if "fabric_live" in item.keywords:
+        if "fabric_live" in item.keywords and "power_bi_live" not in item.keywords:
             item.add_marker(skip)

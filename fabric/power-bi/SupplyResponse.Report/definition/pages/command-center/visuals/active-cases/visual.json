@@ -1,0 +1,63 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "active-cases",
+  "position": {"x": 24, "y": 24, "z": 0, "width": 220, "height": 132, "tabOrder": 0},
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "FilterActiveCases",
+        "field": {"Column": {"Expression": {"SourceRef": {"Entity": "CaseCommandCenter"}}, "Property": "status"}},
+        "type": "Advanced",
+        "filter": {
+          "Version": 2,
+          "From": [{"Name": "c", "Entity": "CaseCommandCenter", "Type": 0}],
+          "Where": [
+            {
+              "Condition": {
+                "Not": {
+                  "Expression": {
+                    "In": {
+                      "Expressions": [
+                        {"Column": {"Expression": {"SourceRef": {"Source": "c"}}, "Property": "status"}}
+                      ],
+                      "Values": [[{"Literal": {"Value": "'closed'"}}]]
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User",
+        "isHiddenInViewMode": true,
+        "isLockedInViewMode": true
+      }
+    ]
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": [
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {"SourceRef": {"Entity": "CaseCommandCenter"}},
+                      "Property": "case_id"
+                    }
+                  },
+                  "Function": 2
+                }
+              },
+              "queryRef": "CaseCommandCenter.case_id",
+              "displayName": "Active Cases"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

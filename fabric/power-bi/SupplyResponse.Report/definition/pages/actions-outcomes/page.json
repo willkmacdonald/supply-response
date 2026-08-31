@@ -1,0 +1,64 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.0.0/schema.json",
+  "name": "actions-outcomes",
+  "displayName": "Actions and Outcomes",
+  "displayOption": "FitToPage",
+  "width": 1280,
+  "height": 720,
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "FilterCurrentShowcaseDecision",
+        "field": {
+          "Column": {
+            "Expression": {"SourceRef": {"Entity": "ActionOutcomes"}},
+            "Property": "decision_id"
+          }
+        },
+        "type": "Advanced",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {"Name": "a", "Entity": "ActionOutcomes", "Type": 0},
+            {"Name": "c", "Entity": "CaseCommandCenter", "Type": 0}
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "Comparison": {
+                  "ComparisonKind": 0,
+                  "Left": {
+                    "Column": {
+                      "Expression": {"SourceRef": {"Source": "a"}},
+                      "Property": "decision_id"
+                    }
+                  },
+                  "Right": {
+                    "Measure": {
+                      "Expression": {"SourceRef": {"Source": "c"}},
+                      "Property": "Current Decision ID"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User",
+        "isHiddenInViewMode": true,
+        "isLockedInViewMode": true
+      }
+    ]
+  },
+  "objects": {
+    "pageRefresh": [
+      {
+        "properties": {
+          "show": true,
+          "refreshType": "FixedInterval",
+          "duration": 30
+        }
+      }
+    ]
+  }
+}

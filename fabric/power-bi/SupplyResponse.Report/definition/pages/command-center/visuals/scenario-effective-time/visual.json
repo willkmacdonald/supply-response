@@ -1,0 +1,21 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "scenario-effective-time",
+  "position": {"x": 1024, "y": 24, "z": 4, "width": 232, "height": 132, "tabOrder": 4},
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": [
+            {
+              "field": {"Measure": {"Expression": {"SourceRef": {"Entity": "CaseCommandCenter"}}, "Property": "Scenario Effective Time"}},
+              "queryRef": "CaseCommandCenter.Scenario Effective Time",
+              "displayName": "Time Since Signal"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

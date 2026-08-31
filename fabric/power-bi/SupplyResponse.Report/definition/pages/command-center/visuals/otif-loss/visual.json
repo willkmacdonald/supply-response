@@ -1,0 +1,20 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "otif-loss",
+  "position": {"x": 512, "y": 24, "z": 2, "width": 220, "height": 132, "tabOrder": 2},
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": [
+            {
+              "field": {"Measure": {"Expression": {"SourceRef": {"Entity": "CaseCommandCenter"}}, "Property": "OTIF Loss %"}},
+              "queryRef": "CaseCommandCenter.OTIF Loss %"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

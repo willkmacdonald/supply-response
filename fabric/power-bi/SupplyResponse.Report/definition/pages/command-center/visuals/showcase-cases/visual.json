@@ -1,0 +1,118 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "showcase-cases",
+  "position": {
+    "x": 24,
+    "y": 184,
+    "z": 5,
+    "width": 1232,
+    "height": 504,
+    "tabOrder": 5
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "FilterShowcasePurpose",
+        "field": {
+          "Column": {
+            "Expression": {"SourceRef": {"Entity": "CaseCommandCenter"}},
+            "Property": "purpose"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [{"Name": "c", "Entity": "CaseCommandCenter", "Type": 0}],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {"SourceRef": {"Source": "c"}},
+                        "Property": "purpose"
+                      }
+                    }
+                  ],
+                  "Values": [[{"Literal": {"Value": "'showcase'"}}]]
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User",
+        "isHiddenInViewMode": true,
+        "isLockedInViewMode": true
+      },
+      {
+        "name": "FilterLatestShowcaseCase",
+        "field": {
+          "Column": {
+            "Expression": {"SourceRef": {"Entity": "CaseCommandCenter"}},
+            "Property": "case_id"
+          }
+        },
+        "type": "Advanced",
+        "filter": {
+          "Version": 2,
+          "From": [{"Name": "c", "Entity": "CaseCommandCenter", "Type": 0}],
+          "Where": [
+            {
+              "Condition": {
+                "Comparison": {
+                  "ComparisonKind": 0,
+                  "Left": {
+                    "Column": {
+                      "Expression": {"SourceRef": {"Source": "c"}},
+                      "Property": "case_id"
+                    }
+                  },
+                  "Right": {
+                    "Measure": {
+                      "Expression": {"SourceRef": {"Source": "c"}},
+                      "Property": "Latest Showcase Case"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User",
+        "isHiddenInViewMode": true,
+        "isLockedInViewMode": true
+      }
+    ]
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {"Column": {"Expression": {"SourceRef": {"Entity": "CaseCommandCenter"}}, "Property": "case_id"}},
+              "queryRef": "CaseCommandCenter.case_id",
+              "displayName": "Case ID"
+            },
+            {
+              "field": {"Column": {"Expression": {"SourceRef": {"Entity": "CaseCommandCenter"}}, "Property": "purpose"}},
+              "queryRef": "CaseCommandCenter.purpose",
+              "displayName": "Purpose"
+            },
+            {
+              "field": {"Measure": {"Expression": {"SourceRef": {"Entity": "CaseCommandCenter"}}, "Property": "Latest Showcase Case"}},
+              "queryRef": "CaseCommandCenter.Latest Showcase Case",
+              "displayName": "Latest Showcase Case"
+            },
+            {
+              "field": {"Column": {"Expression": {"SourceRef": {"Entity": "CaseCommandCenter"}}, "Property": "status"}},
+              "queryRef": "CaseCommandCenter.status"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

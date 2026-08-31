@@ -1,0 +1,21 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "decision-id",
+  "position": {"x": 24, "y": 24, "z": 0, "width": 280, "height": 132, "tabOrder": 0},
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": [
+            {
+              "field": {"Column": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "decision_id"}},
+              "queryRef": "ActionOutcomes.decision_id",
+              "displayName": "Decision ID"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

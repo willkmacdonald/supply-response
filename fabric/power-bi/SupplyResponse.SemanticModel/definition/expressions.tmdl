@@ -1,0 +1,3 @@
+expression FABRIC_SQL_SERVER = "__FABRIC_SQL_SERVER__" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+
+expression FABRIC_SQL_DATABASE = "__FABRIC_SQL_DATABASE__" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
