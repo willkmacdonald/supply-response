@@ -47,9 +47,9 @@ class ExposureResult(FrozenModel):
 class PredictedOutcome(FrozenModel):
     uncovered_part_demand: int
     otif_loss_percentage: int
-    revenue_at_risk: Decimal
-    margin_at_risk: Decimal
-    response_cost: Decimal
+    revenue_at_risk: Money
+    margin_at_risk: Money
+    response_cost: Money
     protected_customer_order_ids: tuple[str, ...] = ()
 
 

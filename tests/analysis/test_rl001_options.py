@@ -1,3 +1,5 @@
+import json
+
 from data.synthetic.rl001 import OperationalSnapshot
 from services.analysis.options import (
     calculate_approval_burden,
@@ -86,3 +88,26 @@ def test_score_helpers_count_each_policy_factor_without_score_literals():
     assert calculate_execution_risk(cross_plant_movements=1) == 1
     assert calculate_execution_risk(schedule_changes=1) == 1
     assert calculate_execution_risk(coordinated_action_count=3) == 2
+
+
+def test_predicted_outcome_serializes_money_at_fixed_scale():
+    expedite = next(
+        item
+        for item in evaluate_response_options(OperationalSnapshot.rl001())
+        if item.option_id == "RL-OPTION-EXPEDITE"
+    )
+    assert expedite.predicted is not None
+
+    payload = expedite.predicted.model_dump(mode="json")
+    assert {
+        "revenue_at_risk": payload["revenue_at_risk"],
+        "margin_at_risk": payload["margin_at_risk"],
+        "response_cost": payload["response_cost"],
+    } == {
+        "revenue_at_risk": "955000.00",
+        "margin_at_risk": "328000.00",
+        "response_cost": "22500.00",
+    }
+    assert (
+        json.loads(expedite.predicted.model_dump_json())["response_cost"] == "22500.00"
+    )
