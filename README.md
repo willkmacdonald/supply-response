@@ -11,7 +11,7 @@ Portable-core scaffold for the Supply Response prototype. This first repository 
 - Deterministic usable-inventory, time-phased projection, stockout, shortage, affected-order, revenue, margin, and OTIF exposure calculations.
 - Initial scenario contracts and deterministic Supplier Beta qualification constraint.
 - Proposed case/scenario/approval/dashboard API routes.
-- In-memory local case/action storage (deliberately replaceable by SQLite/Fabric later).
+- Durable local SQLite case, Decision, action, playback, and observation storage.
 - Pytest and Vitest coverage.
 
 ## Repository layout
@@ -93,7 +93,24 @@ npm test
 npm run dev
 ```
 
-The frontend defaults to calling `http://localhost:8000`. Override with `VITE_API_BASE_URL` when needed.
+The frontend calls same-origin `/api` routes. Vite proxies those requests to the local API at `http://127.0.0.1:8000` during development.
+
+### Complete fallback browser gate
+
+Install the locked frontend dependencies and Playwright's pinned Chromium once:
+
+```bash
+npm --prefix apps/web ci
+(cd apps/web && npx playwright install chromium)
+```
+
+Then run the full Python, Vitest, production-build, and real-browser fallback gate:
+
+```bash
+scripts/run_fallback_demo.sh
+```
+
+The script resolves the repository root from its own location, uses a fresh temporary SQLite database for each Playwright run, and exits nonzero on the first failed gate. Playwright starts only local Uvicorn and Vite servers; Microsoft cloud access is neither configured nor required. Test-only one-shot failure hooks are registered only when Playwright enables automated-test fault support, accept only `automated_test` Cases, and are absent in normal production/showcase configuration.
 
 ## API contracts
 

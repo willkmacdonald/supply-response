@@ -14,11 +14,14 @@ from apps.api.app.dependencies import (
     get_services,
 )
 from apps.api.app.routes.decisions import _decision
+from apps.api.app.routes.decisions import _require_role
 from data.domain.decisions import IdentitySnapshot
 from services.execution.playback import (
     PlaybackAuthorizationError,
     PlaybackStateError,
 )
+from services.execution.worker import ExecutionService, IllegalExecutionTransition
+from services.persistence.store import RecordNotFound
 
 
 router = APIRouter(prefix="/api/decisions", tags=["execution"])
@@ -42,6 +45,40 @@ def list_actions(
     with services.uow_factory() as uow:
         actions = uow.execution.list_actions(decision_id=decision_id)
     return [_action_response(services, decision, action) for action in actions]
+
+
+@router.post(
+    "/{decision_id}/actions/{action_id}/retry",
+    response_model=ActionResponse,
+)
+def retry_failed_action(
+    decision_id: str,
+    action_id: str,
+    services: ApplicationServices = Depends(get_services),
+    actor: IdentitySnapshot = Depends(get_server_identity),
+) -> ActionResponse:
+    _require_role(actor, "response_approver")
+    decision = _decision(services, decision_id)
+    execution = ExecutionService(services.uow_factory, clock=services.clock)
+    try:
+        with services.uow_factory() as uow:
+            existing = uow.execution.get_action(action_id)
+        if existing.decision_id != decision_id:
+            raise RecordNotFound(action_id)
+        execution.retry(action_id)
+        with services.uow_factory() as uow:
+            retried = uow.execution.get_action(action_id)
+    except RecordNotFound:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "ACTION_NOT_FOUND", "action_id": action_id},
+        ) from None
+    except IllegalExecutionTransition as error:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "ACTION_RETRY_NOT_AVAILABLE", "message": str(error)},
+        ) from None
+    return _action_response(services, decision, retried)
 
 
 @router.get("/{decision_id}/drafts", response_model=list[DraftResponse])

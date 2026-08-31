@@ -40,6 +40,7 @@ export interface CaseWorkspaceState {
   approve: () => Promise<void>;
   reject: (reason: string) => Promise<void>;
   retryPlanning: () => Promise<void>;
+  retryAction: (actionId: string) => Promise<void>;
   startPlayback: () => Promise<void>;
 }
 
@@ -87,8 +88,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     setOperation("creating");
     setError(null);
     try {
-      const [runtimeStatus, created] = await Promise.all([api.runtime(), api.createCase(purpose)]);
-      setRuntime(runtimeStatus);
+      const created = await api.createCase(purpose);
       setCaseInstance(created);
       setAnalysis(null);
       setSelectedOption(null);
@@ -107,8 +107,11 @@ export function useCaseWorkspace(): CaseWorkspaceState {
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
-    void create();
-  }, [create]);
+    void api.runtime()
+      .then(setRuntime)
+      .catch((caught) => setError(`Unable to initialize the Case workspace. ${message(caught)}`))
+      .finally(() => setOperation(null));
+  }, []);
 
   const analyze = useCallback(async () => {
     if (!caseInstance) return;
@@ -246,6 +249,19 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     }
   }, [decision, loadExecution]);
 
+  const retryAction = useCallback(async (actionId: string) => {
+    if (!decision) return;
+    setError(null);
+    try {
+      const retried = await api.retryAction(decision.decision_id, actionId);
+      setActions((current) => current.map((action) =>
+        action.action_id === retried.action_id ? retried : action
+      ));
+    } catch (caught) {
+      setError(`Action retry failed. ${message(caught)}`);
+    }
+  }, [decision]);
+
   const startPlayback = useCallback(async () => {
     if (!decision) return;
     setOperation("playback");
@@ -299,6 +315,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     approve,
     reject,
     retryPlanning,
+    retryAction,
     startPlayback,
   };
 }

@@ -11,7 +11,7 @@ import type {
   RuntimeStatus,
 } from "./types";
 
-export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+export const API_BASE = "";
 
 async function json<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -46,6 +46,8 @@ export const api = {
     get(`/api/decisions/${decisionId}`),
   actions: (decisionId: string): Promise<ExecutionAction[]> =>
     get(`/api/decisions/${decisionId}/actions`),
+  retryAction: (decisionId: string, actionId: string): Promise<ExecutionAction> =>
+    post(`/api/decisions/${decisionId}/actions/${actionId}/retry`, {}),
   drafts: (decisionId: string): Promise<DraftArtifact[]> =>
     get(`/api/decisions/${decisionId}/drafts`),
   retryPlanning: (decisionId: string): Promise<Decision> =>

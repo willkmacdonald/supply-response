@@ -8,5 +8,8 @@ dist/
 *.tsbuildinfo
 .superpowers/
 coverage/
+.artifacts/
+.tmp/
+test-results/
 .DS_Store
 *.db

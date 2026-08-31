@@ -313,17 +313,18 @@ describe("API client", () => {
     );
     await api.decision("RL-DECISION-1");
     await api.actions("RL-DECISION-1");
+    await api.retryAction("RL-DECISION-1", "RL-ACTION-1");
     await api.startPlayback("RL-DECISION-1");
     await api.playback("RL-DECISION-1");
     await api.observations("RL-DECISION-1");
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, "http://localhost:8000/api/runtime", undefined);
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "http://localhost:8000/api/cases", {
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/runtime", undefined);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/cases", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({template_id: "RL-001", purpose: "showcase"}),
     });
-    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:8000/api/cases/RL-CASE-1/decisions", {
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "/api/cases/RL-CASE-1/decisions", {
       method: "POST",
       headers: {"Content-Type": "application/json", "Idempotency-Key": "RL-WEB-DECISION-1"},
       body: JSON.stringify({

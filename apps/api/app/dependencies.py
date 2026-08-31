@@ -11,6 +11,7 @@ from fastapi import Request
 from sqlalchemy import select
 
 from apps.api.app.settings import Settings
+from apps.api.app.test_support import AutomatedTestFaults
 from data.domain import RuntimeMode
 from data.domain.analysis import AnalysisVersion
 from data.domain.decisions import DecisionKind, IdentitySnapshot
@@ -20,7 +21,7 @@ from services.analysis.application import FallbackAnalysisApplicationService
 from services.decisions.service import DecisionService, UnitOfWorkFactory
 from services.execution.planner import plan_actions
 from services.execution.playback import PlaybackClock, PlaybackService, RealClock
-from services.execution.worker import ActionPlanningWorker
+from services.execution.worker import ActionPlanningWorker, ExecutionService
 from services.persistence.sqlite import sqlite_store
 from services.persistence.store import SqlAlchemyStore
 from services.persistence.tables import (
@@ -56,6 +57,7 @@ class ApplicationServices:
     playback_clock: PlaybackClock
     clock: Callable[[], datetime]
     identity: IdentitySnapshot
+    test_faults: AutomatedTestFaults
 
     @property
     def uow_factory(self) -> UnitOfWorkFactory:
@@ -158,12 +160,22 @@ def build_composition(
     )
     uow_factory = cast(UnitOfWorkFactory, store.uow_factory)
     active_playback_clock = playback_clock or RealClock()
+    test_faults = AutomatedTestFaults(settings.automated_test_faults_enabled)
+    execution_service = ExecutionService(uow_factory, clock=now)
     return ApplicationServices(
         settings=settings,
         store=store,
         analysis_service=FallbackAnalysisApplicationService(store, clock=now),
         decision_service=DecisionService(uow_factory, clock=now),
-        planning_worker=ActionPlanningWorker(uow_factory, planner=planner),
+        planning_worker=ActionPlanningWorker(
+            uow_factory,
+            planner=test_faults.wrap(planner),
+            after_plan=lambda decision, actions: test_faults.after_plan(
+                decision,
+                actions,
+                execution_service,
+            ),
+        ),
         playback_service=PlaybackService(
             uow_factory,
             clock=active_playback_clock,
@@ -171,6 +183,7 @@ def build_composition(
         playback_clock=active_playback_clock,
         clock=now,
         identity=fallback_identity(),
+        test_faults=test_faults,
     )
 
 

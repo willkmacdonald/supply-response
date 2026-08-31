@@ -18,6 +18,7 @@ from services.persistence.ports import UnitOfWork
 
 UnitOfWorkFactory = Callable[[], UnitOfWork]
 Planner = Callable[[Decision], tuple[ExecutionAction, ...]]
+AfterPlan = Callable[[Decision, tuple[ExecutionAction, ...]], None]
 Clock = Callable[[], datetime]
 
 
@@ -36,9 +37,11 @@ class ActionPlanningWorker:
         uow_factory: UnitOfWorkFactory,
         *,
         planner: Planner = plan_actions,
+        after_plan: AfterPlan | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._planner = planner
+        self._after_plan = after_plan
 
     def process_next_outbox(self) -> bool:
         return self._process_outbox(decision_id=None, unattempted_only=False)
@@ -72,10 +75,13 @@ class ActionPlanningWorker:
             )
             if claim is None:
                 return False
+            decision: Decision | None = None
+            planned_actions: tuple[ExecutionAction, ...] = ()
             try:
                 uow.execution.validate_claimed_outbox(claim)
                 decision = uow.decisions.get(claim.decision_id)
-                for action in self._planner(decision):
+                planned_actions = self._planner(decision)
+                for action in planned_actions:
                     uow.execution.insert_action_if_absent(action)
                 uow.execution.mark_outbox_processed(claim.event_id)
                 uow.cases.mark_action_planning_complete(decision.case_id)
@@ -89,6 +95,9 @@ class ActionPlanningWorker:
                     )
                     failed_uow.cases.mark_action_planning_failed(claim.case_id)
                     failed_uow.commit()
+            else:
+                if self._after_plan is not None and decision is not None:
+                    self._after_plan(decision, planned_actions)
             return True
 
 

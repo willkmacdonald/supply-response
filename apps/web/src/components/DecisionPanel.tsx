@@ -20,7 +20,7 @@ export function DecisionPanel({state, onApprove, onReject}: DecisionPanelProps) 
   return <section className="panel" aria-labelledby="decision-heading">
     <p className="step">04 · Decision</p>
     <h2 id="decision-heading">{state.decision ? "Decision receipt" : "Decision"}</h2>
-    {state.decision ? <div className="receipt">
+    {state.decision ? <div className="receipt" data-testid="decision-receipt">
       <p className="receipt-id">Decision {state.decision.decision_id}</p>
       <p>{state.decision.kind === "approved" ? "Approved" : "Rejected"}</p>
       <dl className="compact-list">

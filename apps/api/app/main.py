@@ -16,6 +16,7 @@ from apps.api.app.routes.dashboard import router as dashboard_router
 from apps.api.app.routes.decisions import router as decisions_router
 from apps.api.app.routes.execution import router as execution_router
 from apps.api.app.routes.health import router as health_router
+from apps.api.app.routes.test_support import router as test_support_router
 from apps.api.app.runtime import RuntimeProgression
 from apps.api.app.settings import Settings
 from services.execution.planner import plan_actions
@@ -58,6 +59,8 @@ def create_app(
     api.include_router(decisions_router)
     api.include_router(execution_router)
     api.include_router(dashboard_router)
+    if active_services.settings.automated_test_faults_enabled:
+        api.include_router(test_support_router)
     return api
 
 

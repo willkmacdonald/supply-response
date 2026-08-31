@@ -10,6 +10,9 @@ import "./styles.css";
 
 export default function App() {
   const workspace = useCaseWorkspace();
+  const createPurpose = new URLSearchParams(window.location.search).get("purpose") === "automated_test"
+    ? "automated_test"
+    : "showcase";
   return <main className="case-workspace">
     {(workspace.operation === "initializing" || workspace.operation === "creating") && (
       <p role="status" aria-live="polite">
@@ -20,7 +23,10 @@ export default function App() {
     <CaseHeader
       runtime={workspace.runtime}
       caseInstance={workspace.caseInstance}
+      createPurpose={createPurpose}
+      creating={workspace.operation === "creating"}
       analyzing={workspace.operation === "analyzing"}
+      onCreate={workspace.create}
       onAnalyze={workspace.analyze}
     />
     <EvidencePanel analysis={workspace.analysis} />
@@ -37,6 +43,7 @@ export default function App() {
       drafts={workspace.drafts}
       retrying={workspace.operation === "planning"}
       onRetry={workspace.retryPlanning}
+      onRetryAction={workspace.retryAction}
     />
     <OutcomePanel
       decision={workspace.decision}

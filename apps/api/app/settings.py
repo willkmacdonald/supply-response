@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     allowed_tenant_id: str | None = None
     tenant_domain: str = "willmacdonald.com"
     frontend_origin: str = "http://localhost:5173"
+    automated_test_faults_enabled: bool = False
 
     @model_validator(mode="after")
     def validate_mode_specific_settings(self) -> "Settings":
