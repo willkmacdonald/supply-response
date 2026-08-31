@@ -3,7 +3,9 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Never
+from urllib.parse import unquote
 
 from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 from pydantic import ValidationError
@@ -46,29 +48,58 @@ _SENSITIVE_PATTERNS = (
     re.compile(
         r"(?i)[?&](?:access_token|client_secret|assertion|sig|token|code)=[^&#\s]+"
     ),
+    re.compile(
+        r"(?i)(?<![A-Za-z0-9])(?:x[\s_-]*api[\s_-]*key|api[\s_-]*key|"
+        r"password|passwd|pwd|client[\s_-]*secret|secret|token|account[\s_-]*key|"
+        r"shared[\s_-]*access[\s_-]*(?:key|signature)|secret[\s_-]*access[\s_-]*key)"
+        r"\s*[:=]\s*(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^\s,;]+)"
+    ),
+    re.compile(r"(?i)\bauthorization\s*:\s*(?:basic|bearer)\s+[^\s,;]+"),
+    re.compile(r"(?i)\b[a-z][a-z0-9+.-]*://[^\s/@:]+:[^\s/@]+@[^\s/]+"),
+    re.compile(
+        r"(?is)-----BEGIN\s+(?:(?:RSA|EC|DSA|OPENSSH|ENCRYPTED)\s+)?"
+        r"PRIVATE\s+KEY-----.*?-----END\s+(?:(?:RSA|EC|DSA|OPENSSH|ENCRYPTED)\s+)?"
+        r"PRIVATE\s+KEY-----"
+    ),
 )
 _REDACTED = "[REDACTED]"
 
 
+def _normalized_sensitive_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value)
+    normalized = normalized.replace("\\r\\n", "\n").replace("\\n", "\n")
+    for _ in range(2):
+        decoded = unquote(normalized)
+        if decoded == normalized:
+            break
+        normalized = decoded
+    return normalized
+
+
 def _contains_sensitive(value: str) -> bool:
-    return any(pattern.search(value) for pattern in _SENSITIVE_PATTERNS)
+    normalized = _normalized_sensitive_text(value)
+    return any(pattern.search(normalized) for pattern in _SENSITIVE_PATTERNS)
 
 
 def _redact_text(value: str) -> str:
-    for pattern in _SENSITIVE_PATTERNS:
-        value = pattern.sub(_REDACTED, value)
-    return value
+    # Redact the complete containing field so encoded or delimiter-adjacent material
+    # cannot survive while a matched fragment is replaced.
+    return _REDACTED if _contains_sensitive(value) else value
 
 
 def _scrub(value: Any) -> Any:
     if isinstance(value, str):
         return _redact_text(value)
     if isinstance(value, dict):
-        return {key: _scrub(item) for key, item in value.items()}
+        return {_scrub(key): _scrub(item) for key, item in value.items()}
     if isinstance(value, list):
         return [_scrub(item) for item in value]
     if isinstance(value, tuple):
         return tuple(_scrub(item) for item in value)
+    if isinstance(value, set):
+        return {_scrub(item) for item in value}
+    if isinstance(value, frozenset):
+        return frozenset(_scrub(item) for item in value)
     return value
 
 
@@ -398,6 +429,53 @@ def build_framework_workflow(
     return workflow
 
 
+@dataclass(frozen=True, slots=True)
+class _ExecutionOutcome:
+    result: OrchestrationResult | None = None
+    failed_partial: PartialDeterministicResult | None = None
+
+
+async def _execute_workflow(
+    *,
+    agent_factory: Callable[[], LocalAgentSet],
+    analyze: Callable[[AnalyzeCaseCommand], AnalysisVersion],
+    topology_observer: Callable[[tuple[str, ...]], None] | None,
+    command: AnalyzeCommand,
+) -> _ExecutionOutcome:
+    """Contain raw workflow state and return only a sanitized public outcome."""
+    deterministic: AnalysisVersion | None = None
+
+    def analyze_once(value: AnalyzeCaseCommand) -> AnalysisVersion:
+        nonlocal deterministic
+        if deterministic is None:
+            deterministic = analyze(value)
+        return deterministic
+
+    try:
+        workflow = build_framework_workflow(agent_factory(), analyze_once)
+        if topology_observer is not None:
+            topology_observer(
+                ("signal", "context", "deterministic_analysis", "decision")
+            )
+        run = await workflow.run(command)
+        outputs = run.get_outputs()
+        if len(outputs) != 1 or not isinstance(outputs[0], OrchestrationResult):
+            raise RuntimeError("workflow returned an invalid output contract")
+        return _ExecutionOutcome(result=outputs[0])
+    except Exception:  # noqa: BLE001 - discard every untrusted SDK object here
+        deterministic = analyze_once(command.deterministic)
+        return _ExecutionOutcome(failed_partial=_safe_partial(deterministic))
+
+
+def _raise_unavailable(partial: PartialDeterministicResult) -> Never:
+    """Raise from a frame containing only the already-scrubbed public result."""
+    public = AgentExplanationUnavailable(partial)
+    public.__cause__ = None
+    public.__context__ = None
+    public.__traceback__ = None
+    raise public from None
+
+
 class Orchestrator:
     """Runs a fresh fixed Agent Framework graph for every analysis."""
 
@@ -413,41 +491,27 @@ class Orchestrator:
         self._topology_observer = topology_observer
 
     async def analyze(self, command: AnalyzeCommand) -> OrchestrationResult:
-        deterministic: AnalysisVersion | None = None
-        result: OrchestrationResult | None = None
-        failed_partial: PartialDeterministicResult | None = None
-
-        def analyze_once(value: AnalyzeCaseCommand) -> AnalysisVersion:
-            nonlocal deterministic
-            if deterministic is None:
-                deterministic = self._analyze(value)
-            return deterministic
-
-        try:
-            workflow = build_framework_workflow(self._agent_factory(), analyze_once)
-            if self._topology_observer is not None:
-                self._topology_observer(
-                    ("signal", "context", "deterministic_analysis", "decision")
-                )
-            run = await workflow.run(command)
-            outputs = run.get_outputs()
-            if len(outputs) != 1 or not isinstance(outputs[0], OrchestrationResult):
-                raise RuntimeError("workflow returned an invalid output contract")
-            result = outputs[0]
-        except Exception:  # noqa: BLE001 - discard the untrusted SDK exception
-            deterministic = analyze_once(command.deterministic)
-            failed_partial = _safe_partial(deterministic)
+        outcome = await _execute_workflow(
+            agent_factory=self._agent_factory,
+            analyze=self._analyze,
+            topology_observer=self._topology_observer,
+            command=command,
+        )
+        # Neither the raw command nor the internal outcome may remain reachable
+        # from a public exception traceback frame.
+        del command
+        failed_partial = outcome.failed_partial
+        result = outcome.result
+        outcome = None
         if failed_partial is not None:
-            public = AgentExplanationUnavailable(failed_partial)
-            public.__cause__ = None
-            public.__context__ = None
-            public.__traceback__ = None
-            raise public
+            _raise_unavailable(failed_partial)
         if result is None:  # pragma: no cover - guarded by the workflow contract
             raise RuntimeError("workflow did not produce a result")
         if result.explanation_status == "rejected":
             # A disagreement is safely downgraded without weakening the analysis.
             return result
         if result.explanation_status != "available":
-            raise AgentExplanationUnavailable(_safe_partial(result.analysis_version))
+            failed_partial = _safe_partial(result.analysis_version)
+            result = None
+            _raise_unavailable(failed_partial)
         return result

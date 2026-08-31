@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import gc
 import traceback
+import types
 import weakref
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -16,7 +17,7 @@ from agents.orchestrator.contracts import (
     PartialDeterministicResult,
 )
 from agents.orchestrator.local import LocalAgentSet
-from agents.orchestrator.workflow import Orchestrator, _evidence_payload
+from agents.orchestrator.workflow import Orchestrator, _evidence_payload, _scrub
 from data.domain import CasePurpose, RuntimeMode
 from data.domain.decisions import CorpusScope, StandingAuthorization
 from data.domain.evidence import AuthorityScope
@@ -299,6 +300,107 @@ def test_final_prompt_dto_fails_closed_on_identity_or_credential_patterns(
         _evidence_payload((item,), scopes={AuthorityScope.QUALIFICATION_STATE})
 
 
+@pytest.mark.parametrize(
+    "suspect",
+    [
+        "api_key=sk-realistic-api-key-value-1234567890",
+        "API_KEY : 'sk-uppercase-key-value-1234567890'",
+        "x-api-key: key-header-value-1234567890",
+        "password = correct-horse-battery-staple",
+        "PASSWD: another-confidential-password",
+        "client_secret = tenant-client-secret-value",
+        "secret: generic-assigned-secret-value",
+        "token = opaque-service-token-value-1234567890",
+        "Authorization: Basic dXNlcjpwYXNzd29yZA==",
+        (
+            "DefaultEndpointsProtocol=https;AccountName=demo;"
+            "AccountKey=base64AccountKeyValue1234567890==;"
+            "EndpointSuffix=core.windows.net"
+        ),
+        (
+            "Endpoint=sb://demo.servicebus.windows.net/;"
+            "SharedAccessKeyName=RootManageSharedAccessKey;"
+            "SharedAccessKey=service-bus-key-value-1234567890="
+        ),
+        "Driver={ODBC Driver};Server=db.invalid;Uid=demo;Pwd=sql-password-value",
+        "postgresql://demo:database-password-value@db.invalid/supply",
+        (
+            "SharedAccessSignature sr=https%3A%2F%2Fdemo.invalid&"
+            "sig=signature-value-1234567890%3D&se=1893456000"
+        ),
+        (
+            "https://demo.blob.core.windows.net/container?"
+            "sv=2025-01-05&ss=b&srt=sco&sp=rwdlacupiytfx&se=2030-01-01&"
+            "sig=sasSignatureValue1234567890%3D"
+        ),
+        (
+            "-----BEGIN PRIVATE KEY-----\n"
+            "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC...\n"
+            "-----END PRIVATE KEY-----"
+        ),
+        (
+            "-----BEGIN%20RSA%20PRIVATE%20KEY-----%0A"
+            "MIIEowIBAAKCAQEAsecretEncodedBody%0A"
+            "-----END%20RSA%20PRIVATE%20KEY-----"
+        ),
+    ],
+)
+def test_final_prompt_dto_fails_closed_on_common_confidential_credentials(
+    suspect: str,
+) -> None:
+    item = (
+        command()
+        .deterministic.evidence_items[-1]
+        .model_copy(update={"claim": suspect, "excerpt": suspect})
+    )
+
+    with pytest.raises(ValueError, match="model data boundary"):
+        _evidence_payload((item,), scopes={AuthorityScope.QUALIFICATION_STATE})
+
+
+@pytest.mark.parametrize(
+    "ordinary",
+    [
+        "The supplier treats the first criterion as absolute.",
+        "The secret supplier strategy remains outside this demo.",
+        "Password policy training is scheduled for next month.",
+        "Token inventory is an ordinary procurement planning term here.",
+        "The API key rotation policy has no credential values in this evidence.",
+    ],
+)
+def test_final_prompt_dto_does_not_overblock_ordinary_business_words(
+    ordinary: str,
+) -> None:
+    item = (
+        command()
+        .deterministic.evidence_items[-1]
+        .model_copy(update={"claim": ordinary, "excerpt": ordinary})
+    )
+
+    payload = _evidence_payload((item,), scopes={AuthorityScope.QUALIFICATION_STATE})
+
+    assert payload["evidence"][0]["claim"] == ordinary
+
+
+def test_recursive_scrubber_redacts_strings_in_keys_and_nested_collections() -> None:
+    secrets = (
+        "api_key=nested-dictionary-key-secret",
+        "password=nested-list-secret",
+        "token=nested-tuple-secret",
+        "-----BEGIN PRIVATE KEY-----\nprivate-body\n-----END PRIVATE KEY-----",
+    )
+    value = {
+        secrets[0]: [secrets[1], (secrets[2],), {secrets[3]}],
+        "ordinary": "The secret supplier strategy is ordinary business prose.",
+    }
+
+    scrubbed = _scrub(value)
+
+    serialized = repr(scrubbed)
+    assert all(secret not in serialized for secret in secrets)
+    assert scrubbed["ordinary"] == value["ordinary"]
+
+
 def test_final_prompt_dto_rejects_non_allowlisted_evidence_identifiers() -> None:
     item = (
         command()
@@ -448,6 +550,108 @@ async def test_public_boundary_rebuilds_nested_unavailable_exception(
     assert caught.value.__cause__ is None
     assert secret not in repr(vars(caught.value))
     assert secret not in "".join(traceback.format_exception(caught.value))
+
+
+def _walk_public_traceback_objects(error: BaseException) -> list[object]:
+    """Collect inspectable public traceback state without following code globals."""
+    roots: list[object] = []
+    current = error.__traceback__
+    while current is not None:
+        module_name = current.tb_frame.f_globals.get("__name__", "")
+        if module_name.startswith("agents.orchestrator"):
+            roots.append(current.tb_frame.f_locals)
+        current = current.tb_next
+    seen: set[int] = set()
+    found: list[object] = []
+    pending = [(item, 0) for item in roots]
+    while pending:
+        value, depth = pending.pop()
+        identity = id(value)
+        if identity in seen or depth > 8:
+            continue
+        seen.add(identity)
+        found.append(value)
+        if isinstance(value, dict):
+            pending.extend((item, depth + 1) for item in value.values())
+        elif isinstance(value, (list, tuple, set, frozenset)):
+            pending.extend((item, depth + 1) for item in value)
+        elif isinstance(value, BaseException):
+            pending.extend((item, depth + 1) for item in value.args)
+            pending.extend((item, depth + 1) for item in vars(value).values())
+        elif not isinstance(
+            value,
+            (
+                str,
+                bytes,
+                int,
+                float,
+                bool,
+                type(None),
+                types.ModuleType,
+                types.FunctionType,
+                types.MethodType,
+                type,
+            ),
+        ):
+            try:
+                pending.extend((item, depth + 1) for item in vars(value).values())
+            except TypeError:
+                pass
+    return found
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("failure", ["build", "run", "outputs"])
+async def test_public_traceback_has_no_path_to_raw_command_or_sdk_failure(
+    monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    secret = f"api_key=task16-{failure}-confidential-value-1234567890"
+    original = command()
+    evidence = list(original.deterministic.evidence_items)
+    evidence[-1] = evidence[-1].model_copy(update={"claim": secret, "excerpt": secret})
+    contaminated = original.model_copy(
+        update={
+            "deterministic": original.deterministic.model_copy(
+                update={"evidence_items": tuple(evidence)}
+            )
+        }
+    )
+    raw_error = RuntimeError(f"SDK retained raw failure: {secret}")
+
+    class FailedRun:
+        def __init__(self) -> None:
+            self.raw_error = raw_error
+
+        def get_outputs(self):
+            raise self.raw_error
+
+    class FailedWorkflow:
+        def __init__(self) -> None:
+            self.raw_error = raw_error
+
+        async def run(self, value):
+            if failure == "run":
+                raise self.raw_error
+            return FailedRun()
+
+    def build(*args, **kwargs):
+        if failure == "build":
+            raise raw_error
+        return FailedWorkflow()
+
+    monkeypatch.setattr("agents.orchestrator.workflow.build_framework_workflow", build)
+
+    with pytest.raises(AgentExplanationUnavailable) as caught:
+        await Orchestrator(agents()[0], analyze_case).analyze(contaminated)
+
+    public = caught.value
+    reachable = _walk_public_traceback_objects(public)
+    assert raw_error not in reachable
+    assert all(secret not in repr(value) for value in reachable)
+    assert secret not in public.partial_result.model_dump_json()
+    assert secret not in repr(public)
+    assert public.__cause__ is None
+    assert public.__context__ is None
 
 
 @pytest.mark.anyio
