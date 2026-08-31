@@ -351,8 +351,6 @@ class AnalysisMaterial(FrozenModel):
     runtime_mode: RuntimeMode
     corpus: CorpusScope
     scenario_effective_time: datetime
-    analysis_started_at: datetime
-    retrieval_window_ends_at: datetime
     operational_snapshot_json: str
     required_authority_scope: tuple[AuthorityScope, ...]
     evidence: tuple[AnalysisEvidenceMaterial, ...]
@@ -370,6 +368,8 @@ class AnalysisMaterial(FrozenModel):
 class AnalysisVersion(FrozenModel):
     analysis_id: str
     case_id: str
+    analysis_started_at: datetime
+    retrieval_window_ends_at: datetime
     created_at: datetime
     material_hash: str
     material: AnalysisMaterial

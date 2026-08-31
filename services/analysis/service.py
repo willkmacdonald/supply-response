@@ -183,6 +183,7 @@ def create_analysis_version(
         runtime_mode=case.runtime_mode,
         scenario_effective_time=case.scenario_effective_time,
         analysis_started_at=analysis_started_at,
+        analysis_recorded_at=created_at,
         required_authority_scope=tuple(
             sorted(set(required_authority_scope), key=lambda value: value.value)
         ),
@@ -222,8 +223,6 @@ def create_analysis_version(
         runtime_mode=case.runtime_mode,
         corpus=corpus,
         scenario_effective_time=case.scenario_effective_time,
-        analysis_started_at=analysis_started_at,
-        retrieval_window_ends_at=(analysis_started_at + EVIDENCE_RETRIEVAL_WINDOW),
         operational_snapshot_json=_canonical_snapshot(operational_snapshot),
         required_authority_scope=canonical_required_scope,
         evidence=tuple(
@@ -267,6 +266,10 @@ def create_analysis_version(
     return AnalysisVersion(
         analysis_id=analysis_id,
         case_id=case.case_id,
+        analysis_started_at=analysis_started_at,
+        retrieval_window_ends_at=min(
+            analysis_started_at + EVIDENCE_RETRIEVAL_WINDOW, created_at
+        ),
         created_at=created_at,
         material_hash=analysis_material_hash(material),
         material=material,

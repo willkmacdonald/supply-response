@@ -22,7 +22,7 @@ from data.domain.evidence import (
 )
 
 
-EVIDENCE_POLICY_VERSION = "evidence-policy-v2"
+EVIDENCE_POLICY_VERSION = "evidence-policy-v3"
 EVIDENCE_RETRIEVAL_WINDOW = timedelta(minutes=5)
 
 
@@ -171,7 +171,7 @@ def _validated_conflict_scope(
         or not declared
         or any(result is None for result in referenced)
         or any(
-            tuple(result.validated_authority_scope) != declared
+            not set(declared).issubset(result.validated_authority_scope)
             for result in referenced
             if result is not None
         )
@@ -189,6 +189,7 @@ def _item_validation(
     runtime_mode: RuntimeMode,
     scenario_effective_time: datetime,
     analysis_started_at: datetime,
+    analysis_recorded_at: datetime,
     conflicted_evidence_ids: set[str],
 ) -> EvidenceItemValidation:
     codes: list[EvidenceBlockingCode] = []
@@ -228,6 +229,7 @@ def _item_validation(
         and analysis_started_at
         <= item.retrieved_at
         <= analysis_started_at + EVIDENCE_RETRIEVAL_WINDOW
+        and item.retrieved_at <= analysis_recorded_at
     )
     freshness = (
         FreshnessState.CURRENT
@@ -284,10 +286,20 @@ def validate_required_evidence(
     runtime_mode: RuntimeMode,
     scenario_effective_time: datetime,
     analysis_started_at: datetime,
+    analysis_recorded_at: datetime,
     required_authority_scope: tuple[AuthorityScope, ...] = (),
     conflicts: tuple[EvidenceConflict, ...] = (),
     conflict_resolutions: tuple[ConflictResolution, ...] = (),
 ) -> EvidenceValidation:
+    if analysis_recorded_at < analysis_started_at:
+        raise PolicyViolation("Analysis recording time cannot precede its start.")
+    if any(
+        item.retrieved_at is not None and item.retrieved_at > analysis_recorded_at
+        for item in evidence_items
+    ):
+        raise PolicyViolation(
+            "Evidence retrieval cannot follow Analysis recording time."
+        )
     base_item_results = tuple(
         _item_validation(
             item,
@@ -295,6 +307,7 @@ def validate_required_evidence(
             runtime_mode=runtime_mode,
             scenario_effective_time=scenario_effective_time,
             analysis_started_at=analysis_started_at,
+            analysis_recorded_at=analysis_recorded_at,
             conflicted_evidence_ids=set(),
         )
         for item in sorted(evidence_items, key=lambda item: item.evidence_id)
@@ -354,6 +367,7 @@ def validate_required_evidence(
             runtime_mode=runtime_mode,
             scenario_effective_time=scenario_effective_time,
             analysis_started_at=analysis_started_at,
+            analysis_recorded_at=analysis_recorded_at,
             conflicted_evidence_ids=conflicted_ids,
         )
         for item in sorted(evidence_items, key=lambda item: item.evidence_id)

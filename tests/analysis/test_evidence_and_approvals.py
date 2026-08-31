@@ -112,6 +112,7 @@ def current_evidence_validation(
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
         analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+        analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
     )
 
 
@@ -196,6 +197,7 @@ def test_uncited_required_workiq_evidence_blocks_authoritative_analysis():
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
         analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+        analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
     )
     assert result.blocking_codes == ("REQUIRED_CITATION_MISSING",)
 
@@ -241,6 +243,7 @@ def test_evidence_validation_reports_each_field_scoped_blocking_code():
         analysis_id="RL-ANALYSIS-1",
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
         analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+        analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
         required_authority_scope=(AuthorityScope.QUALIFICATION_STATE,),
         conflicts=(conflict,),
     )
@@ -278,6 +281,7 @@ def test_typed_human_resolution_clears_only_the_matching_conflict():
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
         analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+        analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
         conflicts=(conflict,),
         conflict_resolutions=(resolution,),
     )
@@ -302,6 +306,7 @@ def test_forged_resolution_with_nonmember_evidence_does_not_clear_conflict():
             runtime_mode=RuntimeMode.LIVE,
             scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
             analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+            analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
             conflicts=(conflict,),
             conflict_resolutions=(forged,),
         )
@@ -380,6 +385,7 @@ def test_directly_constructed_forged_resolution_is_revalidated_at_consumption():
             runtime_mode=RuntimeMode.LIVE,
             scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
             analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+            analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
             conflicts=(evidence_conflict(feasibility_relevant=True),),
             conflict_resolutions=(forged,),
         )
@@ -431,6 +437,7 @@ def test_source_system_cannot_self_assert_an_unauthorized_scope(
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
         analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+        analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
         required_authority_scope=authority_scope,
     )
     assert "AUTHORITY_SCOPE_MISMATCH" in result.blocking_codes
@@ -450,6 +457,7 @@ def test_contextual_evidence_is_visible_but_cannot_satisfy_a_gate():
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
         analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+        analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
         required_authority_scope=(AuthorityScope.COLLABORATION_STATEMENT,),
     )
     assert result.item_results[0].authoritative is False
@@ -469,6 +477,7 @@ def test_contextual_kind_cannot_self_promote_by_claiming_required_status():
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
         analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+        analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
         required_authority_scope=(AuthorityScope.COLLABORATION_STATEMENT,),
     )
     assert result.item_results[0].authoritative is False
@@ -506,6 +515,7 @@ def test_source_authority_is_bound_to_its_runtime_mode(source_system, runtime_mo
         runtime_mode=runtime_mode,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
         analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+        analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
         required_authority_scope=item.authority_scope,
     )
     assert result.item_results[0].authoritative is False
@@ -525,6 +535,7 @@ def test_future_effective_and_exact_expiry_are_typed_business_invalidity():
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
         analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+        analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
     )
     states = {item.evidence_id: item.business_validity for item in result.item_results}
     assert states == {
@@ -558,11 +569,12 @@ def test_source_retrieval_order_and_current_analysis_health_are_visible():
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
         analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+        analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
     )
     assert result.item_results[0].freshness == FreshnessState.STALE
     assert "EVIDENCE_TIMESTAMP_STALE" in result.blocking_codes
     assert "RETRIEVAL_HEALTH_UNACCEPTABLE" in result.blocking_codes
-    assert result.policy_version == "evidence-policy-v2"
+    assert result.policy_version == "evidence-policy-v3"
 
 
 @pytest.mark.parametrize(
@@ -583,6 +595,7 @@ def test_required_live_workiq_evidence_requires_complete_navigable_metadata(upda
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
         analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+        analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
     )
     assert result.blocking_codes
     assert result.item_results[0].authoritative is False
@@ -708,8 +721,8 @@ def test_direct_approval_satisfaction_cannot_bypass_target_policy():
         )
 
 
-def analysis_material(item: EvidenceItem) -> AnalysisMaterial:
-    return create_analysis(evidence_items=(item,)).material
+def analysis_material(item: EvidenceItem, **analysis_overrides) -> AnalysisMaterial:
+    return create_analysis(evidence_items=(item,), **analysis_overrides).material
 
 
 def material_with_satisfaction(analysis_id: str) -> AnalysisMaterial:
@@ -729,10 +742,11 @@ def test_material_hash_ignores_retrieval_retries_and_display_only_metadata():
             "citation_url": "https://rl.example/evidence/RL-E-1?display=compact",
         }
     )
+    recording_time = SCENARIO_EFFECTIVE_TIME + timedelta(minutes=5)
 
     assert analysis_material_hash(
-        analysis_material(original)
-    ) == analysis_material_hash(analysis_material(retried))
+        analysis_material(original, created_at=recording_time)
+    ) == analysis_material_hash(analysis_material(retried, created_at=recording_time))
 
 
 def test_material_hash_changes_when_normalized_evidence_content_changes():
@@ -1047,6 +1061,7 @@ def test_final_review_declared_conflict_scope_cannot_relabel_validated_scope():
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
         analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+        analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
     )
     forged_scope = EvidenceConflict(
         conflict_id="RL-CONFLICT-QUALITY-1",
@@ -1083,6 +1098,7 @@ def test_final_review_unresolved_conflict_makes_each_item_nonauthoritative():
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
         analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+        analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
         conflicts=(evidence_conflict(feasibility_relevant=True),),
     )
 
@@ -1105,6 +1121,7 @@ def test_final_review_old_retrieval_relabelled_current_is_still_stale():
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
         analysis_started_at=analysis_started_at,
+        analysis_recorded_at=analysis_started_at + timedelta(minutes=2),
     )
 
     assert validation.item_results[0].freshness == FreshnessState.STALE
@@ -1147,6 +1164,7 @@ def test_final_review_conflict_rationale_is_material_and_changes_hash():
         runtime_mode=RuntimeMode.LIVE,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
         analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+        analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
     )
     conflict = evidence_conflict(feasibility_relevant=True)
     first = resolve_conflict(
@@ -1173,3 +1191,93 @@ def test_final_review_conflict_rationale_is_material_and_changes_hash():
 
     assert first_analysis.material.conflict_resolutions[0].why == first.why
     assert first_analysis.material_hash != second_analysis.material_hash
+
+
+def test_final_correction_fresh_wall_clock_windows_do_not_change_material_hash():
+    first = create_analysis()
+    later_start = SCENARIO_EFFECTIVE_TIME + timedelta(hours=1)
+    later_retrieval = evidence_item().model_copy(
+        update={
+            "retrieved_at": later_start,
+            "retrieved_for_analysis_id": "RL-ANALYSIS-2",
+        }
+    )
+    second = create_analysis(
+        analysis_id="RL-ANALYSIS-2",
+        evidence_items=(later_retrieval,),
+        analysis_started_at=later_start,
+        created_at=later_start + timedelta(minutes=2),
+    )
+
+    assert first.evidence_validation == second.evidence_validation
+    assert first.analysis_started_at != second.analysis_started_at
+    assert first.retrieval_window_ends_at != second.retrieval_window_ends_at
+    assert first.material_hash == second.material_hash
+    assert "analysis_started_at" not in type(first.material).model_fields
+    assert "retrieval_window_ends_at" not in type(first.material).model_fields
+
+
+def test_final_correction_retrieval_after_analysis_recording_is_rejected():
+    with pytest.raises(PolicyViolation, match="recording time"):
+        create_analysis(
+            evidence_items=(
+                evidence_item().model_copy(
+                    update={
+                        "retrieved_at": SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2)
+                    }
+                ),
+            ),
+            created_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=1),
+        )
+
+
+def test_final_correction_conflict_scope_may_be_valid_evidence_scope_subset():
+    evidence = tuple(
+        evidence_item(
+            evidence_id=evidence_id,
+            authority_scope=(
+                AuthorityScope.OPERATIONAL_QUANTITY,
+                AuthorityScope.QUALIFICATION_STATE,
+            ),
+            kind=EvidenceKind.OPERATIONAL_FACT,
+            source_system=EvidenceSourceSystem.FABRIC,
+        )
+        for evidence_id in ("RL-E-MULTISCOPE-1", "RL-E-MULTISCOPE-2")
+    )
+    validation = validate_required_evidence(
+        evidence,
+        analysis_id="RL-ANALYSIS-1",
+        runtime_mode=RuntimeMode.LIVE,
+        scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        analysis_started_at=SCENARIO_EFFECTIVE_TIME,
+        analysis_recorded_at=SCENARIO_EFFECTIVE_TIME + timedelta(minutes=2),
+    )
+    conflict = EvidenceConflict(
+        conflict_id="RL-CONFLICT-OPERATIONAL-SUBSET-1",
+        case_id="RL-CASE-1",
+        evidence_ids=("RL-E-MULTISCOPE-1", "RL-E-MULTISCOPE-2"),
+        authority_scope=(AuthorityScope.OPERATIONAL_QUANTITY,),
+        description="RL multiscope records disagree on operational quantity.",
+        feasibility_relevant=True,
+    )
+    resolution = resolve_conflict(
+        conflict,
+        evidence_validation=validation,
+        actor=alex_actor(),
+        governing_evidence_id="RL-E-MULTISCOPE-2",
+        why="RL supplier citation is newer.",
+    )
+
+    analysis = create_analysis(
+        evidence_items=evidence,
+        conflicts=(conflict,),
+        conflict_resolutions=(resolution,),
+    )
+
+    assert (
+        "EVIDENCE_CONFLICT_UNRESOLVED"
+        not in analysis.evidence_validation.blocking_codes
+    )
+    assert analysis.material.conflicts[0].authority_scope == (
+        AuthorityScope.OPERATIONAL_QUANTITY,
+    )
