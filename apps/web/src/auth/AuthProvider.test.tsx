@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import {BrowserCacheLocation} from "@azure/msal-browser";
+import {BrowserCacheLocation, InteractionRequiredAuthError} from "@azure/msal-browser";
 import {act, cleanup, render, screen, waitFor} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {afterEach, describe, expect, it, vi} from "vitest";
@@ -64,6 +64,28 @@ describe("Entra configuration", () => {
     })).toEqual(entraConfig);
   });
 
+  it.each([
+    "https://example.com/callback?next=1",
+    "https://example.com/callback#fragment",
+    "http://example.com/callback",
+  ])("rejects a non-exact redirect URI: %s", (redirectUri) => {
+    expect(() => readEntraConfig({
+      VITE_ENTRA_TENANT_ID: entraConfig.tenantId,
+      VITE_ENTRA_WEB_CLIENT_ID: entraConfig.webClientId,
+      VITE_ENTRA_API_SCOPE: entraConfig.apiScope,
+      VITE_ENTRA_REDIRECT_URI: redirectUri,
+    })).toThrow(/redirect/);
+  });
+
+  it("normalizes only a single trailing slash", () => {
+    expect(readEntraConfig({
+      VITE_ENTRA_TENANT_ID: entraConfig.tenantId,
+      VITE_ENTRA_WEB_CLIENT_ID: entraConfig.webClientId,
+      VITE_ENTRA_API_SCOPE: entraConfig.apiScope,
+      VITE_ENTRA_REDIRECT_URI: "https://example.com/auth/callback/",
+    })?.redirectUri).toBe("https://example.com/auth/callback");
+  });
+
   it("uses the tenant-specific authority and never localStorage", () => {
     const config = createMsalConfig(entraConfig);
     expect(config.auth).toMatchObject({
@@ -118,5 +140,35 @@ describe("AuthProvider", () => {
     expect(screen.queryByRole("button", {name: "Get token"})).not.toBeInTheDocument();
     await act(async () => resolveInitialization());
     await waitFor(() => expect(screen.getByRole("button", {name: "Get token"})).toBeInTheDocument());
+  });
+
+  it("shows a recoverable sign-in action when initialization fails", async () => {
+    const client = fakeClient();
+    client.initialize = vi.fn().mockRejectedValue(new Error("initialization failed"));
+    render(<AuthProvider config={entraConfig} client={client}><Consumer /></AuthProvider>);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/secure sign-in failed/i);
+    await userEvent.click(screen.getByRole("button", {name: /retry sign-in/i}));
+    expect(client.loginRedirect).toHaveBeenCalledOnce();
+  });
+
+  it("deduplicates concurrent interactive redirects after silent acquisition", async () => {
+    const client = fakeClient();
+    const required = new InteractionRequiredAuthError("interaction_required", "interaction required");
+    client.acquireTokenSilent = vi.fn().mockRejectedValue(required);
+    let releaseRedirect!: () => void;
+    client.acquireTokenRedirect = vi.fn(() => new Promise<void>((resolve) => {
+      releaseRedirect = resolve;
+    }));
+    render(<AuthProvider config={entraConfig} client={client}><Consumer /></AuthProvider>);
+    await waitFor(() => expect(screen.getByTestId("name")).toHaveTextContent("Alex Morgan"));
+    const auth = screen.getByRole("button", {name: "Get token"});
+    await act(async () => {
+      auth.click();
+      auth.click();
+      await Promise.resolve();
+    });
+    expect(client.acquireTokenSilent).toHaveBeenCalledTimes(2);
+    expect(client.acquireTokenRedirect).toHaveBeenCalledOnce();
+    await act(async () => releaseRedirect());
   });
 });

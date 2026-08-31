@@ -124,6 +124,7 @@ def token_factory():
             "tid": TENANT_ID,
             "oid": ALEX_OID,
             "roles": ["material_planner", "response_approver"],
+            "scp": "access_as_user",
             "preferred_username": "alex@willmacdonald.com",
             "name": "Alex Morgan",
         }
@@ -135,13 +136,39 @@ def token_factory():
 
 
 def test_alex_token_maps_stable_persona_and_roles(token_factory, auth_service):
-    actor = auth_service.authenticate(
-        token_factory(), bearer_assertion="original-token"
-    )
+    token = token_factory()
+    actor = auth_service.authenticate(token)
 
     assert actor.persona_id == "RL-PERSONA-ALEX"
     assert actor.effective_roles == ("material_planner", "response_approver")
-    assert actor.downstream_user_assertion.reveal() == "original-token"
+    assert actor.downstream_user_assertion.reveal() == token
+
+
+def test_authenticate_cannot_retain_an_alternate_obo_assertion(
+    token_factory, auth_service
+):
+    with pytest.raises(TypeError):
+        auth_service.authenticate(
+            token_factory(), bearer_assertion="unvalidated-second-token"
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        {"aud": [API_CLIENT_ID]},
+        {"roles": ["response_approver"]},
+        {"roles": ["material_planner", "response_approver", "quality_approver"]},
+        {"scp": None},
+        {"scp": "other_scope"},
+        {"scp": "access_as_user other_scope"},
+    ],
+)
+def test_token_contract_requires_exact_audience_roles_and_scope(
+    token_factory, auth_service, mutation
+):
+    with pytest.raises((AuthenticationError, AuthorizationError)):
+        auth_service.authenticate(token_factory(**mutation))
 
 
 @pytest.mark.parametrize(

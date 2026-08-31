@@ -1,5 +1,5 @@
 import {InteractionRequiredAuthError, type AccountInfo, type AuthenticationResult} from "@azure/msal-browser";
-import {createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode} from "react";
+import {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode} from "react";
 import {setAccessTokenProvider} from "../api";
 import {createMsalClient, defaultEntraConfig, type EntraConfig} from "./msal";
 
@@ -61,24 +61,40 @@ export function AuthProvider({
   );
   const [account, setAccount] = useState<AuthAccount | null>(null);
   const [ready, setReady] = useState(config === null);
+  const [authFailure, setAuthFailure] = useState(false);
+  const interactiveRedirect = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     if (!client) return;
     setReady(false);
+    setAuthFailure(false);
     let active = true;
-    void client.initialize().then(async () => {
-      const redirect = await client.handleRedirectPromise();
-      const resolved = redirect?.account ?? client.getActiveAccount() ?? client.getAllAccounts()[0] ?? null;
-      if (!active) return;
-      client.setActiveAccount(resolved);
-      setAccount(resolved);
-      setReady(true);
-    });
+    void (async () => {
+      try {
+        await client.initialize();
+        const redirect = await client.handleRedirectPromise();
+        const resolved = redirect?.account ?? client.getActiveAccount() ?? client.getAllAccounts()[0] ?? null;
+        if (!active) return;
+        client.setActiveAccount(resolved);
+        setAccount(resolved);
+        setReady(true);
+      } catch {
+        if (!active) return;
+        setAuthFailure(true);
+        setReady(false);
+      }
+    })();
     return () => { active = false; };
   }, [client]);
 
   const signIn = useCallback(async () => {
-    if (client && config) await client.loginRedirect({scopes: [config.apiScope]});
+    if (!client || !config) return;
+    setAuthFailure(false);
+    if (!interactiveRedirect.current) {
+      interactiveRedirect.current = client.loginRedirect({scopes: [config.apiScope]})
+        .finally(() => { interactiveRedirect.current = null; });
+    }
+    await interactiveRedirect.current;
   }, [client, config]);
 
   const getAccessToken = useCallback(async (): Promise<string | null> => {
@@ -90,7 +106,11 @@ export function AuthProvider({
       return (await client.acquireTokenSilent(request)).accessToken;
     } catch (error) {
       if (!(error instanceof InteractionRequiredAuthError)) throw error;
-      await client.acquireTokenRedirect(request);
+      if (!interactiveRedirect.current) {
+        interactiveRedirect.current = client.acquireTokenRedirect(request)
+          .finally(() => { interactiveRedirect.current = null; });
+      }
+      await interactiveRedirect.current;
       return null;
     }
   }, [account, client, config]);
@@ -108,7 +128,9 @@ export function AuthProvider({
   } : fallbackValue, [account, config, getAccessToken, signIn]);
 
   return <AuthContext.Provider value={value}>
-    {ready ? children : <p role="status">Completing secure sign-in…</p>}
+    {authFailure
+      ? <div role="alert">Secure sign-in failed. <button onClick={() => void signIn()}>Retry sign-in</button></div>
+      : ready ? children : <p role="status">Completing secure sign-in…</p>}
   </AuthContext.Provider>;
 }
 

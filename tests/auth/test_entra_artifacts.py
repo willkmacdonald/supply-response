@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import stat
 from pathlib import Path
 
 import pytest
@@ -61,6 +62,15 @@ def test_manifests_define_only_two_single_tenant_apps_and_exact_permissions():
     assert "WorkIQAgent.Ask" not in json.dumps(web)
     assert "clientSecret" not in serialized
     assert "passwordCredentials" not in serialized
+    for role in api["appRoles"]:
+        assert "origin" not in role
+
+
+def test_manifest_write_payload_contains_no_graph_read_only_fields():
+    api = load("api-app.json")
+    forbidden = {"origin", "publisherDomain", "verifiedPublisher", "createdDateTime"}
+    assert not forbidden.intersection(api)
+    assert all(not forbidden.intersection(role) for role in api["appRoles"])
 
 
 def _env() -> dict[str, str]:
@@ -103,6 +113,253 @@ def test_configure_fails_closed_on_tenant_mismatch():
     result = run("configure.sh", "configure.json", env=env)
     assert result.returncode != 0
     assert "tenant" in result.stderr.lower()
+
+
+@pytest.mark.parametrize(
+    "redirect",
+    [
+        "https://example.com/callback?next=1",
+        "https://example.com/callback#fragment",
+        "http://example.com/callback",
+    ],
+)
+def test_configure_rejects_redirects_the_spa_would_reject(redirect):
+    env = _env()
+    env["SUPPLY_RESPONSE_REDIRECT_URI"] = redirect
+    result = run("configure.sh", "configure.json", env=env)
+    assert result.returncode != 0
+    assert "redirect" in result.stderr.lower()
+
+
+def test_configure_normalizes_a_single_trailing_slash():
+    env = _env()
+    env["SUPPLY_RESPONSE_REDIRECT_URI"] = "https://example.com/auth/callback/"
+    result = run("configure.sh", "configure.json", env=env)
+    assert result.returncode == 0, result.stderr
+    assert "redirect=https://example.com/auth/callback" in result.stdout
+
+
+def _fake_az(tmp_path: Path) -> tuple[Path, Path]:
+    state = tmp_path / "fake-az-state"
+    executable = tmp_path / "az"
+    executable.write_text(
+        """#!/usr/bin/env python3
+import json, os, pathlib, sys
+state = pathlib.Path(os.environ["FAKE_AZ_STATE"])
+state.mkdir(exist_ok=True)
+args = sys.argv[1:]
+counter = state / "mutations"
+creates = state / "creates"
+mutations = int(counter.read_text()) if counter.exists() else 0
+def mutate():
+    global mutations
+    mutations += 1
+    counter.write_text(str(mutations))
+if args[:2] == ["account", "show"]:
+    print("11111111-1111-4111-8111-111111111111")
+elif args[:2] == ["rest", "--method"] and "GET" in args:
+    uri = args[args.index("--uri") + 1]
+    if "organization" in uri:
+        print(json.dumps({"verifiedDomains":[{"name":"willmacdonald.com","isVerified":True}]}))
+    else:
+        print("[]")
+elif args[:3] == ["ad", "sp", "show"] and "44444444-4444-4444-8444-444444444444" in args:
+    print(json.dumps({"appId":"44444444-4444-4444-8444-444444444444","oauth2PermissionScopes":[{"id":"55555555-5555-4555-8555-555555555555","value":"WorkIQAgent.Ask","isEnabled":True}]}))
+elif args[:3] == ["ad", "app", "create"]:
+    mutate()
+    creates.write_text(str(int(creates.read_text()) + 1 if creates.exists() else 1))
+    name = args[args.index("--display-name") + 1]
+    api = name.endswith("API")
+    print(json.dumps({"appId":"22222222-2222-4222-8222-222222222222" if api else "33333333-3333-4333-8333-333333333333", "id":"77777777-7777-4777-8777-777777777777" if api else "88888888-8888-4888-8888-888888888888"}))
+elif args[:3] == ["ad", "app", "show"]:
+    client = args[args.index("--id") + 1]
+    object_id = "77777777-7777-4777-8777-777777777777" if client.startswith("2222") else "88888888-8888-4888-8888-888888888888"
+    print(json.dumps({"appId":client,"id":object_id}))
+elif args[:2] == ["rest", "--method"] and "PATCH" in args:
+    body = args[args.index("--body") + 1]
+    payload = json.loads(pathlib.Path(body[1:]).read_text())
+    forbidden = {"origin", "publisherDomain", "verifiedPublisher", "createdDateTime"}
+    assert not forbidden.intersection(payload)
+    assert all(not forbidden.intersection(role) for role in payload.get("appRoles", []))
+    mutate()
+elif args[:3] == ["ad", "sp", "show"]:
+    client = args[args.index("--id") + 1]
+    marker = state / ("sp-" + client)
+    if not marker.exists(): sys.exit(1)
+    print(json.dumps({"id":client}))
+elif args[:3] == ["ad", "sp", "create"]:
+    mutate()
+    client = args[args.index("--id") + 1]
+    (state / ("sp-" + client)).write_text("yes")
+else:
+    print("unsupported fake az: " + repr(args), file=sys.stderr)
+    sys.exit(3)
+"""
+    )
+    executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
+    return executable, state
+
+
+@pytest.mark.parametrize(
+    "failure_boundary",
+    ["api_app", "web_app", "api_patch", "web_patch", "api_sp", "web_sp"],
+)
+def test_configure_apply_persists_progress_and_reuses_apps_after_each_failure(
+    tmp_path, failure_boundary
+):
+    _, state = _fake_az(tmp_path)
+    env = _env()
+    env.pop("SUPPLY_RESPONSE_API_CLIENT_ID")
+    env.pop("SUPPLY_RESPONSE_WEB_CLIENT_ID")
+    env.update(
+        {
+            "PATH": f"{tmp_path}:{env['PATH']}",
+            "FAKE_AZ_STATE": str(state),
+            "SUPPLY_RESPONSE_TEST_MODE": "1",
+            "SUPPLY_RESPONSE_INJECT_FAILURE_AFTER": failure_boundary,
+            "SUPPLY_RESPONSE_ENTRA_STATE_FILE": str(tmp_path / ".env.tenant"),
+            "SUPPLY_RESPONSE_SKIP_FINAL_CHECK": "1",
+        }
+    )
+    first = subprocess.run(
+        [str(ENTRA / "configure.sh"), "--apply"],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert first.returncode != 0
+    state_file = tmp_path / ".env.tenant"
+    assert state_file.exists()
+    assert stat.S_IMODE(state_file.stat().st_mode) == 0o600
+    assert "SUPPLY_RESPONSE_ENTRA_STATE=INCOMPLETE" in state_file.read_text()
+
+    env.pop("SUPPLY_RESPONSE_INJECT_FAILURE_AFTER")
+    second = subprocess.run(
+        [str(ENTRA / "configure.sh"), "--apply"],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert second.returncode == 0, second.stderr
+    assert "SUPPLY_RESPONSE_ENTRA_STATE=COMPLETE" in state_file.read_text()
+    assert (state / "creates").read_text() == "2"
+
+
+def test_exact_check_logic_rejects_excess_permissions_roles_and_assignments():
+    configure = (ENTRA / "configure.sh").read_text()
+    assign = (ENTRA / "assign-personas.sh").read_text()
+    assert "canonical_api_contract" in configure
+    assert "canonical_web_contract" in configure
+    assert "exact_persona_assignments" in assign
+
+
+def _check_fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
+    fixture = json.loads((FIXTURES / "configure.json").read_text())
+    api_text = json.dumps(load("api-app.json"))
+    api_text = api_text.replace("{{API_APP_ID}}", API_ID)
+    api_text = api_text.replace("{{WORKIQ_RESOURCE_APP_ID}}", WORKIQ_ID)
+    api_text = api_text.replace(
+        "{{WORKIQ_AGENT_ASK_SCOPE_ID}}", "55555555-5555-4555-8555-555555555555"
+    )
+    web_text = json.dumps(load("web-app.json"))
+    web_text = web_text.replace("{{API_APP_ID}}", API_ID)
+    web_text = web_text.replace(
+        "{{REDIRECT_URI}}", _env()["SUPPLY_RESPONSE_REDIRECT_URI"]
+    )
+    fixture["apiApplication"] = json.loads(api_text)
+    fixture["webApplication"] = json.loads(web_text)
+    path = tmp_path / "configure-check.json"
+    path.write_text(json.dumps(fixture))
+    state_file = tmp_path / ".env.tenant"
+    state_file.write_text(
+        "SUPPLY_RESPONSE_ENTRA_STATE=COMPLETE\n"
+        f"SUPPLY_RESPONSE_API_CLIENT_ID={API_ID}\n"
+        f"SUPPLY_RESPONSE_WEB_CLIENT_ID={WEB_ID}\n"
+    )
+    env = _env()
+    env.update(
+        {
+            "SUPPLY_RESPONSE_TEST_MODE": "1",
+            "SUPPLY_RESPONSE_ENTRA_STATE_FILE": str(state_file),
+        }
+    )
+    return path, env
+
+
+@pytest.mark.parametrize("drift", ["excess_permission", "altered_role"])
+def test_configure_check_rejects_permission_or_role_drift(tmp_path, drift):
+    path, env = _check_fixture(tmp_path)
+    fixture = json.loads(path.read_text())
+    if drift == "excess_permission":
+        fixture["apiApplication"]["requiredResourceAccess"].append(
+            {
+                "resourceAppId": "99999999-9999-4999-8999-999999999999",
+                "resourceAccess": [
+                    {"id": "98888888-8888-4888-8888-888888888888", "type": "Scope"}
+                ],
+            }
+        )
+    else:
+        fixture["apiApplication"]["appRoles"][0]["description"] = "Drifted role"
+    path.write_text(json.dumps(fixture))
+    result = subprocess.run(
+        [str(ENTRA / "configure.sh"), "--check", "--fixture", str(path)],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "exactly match" in result.stderr
+
+
+def test_assignment_check_rejects_an_excess_persona_role(tmp_path):
+    fixture = json.loads((FIXTURES / "assignments.json").read_text())
+    roles = {role["value"]: role["id"] for role in fixture["appRoles"]}
+    fixture["assignments"] = [
+        {
+            "principalId": ALEX_ID,
+            "resourceId": fixture["apiServicePrincipalId"],
+            "appRoleId": roles["material_planner"],
+        },
+        {
+            "principalId": ALEX_ID,
+            "resourceId": fixture["apiServicePrincipalId"],
+            "appRoleId": roles["response_approver"],
+        },
+        {
+            "principalId": ALEX_ID,
+            "resourceId": fixture["apiServicePrincipalId"],
+            "appRoleId": roles["quality_approver"],
+        },
+        {
+            "principalId": JORDAN_ID,
+            "resourceId": fixture["apiServicePrincipalId"],
+            "appRoleId": roles["quality_approver"],
+        },
+        {
+            "principalId": TAYLOR_ID,
+            "resourceId": fixture["apiServicePrincipalId"],
+            "appRoleId": roles["finance_approver"],
+        },
+    ]
+    path = tmp_path / "assignments-extra.json"
+    path.write_text(json.dumps(fixture))
+    result = subprocess.run(
+        [str(ENTRA / "assign-personas.sh"), "--check", "--fixture", str(path)],
+        cwd=ROOT,
+        env=_env(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "exactly match" in result.stderr
 
 
 def test_assign_personas_dry_run_uses_only_exact_object_ids_and_role_values():

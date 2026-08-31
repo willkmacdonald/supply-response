@@ -19,19 +19,31 @@ Local implementation is complete and verified. Live app registration, service-pr
 ## RED → GREEN evidence
 
 1. Backend RED: `tests/auth/test_token_authorization.py` failed collection with `ModuleNotFoundError: apps.api.app.auth`.
-2. Backend GREEN: 26 adversarial JWT/JWKS/persona/snapshot tests passed, including algorithm confusion, signature failure, wrong issuer/audience/tenant, guest identity provider, UPN-only lookup, missing/duplicate/unknown roles, malformed/oversized tokens, duplicate/oversized keys, successful rotation, TTL refresh, and redaction.
+2. Backend GREEN: adversarial JWT/JWKS/persona/snapshot tests passed, including algorithm confusion, signature failure, scalar-audience enforcement, exact delegated scope and role sets, wrong issuer/tenant, guest identity provider, UPN-only lookup, malformed/oversized tokens, duplicate/oversized keys, successful rotation, TTL refresh, assertion lineage, and redaction.
 3. Manifest/script RED: 7 tests failed because `infra/entra` artifacts did not exist.
-4. Manifest/script GREEN: 8 manifest, fixture dry-run, fail-closed input, persona-object-ID, and ignore-file tests passed.
+4. Manifest/script GREEN: manifest/PATCH contracts, fixture dry-run/check, all-boundary restart recovery, exact drift detection, fail-closed input, persona-object-ID, and ignore-file tests passed.
 5. Frontend RED: missing `AuthProvider`/MSAL modules and access-token-provider API; later focused RED caught permissive scope parsing and premature child mounting.
-6. Frontend GREEN: 22 tests passed across AuthProvider, API client, and existing App behavior.
+6. Frontend GREEN: 28 tests passed across AuthProvider, API client, and existing App behavior, including initialization rejection and concurrent interaction-required acquisition.
+
+## Independent-review corrections
+
+The six Important findings and one Minor finding from the independent review were closed test-first:
+
+- Graph read-only `appRole.origin` is absent from both the manifest and generated PATCH payload; fake-Graph apply tests inspect every PATCH body.
+- `authenticate()` no longer accepts an alternate OBO assertion. The successfully validated inbound token is the only retained assertion.
+- Audience is an exact scalar UUID, `scp` is exactly `access_as_user`, and each bound persona must present exactly its fixed role set.
+- Provisioning persists each created client ID immediately in a `0600` state file marked `INCOMPLETE`. Injected failures after all six mutation boundaries prove retries reuse the same two applications; only final exact validation marks the state `COMPLETE`.
+- Registration checks compare canonical exact scopes, permissions, redirects, and complete role shapes. Persona checks reject excess assignments for Alex, Jordan, or Taylor.
+- MSAL initialization failures render a recoverable sign-in action. Concurrent silent acquisition remains concurrent while interaction-required redirects are single-flight.
+- Shell and SPA redirect validation now share the same HTTPS/loopback, no-query, no-fragment, single-trailing-slash normalization contract.
 
 ## Verification
 
-- Auth/artifact suite: **34 passed**.
-- Full non-live Python suite: **411 passed, 12 deselected**. Its locked TMDL validator required approved access to public NuGet; no tenant API was contacted. One pre-existing Starlette/httpx deprecation warning remains.
-- Frontend: **3 files, 22 tests passed**; production TypeScript/Vite build passed.
+- Auth/artifact suite: **56 passed**.
+- Full non-live Python suite: **435 passed, 12 skipped**. Its locked TMDL validator required approved access to public NuGet; no tenant API was contacted. One pre-existing Starlette/httpx deprecation warning remains.
+- Frontend: **3 files, 28 tests passed**; production TypeScript/Vite build passed.
 - Changed Python scope: Ruff check/format passed; Pyright **0 errors, 0 warnings**.
-- Bash: `bash -n` passed; `shellcheck` was unavailable. JSON parsed with `jq`; fixture-only dry runs passed.
+- Bash: `bash -n` passed; `shellcheck` was unavailable. JSON parsed with `jq`; fixture dry-run/check and fake-Azure apply/retry tests passed.
 - `uv lock --check` passed; Python sdist/wheel build passed.
 - `pip-audit`: no known vulnerabilities. `npm audit --audit-level=high`: 0 vulnerabilities.
 - `git diff --check`: passed.

@@ -25,7 +25,6 @@
       "displayName": "Material Planner",
       "id": "3549f14f-f0af-4e37-9276-e7186ba6599e",
       "isEnabled": true,
-      "origin": "Application",
       "value": "material_planner"
     },
     {
@@ -34,7 +33,6 @@
       "displayName": "Response Approver",
       "id": "e42f6a12-cf3b-4bc3-988e-f9f074034f60",
       "isEnabled": true,
-      "origin": "Application",
       "value": "response_approver"
     },
     {
@@ -43,7 +41,6 @@
       "displayName": "Quality Approver",
       "id": "9bb74f50-a888-45b2-95b4-c0a32d81b450",
       "isEnabled": true,
-      "origin": "Application",
       "value": "quality_approver"
     },
     {
@@ -52,7 +49,6 @@
       "displayName": "Finance Approver",
       "id": "ab2d7f94-bf55-481e-8951-bfa9ea77572d",
       "isEnabled": true,
-      "origin": "Application",
       "value": "finance_approver"
     }
   ],

@@ -225,8 +225,6 @@ class AuthService:
     def authenticate(
         self,
         token: str,
-        *,
-        bearer_assertion: str | None = None,
     ) -> AuthenticatedActor:
         if not isinstance(token, str):
             raise AuthenticationError("bearer token is malformed")
@@ -252,15 +250,27 @@ class AuthService:
                 audience=self._audience,
                 issuer=self._issuer,
                 options={
-                    "require": ["iss", "aud", "exp", "nbf", "tid", "oid", "roles"],
+                    "require": [
+                        "iss",
+                        "aud",
+                        "exp",
+                        "nbf",
+                        "tid",
+                        "oid",
+                        "roles",
+                        "scp",
+                    ],
                     "verify_exp": False,
                     "verify_nbf": False,
                     "verify_iat": False,
+                    "strict_aud": True,
                 },
             )
         except (InvalidTokenError, ValueError, TypeError) as error:
             raise AuthenticationError("bearer token validation failed") from error
-        return self._authorize(claims, bearer_assertion or token)
+        if not isinstance(claims.get("aud"), str) or claims["aud"] != self._audience:
+            raise AuthenticationError("bearer token audience is invalid")
+        return self._authorize(claims, token)
 
     def _authorize(
         self, claims: Mapping[str, Any], bearer_assertion: str
@@ -314,8 +324,11 @@ class AuthService:
             or len(roles) != len(set(roles))
         ):
             raise AuthorizationError("token roles are missing or ambiguous")
-        if not set(roles).issubset(binding.allowed_roles):
-            raise AuthorizationError("token role is not configured for persona binding")
+        if set(roles) != set(binding.allowed_roles):
+            raise AuthorizationError("token roles do not exactly match persona binding")
+        scope = claims.get("scp")
+        if scope != "access_as_user":
+            raise AuthorizationError("token scope must be exactly access_as_user")
         display_name = self._optional_string(claims, "name")
         upn = self._optional_string(claims, "preferred_username")
         return AuthenticatedActor(
