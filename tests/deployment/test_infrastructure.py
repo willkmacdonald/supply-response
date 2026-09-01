@@ -30,6 +30,12 @@ def test_azd_is_infrastructure_only_and_uses_environment_parameters():
     assert parameters["parameters"]["containerAppName"]["value"] == (
         "${SUPPLY_RESPONSE_CONTAINER_APP_NAME}"
     )
+    assert parameters["parameters"]["deploymentPrincipalId"]["value"] == (
+        "${SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID}"
+    )
+    assert parameters["parameters"]["deploymentPrincipalType"]["value"] == (
+        "${SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE}"
+    )
     assert not (ROOT / "infra/main.bicepparam").exists()
 
 
@@ -162,6 +168,7 @@ def test_one_argument_aware_image_build_path_is_explicit_and_immutable():
     assert 'image="${registry_server}/supply-response@${image_digest}"' in deploy
     assert "build_context_changes" in deploy
     for path in (
+        ".dockerignore",
         "Dockerfile",
         "pyproject.toml",
         "uv.lock",
@@ -311,6 +318,7 @@ def test_preflight_requires_exact_foundry_fabric_and_azd_environment_contracts()
 
 def test_secret_file_and_live_smoke_gate_fail_closed():
     deploy = _read("scripts/deploy_personal_tenant.sh")
+    helper = _read("scripts/lib/safe_command.sh")
 
     assert (
         "secret file must contain exactly one line without a trailing newline" in deploy
@@ -321,10 +329,11 @@ def test_secret_file_and_live_smoke_gate_fail_closed():
     assert 'runtime["capability_health"]["agent_runtime"] == "ready"' in deploy
     smoke_body = deploy.split("smoke_gate()", 1)[1].split("\n}\n", 1)[0]
     assert "SUPPLY_RESPONSE_WORKIQ" not in smoke_body
-    assert "os.path.islink" in deploy
-    assert "st_uid == os.getuid()" in deploy
-    assert "stat.S_IMODE" in deploy
-    assert "mode & 0o077 == 0" in deploy
+    assert "valid_secret_file" in deploy
+    assert "os.path.islink" in helper
+    assert "st_uid == os.getuid()" in helper
+    assert "stat.S_IMODE" in helper
+    assert "mode & 0o077 == 0" in helper
 
 
 def test_provision_diagnostics_are_protected_sanitized_and_not_streamed():
@@ -347,6 +356,36 @@ def test_provision_diagnostics_are_protected_sanitized_and_not_streamed():
             stripped = line.strip()
             if re.search(r"(^|[$(])(?:az|azd) ", stripped):
                 assert "safe_capture" in stripped or "safe_run" in stripped, stripped
+
+
+def test_sensitive_capture_deletes_success_stdout_and_retains_only_failure_stderr():
+    completed = subprocess.run(
+        [
+            "bash",
+            "-c",
+            (
+                "set -euo pipefail; source scripts/lib/safe_command.sh; "
+                "safe_init_diagnostics; token=''; "
+                "safe_capture_ephemeral token token-success printf token-value; "
+                '[[ "$token" == token-value ]]; '
+                '[[ ! -e "$SAFE_DIAGNOSTICS_DIR/token-success.stdout" ]]; '
+                '[[ ! -e "$SAFE_DIAGNOSTICS_DIR/token-success.stderr" ]]; '
+                "if safe_capture_ephemeral token token-failure bash -c "
+                "'printf partial-token; printf ERROR >&2; exit 7'; then exit 9; fi; "
+                '[[ ! -e "$SAFE_DIAGNOSTICS_DIR/token-failure.stdout" ]]; '
+                '[[ -f "$SAFE_DIAGNOSTICS_DIR/token-failure.stderr" ]]; '
+                "! grep -R 'token-value\\|partial-token' \"$SAFE_DIAGNOSTICS_DIR\""
+            ),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    preflight = _read("scripts/preflight_personal_tenant.sh")
+    assert "safe_capture_ephemeral fabric_access_token fabric-token" in preflight
 
 
 def test_safe_command_failure_summary_never_echoes_identifiers():
@@ -388,14 +427,50 @@ def test_secret_is_seeded_only_during_true_bootstrap_and_rotation_is_separate():
         'if [[ "$started_from_bootstrap" == true ]]', 0, seed
     )
     assert bootstrap_guard >= 0
-    assert "keyvault secret list" in deploy[bootstrap_guard:seed]
+    assert "wait_for_bootstrap_operator_access" in deploy[bootstrap_guard:seed]
+    assert "keyvault secret list" in deploy
     assert "existing seed version" in deploy
     assert "normal apply does not rotate" in docs.lower()
     assert "Capture the old version" in docs
     assert "new_secret_id" in docs
     assert '"$rotation_tmp/new-version"' in docs
     assert "Rollback" in docs
-    assert "test_workiq_live.py" in docs
+    assert "valid_secret_file" in docs
+    assert "--project=live" in docs
+    assert "test_workiq_live.py" not in docs
+
+
+def test_bootstrap_operator_access_is_exact_temporary_and_confirmed():
+    main = _read("infra/main.bicep")
+    rbac = _read("infra/modules/rbac.bicep")
+    preflight = _read("scripts/preflight_personal_tenant.sh")
+    deploy = _read("scripts/deploy_personal_tenant.sh")
+    docs = _read("docs/deployment/personal-tenant.md")
+
+    assert "param deploymentPrincipalId string" in main
+    assert "param deploymentPrincipalType string" in main
+    assert "bootstrapOperatorAccess" in main
+    assert "if (bootstrapMode)" in main
+    assert "b86a8fe4-44ce-4948-aee5-eccb2c155cd7" in main
+    assert "principalType: deploymentPrincipalType" in main
+    assert "principalType: 'ServicePrincipal'" in main
+    assert "param principalType string" in rbac
+    assert "principalType: principalType" in rbac
+
+    assert "SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID:?" in preflight
+    assert "SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE:?" in preflight
+    assert "az ad signed-in-user show" in preflight
+    assert "az ad sp show" in preflight
+    assert "current deployment principal" in preflight
+
+    assert "bootstrap_operator_role_assignment_id" in deploy
+    assert "wait_for_bootstrap_operator_access" in deploy
+    assert "remove_bootstrap_operator_access" in deploy
+    assert "az role assignment delete --ids" in deploy
+    assert "keyvault secret list" in deploy
+    assert "safe_before_diagnostics_cleanup" in deploy
+    assert "interrupted bootstrap" in docs.lower()
+    assert "temporary Key Vault Secrets Officer" in docs
 
 
 def test_restart_safe_upgrade_never_replaces_final_with_placeholder():
@@ -441,6 +516,7 @@ def test_operator_permissions_are_exact_for_every_deployment_scope():
         "Microsoft.Resources/subscriptions/resourceGroups/write",
         "Microsoft.Authorization/roleAssignments/write",
         "Microsoft.ContainerRegistry/registries/scheduleRun/action",
+        "Microsoft.KeyVault/vaults/secrets/readMetadata/action",
         "Microsoft.KeyVault/vaults/secrets/setSecret/action",
     ):
         assert permission in docs

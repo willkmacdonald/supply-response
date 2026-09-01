@@ -8,6 +8,8 @@
     "tenantId": { "value": "${AZURE_TENANT_ID}" },
     "resourceGroupName": { "value": "${SUPPLY_RESPONSE_RESOURCE_GROUP}" },
     "containerAppName": { "value": "${SUPPLY_RESPONSE_CONTAINER_APP_NAME}" },
+    "deploymentPrincipalId": { "value": "${SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID}" },
+    "deploymentPrincipalType": { "value": "${SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE}" },
     "sharedResourceGroupName": { "value": "${SUPPLY_RESPONSE_SHARED_RESOURCE_GROUP}" },
     "sharedContainerAppsEnvironmentName": { "value": "${SUPPLY_RESPONSE_SHARED_CONTAINER_APPS_ENVIRONMENT}" },
     "sharedRegistryName": { "value": "${SUPPLY_RESPONSE_SHARED_REGISTRY}" },

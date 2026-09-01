@@ -16,6 +16,11 @@ safe_init_diagnostics() {
 
 safe_cleanup_diagnostics() {
   local status=$?
+  if declare -F safe_before_diagnostics_cleanup >/dev/null; then
+    if ! safe_before_diagnostics_cleanup; then
+      status=1
+    fi
+  fi
   if [[ -n "$SAFE_DIAGNOSTICS_DIR" ]]; then
     if [[ "$status" == 0 ]]; then
       rm -rf "$SAFE_DIAGNOSTICS_DIR"
@@ -83,6 +88,21 @@ safe_capture() {
   return 1
 }
 
+safe_capture_ephemeral() {
+  local output_name="$1" label="$2" status=0
+  shift 2
+  safe_capture_quiet "$output_name" "$label" "$@" || status=$?
+  rm -f "$SAFE_LAST_STDOUT"
+  SAFE_LAST_STDOUT=''
+  if [[ "$status" == 0 ]]; then
+    rm -f "$SAFE_LAST_STDERR"
+    SAFE_LAST_STDERR=''
+    return 0
+  fi
+  safe_report_failure "$label"
+  return "$status"
+}
+
 safe_run() {
   local ignored_output=''
   safe_capture ignored_output "$@"
@@ -93,4 +113,31 @@ valid_container_app_name() {
   (( ${#name} >= 2 && ${#name} <= 32 )) \
     && [[ "$name" =~ ^[a-z][a-z0-9-]*[a-z0-9]$ ]] \
     && [[ "$name" != *--* ]]
+}
+
+valid_secret_file() {
+  python3 - "$1" <<'PY'
+import os
+import stat
+import sys
+
+path = sys.argv[1]
+if os.path.islink(path):
+    raise SystemExit(1)
+try:
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+except OSError:
+    raise SystemExit(1) from None
+metadata = os.fstat(descriptor)
+mode = stat.S_IMODE(metadata.st_mode)
+valid = (
+    stat.S_ISREG(metadata.st_mode)
+    and metadata.st_uid == os.getuid()
+    and mode & 0o077 == 0
+)
+with os.fdopen(descriptor, "rb") as stream:
+    data = stream.read(4097)
+if not valid or not data or len(data) > 4096 or b"\n" in data or b"\r" in data:
+    raise SystemExit(1)
+PY
 }

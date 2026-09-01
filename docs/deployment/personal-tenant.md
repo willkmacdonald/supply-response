@@ -212,9 +212,14 @@ The deployment principal needs these exact permissions before `--apply`:
   Application Insights, and Key Vault, plus
   `Microsoft.Authorization/roleAssignments/write` for the Key Vault assignment.
   Initial secret population additionally requires the data-plane action
-  `Microsoft.KeyVault/vaults/secrets/setSecret/action`. The Key Vault Secrets Officer
-  role supplies it at the exact new-vault scope. A management-plane secret
-  write permission is not a substitute.
+  `Microsoft.KeyVault/vaults/secrets/readMetadata/action` and
+  `Microsoft.KeyVault/vaults/secrets/setSecret/action`. The Key Vault Secrets
+  Officer role supplies both at the exact new-vault scope. A management-plane
+  secret write permission is not a substitute. During bootstrap only, Bicep
+  assigns that role to the separately confirmed current deployment principal;
+  the apply script removes the exact assignment immediately after inspection and
+  optional seed. This requires `Microsoft.Authorization/roleAssignments/delete`
+  at the new-vault scope as well as write.
 - At the **Foundry project scope**,
   `Microsoft.Authorization/roleAssignments/write` for the exact `Azure AI User`
   assignment. Reader access is also required on the existing Container Apps
@@ -237,11 +242,15 @@ export AZURE_TENANT_ID=<confirmed-tenant-id>
 export AZURE_LOCATION=eastus2
 export SUPPLY_RESPONSE_RESOURCE_GROUP=rg-supply-response-demo
 export SUPPLY_RESPONSE_CONTAINER_APP_NAME=ca-sr-demo
+export SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID=<confirmed-current-object-id>
+export SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE=User # or ServicePrincipal
 azd env set AZURE_SUBSCRIPTION_ID <confirmed-subscription-id>
 azd env set AZURE_TENANT_ID <confirmed-tenant-id>
 azd env set AZURE_LOCATION eastus2
 azd env set SUPPLY_RESPONSE_RESOURCE_GROUP rg-supply-response-demo
 azd env set SUPPLY_RESPONSE_CONTAINER_APP_NAME ca-sr-demo
+azd env set SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID <confirmed-current-object-id>
+azd env set SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE User
 azd env set SUPPLY_RESPONSE_SHARED_RESOURCE_GROUP shared-services-rg
 azd env set SUPPLY_RESPONSE_SHARED_CONTAINER_APPS_ENVIRONMENT shared-services-env
 azd env set SUPPLY_RESPONSE_SHARED_REGISTRY wkmsharedservicesacr
@@ -299,8 +308,10 @@ The restart-safe sequence is: same-tenant preflight; reject tracked or untracked
 changes under the committed image build context; inspect the exact app; create
 the viable Microsoft placeholder only when the app/identity is absent; verify an
 existing non-placeholder revision is healthy before an upgrade; check exact
-managed-identity role records; seed the Key Vault secret only when a bootstrap
-has no existing seed version; build an image tagged
+managed-identity role records; verify the exact temporary Key Vault Secrets Officer
+assignment for the confirmed current operator; wait until a real Key Vault
+metadata read succeeds; seed the secret only when a bootstrap has no existing
+version; remove the exact temporary operator assignment immediately; build an image tagged
 with both the Git revision and a SHA-256 digest of the tenant, Web client, API
 scope, and exact redirect; resolve its ACR manifest digest; and deploy only the
 immutable `registry/supply-response@sha256:...` reference. A role
@@ -315,6 +326,28 @@ redacted categorized summary. Successful runs remove the directory; failed runs
 retain it and print its path so the owner can troubleshoot and then delete it.
 Other failures stop immediately.
 
+If an interrupted bootstrap leaves the temporary role behind, do not continue to
+the final deployment. Under a separate exact-target removal approval, read
+`SUPPLY_RESPONSE_BOOTSTRAP_OPERATOR_ROLE_ASSIGNMENT_ID` from the selected azd
+environment, verify that the assignment has the confirmed principal ID/type,
+Key Vault Secrets Officer role definition, and exact vault scope, then remove
+only that assignment:
+
+```bash
+set -euo pipefail
+source scripts/lib/safe_command.sh
+safe_init_diagnostics
+safe_capture assignment_id bootstrap-role-id azd env get-value \
+  SUPPLY_RESPONSE_BOOTSTRAP_OPERATOR_ROLE_ASSIGNMENT_ID
+safe_run remove-interrupted-bootstrap-role az role assignment delete --ids "$assignment_id"
+```
+
+If the output is absent, list assignments only at the exact vault scope and
+require one match on the confirmed principal ID, principal type, and role
+definition `b86a8fe4-44ce-4948-aee5-eccb2c155cd7` before deleting its ID. Never
+delete by role name alone. The Container App retains only Key Vault Secrets User;
+it is never granted Secrets Officer.
+
 ### Separate Entra client-secret rotation
 
 Normal apply does not rotate the confidential-client secret or create a new Key
@@ -322,54 +355,81 @@ Vault version. Rotation is a separate, explicitly approved operation. Prepare
 the replacement in an owner-only, nonsymlink file with no newline and confirm
 the exact vault, Container App, tenant, and active revision.
 
-Capture the old version without printing its ID or value, create one controlled
-new version, restart the exact active revision so its versionless Key Vault
-reference refreshes, and run the authenticated delegated Work IQ check:
+The following workflow protects every command output, validates the replacement
+with the same file contract as apply, captures the old version without printing
+its ID or value, and creates one controlled new version. Set the live Playwright
+gate variables listed earlier before starting. The `live` project targets the
+deployed HTTPS origin, performs authenticated Alex analysis, and proves that the
+deployed Container App completes Work IQ/OBO; a local integration test is not a
+deployment credential check.
+
+Capture the old version and controlled new version as protected metadata:
+
+Obtain four separate approvals: (1) create the new Key Vault version, (2) restart
+the exact active revision, (3) run the live Playwright gate—which creates a live
+Case, Decision, and simulated execution records—and, only on failure, (4) perform
+the rollback mutations. Stop at each boundary until its exact targets are approved.
 
 ```bash
-rotation_tmp="$(mktemp -d)"
-chmod 700 "$rotation_tmp"
-trap 'rm -rf "$rotation_tmp"' EXIT
-vault_name="$(azd env get-value SUPPLY_RESPONSE_KEY_VAULT_NAME)"
-old_secret_id="$(az keyvault secret show --vault-name "$vault_name" \
-  --name entra-client-secret --query id --output tsv)"
+set -euo pipefail
+source scripts/lib/safe_command.sh
+safe_init_diagnostics
+rotation_tmp="$SAFE_DIAGNOSTICS_DIR/rotation"
+mkdir -m 700 "$rotation_tmp"
+replacement_file=/owner-only/path/replacement-secret
+valid_secret_file "$replacement_file" || exit 1
+safe_capture vault_name rotation-vault azd env get-value SUPPLY_RESPONSE_KEY_VAULT_NAME
+safe_capture_ephemeral old_secret_id old-secret-id az keyvault secret show \
+  --vault-name "$vault_name" --name entra-client-secret --query id --output tsv
 old_version="${old_secret_id##*/}"
 printf '%s' "$old_version" >"$rotation_tmp/old-version"
-new_secret_id="$(az keyvault secret set --vault-name "$vault_name" \
-  --name entra-client-secret --file /owner-only/path/replacement-secret \
-  --query id --output tsv)"
+safe_capture_ephemeral new_secret_id new-secret-id az keyvault secret set \
+  --vault-name "$vault_name" --name entra-client-secret \
+  --file "$replacement_file" --query id --output tsv
 new_version="${new_secret_id##*/}"
 printf '%s' "$new_version" >"$rotation_tmp/new-version"
 chmod 600 "$rotation_tmp/old-version" "$rotation_tmp/new-version"
-active_revision="$(az containerapp revision list \
+safe_capture active_revision active-revision az containerapp revision list \
+  --resource-group "$SUPPLY_RESPONSE_RESOURCE_GROUP" --name "$SUPPLY_RESPONSE_CONTAINER_APP_NAME" \
+  --query "[?properties.active].name | [0]" --output tsv
+rotation_failed=false
+safe_run restart-new-credential az containerapp revision restart \
   --resource-group "$SUPPLY_RESPONSE_RESOURCE_GROUP" \
-  --name "$SUPPLY_RESPONSE_CONTAINER_APP_NAME" \
-  --query "[?properties.active].name | [0]" --output tsv)"
-az containerapp revision restart \
-  --resource-group "$SUPPLY_RESPONSE_RESOURCE_GROUP" \
-  --name "$SUPPLY_RESPONSE_CONTAINER_APP_NAME" --revision "$active_revision"
-.venv/bin/pytest tests/integration/test_workiq_live.py -m workiq_live -q
+  --name "$SUPPLY_RESPONSE_CONTAINER_APP_NAME" --revision "$active_revision" \
+  || rotation_failed=true
+if [[ "$rotation_failed" == false ]]; then
+  safe_run deployed-workiq-obo npm --prefix apps/web run test:e2e -- --project=live \
+    || rotation_failed=true
+fi
 ```
 
 Save a redacted receipt containing the old and new version suffixes, UTC time,
 revision name, and verification exit status; never record a secret value. If the
-deployed verification fails, **Rollback** by downloading the captured old version
+restart or deployed verification fails, **Rollback** by downloading the captured old version
 to a mode-`0600` temporary file, setting that value as a new current version,
 restarting the same controlled revision, and rerunning the live check:
+
+Rollback is itself a separately approved Key Vault and Container Apps mutation.
+If creation of the new version fails, stop: Key Vault still serves the old
+current version, so no rollback write is necessary.
 
 ```bash
 old_version="$(<"$rotation_tmp/old-version")"
 rollback_file="$rotation_tmp/rollback-secret"
 install -m 600 /dev/null "$rollback_file"
-az keyvault secret download --vault-name "$vault_name" \
-  --name entra-client-secret --version "$old_version" \
-  --file "$rollback_file" --encoding utf-8 --output none
-az keyvault secret set --vault-name "$vault_name" --name entra-client-secret \
-  --file "$rollback_file" --output none
-az containerapp revision restart \
-  --resource-group "$SUPPLY_RESPONSE_RESOURCE_GROUP" \
-  --name "$SUPPLY_RESPONSE_CONTAINER_APP_NAME" --revision "$active_revision"
-.venv/bin/pytest tests/integration/test_workiq_live.py -m workiq_live -q
+if [[ "$rotation_failed" == true ]]; then
+  safe_run download-old-credential az keyvault secret download --vault-name "$vault_name" \
+    --name entra-client-secret --version "$old_version" \
+    --file "$rollback_file" --encoding utf-8 --output none
+  valid_secret_file "$rollback_file" || exit 1
+  safe_run restore-old-credential az keyvault secret set --vault-name "$vault_name" --name entra-client-secret \
+    --file "$rollback_file" --output none
+  safe_run restart-rolled-back-credential az containerapp revision restart \
+    --resource-group "$SUPPLY_RESPONSE_RESOURCE_GROUP" \
+    --name "$SUPPLY_RESPONSE_CONTAINER_APP_NAME" --revision "$active_revision"
+  safe_run verify-rolled-back-deployment npm --prefix apps/web run test:e2e -- --project=live
+  exit 1
+fi
 ```
 
 The old version remains available for this recovery path; do not disable or

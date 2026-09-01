@@ -1,4 +1,9 @@
 param principalId string
+@allowed([
+  'User'
+  'ServicePrincipal'
+])
+param principalType string
 param targetResourceName string
 param roleDefinitionId string
 
@@ -11,7 +16,9 @@ resource assignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: target
   properties: {
     principalId: principalId
-    principalType: 'ServicePrincipal'
+    principalType: principalType
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitionId)
   }
 }
+
+output assignmentId string = assignment.id

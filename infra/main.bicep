@@ -9,6 +9,12 @@ param resourceGroupName string
 @minLength(2)
 @maxLength(32)
 param containerAppName string
+param deploymentPrincipalId string
+@allowed([
+  'User'
+  'ServicePrincipal'
+])
+param deploymentPrincipalType string
 param sharedResourceGroupName string
 param sharedContainerAppsEnvironmentName string
 param sharedRegistryName string
@@ -135,8 +141,20 @@ module vaultAccess 'modules/rbac.bicep' = {
   scope: applicationResourceGroup
   params: {
     principalId: app.outputs.principalId
+    principalType: 'ServicePrincipal'
     targetResourceName: vault.outputs.vaultName
     roleDefinitionId: '4633458b-17de-408a-b874-0445c86b69e6'
+  }
+}
+
+module bootstrapOperatorAccess 'modules/rbac.bicep' = if (bootstrapMode) {
+  name: 'bootstrap-operator-vault-access'
+  scope: applicationResourceGroup
+  params: {
+    principalId: deploymentPrincipalId
+    principalType: deploymentPrincipalType
+    targetResourceName: vault.outputs.vaultName
+    roleDefinitionId: 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7'
   }
 }
 
@@ -156,3 +174,4 @@ output SERVICE_API_URI string = 'https://${app.outputs.fqdn}'
 output SUPPLY_RESPONSE_KEY_VAULT_NAME string = vault.outputs.vaultName
 output SUPPLY_RESPONSE_APPLICATION_INSIGHTS_CONNECTION_STRING string = monitoring.outputs.connectionString
 output SUPPLY_RESPONSE_ACR_LOGIN_SERVER string = registryAccess.outputs.loginServer
+output SUPPLY_RESPONSE_BOOTSTRAP_OPERATOR_ROLE_ASSIGNMENT_ID string = bootstrapMode ? bootstrapOperatorAccess!.outputs.assignmentId : ''
