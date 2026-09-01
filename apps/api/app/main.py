@@ -3,8 +3,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from apps.api.app.dependencies import (
     ApplicationServices,
@@ -19,6 +22,7 @@ from apps.api.app.routes.health import router as health_router
 from apps.api.app.routes.test_support import router as test_support_router
 from apps.api.app.runtime import RuntimeProgression
 from apps.api.app.settings import Settings
+from apps.api.app.telemetry import configure_azure_monitor_from_environment
 from services.execution.planner import plan_actions
 from services.execution.playback import PlaybackClock
 
@@ -30,6 +34,7 @@ def create_app(
     clock: Callable[[], datetime] | None = None,
     playback_clock: PlaybackClock | None = None,
     planner=plan_actions,
+    static_directory: Path | None = None,
 ) -> FastAPI:
     active_services = services or build_composition(
         settings or default_settings(),
@@ -62,7 +67,22 @@ def create_app(
     api.include_router(dashboard_router)
     if active_services.settings.automated_test_faults_enabled:
         api.include_router(test_support_router)
+
+    distribution = static_directory or Path(__file__).resolve().parents[1] / "static"
+    index = distribution / "index.html"
+    if index.is_file():
+        assets = distribution / "assets"
+        if assets.is_dir():
+            api.mount("/assets", StaticFiles(directory=assets), name="spa-assets")
+
+        @api.get("/{spa_path:path}", include_in_schema=False)
+        async def spa_fallback(spa_path: str):
+            if spa_path == "health" or spa_path.startswith(("api/", "health/")):
+                raise HTTPException(status_code=404)
+            return FileResponse(index)
+
     return api
 
 
+configure_azure_monitor_from_environment()
 app = create_app()

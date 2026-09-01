@@ -1,0 +1,14 @@
+name: supply-response
+metadata:
+  template: supply-response@0.1.0
+infra:
+  provider: bicep
+  path: infra
+services:
+  api:
+    project: .
+    host: containerapp
+    language: python
+    docker:
+      path: Dockerfile
+      context: .

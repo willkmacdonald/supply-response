@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": { "value": "${AZURE_ENV_NAME}" },
+    "location": { "value": "${AZURE_LOCATION}" },
+    "subscriptionId": { "value": "${AZURE_SUBSCRIPTION_ID}" },
+    "tenantId": { "value": "${AZURE_TENANT_ID}" },
+    "resourceGroupName": { "value": "${SUPPLY_RESPONSE_RESOURCE_GROUP}" },
+    "sharedResourceGroupName": { "value": "${SUPPLY_RESPONSE_SHARED_RESOURCE_GROUP}" },
+    "sharedContainerAppsEnvironmentName": { "value": "${SUPPLY_RESPONSE_SHARED_CONTAINER_APPS_ENVIRONMENT}" },
+    "sharedRegistryName": { "value": "${SUPPLY_RESPONSE_SHARED_REGISTRY}" },
+    "sharedLogAnalyticsWorkspaceName": { "value": "${SUPPLY_RESPONSE_SHARED_LOG_ANALYTICS_WORKSPACE}" },
+    "minReplicas": { "value": "${SUPPLY_RESPONSE_MIN_REPLICAS=0}" },
+    "bootstrapMode": { "value": "${SUPPLY_RESPONSE_BOOTSTRAP_MODE=true}" },
+    "imageName": { "value": "${SUPPLY_RESPONSE_IMAGE_NAME=}" },
+    "foundryProjectResourceId": { "value": "${SUPPLY_RESPONSE_FOUNDRY_PROJECT_RESOURCE_ID}" }
+  }
+}
