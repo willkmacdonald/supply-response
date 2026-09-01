@@ -4,6 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
 source "${script_dir}/lib/safe_command.sh"
+source "${script_dir}/lib/key_vault_operator_access.sh"
 safe_init_diagnostics
 
 EXPECTED_SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID:?Set AZURE_SUBSCRIPTION_ID to the separately confirmed target}"
@@ -15,24 +16,11 @@ FINAL_PROVISION_MAX_ATTEMPTS="${FINAL_PROVISION_MAX_ATTEMPTS:-6}"
 SMOKE_MAX_ATTEMPTS="${SMOKE_MAX_ATTEMPTS:-12}"
 PLACEHOLDER_IMAGE='mcr.microsoft.com/k8se/quickstart:latest'
 MODE=dry-run
-bootstrap_operator_role_assignment_id=''
-temporary_operator_role_active=false
-
-remove_bootstrap_operator_access() {
-  [[ "$temporary_operator_role_active" == true ]] || return 0
-  if safe_run remove-bootstrap-operator-role az role assignment delete --ids "$bootstrap_operator_role_assignment_id"; then
-    temporary_operator_role_active=false
-    printf 'Temporary bootstrap operator Key Vault role removed.\n'
-    return 0
-  fi
-  printf 'Temporary bootstrap operator role removal failed; follow the exact recovery command in the deployment runbook.\n' >&2
-  return 1
-}
 
 safe_before_diagnostics_cleanup() {
-  if [[ "$temporary_operator_role_active" == true ]]; then
+  if [[ "$KV_OPERATOR_CLEANUP_ACTIVE" == true ]]; then
     printf 'Interrupted bootstrap detected; attempting exact temporary operator-role removal.\n' >&2
-    remove_bootstrap_operator_access
+    cleanup_temporary_kv_operator_access
   fi
 }
 
@@ -126,9 +114,6 @@ if [[ -n "$build_context_changes" ]]; then
   exit 1
 fi
 unset build_context_changes
-
-safe_run azd-deployment-principal-id azd env set SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID "$SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID"
-safe_run azd-deployment-principal-type azd env set SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE "$SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE"
 
 last_provision_log=''
 run_provision() {
@@ -228,18 +213,12 @@ for attempt in {1..12}; do
 done
 
 wait_for_bootstrap_operator_access() {
-  local assignment_json secret_metadata_json attempt
-  safe_capture bootstrap_operator_role_assignment_id bootstrap-operator-role-id azd env get-value SUPPLY_RESPONSE_BOOTSTRAP_OPERATOR_ROLE_ASSIGNMENT_ID
-  [[ -n "$bootstrap_operator_role_assignment_id" ]] || { printf 'Bootstrap did not return the temporary operator role-assignment ID.\n' >&2; return 1; }
-  temporary_operator_role_active=true
+  local secret_metadata_json attempt
   for attempt in {1..12}; do
-    safe_capture assignment_json bootstrap-operator-role az role assignment list --scope "$vault_id" --output json
-    if ASSIGNMENT_ID="$bootstrap_operator_role_assignment_id" PRINCIPAL_ID="$SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID" PRINCIPAL_TYPE="$SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE" python3 -c 'import json,os,sys; items=json.load(sys.stdin); expected_role="b86a8fe4-44ce-4948-aee5-eccb2c155cd7"; matches=[item for item in items if item.get("id", "").lower()==os.environ["ASSIGNMENT_ID"].lower() and item.get("principalId", "").lower()==os.environ["PRINCIPAL_ID"].lower() and item.get("principalType")==os.environ["PRINCIPAL_TYPE"] and item.get("roleDefinitionId", "").lower().endswith(expected_role)]; raise SystemExit(0 if len(matches)==1 else 1)' <<<"$assignment_json"; then
-      if safe_capture_ephemeral secret_metadata_json bootstrap-secret-metadata az keyvault secret list --vault-name "$vault_name" --query "[?name=='entra-client-secret']" --output json; then
-        existing_secret_count="$(python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' <<<"$secret_metadata_json")"
-        unset secret_metadata_json
-        return 0
-      fi
+    if safe_capture_ephemeral secret_metadata_json bootstrap-secret-metadata az keyvault secret list --vault-name "$vault_name" --query "[?name=='entra-client-secret']" --output json; then
+      existing_secret_count="$(python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' <<<"$secret_metadata_json")"
+      unset secret_metadata_json
+      return 0
     fi
     sleep 10
   done
@@ -254,6 +233,8 @@ validate_secret_file() {
 }
 
 if [[ "$started_from_bootstrap" == true ]]; then
+  configure_temporary_kv_operator_access "$vault_id" "$SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID" "$SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE"
+  create_temporary_kv_operator_access
   wait_for_bootstrap_operator_access
   if [[ "$existing_secret_count" == 0 ]]; then
     secret_file="${SUPPLY_RESPONSE_ENTRA_CLIENT_SECRET_FILE:-}"
@@ -263,10 +244,11 @@ if [[ "$started_from_bootstrap" == true ]]; then
     printf 'Bootstrap detected an existing seed version; preserving it. Normal apply never rotates this secret.\n'
   else
     printf 'Secret metadata was ambiguous; refusing to select or create a version.\n' >&2
-    remove_bootstrap_operator_access || true
+    cleanup_temporary_kv_operator_access || true
     exit 1
   fi
-  remove_bootstrap_operator_access
+  cleanup_temporary_kv_operator_access
+  printf 'Temporary bootstrap operator Key Vault role removed.\n'
 fi
 git_revision="$(git -C "$repo_root" rev-parse --short=12 HEAD)"
 public_config_digest="$(printf '%s\n' "$EXPECTED_TENANT_ID" "${SUPPLY_RESPONSE_WEB_CLIENT_ID}" "$api_scope" "$expected_redirect_uri" | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest()[:16])')"

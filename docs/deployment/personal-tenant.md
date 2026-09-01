@@ -215,11 +215,13 @@ The deployment principal needs these exact permissions before `--apply`:
   `Microsoft.KeyVault/vaults/secrets/readMetadata/action` and
   `Microsoft.KeyVault/vaults/secrets/setSecret/action`. The Key Vault Secrets
   Officer role supplies both at the exact new-vault scope. A management-plane
-  secret write permission is not a substitute. During bootstrap only, Bicep
-  assigns that role to the separately confirmed current deployment principal;
-  the apply script removes the exact assignment immediately after inspection and
-  optional seed. This requires `Microsoft.Authorization/roleAssignments/delete`
-  at the new-vault scope as well as write.
+  secret write permission is not a substitute. After Bicep successfully creates
+  the bootstrap vault, the apply script creates one deterministic exact-scope
+  assignment for the separately confirmed current principal, then removes it
+  immediately after inspection and optional seed. Bicep and placeholder restores
+  never create operator elevation. This requires
+  `Microsoft.Authorization/roleAssignments/delete` at the new-vault scope as well
+  as write.
 - At the **Foundry project scope**,
   `Microsoft.Authorization/roleAssignments/write` for the exact `Azure AI User`
   assignment. Reader access is also required on the existing Container Apps
@@ -249,8 +251,6 @@ azd env set AZURE_TENANT_ID <confirmed-tenant-id>
 azd env set AZURE_LOCATION eastus2
 azd env set SUPPLY_RESPONSE_RESOURCE_GROUP rg-supply-response-demo
 azd env set SUPPLY_RESPONSE_CONTAINER_APP_NAME ca-sr-demo
-azd env set SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID <confirmed-current-object-id>
-azd env set SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE User
 azd env set SUPPLY_RESPONSE_SHARED_RESOURCE_GROUP shared-services-rg
 azd env set SUPPLY_RESPONSE_SHARED_CONTAINER_APPS_ENVIRONMENT shared-services-env
 azd env set SUPPLY_RESPONSE_SHARED_REGISTRY wkmsharedservicesacr
@@ -308,10 +308,11 @@ The restart-safe sequence is: same-tenant preflight; reject tracked or untracked
 changes under the committed image build context; inspect the exact app; create
 the viable Microsoft placeholder only when the app/identity is absent; verify an
 existing non-placeholder revision is healthy before an upgrade; check exact
-managed-identity role records; verify the exact temporary Key Vault Secrets Officer
-assignment for the confirmed current operator; wait until a real Key Vault
-metadata read succeeds; seed the secret only when a bootstrap has no existing
-version; remove the exact temporary operator assignment immediately; build an image tagged
+managed-identity role records; create and verify the exact deterministic
+temporary Key Vault Secrets Officer assignment for the confirmed current
+operator; wait until a real Key Vault metadata read succeeds; seed the secret
+only when a bootstrap has no existing version; remove the exact temporary
+operator assignment immediately; build an image tagged
 with both the Git revision and a SHA-256 digest of the tenant, Web client, API
 scope, and exact redirect; resolve its ACR manifest digest; and deploy only the
 immutable `registry/supply-response@sha256:...` reference. A role
@@ -327,113 +328,78 @@ retain it and print its path so the owner can troubleshoot and then delete it.
 Other failures stop immediately.
 
 If an interrupted bootstrap leaves the temporary role behind, do not continue to
-the final deployment. Under a separate exact-target removal approval, read
-`SUPPLY_RESPONSE_BOOTSTRAP_OPERATOR_ROLE_ASSIGNMENT_ID` from the selected azd
-environment, verify that the assignment has the confirmed principal ID/type,
-Key Vault Secrets Officer role definition, and exact vault scope, then remove
-only that assignment:
+the final deployment. Under a separate exact-target removal approval, first
+verify the selected azd environment plus active subscription and tenant. Resolve
+the exact vault ID, recompute the deterministic assignment ID, fetch it at that
+vault scope, and require its principal ID/type, scope, and role definition to
+match before deleting:
 
 ```bash
 set -euo pipefail
 source scripts/lib/safe_command.sh
 safe_init_diagnostics
-safe_capture assignment_id bootstrap-role-id azd env get-value \
-  SUPPLY_RESPONSE_BOOTSTRAP_OPERATOR_ROLE_ASSIGNMENT_ID
-safe_run remove-interrupted-bootstrap-role az role assignment delete --ids "$assignment_id"
+source scripts/lib/key_vault_operator_access.sh
+safe_capture selected_env recovery-env azd env get-value AZURE_ENV_NAME
+safe_capture active_subscription recovery-subscription az account show --query id --output tsv
+safe_capture active_tenant recovery-tenant az account show --query tenantId --output tsv
+[[ "$selected_env" == "$SUPPLY_RESPONSE_AZD_ENVIRONMENT" ]]
+[[ "$active_subscription" == "$AZURE_SUBSCRIPTION_ID" ]]
+[[ "$active_tenant" == "$AZURE_TENANT_ID" ]]
+safe_capture vault_name recovery-vault-name azd env get-value SUPPLY_RESPONSE_KEY_VAULT_NAME
+safe_capture vault_id recovery-vault-id az keyvault show --name "$vault_name" --query id --output tsv
+configure_temporary_kv_operator_access "$vault_id" \
+  "$SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID" \
+  "$SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE"
+KV_OPERATOR_CLEANUP_ACTIVE=true
+verify_temporary_kv_operator_access
+cleanup_temporary_kv_operator_access
 ```
 
-If the output is absent, list assignments only at the exact vault scope and
-require one match on the confirmed principal ID, principal type, and role
-definition `b86a8fe4-44ce-4948-aee5-eccb2c155cd7` before deleting its ID. Never
-delete by role name alone. The Container App retains only Key Vault Secrets User;
-it is never granted Secrets Officer.
+The verifier fetches only the locally derived exact assignment ID and refuses
+deletion unless it matches the confirmed principal, exact vault scope, and role
+definition `b86a8fe4-44ce-4948-aee5-eccb2c155cd7`. It never trusts an azd output
+or deletes by role name alone. The Container App retains only Key Vault Secrets
+User; it is never granted Secrets Officer.
 
 ### Separate Entra client-secret rotation
 
-Normal apply does not rotate the confidential-client secret or create a new Key
-Vault version. Rotation is a separate, explicitly approved operation. Prepare
-the replacement in an owner-only, nonsymlink file with no newline and confirm
-the exact vault, Container App, tenant, and active revision.
-
-The following workflow protects every command output, validates the replacement
-with the same file contract as apply, captures the old version without printing
-its ID or value, and creates one controlled new version. Set the live Playwright
-gate variables listed earlier before starting. The `live` project targets the
-deployed HTTPS origin, performs authenticated Alex analysis, and proves that the
-deployed Container App completes Work IQ/OBO; a local integration test is not a
-deployment credential check.
-
-Capture the old version and controlled new version as protected metadata:
-
-Obtain four separate approvals: (1) create the new Key Vault version, (2) restart
-the exact active revision, (3) run the live Playwright gate—which creates a live
-Case, Decision, and simulated execution records—and, only on failure, (4) perform
-the rollback mutations. Stop at each boundary until its exact targets are approved.
+Normal apply does not rotate this credential. Rotation uses the dedicated script,
+which is dry-run by default:
 
 ```bash
-set -euo pipefail
-source scripts/lib/safe_command.sh
-safe_init_diagnostics
-rotation_tmp="$SAFE_DIAGNOSTICS_DIR/rotation"
-mkdir -m 700 "$rotation_tmp"
-replacement_file=/owner-only/path/replacement-secret
-valid_secret_file "$replacement_file" || exit 1
-safe_capture vault_name rotation-vault azd env get-value SUPPLY_RESPONSE_KEY_VAULT_NAME
-safe_capture_ephemeral old_secret_id old-secret-id az keyvault secret show \
-  --vault-name "$vault_name" --name entra-client-secret --query id --output tsv
-old_version="${old_secret_id##*/}"
-printf '%s' "$old_version" >"$rotation_tmp/old-version"
-safe_capture_ephemeral new_secret_id new-secret-id az keyvault secret set \
-  --vault-name "$vault_name" --name entra-client-secret \
-  --file "$replacement_file" --query id --output tsv
-new_version="${new_secret_id##*/}"
-printf '%s' "$new_version" >"$rotation_tmp/new-version"
-chmod 600 "$rotation_tmp/old-version" "$rotation_tmp/new-version"
-safe_capture active_revision active-revision az containerapp revision list \
-  --resource-group "$SUPPLY_RESPONSE_RESOURCE_GROUP" --name "$SUPPLY_RESPONSE_CONTAINER_APP_NAME" \
-  --query "[?properties.active].name | [0]" --output tsv
-rotation_failed=false
-safe_run restart-new-credential az containerapp revision restart \
-  --resource-group "$SUPPLY_RESPONSE_RESOURCE_GROUP" \
-  --name "$SUPPLY_RESPONSE_CONTAINER_APP_NAME" --revision "$active_revision" \
-  || rotation_failed=true
-if [[ "$rotation_failed" == false ]]; then
-  safe_run deployed-workiq-obo npm --prefix apps/web run test:e2e -- --project=live \
-    || rotation_failed=true
-fi
+./scripts/rotate_entra_client_secret.sh
 ```
 
-Save a redacted receipt containing the old and new version suffixes, UTC time,
-revision name, and verification exit status; never record a secret value. If the
-restart or deployed verification fails, **Rollback** by downloading the captured old version
-to a mode-`0600` temporary file, setting that value as a new current version,
-restarting the same controlled revision, and rerunning the live check:
-
-Rollback is itself a separately approved Key Vault and Container Apps mutation.
-If creation of the new version fails, stop: Key Vault still serves the old
-current version, so no rollback write is necessary.
+The mutation path requires exact subscription, tenant, vault ID, Container App,
+current principal, and replacement-file settings plus matching
+`CONFIRM_SUBSCRIPTION_ID`, `CONFIRM_TENANT_ID`, `CONFIRM_VAULT_ID`, and
+`CONFIRM_CONTAINER_APP_NAME` values. Set every live Playwright gate variable
+listed earlier, then obtain separate approvals for temporary role creation,
+secret read/set, revision restart, the live-demo business actions, and possible
+rollback before running:
 
 ```bash
-old_version="$(<"$rotation_tmp/old-version")"
-rollback_file="$rotation_tmp/rollback-secret"
-install -m 600 /dev/null "$rollback_file"
-if [[ "$rotation_failed" == true ]]; then
-  safe_run download-old-credential az keyvault secret download --vault-name "$vault_name" \
-    --name entra-client-secret --version "$old_version" \
-    --file "$rollback_file" --encoding utf-8 --output none
-  valid_secret_file "$rollback_file" || exit 1
-  safe_run restore-old-credential az keyvault secret set --vault-name "$vault_name" --name entra-client-secret \
-    --file "$rollback_file" --output none
-  safe_run restart-rolled-back-credential az containerapp revision restart \
-    --resource-group "$SUPPLY_RESPONSE_RESOURCE_GROUP" \
-    --name "$SUPPLY_RESPONSE_CONTAINER_APP_NAME" --revision "$active_revision"
-  safe_run verify-rolled-back-deployment npm --prefix apps/web run test:e2e -- --project=live
-  exit 1
-fi
+./scripts/rotate_entra_client_secret.sh --apply
 ```
 
-The old version remains available for this recovery path; do not disable or
-purge it until the separately approved rotation has a passing receipt.
+The script creates one deterministic Key Vault Secrets Officer assignment at the
+exact vault scope. At that scope, the role supplies the required rotation actions:
+`Microsoft.KeyVault/vaults/secrets/readMetadata/action`,
+`Microsoft.KeyVault/vaults/secrets/getSecret/action`, and
+`Microsoft.KeyVault/vaults/secrets/setSecret/action`. It waits for real
+data-plane access, downloads the old value into an owner-only rollback file,
+sets the validated replacement, restarts the exact active revision, and runs
+`npm --prefix apps/web run test:e2e -- --project=live`. That deployed gate performs
+authenticated Alex Work IQ/OBO; the local Python integration test is not used.
+
+Restart or live-gate failure restores the prior value, restarts, and reruns the
+same deployed gate. Success, failure, interruption, and handled signals all run
+the cleanup hook: it removes the rollback file before diagnostics can be retained
+and verifies/removes only the deterministic exact role assignment. If cleanup or
+rollback is interrupted, use the verified recovery procedure above for the role;
+the previous Key Vault version remains available for a newly approved recovery.
+Record only redacted version suffixes, UTC time, revision, gate result, rollback
+result, and exact-role cleanup result—never a secret value or bearer token.
 
 ### Separate Fabric SQL access procedure
 

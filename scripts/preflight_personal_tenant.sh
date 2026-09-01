@@ -56,7 +56,10 @@ uuid_pattern='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a
 safe_capture active_subscription account-subscription az account show --query id --output tsv
 safe_capture active_tenant account-tenant az account show --query tenantId --output tsv
 safe_capture active_principal_type account-principal-type az account show --query user.type --output tsv
-safe_capture active_principal_name account-principal-name az account show --query user.name --output tsv
+safe_capture_ephemeral arm_access_token current-arm-token az account get-access-token --resource https://management.azure.com/ --query accessToken --output tsv
+current_principal_id="$(printf '%s' "$arm_access_token" | python3 -c 'import base64,json,sys; part=sys.stdin.read().split(".")[1]; claims=json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4))); print(claims["oid"])')"
+arm_token_tid="$(printf '%s' "$arm_access_token" | python3 -c 'import base64,json,sys; part=sys.stdin.read().split(".")[1]; claims=json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4))); print(claims["tid"])')"
+unset arm_access_token
 safe_capture selected_azd_environment azd-environment azd env get-value AZURE_ENV_NAME
 assert_equal subscription "$active_subscription" "$EXPECTED_SUBSCRIPTION_ID"
 assert_equal tenant "$active_tenant" "$EXPECTED_TENANT_ID"
@@ -64,17 +67,16 @@ assert_equal 'azd environment' "$selected_azd_environment" "$EXPECTED_AZD_ENVIRO
 case "$active_principal_type" in
   user|User)
     current_principal_type=User
-    safe_capture current_principal_id current-user-principal az ad signed-in-user show --query id --output tsv
     ;;
   servicePrincipal|serviceprincipal|ServicePrincipal)
     current_principal_type=ServicePrincipal
-    safe_capture current_principal_id current-service-principal az ad sp show --id "$active_principal_name" --query id --output tsv
     ;;
   *)
     printf 'Azure CLI current principal type is unsupported.\n' >&2
     exit 1
     ;;
 esac
+assert_equal 'ARM access-token tenant' "$arm_token_tid" "$EXPECTED_TENANT_ID"
 assert_equal 'current deployment principal type' "$current_principal_type" "$DEPLOYMENT_PRINCIPAL_TYPE"
 assert_equal 'current deployment principal ID' "$current_principal_id" "$DEPLOYMENT_PRINCIPAL_ID"
 

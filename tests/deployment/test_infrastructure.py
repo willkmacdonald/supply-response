@@ -30,12 +30,8 @@ def test_azd_is_infrastructure_only_and_uses_environment_parameters():
     assert parameters["parameters"]["containerAppName"]["value"] == (
         "${SUPPLY_RESPONSE_CONTAINER_APP_NAME}"
     )
-    assert parameters["parameters"]["deploymentPrincipalId"]["value"] == (
-        "${SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID}"
-    )
-    assert parameters["parameters"]["deploymentPrincipalType"]["value"] == (
-        "${SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE}"
-    )
+    assert "deploymentPrincipalId" not in parameters["parameters"]
+    assert "deploymentPrincipalType" not in parameters["parameters"]
     assert not (ROOT / "infra/main.bicepparam").exists()
 
 
@@ -421,6 +417,7 @@ def test_safe_command_failure_summary_never_echoes_identifiers():
 def test_secret_is_seeded_only_during_true_bootstrap_and_rotation_is_separate():
     deploy = _read("scripts/deploy_personal_tenant.sh")
     docs = _read("docs/deployment/personal-tenant.md")
+    rotation = _read("scripts/rotate_entra_client_secret.sh")
 
     seed = deploy.index("az keyvault secret set")
     bootstrap_guard = deploy.rfind(
@@ -431,11 +428,9 @@ def test_secret_is_seeded_only_during_true_bootstrap_and_rotation_is_separate():
     assert "keyvault secret list" in deploy
     assert "existing seed version" in deploy
     assert "normal apply does not rotate" in docs.lower()
-    assert "Capture the old version" in docs
-    assert "new_secret_id" in docs
-    assert '"$rotation_tmp/new-version"' in docs
-    assert "Rollback" in docs
-    assert "valid_secret_file" in docs
+    assert "new_secret_id" in rotation
+    assert "restore-prior-secret" in rotation
+    assert "valid_secret_file" in rotation
     assert "--project=live" in docs
     assert "test_workiq_live.py" not in docs
 
@@ -443,34 +438,145 @@ def test_secret_is_seeded_only_during_true_bootstrap_and_rotation_is_separate():
 def test_bootstrap_operator_access_is_exact_temporary_and_confirmed():
     main = _read("infra/main.bicep")
     rbac = _read("infra/modules/rbac.bicep")
+    parameters = _read("infra/main.parameters.json")
     preflight = _read("scripts/preflight_personal_tenant.sh")
     deploy = _read("scripts/deploy_personal_tenant.sh")
+    lifecycle = _read("scripts/lib/key_vault_operator_access.sh")
     docs = _read("docs/deployment/personal-tenant.md")
 
-    assert "param deploymentPrincipalId string" in main
-    assert "param deploymentPrincipalType string" in main
-    assert "bootstrapOperatorAccess" in main
-    assert "if (bootstrapMode)" in main
-    assert "b86a8fe4-44ce-4948-aee5-eccb2c155cd7" in main
-    assert "principalType: deploymentPrincipalType" in main
-    assert "principalType: 'ServicePrincipal'" in main
-    assert "param principalType string" in rbac
-    assert "principalType: principalType" in rbac
+    assert "deploymentPrincipalId" not in main + parameters
+    assert "deploymentPrincipalType" not in main + parameters
+    assert "bootstrapOperatorAccess" not in main
+    assert "principalType: 'ServicePrincipal'" in rbac
 
     assert "SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID:?" in preflight
     assert "SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE:?" in preflight
-    assert "az ad signed-in-user show" in preflight
-    assert "az ad sp show" in preflight
+    assert "safe_capture_ephemeral arm_access_token current-arm-token" in preflight
+    assert 'claims["oid"]' in preflight
+    assert "az ad signed-in-user show" not in preflight
+    assert "az ad sp show" not in preflight
     assert "current deployment principal" in preflight
 
-    assert "bootstrap_operator_role_assignment_id" in deploy
+    assert 'source "${script_dir}/lib/key_vault_operator_access.sh"' in deploy
+    assert "create_temporary_kv_operator_access" in deploy
     assert "wait_for_bootstrap_operator_access" in deploy
-    assert "remove_bootstrap_operator_access" in deploy
-    assert "az role assignment delete --ids" in deploy
+    assert "cleanup_temporary_kv_operator_access" in deploy
+    assert "az role assignment create" in lifecycle
+    assert "az role assignment delete --ids" in lifecycle
+    assert "uuid.uuid5" in lifecycle
     assert "keyvault secret list" in deploy
     assert "safe_before_diagnostics_cleanup" in deploy
     assert "interrupted bootstrap" in docs.lower()
     assert "temporary Key Vault Secrets Officer" in docs
+
+    restore_body = deploy.split("restore_bootstrap_revision()", 1)[1].split("\n}", 1)[0]
+    assert "role assignment create" not in restore_body
+    assert deploy.index("cleanup_temporary_kv_operator_access") < deploy.index(
+        "for ((attempt=1; attempt<=FINAL_PROVISION_MAX_ATTEMPTS"
+    )
+
+
+def test_temporary_kv_operator_access_lifecycle_with_partial_failures(tmp_path):
+    lifecycle = ROOT / "scripts/lib/key_vault_operator_access.sh"
+    helper = ROOT / "scripts/lib/safe_command.sh"
+    assert lifecycle.exists()
+
+    scenarios = {
+        "before-create": "cleanup_temporary_kv_operator_access",
+        "create-failure": (
+            "export FAKE_CREATE_MODE=fail; "
+            "create_temporary_kv_operator_access || true; "
+            "cleanup_temporary_kv_operator_access"
+        ),
+        "partial-create": (
+            "export FAKE_CREATE_MODE=partial; "
+            "create_temporary_kv_operator_access || true; "
+            "cleanup_temporary_kv_operator_access"
+        ),
+        "success": (
+            "export FAKE_CREATE_MODE=success; "
+            "create_temporary_kv_operator_access; "
+            "cleanup_temporary_kv_operator_access"
+        ),
+        "exit-cleanup": (
+            "export FAKE_CREATE_MODE=success; "
+            "safe_before_diagnostics_cleanup() { cleanup_temporary_kv_operator_access; }; "
+            "create_temporary_kv_operator_access"
+        ),
+    }
+
+    for scenario, body in scenarios.items():
+        scenario_dir = tmp_path / scenario
+        scenario_dir.mkdir()
+        fake_az = scenario_dir / "az"
+        fake_az.write_text(
+            """#!/usr/bin/env bash
+set -eu
+state="$FAKE_STATE"
+if [[ "$*" == *"role assignment create"* ]]; then
+  case "$FAKE_CREATE_MODE" in
+    fail) exit 7 ;;
+    partial) printf present >"$state"; exit 7 ;;
+    success) printf present >"$state"; printf '{}'; exit 0 ;;
+  esac
+elif [[ "$*" == *"role assignment list"* ]]; then
+  if [[ -f "$state" ]]; then
+    printf '[{"id":"%s","principalId":"%s","principalType":"%s","scope":"%s","roleDefinitionId":"%s"}]' "$KV_OPERATOR_ASSIGNMENT_ID" "$KV_OPERATOR_PRINCIPAL_ID" "$KV_OPERATOR_PRINCIPAL_TYPE" "$KV_OPERATOR_SCOPE" "$KV_OPERATOR_ROLE_RESOURCE_ID"
+  else
+    printf '[]'
+  fi
+elif [[ "$*" == *"role assignment delete"* ]]; then
+  rm -f "$state"
+fi
+"""
+        )
+        fake_az.chmod(0o700)
+        state = scenario_dir / "assignment-state"
+        script = (
+            "set -euo pipefail; "
+            f"source {helper}; source {lifecycle}; safe_init_diagnostics; "
+            "configure_temporary_kv_operator_access "
+            "'/subscriptions/sub/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/kv' "
+            "'11111111-1111-4111-8111-111111111111' User; "
+            f"{body}"
+        )
+        completed = subprocess.run(
+            ["/bin/bash", "-c", script],
+            env={
+                **os.environ,
+                "PATH": f"{scenario_dir}:{os.environ['PATH']}",
+                "FAKE_STATE": str(state),
+                "FAKE_CREATE_MODE": "success",
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert completed.returncode == 0, (scenario, completed.stderr)
+        assert not state.exists(), scenario
+
+
+def test_rotation_script_is_dry_run_exact_scoped_and_always_cleans_secret_file():
+    rotation = _read("scripts/rotate_entra_client_secret.sh")
+    docs = _read("docs/deployment/personal-tenant.md")
+
+    assert "MODE=dry-run" in rotation
+    assert "--apply" in rotation
+    assert "CONFIRM_SUBSCRIPTION_ID" in rotation
+    assert "CONFIRM_TENANT_ID" in rotation
+    assert "CONFIRM_VAULT_ID" in rotation
+    assert "CONFIRM_CONTAINER_APP_NAME" in rotation
+    assert "create_temporary_kv_operator_access" in rotation
+    assert "cleanup_temporary_kv_operator_access" in rotation
+    assert "safe_before_diagnostics_cleanup" in rotation
+    assert 'rm -f "$rollback_secret_file"' in rotation
+    assert '--version "$old_version"' in rotation
+    assert rotation.index("rotation_needs_rollback=true") < rotation.index(
+        "rotation-new-secret"
+    )
+    assert "--project=live" in rotation
+    assert "valid_secret_file" in rotation
+    assert "scripts/rotate_entra_client_secret.sh --apply" in docs
 
 
 def test_restart_safe_upgrade_never_replaces_final_with_placeholder():
