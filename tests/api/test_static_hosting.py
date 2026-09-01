@@ -37,4 +37,5 @@ def test_spa_fallback_serves_navigation_without_shadowing_api(tmp_path):
         assert client.get("/assets/app.js").text == "console.log('built')"
         assert client.get("/health").json()["status"] == "ok"
         assert client.get("/api/runtime").status_code == 200
+        assert client.get("/api").status_code == 404
         assert client.get("/api/not-a-real-route").status_code == 404

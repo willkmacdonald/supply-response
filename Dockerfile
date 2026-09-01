@@ -1,9 +1,21 @@
 FROM node:22-bookworm-slim AS web-build
 WORKDIR /build/apps/web
+ARG VITE_ENTRA_TENANT_ID
+ARG VITE_ENTRA_WEB_CLIENT_ID
+ARG VITE_ENTRA_API_SCOPE
+ARG VITE_ENTRA_REDIRECT_URI
 COPY apps/web/package.json apps/web/package-lock.json ./
 RUN npm ci
 COPY apps/web/ ./
-RUN npm run build
+RUN test -n "${VITE_ENTRA_TENANT_ID}" \
+    && test -n "${VITE_ENTRA_WEB_CLIENT_ID}" \
+    && test -n "${VITE_ENTRA_API_SCOPE}" \
+    && test -n "${VITE_ENTRA_REDIRECT_URI}" \
+    && VITE_ENTRA_TENANT_ID=${VITE_ENTRA_TENANT_ID} \
+       VITE_ENTRA_WEB_CLIENT_ID=${VITE_ENTRA_WEB_CLIENT_ID} \
+       VITE_ENTRA_API_SCOPE=${VITE_ENTRA_API_SCOPE} \
+       VITE_ENTRA_REDIRECT_URI=${VITE_ENTRA_REDIRECT_URI} \
+       npm run build
 
 FROM python:3.12-slim-bookworm AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \

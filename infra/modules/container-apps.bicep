@@ -11,6 +11,7 @@ param registryServer string
 param keyVaultUri string
 param applicationInsightsConnectionString string
 param tenantId string
+param runtimeSettings object
 param tags object
 
 var placeholderImage = 'mcr.microsoft.com/k8se/quickstart:latest'
@@ -37,6 +38,27 @@ var finalEnvironment = [
   { name: 'SUPPLY_RESPONSE_RUNTIME_MODE', value: 'live' }
   { name: 'SUPPLY_RESPONSE_CREDENTIAL_MODE', value: 'managed_identity' }
   { name: 'SUPPLY_RESPONSE_ALLOWED_TENANT_ID', value: tenantId }
+  { name: 'SUPPLY_RESPONSE_FRONTEND_ORIGIN', value: 'https://${appName}.${environment.properties.defaultDomain}' }
+  { name: 'SUPPLY_RESPONSE_API_CLIENT_ID', value: runtimeSettings.apiClientId }
+  { name: 'SUPPLY_RESPONSE_ALEX_OBJECT_ID', value: runtimeSettings.alexObjectId }
+  { name: 'SUPPLY_RESPONSE_FABRIC_SQL_SERVER', value: runtimeSettings.fabricSqlServer }
+  { name: 'SUPPLY_RESPONSE_FABRIC_SQL_DATABASE', value: runtimeSettings.fabricSqlDatabase }
+  { name: 'SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SOURCE_ID', value: runtimeSettings.workIqSupplierSourceId }
+  { name: 'SUPPLY_RESPONSE_WORKIQ_QUALITY_SOURCE_ID', value: runtimeSettings.workIqQualitySourceId }
+  { name: 'SUPPLY_RESPONSE_WORKIQ_CORPUS_VERSION', value: runtimeSettings.workIqCorpusVersion }
+  { name: 'SUPPLY_RESPONSE_WORKIQ_DEPLOYMENT_RECEIPT', value: runtimeSettings.workIqDeploymentReceipt }
+  { name: 'SUPPLY_RESPONSE_TENANT_SHAREPOINT_HOST', value: runtimeSettings.tenantSharePointHost }
+  { name: 'SUPPLY_RESPONSE_FOUNDRY_PROJECT_ENDPOINT', value: runtimeSettings.foundryProjectEndpoint }
+  { name: 'SUPPLY_RESPONSE_FOUNDRY_SIGNAL_AGENT_NAME', value: runtimeSettings.foundrySignalAgentName }
+  { name: 'SUPPLY_RESPONSE_FOUNDRY_SIGNAL_AGENT_VERSION', value: runtimeSettings.foundrySignalAgentVersion }
+  { name: 'SUPPLY_RESPONSE_FOUNDRY_CONTEXT_AGENT_NAME', value: runtimeSettings.foundryContextAgentName }
+  { name: 'SUPPLY_RESPONSE_FOUNDRY_CONTEXT_AGENT_VERSION', value: runtimeSettings.foundryContextAgentVersion }
+  { name: 'SUPPLY_RESPONSE_FOUNDRY_DECISION_AGENT_NAME', value: runtimeSettings.foundryDecisionAgentName }
+  { name: 'SUPPLY_RESPONSE_FOUNDRY_DECISION_AGENT_VERSION', value: runtimeSettings.foundryDecisionAgentVersion }
+  { name: 'SUPPLY_RESPONSE_FOUNDRY_DEPLOYMENT_RECEIPT', value: runtimeSettings.foundryDeploymentReceipt }
+  { name: 'SUPPLY_RESPONSE_POWER_BI_REPORT_URL', value: runtimeSettings.powerBiReportUrl }
+  { name: 'SUPPLY_RESPONSE_POWER_BI_DEPLOYMENT_RECEIPT', value: runtimeSettings.powerBiDeploymentReceipt }
+  { name: 'SUPPLY_RESPONSE_FABRIC_CITATION_BASE_URL', value: runtimeSettings.fabricCitationBaseUrl }
   { name: 'SUPPLY_RESPONSE_ENTRA_CLIENT_SECRET', secretRef: 'entra-client-secret' }
   { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: applicationInsightsConnectionString }
 ]

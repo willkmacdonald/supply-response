@@ -1,6 +1,9 @@
 .git
 .github
 .azure
+.superpowers
+.artifacts
+.tmp
 .venv
 .pytest_cache
 .ruff_cache
@@ -12,6 +15,12 @@ tests
 docs
 fabric
 infra
+infra/entra/.env.tenant
+**/.env.tenant
+**/*storage-state*.json
+**/*.pem
+**/*.pfx
+**/*.key
 *.db
 *.log
 .env*

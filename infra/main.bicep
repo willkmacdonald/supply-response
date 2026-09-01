@@ -16,6 +16,26 @@ param minReplicas int = 0
 param bootstrapMode bool = true
 param imageName string = ''
 param foundryProjectResourceId string = ''
+param apiClientId string
+param alexObjectId string
+param fabricSqlServer string
+param fabricSqlDatabase string
+param workIqSupplierSourceId string
+param workIqQualitySourceId string
+param workIqCorpusVersion string
+param workIqDeploymentReceipt string
+param tenantSharePointHost string
+param foundryProjectEndpoint string
+param foundrySignalAgentName string
+param foundrySignalAgentVersion string
+param foundryContextAgentName string
+param foundryContextAgentVersion string
+param foundryDecisionAgentName string
+param foundryDecisionAgentVersion string
+param foundryDeploymentReceipt string
+param powerBiReportUrl string
+param powerBiDeploymentReceipt string
+param fabricCitationBaseUrl string
 
 var tags = {
   'azd-env-name': environmentName
@@ -68,6 +88,28 @@ module app 'modules/container-apps.bicep' = {
     keyVaultUri: vault.outputs.vaultUri
     applicationInsightsConnectionString: monitoring.outputs.connectionString
     tenantId: tenantId
+    runtimeSettings: {
+      apiClientId: apiClientId
+      alexObjectId: alexObjectId
+      fabricSqlServer: fabricSqlServer
+      fabricSqlDatabase: fabricSqlDatabase
+      workIqSupplierSourceId: workIqSupplierSourceId
+      workIqQualitySourceId: workIqQualitySourceId
+      workIqCorpusVersion: workIqCorpusVersion
+      workIqDeploymentReceipt: workIqDeploymentReceipt
+      tenantSharePointHost: tenantSharePointHost
+      foundryProjectEndpoint: foundryProjectEndpoint
+      foundrySignalAgentName: foundrySignalAgentName
+      foundrySignalAgentVersion: foundrySignalAgentVersion
+      foundryContextAgentName: foundryContextAgentName
+      foundryContextAgentVersion: foundryContextAgentVersion
+      foundryDecisionAgentName: foundryDecisionAgentName
+      foundryDecisionAgentVersion: foundryDecisionAgentVersion
+      foundryDeploymentReceipt: foundryDeploymentReceipt
+      powerBiReportUrl: powerBiReportUrl
+      powerBiDeploymentReceipt: powerBiDeploymentReceipt
+      fabricCitationBaseUrl: fabricCitationBaseUrl
+    }
     tags: union(tags, { 'azd-service-name': 'api' })
   }
 }

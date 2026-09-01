@@ -69,6 +69,78 @@ def test_container_app_has_viable_bootstrap_and_final_runtime_contracts():
     assert "identity: 'system'" in source
 
 
+def test_production_bundle_requires_exact_entra_build_contract():
+    dockerfile = _read("Dockerfile")
+
+    for setting in (
+        "VITE_ENTRA_TENANT_ID",
+        "VITE_ENTRA_WEB_CLIENT_ID",
+        "VITE_ENTRA_API_SCOPE",
+        "VITE_ENTRA_REDIRECT_URI",
+    ):
+        assert f"ARG {setting}" in dockerfile
+        assert f"{setting}=${{{setting}}}" in dockerfile
+        assert f'test -n "${{{setting}}}"' in dockerfile
+
+
+def test_vite_production_bundle_embeds_exact_entra_values(tmp_path):
+    expected = {
+        "VITE_ENTRA_TENANT_ID": "11111111-1111-4111-8111-111111111111",
+        "VITE_ENTRA_WEB_CLIENT_ID": "22222222-2222-4222-8222-222222222222",
+        "VITE_ENTRA_API_SCOPE": (
+            "api://33333333-3333-4333-8333-333333333333/access_as_user"
+        ),
+        "VITE_ENTRA_REDIRECT_URI": "https://demo.example.test/auth/callback",
+    }
+    output = tmp_path / "web-dist"
+    completed = subprocess.run(
+        ["npm", "run", "build", "--", "--outDir", str(output)],
+        cwd=ROOT / "apps/web",
+        env={**os.environ, **expected},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    bundle = "\n".join(path.read_text() for path in output.rglob("*.js"))
+    for value in expected.values():
+        assert value in bundle
+
+
+def test_final_revision_declares_every_live_backend_setting():
+    source = _read("infra/modules/container-apps.bicep")
+    main = _read("infra/main.bicep")
+    parameters = _read("infra/main.parameters.json")
+    required = {
+        "SUPPLY_RESPONSE_FRONTEND_ORIGIN",
+        "SUPPLY_RESPONSE_API_CLIENT_ID",
+        "SUPPLY_RESPONSE_ALEX_OBJECT_ID",
+        "SUPPLY_RESPONSE_FABRIC_SQL_SERVER",
+        "SUPPLY_RESPONSE_FABRIC_SQL_DATABASE",
+        "SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SOURCE_ID",
+        "SUPPLY_RESPONSE_WORKIQ_QUALITY_SOURCE_ID",
+        "SUPPLY_RESPONSE_WORKIQ_CORPUS_VERSION",
+        "SUPPLY_RESPONSE_WORKIQ_DEPLOYMENT_RECEIPT",
+        "SUPPLY_RESPONSE_TENANT_SHAREPOINT_HOST",
+        "SUPPLY_RESPONSE_FOUNDRY_PROJECT_ENDPOINT",
+        "SUPPLY_RESPONSE_FOUNDRY_SIGNAL_AGENT_NAME",
+        "SUPPLY_RESPONSE_FOUNDRY_SIGNAL_AGENT_VERSION",
+        "SUPPLY_RESPONSE_FOUNDRY_CONTEXT_AGENT_NAME",
+        "SUPPLY_RESPONSE_FOUNDRY_CONTEXT_AGENT_VERSION",
+        "SUPPLY_RESPONSE_FOUNDRY_DECISION_AGENT_NAME",
+        "SUPPLY_RESPONSE_FOUNDRY_DECISION_AGENT_VERSION",
+        "SUPPLY_RESPONSE_FOUNDRY_DEPLOYMENT_RECEIPT",
+        "SUPPLY_RESPONSE_POWER_BI_REPORT_URL",
+        "SUPPLY_RESPONSE_POWER_BI_DEPLOYMENT_RECEIPT",
+        "SUPPLY_RESPONSE_FABRIC_CITATION_BASE_URL",
+    }
+    combined = source + main + parameters
+
+    for setting in required:
+        assert setting in combined
+    assert "az containerapp update" not in _read("scripts/deploy_personal_tenant.sh")
+
+
 def test_key_vault_is_protected_and_runtime_secrets_are_not_iac_values():
     vault = _read("infra/modules/key-vault.bicep")
     all_bicep = "\n".join(
@@ -108,6 +180,83 @@ def test_deploy_scripts_are_default_dry_run_and_require_exact_apply_confirmation
     assert "keyvault secret set" in deploy
     assert "--query value" not in deploy
     assert "az acr credential" not in deploy
+
+
+def test_deployment_preserves_bootstrap_during_bounded_identity_propagation():
+    deploy = _read("scripts/deploy_personal_tenant.sh")
+
+    assert "FINAL_PROVISION_MAX_ATTEMPTS" in deploy
+    assert "recognized_identity_binding_failure" in deploy
+    assert "restore_bootstrap_revision" in deploy
+    assert "SUPPLY_RESPONSE_BOOTSTRAP_MODE true" in deploy
+    assert "SUPPLY_RESPONSE_BOOTSTRAP_MODE false" in deploy
+    assert "sleep" in deploy
+
+
+def test_preflight_requires_exact_foundry_fabric_and_azd_environment_contracts():
+    preflight = _read("scripts/preflight_personal_tenant.sh")
+
+    assert "SUPPLY_RESPONSE_FOUNDRY_PROJECT_RESOURCE_ID:?" in preflight
+    assert "Microsoft.CognitiveServices/accounts/projects" in preflight
+    assert "expected_foundry_endpoint" in preflight
+    assert "SUPPLY_RESPONSE_FABRIC_WORKSPACE_ID:?" in preflight
+    assert "SUPPLY_RESPONSE_FABRIC_SQL_DATABASE_ID:?" in preflight
+    assert '"type" "SQLDatabase"' in preflight
+    assert "fabric_token_tid" in preflight
+    assert "EXPECTED_TENANT_ID" in preflight
+    assert "azd env get-value AZURE_ENV_NAME" in preflight
+    assert "EXPECTED_AZD_ENVIRONMENT" in preflight
+    assert "az ad app show" in preflight
+    assert "access_as_user" in preflight
+    assert "registered Container App redirect" in preflight
+    assert "accessToken" in preflight
+    assert "printf '%s' \"$fabric_access_token\"" in preflight
+
+
+def test_secret_file_and_live_smoke_gate_fail_closed():
+    deploy = _read("scripts/deploy_personal_tenant.sh")
+
+    assert (
+        "secret file must contain exactly one line without a trailing newline" in deploy
+    )
+    assert "SMOKE_MAX_ATTEMPTS" in deploy
+    assert 'health["runtime_mode"] == "live"' in deploy
+    assert 'runtime["capability_health"]["operational_store"] == "ready"' in deploy
+    assert 'runtime["capability_health"]["agent_runtime"] == "ready"' in deploy
+    smoke_body = deploy.split("smoke_gate()", 1)[1].split("\n}\n", 1)[0]
+    assert "SUPPLY_RESPONSE_WORKIQ" not in smoke_body
+
+
+def test_docker_context_excludes_local_operator_and_security_artifacts():
+    ignored = set(_read(".dockerignore").splitlines())
+
+    assert {".superpowers", ".artifacts", ".tmp", "infra/entra/.env.tenant"} <= ignored
+
+
+def test_operator_runbook_has_actionable_external_access_and_recovery_steps():
+    docs = _read("docs/deployment/personal-tenant.md")
+
+    assert "azd env new" in docs
+    assert "azd env select" in docs
+    assert "CREATE USER" in docs
+    assert "GRANT SELECT, INSERT, UPDATE, DELETE ON SCHEMA::app" in docs
+    assert "sys.database_permissions" in docs
+    assert "schema version (`11`)" in docs
+    assert "scripts/verify_foundry_agents.py --live" in docs
+    assert "SUPPLY_RESPONSE_FOUNDRY_DEPLOYMENT_RECEIPT" in docs
+    assert "separate approval" in docs
+    assert "revoke" in docs.lower()
+
+
+def test_shared_resource_and_monitoring_claims_are_accurate():
+    plan = _read(".azure/deployment-plan.md")
+    docs = _read("docs/deployment/personal-tenant.md")
+    combined = plan + docs
+
+    assert "lower configured daily cap" not in combined
+    assert "without modifying them" not in docs
+    assert "AcrPull" in docs
+    assert "repository" in docs.lower()
 
 
 def test_target_ids_are_required_from_environment_not_committed_literals():

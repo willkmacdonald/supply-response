@@ -14,6 +14,26 @@
     "minReplicas": { "value": "${SUPPLY_RESPONSE_MIN_REPLICAS=0}" },
     "bootstrapMode": { "value": "${SUPPLY_RESPONSE_BOOTSTRAP_MODE=true}" },
     "imageName": { "value": "${SUPPLY_RESPONSE_IMAGE_NAME=}" },
-    "foundryProjectResourceId": { "value": "${SUPPLY_RESPONSE_FOUNDRY_PROJECT_RESOURCE_ID}" }
+    "foundryProjectResourceId": { "value": "${SUPPLY_RESPONSE_FOUNDRY_PROJECT_RESOURCE_ID}" },
+    "apiClientId": { "value": "${SUPPLY_RESPONSE_API_CLIENT_ID}" },
+    "alexObjectId": { "value": "${SUPPLY_RESPONSE_ALEX_OBJECT_ID}" },
+    "fabricSqlServer": { "value": "${SUPPLY_RESPONSE_FABRIC_SQL_SERVER}" },
+    "fabricSqlDatabase": { "value": "${SUPPLY_RESPONSE_FABRIC_SQL_DATABASE}" },
+    "workIqSupplierSourceId": { "value": "${SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SOURCE_ID}" },
+    "workIqQualitySourceId": { "value": "${SUPPLY_RESPONSE_WORKIQ_QUALITY_SOURCE_ID}" },
+    "workIqCorpusVersion": { "value": "${SUPPLY_RESPONSE_WORKIQ_CORPUS_VERSION}" },
+    "workIqDeploymentReceipt": { "value": "${SUPPLY_RESPONSE_WORKIQ_DEPLOYMENT_RECEIPT}" },
+    "tenantSharePointHost": { "value": "${SUPPLY_RESPONSE_TENANT_SHAREPOINT_HOST}" },
+    "foundryProjectEndpoint": { "value": "${SUPPLY_RESPONSE_FOUNDRY_PROJECT_ENDPOINT}" },
+    "foundrySignalAgentName": { "value": "${SUPPLY_RESPONSE_FOUNDRY_SIGNAL_AGENT_NAME}" },
+    "foundrySignalAgentVersion": { "value": "${SUPPLY_RESPONSE_FOUNDRY_SIGNAL_AGENT_VERSION}" },
+    "foundryContextAgentName": { "value": "${SUPPLY_RESPONSE_FOUNDRY_CONTEXT_AGENT_NAME}" },
+    "foundryContextAgentVersion": { "value": "${SUPPLY_RESPONSE_FOUNDRY_CONTEXT_AGENT_VERSION}" },
+    "foundryDecisionAgentName": { "value": "${SUPPLY_RESPONSE_FOUNDRY_DECISION_AGENT_NAME}" },
+    "foundryDecisionAgentVersion": { "value": "${SUPPLY_RESPONSE_FOUNDRY_DECISION_AGENT_VERSION}" },
+    "foundryDeploymentReceipt": { "value": "${SUPPLY_RESPONSE_FOUNDRY_DEPLOYMENT_RECEIPT}" },
+    "powerBiReportUrl": { "value": "${SUPPLY_RESPONSE_POWER_BI_REPORT_URL}" },
+    "powerBiDeploymentReceipt": { "value": "${SUPPLY_RESPONSE_POWER_BI_DEPLOYMENT_RECEIPT}" },
+    "fabricCitationBaseUrl": { "value": "${SUPPLY_RESPONSE_FABRIC_CITATION_BASE_URL}" }
   }
 }

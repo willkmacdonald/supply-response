@@ -126,7 +126,7 @@ Read-only checks were performed on 2026-08-31 for the confirmed subscription and
 | `Microsoft.ContainerRegistry/registries` | 0 | 3 | 3 | Existing Standard registry includes 100 GiB | Reuse `wkmsharedservicesacr`; no additional registry unit; demo image is expected to remain within included storage |
 | `Microsoft.KeyVault/vaults` Standard | 1 | 2 | 3 | No vault-count restriction; 4,000 other transactions/10 seconds per vault | Azure CLI count + Microsoft Key Vault limits; demo usage is negligible |
 | `Microsoft.OperationalInsights/workspaces` pay-as-you-go | 0 | 5 | 5 | No workspace-count limit for nonlegacy tiers | Reuse `shared-services-logs`; healthy |
-| `Microsoft.Insights/components` workspace-based | 1 | 0 | 1 | 100 GB/day default telemetry limit | Azure CLI count + Microsoft Azure Monitor limits; healthy with a lower configured daily cap |
+| `Microsoft.Insights/components` workspace-based | 1 | 0 | 1 | No project-specific ingestion cap is configured | Azure CLI count + Microsoft Azure Monitor limits; application sampling and bounded verbosity control demo telemetry without claiming a workspace cap |
 
 **Capacity status:** All planned resources are within applicable quotas and documented service limits. No quota increase is required.
 
@@ -156,7 +156,7 @@ Read-only checks were performed on 2026-08-31 for the confirmed subscription and
 - **Key Vault:** Create a dedicated Standard RBAC vault with soft delete and purge protection. Secret values are never IaC parameters or outputs.
 - **Monitoring:** Reuse `shared-services-logs`, create a workspace-based Application Insights component, and initialize Python Azure Monitor OpenTelemetry only when its connection string is present. Tests and fallback mode emit no cloud telemetry.
 - **azd:** Use `infra/main.parameters.json`; azd's ARM JSON parameter format is required for environment substitution. A `.bicepparam` file is intentionally not used.
-- **Shared-resource safety:** Existing shared resources are referenced, not modified. The current ACR admin-account setting remains a separately managed residual risk; this deployment authenticates only by managed identity.
+- **Shared-resource safety:** Existing shared resource configuration and SKUs are not modified. The approved deployment does add an exact-scope `AcrPull` role assignment and writes the project image into the shared ACR's `supply-response` repository. The current ACR admin-account setting remains a separately managed residual risk; this deployment authenticates only by managed identity.
 - **Verification:** Compile Bicep locally, validate shell scripts without applying, build/run the container when local tooling permits, and verify `/health`, `/api`, and SPA routing before handing off to `azure-validate`.
 
 ## 9. Execution checklist
@@ -208,17 +208,17 @@ dependencies. It is not `azure-validate` proof and does not authorize deployment
 
 | Check | Command | Result | Timestamp |
 |---|---|---|---|
-| TDD red phase | `.venv/bin/pytest tests/deployment/test_infrastructure.py tests/api/test_static_hosting.py -q` | 8 expected failures before implementation | 2026-08-31 |
-| Focused infrastructure/API | `.venv/bin/pytest tests/deployment/test_infrastructure.py tests/api/test_static_hosting.py tests/api/test_telemetry.py -q` | 11 passed | 2026-08-31 |
-| Relevant API/integration | `.venv/bin/pytest tests/api tests/test_api.py tests/integration/test_live_case_contract.py tests/integrations/test_fabric_health.py -q` | 49 passed | 2026-08-31 |
+| TDD red phase | `.venv/bin/pytest tests/deployment/test_infrastructure.py tests/api/test_static_hosting.py -q` | Initial 8 expected failures plus 9 review-contract failures before their fixes | 2026-08-31 |
+| Focused infrastructure/API | `.venv/bin/pytest tests/deployment/test_infrastructure.py tests/api/test_static_hosting.py tests/api/test_telemetry.py -q` | 20 passed, including an actual exact-Entra Vite production bundle | 2026-08-31 |
+| Relevant API/integration | `.venv/bin/pytest tests/api tests/test_api.py tests/integration/test_live_case_contract.py tests/integrations/test_fabric_health.py tests/deployment/test_infrastructure.py -q` | 65 passed | 2026-08-31 |
 | Full Python regression | `.venv/bin/pytest -q` with public NuGet access for the existing locked TMDL validator | Passed; expected live-only skips, no failures | 2026-08-31 |
 | Web unit suite | `npm test -- --run` | 5 files, 49 tests passed | 2026-08-31 |
 | Web production build | `npm run build` | Passed; Vite built 179 modules | 2026-08-31 |
 | Python lint/type | `.venv/bin/ruff check ...`; `.venv/bin/pyright --pythonpath .venv/bin/python ...` | Passed; 0 type errors | 2026-08-31 |
 | Shell syntax | `bash -n scripts/preflight_personal_tenant.sh scripts/deploy_personal_tenant.sh` | Passed | 2026-08-31 |
 | Bicep compilation | `bicep build infra/main.bicep` with temporary extraction directory | Passed without warnings | 2026-08-31 |
-| Production image | `docker build --tag supply-response:task18-local .` | Passed after correcting ODBC repository trust setup | 2026-08-31 |
-| Local container | Docker fallback runtime plus `curl /health`, `/`, `/api/runtime` | Health, SPA, and API responses verified | 2026-08-31 |
+| Production image | Initial Task 18 image built and ran; review-fix rebuild used `--network=none` with exact Entra args | Initial image passed; offline rebuild stopped at uncached Debian/ODBC packages, so the final image must be rebuilt when approved public package access is available | 2026-08-31 |
+| Local container | Initial Task 18 image plus `curl /health`, `/`, `/api/runtime` | Initial health, SPA, and API responses verified; exact-Entra final image smoke remains paired with the approved rebuild | 2026-08-31 |
 
 ## 11. Next step
 

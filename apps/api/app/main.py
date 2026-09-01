@@ -77,7 +77,9 @@ def create_app(
 
         @api.get("/{spa_path:path}", include_in_schema=False)
         async def spa_fallback(spa_path: str):
-            if spa_path == "health" or spa_path.startswith(("api/", "health/")):
+            if spa_path in {"api", "health"} or spa_path.startswith(
+                ("api/", "health/")
+            ):
                 raise HTTPException(status_code=404)
             return FileResponse(index)
 
