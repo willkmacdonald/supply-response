@@ -4,11 +4,5 @@ metadata:
 infra:
   provider: bicep
   path: infra
-services:
-  api:
-    project: .
-    host: containerapp
-    language: python
-    docker:
-      path: Dockerfile
-      context: .
+# Services are intentionally omitted. The only supported image path is the
+# argument-aware `az acr build` in scripts/deploy_personal_tenant.sh; see runbook.

@@ -6,6 +6,9 @@ param location string
 param subscriptionId string
 param tenantId string
 param resourceGroupName string
+@minLength(1)
+@maxLength(32)
+param containerAppName string
 param sharedResourceGroupName string
 param sharedContainerAppsEnvironmentName string
 param sharedRegistryName string
@@ -77,7 +80,7 @@ module app 'modules/container-apps.bicep' = {
   name: 'container-app'
   scope: applicationResourceGroup
   params: {
-    appName: 'ca-supply-response-${environmentName}'
+    appName: containerAppName
     sharedSubscriptionId: subscriptionId
     sharedResourceGroupName: sharedResourceGroupName
     sharedEnvironmentName: sharedContainerAppsEnvironmentName

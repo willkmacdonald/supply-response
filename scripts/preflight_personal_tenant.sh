@@ -5,6 +5,7 @@ EXPECTED_SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID:?Set AZURE_SUBSCRIPTION_ID to 
 EXPECTED_TENANT_ID="${AZURE_TENANT_ID:?Set AZURE_TENANT_ID to the separately confirmed target}"
 EXPECTED_LOCATION="${AZURE_LOCATION:?Set AZURE_LOCATION to the separately confirmed target}"
 EXPECTED_AZD_ENVIRONMENT="${SUPPLY_RESPONSE_AZD_ENVIRONMENT:?Set SUPPLY_RESPONSE_AZD_ENVIRONMENT to the selected azd environment}"
+EXPECTED_CONTAINER_APP_NAME="${SUPPLY_RESPONSE_CONTAINER_APP_NAME:?Set the exact bounded Container App name}"
 FOUNDRY_PROJECT_RESOURCE_ID="${SUPPLY_RESPONSE_FOUNDRY_PROJECT_RESOURCE_ID:?Set the canonical Foundry project resource ID}"
 FOUNDRY_PROJECT_ENDPOINT="${SUPPLY_RESPONSE_FOUNDRY_PROJECT_ENDPOINT:?Set the canonical Foundry project endpoint}"
 FABRIC_WORKSPACE_ID="${SUPPLY_RESPONSE_FABRIC_WORKSPACE_ID:?Set the exact Fabric workspace ID}"
@@ -38,6 +39,11 @@ require_command az
 require_command azd
 require_command python3
 
+if (( ${#EXPECTED_CONTAINER_APP_NAME} > 32 )) || [[ ! "$EXPECTED_CONTAINER_APP_NAME" =~ ^[a-z]([a-z0-9-]{0,30}[a-z0-9])?$ ]]; then
+  printf 'SUPPLY_RESPONSE_CONTAINER_APP_NAME must be 1-32 lowercase letters, numbers, or hyphens, starting with a letter and ending alphanumeric.\n' >&2
+  exit 1
+fi
+
 active_subscription="$(az account show --query id --output tsv)"
 active_tenant="$(az account show --query tenantId --output tsv)"
 selected_azd_environment="$(azd env get-value AZURE_ENV_NAME)"
@@ -56,7 +62,7 @@ unset environment_json
 assert_equal location "$environment_location" "$EXPECTED_LOCATION"
 assert_equal 'Container Apps environment network mode' "$environment_internal" false
 [[ "$consumption_profiles" -ge 1 ]] || { printf 'Shared environment does not expose a Consumption workload profile.\n' >&2; exit 1; }
-expected_redirect_uri="https://ca-supply-response-${EXPECTED_AZD_ENVIRONMENT}.${environment_default_domain}/auth/callback"
+expected_redirect_uri="https://${EXPECTED_CONTAINER_APP_NAME}.${environment_default_domain}/auth/callback"
 assert_equal 'registered Container App redirect' "$REGISTERED_REDIRECT_URI" "$expected_redirect_uri"
 
 web_app_json="$(az ad app show --id "$WEB_CLIENT_ID" --output json)"

@@ -179,13 +179,51 @@ locked Python dependencies, built React assets, a nonroot runtime user, and one
 Uvicorn process on port 8000. FastAPI registers health and API routes before the
 SPA fallback; unknown `/api` paths remain 404s.
 
+`azure.yaml` is intentionally infrastructure-only. Do not use `azd package`,
+`azd deploy`, or `azd up`: those paths do not carry the four required public Vite
+build arguments. The only approved deployment image build is the argument-aware
+`az acr build` call inside `deploy_personal_tenant.sh --apply`. A checked local
+equivalent is:
+
+```bash
+docker build --pull=false --tag supply-response:entra-contract-check \
+  --build-arg 'VITE_ENTRA_TENANT_ID=<fixture-tenant-id>' \
+  --build-arg 'VITE_ENTRA_WEB_CLIENT_ID=<fixture-web-client-id>' \
+  --build-arg 'VITE_ENTRA_API_SCOPE=api://<fixture-api-client-id>/access_as_user' \
+  --build-arg 'VITE_ENTRA_REDIRECT_URI=https://demo.example.test/auth/callback' .
+```
+
+The values above are fixtures. A full image build may download public base images
+and packages and therefore requires network approval; the Vite production-bundle
+contract test runs locally without embedding tenant values in source.
+
 ### Approval-gated preparation
 
-The operator needs Owner or User Access Administrator plus Contributor over the
-new resource group and shared ACR, permission to write the dedicated Key Vault,
-and appropriate existing Foundry/Fabric administration. Tenant consent, persona
-assignment, Fabric database grants, Foundry publication, Power BI publication,
-and Demo Corpus work remain separate procedures and are never automated here.
+The deployment principal needs these exact control-plane permissions before
+`--apply`:
+
+- At **subscription scope**, `Microsoft.Resources/subscriptions/resourceGroups/write`
+  plus deployment write/read permissions for the new resource group (normally
+  Contributor at subscription scope because the group does not exist yet).
+- At the **shared ACR resource scope**, read plus
+  `Microsoft.ContainerRegistry/registries/scheduleRun/action` for the remote build,
+  repository push, and `Microsoft.Authorization/roleAssignments/write` for the
+  Container App's `AcrPull` assignment.
+- At the **project resource-group scope**, create/update rights for Container Apps,
+  Application Insights, and Key Vault, plus
+  `Microsoft.Authorization/roleAssignments/write` for the Key Vault assignment.
+  Secret population additionally requires
+  `Microsoft.KeyVault/vaults/secrets/write` on the new vault.
+- At the **Foundry project scope**,
+  `Microsoft.Authorization/roleAssignments/write` for the exact `Azure AI User`
+  assignment. Reader access is also required on the existing Container Apps
+  environment, shared Log Analytics workspace, shared ACR, and Foundry project.
+
+Owner, Role Based Access Control Administrator, or User Access Administrator may
+supply `roleAssignments/write` only at the scopes where assigned; Contributor
+alone cannot. Fabric SQL administration, tenant consent, persona assignment,
+Foundry publication, Power BI publication, and Demo Corpus work remain separate
+procedures and are never automated here.
 
 Configure azd values without putting secrets in its environment:
 
@@ -197,10 +235,12 @@ export AZURE_SUBSCRIPTION_ID=<confirmed-subscription-id>
 export AZURE_TENANT_ID=<confirmed-tenant-id>
 export AZURE_LOCATION=eastus2
 export SUPPLY_RESPONSE_RESOURCE_GROUP=rg-supply-response-demo
+export SUPPLY_RESPONSE_CONTAINER_APP_NAME=ca-sr-demo
 azd env set AZURE_SUBSCRIPTION_ID <confirmed-subscription-id>
 azd env set AZURE_TENANT_ID <confirmed-tenant-id>
 azd env set AZURE_LOCATION eastus2
 azd env set SUPPLY_RESPONSE_RESOURCE_GROUP rg-supply-response-demo
+azd env set SUPPLY_RESPONSE_CONTAINER_APP_NAME ca-sr-demo
 azd env set SUPPLY_RESPONSE_SHARED_RESOURCE_GROUP shared-services-rg
 azd env set SUPPLY_RESPONSE_SHARED_CONTAINER_APPS_ENVIRONMENT shared-services-env
 azd env set SUPPLY_RESPONSE_SHARED_REGISTRY wkmsharedservicesacr
@@ -213,18 +253,22 @@ was last active. Preflight compares the selected `AZURE_ENV_NAME` to
 `SUPPLY_RESPONSE_AZD_ENVIRONMENT` and stops on drift.
 
 Export the nonsecret live settings listed above, the exact Foundry project
-resource ID, Fabric workspace and SQL item IDs for preflight, and an owner-only
-file containing the Entra confidential-client secret. Never pass the secret as a
-command argument or store it in azd. The deployment script writes it with
-`--file` and suppresses command output. Also export the Web application client ID
+resource ID, Fabric workspace and SQL item IDs for preflight, and a nonsymlink
+regular file containing the Entra confidential-client secret. The file must be
+owned by the current UID, have no group/world permission bits (mode `0600` or
+stricter), and contain no newline. Never pass the secret as a command argument or
+store it in azd. The deployment script writes it with `--file` and suppresses
+command output. Also export the Web application client ID
 and the exact registered callback. For this single-container deployment the
-callback must be `https://<bootstrapped-container-app-fqdn>/auth/callback`; the
-script derives that value from the placeholder app and refuses any mismatch. The
+callback must be `https://<exact-container-app-fqdn>/auth/callback`; the script
+derives that value from the exact bounded app and refuses any mismatch. The
 four validated public Entra values are then embedded into the production Vite
 bundle as ACR build arguments. Before mutation, preflight also reads both Entra
 registrations and requires the exact Web redirect plus one enabled
-`access_as_user` API scope. The hostname is deterministic: combine
-`ca-supply-response-<azd-environment>` with the existing Container Apps
+`access_as_user` API scope. Choose and freeze an explicit Container App name of
+1–32 lowercase letters, numbers, or hyphens (letter first, alphanumeric last).
+It is deliberately independent of the arbitrary-length azd environment name.
+The hostname combines that bounded name with the existing Container Apps
 environment's `properties.defaultDomain`. Update the Web registration under the
 separate Entra approval and run `infra/entra/configure.sh --check` before starting
 this deployment.
@@ -248,17 +292,20 @@ export SUPPLY_RESPONSE_ENTRA_CLIENT_SECRET_FILE=/owner-only/path/entra-client-se
 ./scripts/deploy_personal_tenant.sh --apply
 ```
 
-The restart-safe sequence is: same-tenant preflight; a viable Microsoft
-placeholder on port 80 with no custom probes; exact managed-identity role-record
-checks; Key Vault secret write; exact Entra-configured image build; then a bounded
-second Bicep pass that declaratively establishes the ACR/Key Vault bindings, real
-image, every live nonsecret setting, port 8000, and `/health` probes. A role record
-is not treated as proof of data-plane propagation. Recognized ACR pull or Key
-Vault identity failures trigger a bounded retry, and the script restores the
-placeholder between attempts and on exhaustion. Other failures stop immediately.
-Re-running is safe: Bicep and role assignments use stable names, the secret is
-versioned, and Container Apps creates a new revision. If the project resource
-group is deleted, reset `SUPPLY_RESPONSE_BOOTSTRAP_MODE=true` before recreating it.
+The restart-safe sequence is: same-tenant preflight; inspect the exact app; create
+the viable Microsoft placeholder only when the app/identity is absent; verify an
+existing non-placeholder revision is healthy before an upgrade; check exact
+managed-identity role records; write the Key Vault secret; build an image tagged
+with both the Git revision and a SHA-256 digest of the tenant, Web client, API
+scope, and exact redirect; then apply the declarative final revision. A role
+record is not treated as proof of data-plane propagation. Recognized ACR pull or
+Key Vault identity failures trigger bounded retries. The placeholder is restored
+only for a first deployment that started from it; an upgrade preserves the prior
+healthy final revision. Raw `azd provision` output is written only to mode-`0600`
+files inside a mode-`0700` temporary directory, and the console receives a
+redacted categorized summary. Successful runs remove the directory; failed runs
+retain it and print its path so the owner can troubleshoot and then delete it.
+Other failures stop immediately.
 
 ### Separate Fabric SQL access procedure
 
@@ -283,14 +330,14 @@ sqlcmd -S "$SUPPLY_RESPONSE_FABRIC_SQL_SERVER" -d "$SUPPLY_RESPONSE_FABRIC_SQL_D
   "IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'ca-supply-response') CREATE USER [ca-supply-response] FROM EXTERNAL PROVIDER WITH OBJECT_ID='$SUPPLY_RESPONSE_CONTAINER_APP_PRINCIPAL_ID'; GRANT SELECT, INSERT, UPDATE, DELETE ON SCHEMA::app TO [ca-supply-response];"
 ```
 
-Verify the exact committed schema version (`11`) and the four schema permissions:
+Verify the exact committed schema version (`12`) and the four schema permissions:
 
 ```bash
 sqlcmd -S "$SUPPLY_RESPONSE_FABRIC_SQL_SERVER" -d "$SUPPLY_RESPONSE_FABRIC_SQL_DATABASE" -G -b -Q \
   "SET NOCOUNT ON; SELECT schema_version FROM app.schema_version WHERE component=N'operational'; SELECT permission_name, state_desc FROM sys.database_permissions WHERE grantee_principal_id=USER_ID(N'ca-supply-response') AND class_desc=N'SCHEMA' AND major_id=SCHEMA_ID(N'app') ORDER BY permission_name;"
 ```
 
-The first result must be `11`; the second must contain exactly `DELETE`,
+The first result must be `12`; the second must contain exactly `DELETE`,
 `INSERT`, `SELECT`, and `UPDATE`, all in `GRANT` state. Save the redacted workspace
 ID, SQL item ID, principal ID, schema version, timestamp, and command exit status
 in ignored `.artifacts/deployment/fabric-sql-receipt.txt`; never save an access
@@ -362,12 +409,13 @@ Immediately after each rehearsal/showcase, restore scale-to-zero:
 
 ```bash
 azd env set SUPPLY_RESPONSE_MIN_REPLICAS 0
-azd provision --no-prompt
+az containerapp update --resource-group "$SUPPLY_RESPONSE_RESOURCE_GROUP" \
+  --name "$SUPPLY_RESPONSE_CONTAINER_APP_NAME" --min-replicas 0 --output none
 ```
 
 This is a cloud mutation and requires its own exact-target approval. Using the
-Bicep parameter keeps the next deployment from silently returning to a drifted
-replica count.
+same persisted Bicep parameter before the narrow update keeps the next deployment
+from silently returning to a drifted replica count.
 
 Deleting the project resource group is a separate destructive approval. It does
 not delete the shared environment, ACR, or Log Analytics workspace; container

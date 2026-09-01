@@ -14,12 +14,11 @@ def _read(relative: str) -> str:
     return (ROOT / relative).read_text()
 
 
-def test_azd_uses_environment_parameters_and_root_docker_context():
+def test_azd_is_infrastructure_only_and_uses_environment_parameters():
     azure_yaml = _read("azure.yaml")
     parameters = json.loads(_read("infra/main.parameters.json"))
 
-    assert "host: containerapp" in azure_yaml
-    assert "context: ." in azure_yaml
+    assert "services:" not in azure_yaml
     assert (
         parameters["parameters"]["subscriptionId"]["value"]
         == "${AZURE_SUBSCRIPTION_ID}"
@@ -28,7 +27,23 @@ def test_azd_uses_environment_parameters_and_root_docker_context():
     assert parameters["parameters"]["resourceGroupName"]["value"] == (
         "${SUPPLY_RESPONSE_RESOURCE_GROUP}"
     )
+    assert parameters["parameters"]["containerAppName"]["value"] == (
+        "${SUPPLY_RESPONSE_CONTAINER_APP_NAME}"
+    )
     assert not (ROOT / "infra/main.bicepparam").exists()
+
+
+def test_container_app_name_is_explicit_bounded_and_decoupled_from_azd_name():
+    main = _read("infra/main.bicep")
+    preflight = _read("scripts/preflight_personal_tenant.sh")
+    docs = _read("docs/deployment/personal-tenant.md")
+
+    assert "param containerAppName string" in main
+    assert "appName: containerAppName" in main
+    assert "ca-supply-response-${environmentName}" not in main
+    assert "SUPPLY_RESPONSE_CONTAINER_APP_NAME:?" in preflight
+    assert "${#EXPECTED_CONTAINER_APP_NAME} > 32" in preflight
+    assert "1–32" in docs
 
 
 def test_template_reuses_shared_resources_and_contains_no_fixed_target_ids():
@@ -81,6 +96,20 @@ def test_production_bundle_requires_exact_entra_build_contract():
         assert f"ARG {setting}" in dockerfile
         assert f"{setting}=${{{setting}}}" in dockerfile
         assert f'test -n "${{{setting}}}"' in dockerfile
+
+
+def test_one_argument_aware_image_build_path_is_explicit_and_immutable():
+    deploy = _read("scripts/deploy_personal_tenant.sh")
+    docs = _read("docs/deployment/personal-tenant.md")
+
+    assert "az acr build" in deploy
+    assert deploy.count('--build-arg "VITE_ENTRA_') == 4
+    assert "public_config_digest" in deploy
+    assert "git_revision" in deploy
+    assert "SUPPLY_RESPONSE_IMAGE_TAG:-" not in deploy
+    assert "azd package" in docs
+    assert "azd deploy" in docs
+    assert "docker build" in docs
 
 
 def test_vite_production_bundle_embeds_exact_entra_values(tmp_path):
@@ -225,6 +254,32 @@ def test_secret_file_and_live_smoke_gate_fail_closed():
     assert 'runtime["capability_health"]["agent_runtime"] == "ready"' in deploy
     smoke_body = deploy.split("smoke_gate()", 1)[1].split("\n}\n", 1)[0]
     assert "SUPPLY_RESPONSE_WORKIQ" not in smoke_body
+    assert "os.path.islink" in deploy
+    assert "st_uid == os.getuid()" in deploy
+    assert "stat.S_IMODE" in deploy
+    assert "mode & 0o077 == 0" in deploy
+
+
+def test_provision_diagnostics_are_protected_sanitized_and_not_streamed():
+    deploy = _read("scripts/deploy_personal_tenant.sh")
+
+    assert "deployment_tmp" in deploy
+    assert "chmod 700" in deploy
+    assert "chmod 600" in deploy
+    assert "run_provision" in deploy
+    assert "sanitized_provision_summary" in deploy
+    assert "sed -n '1,120p'" not in deploy
+    assert not re.search(r"(?m)^azd provision --no-prompt\s*$", deploy)
+
+
+def test_restart_safe_upgrade_never_replaces_final_with_placeholder():
+    deploy = _read("scripts/deploy_personal_tenant.sh")
+
+    assert "existing_app_image" in deploy
+    assert "started_from_bootstrap" in deploy
+    assert "verify_existing_final_health" in deploy
+    assert 'if [[ "$started_from_bootstrap" == true ]]' in deploy
+    assert "prior healthy final revision remains" in deploy
 
 
 def test_docker_context_excludes_local_operator_and_security_artifacts():
@@ -241,11 +296,35 @@ def test_operator_runbook_has_actionable_external_access_and_recovery_steps():
     assert "CREATE USER" in docs
     assert "GRANT SELECT, INSERT, UPDATE, DELETE ON SCHEMA::app" in docs
     assert "sys.database_permissions" in docs
-    assert "schema version (`11`)" in docs
+    from integrations.fabric.health import FABRIC_SCHEMA_VERSION
+
+    assert f"schema version (`{FABRIC_SCHEMA_VERSION}`)" in docs
+    assert f"must be `{FABRIC_SCHEMA_VERSION}`" in docs
+    analytics = _read("fabric/sql/002_analytics_views.sql")
+    assert f"SET schema_version = {FABRIC_SCHEMA_VERSION}" in analytics
     assert "scripts/verify_foundry_agents.py --live" in docs
     assert "SUPPLY_RESPONSE_FOUNDRY_DEPLOYMENT_RECEIPT" in docs
     assert "separate approval" in docs
     assert "revoke" in docs.lower()
+
+
+def test_operator_permissions_are_exact_for_every_deployment_scope():
+    docs = _read("docs/deployment/personal-tenant.md")
+
+    for permission in (
+        "Microsoft.Resources/subscriptions/resourceGroups/write",
+        "Microsoft.Authorization/roleAssignments/write",
+        "Microsoft.ContainerRegistry/registries/scheduleRun/action",
+        "Microsoft.KeyVault/vaults/secrets/write",
+    ):
+        assert permission in docs
+    for scope in (
+        "subscription scope",
+        "shared ACR resource scope",
+        "project resource-group scope",
+        "Foundry project scope",
+    ):
+        assert scope in docs
 
 
 def test_shared_resource_and_monitoring_claims_are_accurate():
@@ -257,6 +336,14 @@ def test_shared_resource_and_monitoring_claims_are_accurate():
     assert "without modifying them" not in docs
     assert "AcrPull" in docs
     assert "repository" in docs.lower()
+
+
+def test_plan_does_not_claim_unverified_final_image_or_stale_test_counts():
+    plan = _read(".azure/deployment-plan.md")
+
+    assert "Complete; locally built and smoke-tested" not in plan
+    assert "Complete; 6 tests pass" not in plan
+    assert "Run Python, web, infrastructure, shell, Docker, and Bicep" not in plan
 
 
 def test_target_ids_are_required_from_environment_not_committed_literals():

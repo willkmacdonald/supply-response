@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Ready for Validation
+> **Status:** Ready for local validation; final image rebuild requires separately approved public package access
 
 Generated: 2026-08-31
 
@@ -85,6 +85,7 @@ The subscription currently has Microsoft cloud security benchmark and Defender a
 ### Runtime behavior
 
 - A Node build stage builds `apps/web/dist`.
+- The Container App name is an explicit 1–32-character deployment binding, independent of the azd environment name; this keeps resource naming valid and the redirect stable.
 - A Python 3.12 runtime stage installs ODBC Driver 18 and locked Python dependencies, copies the SPA into `apps/api/static`, and runs as a nonroot user.
 - FastAPI registers `/api` and `/health` routes before static SPA handling. A focused application change and tests will prove API routes are never shadowed and SPA navigation resolves correctly.
 - The Uvicorn command is `uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8000 --proxy-headers`.
@@ -102,6 +103,7 @@ The subscription currently has Microsoft cloud security benchmark and Defender a
 - The existing shared registry currently has its admin account enabled for other workloads. This deployment does not change that shared setting, does not read its admin credentials, and authenticates exclusively through managed identity. Disabling the shared admin account is a separate hardening decision because it could affect existing applications.
 - Public Container App ingress is HTTPS-only. The POC does not add a VNet/private endpoints; that is a documented nonproduction tradeoff.
 - The deploy script is fail-closed and requires an explicit apply flag plus exact subscription, tenant, region, and resource-group confirmation. Its default mode is validation/dry-run.
+- Deployment images use the Git revision plus a digest of the four public Entra bundle values, so a configuration change cannot silently reuse the prior revision tag. Raw provisioning diagnostics stay in owner-only temporary storage and only redacted summaries reach the console.
 - No script automates tenant consent or sends messages, modifies orders, creates commitments, or performs other external business actions.
 
 ### Cost controls
@@ -135,8 +137,8 @@ Read-only checks were performed on 2026-08-31 for the confirmed subscription and
 | File | Purpose | Status |
 |---|---|---|
 | `.azure/deployment-plan.md` | Deployment source of truth | Ready for validation |
-| `Dockerfile`, `.dockerignore` | Reproducible nonroot production image | Complete; locally built and smoke-tested |
-| `azure.yaml` | azd project/service definition | Complete |
+| `Dockerfile`, `.dockerignore` | Reproducible nonroot production image | Contract-tested; final exact-Entra rebuild pending approved public package access |
+| `azure.yaml` | Infrastructure-only azd project definition; image build stays in the approved argument-aware script | Complete |
 | `infra/main.bicep`, `infra/main.parameters.json` | Subscription target and azd-compatible environment parameters | Complete; compiles locally |
 | `infra/modules/registry.bicep` | Reference the existing ACR and grant managed-identity `AcrPull` without admin credentials | Complete |
 | `infra/modules/container-apps.bicep` | Reference the existing environment; create the HTTPS app, identity, scaling, and bootstrap configuration | Complete |
@@ -146,16 +148,16 @@ Read-only checks were performed on 2026-08-31 for the confirmed subscription and
 | `scripts/preflight_personal_tenant.sh` | Read-only same-tenant and prerequisite checks | Complete; syntax-only validation performed |
 | `scripts/deploy_personal_tenant.sh` | Explicit, restart-safe approval-gated deployment orchestration | Complete; syntax-only validation performed, never applied |
 | `apps/api/app/main.py` and focused tests | Serve the built SPA without shadowing API/health routes | Complete |
-| `tests/deployment/test_infrastructure.py` | Static and compiled-template security/architecture contract | Complete; 6 tests pass |
+| `tests/deployment/test_infrastructure.py` | Static, production-bundle, runbook, and compiled-template security/architecture contract | Complete; current count recorded in local proof |
 | `docs/deployment/personal-tenant.md` | Exact preparation, approval, deployment, rollback, and cost steps | Complete |
 
 ## 8. Research summary
 
 - **Container Apps:** Reuse the existing public Consumption workload-profile environment. Use one system-assigned identity, HTTPS-only ingress, explicit startup/liveness/readiness probes, 0.5 vCPU/1 GiB, HTTP scaling, and `minReplicas=0` except during a bounded demo window.
-- **Two-phase identity binding:** A system-assigned identity does not exist until the Container App is created. Initial Bicep therefore uses a public Microsoft placeholder on its native port 80 with no custom probes and without Key Vault or private-registry configuration. After exact-scope RBAC propagation, the approval-gated workflow builds the private image and runs Bicep again with final mode: managed-identity ACR and Key Vault bindings, target port 8000, and all three `/health` probes are established together. This avoids circular dependencies and never uses registry admin credentials.
+- **Two-phase identity binding:** A system-assigned identity does not exist until the Container App is created. A first deployment therefore uses a public Microsoft placeholder on its native port 80 with no custom probes and without Key Vault or private-registry configuration. An upgrade first proves the existing non-placeholder revision is healthy and never switches it back to bootstrap. After exact-scope RBAC propagation, the approval-gated workflow builds the private image and runs Bicep in final mode: managed-identity ACR and Key Vault bindings, target port 8000, and all three `/health` probes are established together. This avoids circular dependencies and never uses registry admin credentials.
 - **Key Vault:** Create a dedicated Standard RBAC vault with soft delete and purge protection. Secret values are never IaC parameters or outputs.
 - **Monitoring:** Reuse `shared-services-logs`, create a workspace-based Application Insights component, and initialize Python Azure Monitor OpenTelemetry only when its connection string is present. Tests and fallback mode emit no cloud telemetry.
-- **azd:** Use `infra/main.parameters.json`; azd's ARM JSON parameter format is required for environment substitution. A `.bicepparam` file is intentionally not used.
+- **azd:** Use `infra/main.parameters.json`; azd's ARM JSON parameter format is required for environment substitution. `azure.yaml` is deliberately infrastructure-only so `azd package`/`azd deploy` cannot silently omit required Vite build arguments. The approval-gated script owns the one argument-aware ACR build path. A `.bicepparam` file is intentionally not used.
 - **Shared-resource safety:** Existing shared resource configuration and SKUs are not modified. The approved deployment does add an exact-scope `AcrPull` role assignment and writes the project image into the shared ACR's `supply-response` repository. The current ACR admin-account setting remains a separately managed residual risk; this deployment authenticates only by managed identity.
 - **Verification:** Compile Bicep locally, validate shell scripts without applying, build/run the container when local tooling permits, and verify `/health`, `/api`, and SPA routing before handing off to `azure-validate`.
 
@@ -181,7 +183,8 @@ Read-only checks were performed on 2026-08-31 for the confirmed subscription and
 - [x] Generate modular Bicep and `azure.yaml`.
 - [x] Generate fail-closed preflight and deployment scripts.
 - [x] Update personal-tenant deployment documentation.
-- [x] Run Python, web, infrastructure, shell, Docker, and Bicep local verification.
+- [x] Run Python, web, infrastructure, shell, and Bicep local verification.
+- [ ] Rebuild and smoke-test the final exact-Entra image after separate public package/network approval.
 - [x] Mark this plan `Ready for Validation` only when preparation tests pass.
 
 ### Phase 3 — validation
@@ -208,10 +211,10 @@ dependencies. It is not `azure-validate` proof and does not authorize deployment
 
 | Check | Command | Result | Timestamp |
 |---|---|---|---|
-| TDD red phase | `.venv/bin/pytest tests/deployment/test_infrastructure.py tests/api/test_static_hosting.py -q` | Initial 8 expected failures plus 9 review-contract failures before their fixes | 2026-08-31 |
-| Focused infrastructure/API | `.venv/bin/pytest tests/deployment/test_infrastructure.py tests/api/test_static_hosting.py tests/api/test_telemetry.py -q` | 20 passed, including an actual exact-Entra Vite production bundle | 2026-08-31 |
-| Relevant API/integration | `.venv/bin/pytest tests/api tests/test_api.py tests/integration/test_live_case_contract.py tests/integrations/test_fabric_health.py tests/deployment/test_infrastructure.py -q` | 65 passed | 2026-08-31 |
-| Full Python regression | `.venv/bin/pytest -q` with public NuGet access for the existing locked TMDL validator | Passed; expected live-only skips, no failures | 2026-08-31 |
+| TDD red phase | `.venv/bin/pytest tests/deployment/test_infrastructure.py tests/api/test_static_hosting.py -q` | Initial 8 expected failures, 9 first-review failures, and 9 second-review failures before their fixes | 2026-08-31 |
+| Focused infrastructure/API | `.venv/bin/pytest tests/deployment/test_infrastructure.py tests/api/test_static_hosting.py tests/api/test_telemetry.py -q` | 26 passed (22 deployment contracts plus static-hosting/telemetry), including an actual exact-Entra Vite production bundle | 2026-08-31 |
+| Relevant API/integration | `.venv/bin/pytest tests/api tests/test_api.py tests/integration/test_live_case_contract.py tests/integrations/test_fabric_health.py tests/deployment/test_infrastructure.py -q` | 71 passed | 2026-08-31 |
+| Full Python regression | Earlier Task 18 baseline with public NuGet access | Passed before review fixes; current review scope is covered by the focused and relevant suites above, while a new locked NuGet restore was not authorized | 2026-08-31 |
 | Web unit suite | `npm test -- --run` | 5 files, 49 tests passed | 2026-08-31 |
 | Web production build | `npm run build` | Passed; Vite built 179 modules | 2026-08-31 |
 | Python lint/type | `.venv/bin/ruff check ...`; `.venv/bin/pyright --pythonpath .venv/bin/python ...` | Passed; 0 type errors | 2026-08-31 |
