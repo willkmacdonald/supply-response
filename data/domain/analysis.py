@@ -1,5 +1,6 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import Field
 
@@ -49,7 +50,7 @@ class ProjectionPoint(FrozenModel):
 class CalculationMetadata(FrozenModel):
     analysis_id: str
     calculation_version: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     assumptions: tuple[str, ...] = ()
     source_data_lineage: tuple[str, ...] = ()
 
@@ -65,8 +66,8 @@ class ExposureResult(FrozenModel):
     revenue_at_risk: Money
     margin_at_risk: Money
     otif_lines_at_risk: int
-    response_cost: Money = Decimal("0")
-    revenue_protected: Money = Decimal("0")
+    response_cost: Money = Decimal(0)
+    revenue_protected: Money = Decimal(0)
     remaining_uncertainty: tuple[str, ...] = ()
 
 
@@ -401,6 +402,23 @@ class AnalysisMaterial(FrozenModel):
     approval_policy_version: str
 
 
+class AnalysisRetrievalLineage(FrozenModel):
+    """Token-free immutable lineage for one delegated evidence retrieval."""
+
+    source_kind: Literal["supplier", "quality"]
+    context_id: str
+    task_id: str
+    artifact_ids: tuple[str, ...]
+    source_ids: tuple[str, ...]
+
+
+class AnalysisExplanation(FrozenModel):
+    status: Literal["available", "rejected", "unavailable"]
+    signal_json: str | None = None
+    context_json: str | None = None
+    decision_json: str | None = None
+
+
 class AnalysisVersion(FrozenModel):
     analysis_id: str
     case_id: str
@@ -414,3 +432,5 @@ class AnalysisVersion(FrozenModel):
     response_options: tuple[ResponseOption, ...]
     approval_satisfactions: tuple[ApprovalSatisfaction, ...]
     ranking: RankingResult
+    retrieval_lineage: tuple[AnalysisRetrievalLineage, ...] = ()
+    explanation: AnalysisExplanation = AnalysisExplanation(status="unavailable")

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol, cast
@@ -18,6 +18,11 @@ from apps.api.app.auth import (
     AuthenticationError,
     AuthorizationError,
     AuthService,
+)
+from apps.api.app.readiness import (
+    FallbackReadiness,
+    ReadinessPort,
+    UnverifiedLiveReadiness,
 )
 from apps.api.app.settings import Settings
 from apps.api.app.test_support import AutomatedTestFaults
@@ -76,6 +81,8 @@ class ApplicationServices:
     auth_service: AuthService | None = None
     power_bi_url: str | None = None
     async_resources: tuple[Any, ...] = ()
+    live_operational_data: Any | None = None
+    readiness: ReadinessPort = field(default_factory=FallbackReadiness)
 
     @property
     def uow_factory(self) -> UnitOfWorkFactory:
@@ -192,6 +199,7 @@ def build_composition(
         analysis_service: AnalysisApplicationService = (
             FallbackAnalysisApplicationService(store, clock=now)
         )
+        readiness: ReadinessPort = FallbackReadiness()
     else:
         if live_components is None:
             live_components = build_live_components(settings, clock=now)
@@ -204,6 +212,7 @@ def build_composition(
         power_bi_available = True
         fabric_schema_version = live_components.get("fabric_schema_version")
         analysis_service = live_components["analysis_service"]
+        readiness = live_components.get("readiness", UnverifiedLiveReadiness())
     uow_factory = cast(UnitOfWorkFactory, store.uow_factory)
     active_playback_clock = playback_clock or RealClock()
     test_faults = AutomatedTestFaults(settings.automated_test_faults_enabled)
@@ -240,6 +249,10 @@ def build_composition(
             None if live_components is None else live_components["power_bi_url"]
         ),
         async_resources=owned_resources,
+        live_operational_data=(
+            None if live_components is None else live_components.get("operational_data")
+        ),
+        readiness=readiness,
     )
     return services
 
@@ -266,45 +279,77 @@ def build_live_components(
         LiveAnalysisApplicationService,
         validate_live_https_url,
     )
+    from apps.api.app.readiness import (
+        FabricBoundReadiness,
+        verify_binding_receipt,
+        verify_power_bi_deployment_receipt,
+    )
+    from integrations.fabric.operational import FabricLiveOperationalDataPort
     from integrations.workiq.client import WorkIQClient, WorkIQEvidencePort
     from integrations.workiq.obo import build_obo_exchange
     from services.analysis.service import analyze_case
     from services.persistence.fabric_sql import build_credential
 
-    tenant_id = _required_live_setting(settings, "allowed_tenant_id")
-    client_id = _required_live_setting(settings, "api_client_id")
+    required_names = (
+        "allowed_tenant_id",
+        "api_client_id",
+        "alex_object_id",
+        "entra_client_secret",
+        "tenant_sharepoint_host",
+        "workiq_supplier_source_id",
+        "workiq_quality_source_id",
+        "workiq_corpus_version",
+        "foundry_project_endpoint",
+        "foundry_signal_agent_name",
+        "foundry_signal_agent_version",
+        "foundry_context_agent_name",
+        "foundry_context_agent_version",
+        "foundry_decision_agent_name",
+        "foundry_decision_agent_version",
+        "power_bi_report_url",
+        "fabric_citation_base_url",
+    )
+    values = {name: _required_live_setting(settings, name) for name in required_names}
+    tenant_id = values["allowed_tenant_id"]
+    client_id = values["api_client_id"]
+    power_bi_url = validate_live_https_url(
+        values["power_bi_report_url"], allowed_hosts={"app.powerbi.com"}
+    )
+    validate_live_https_url(
+        values["fabric_citation_base_url"], allowed_hosts={"app.powerbi.com"}
+    )
+    sharepoint_host = values["tenant_sharepoint_host"].lower()
+    if (
+        ":" in sharepoint_host
+        or "/" in sharepoint_host
+        or not sharepoint_host.endswith(".sharepoint.com")
+    ):
+        raise RuntimeError("live dependency setting is invalid: tenant_sharepoint_host")
     auth_service = AuthService(
         tenant_id=tenant_id,
         audience=client_id,
-        bindings=(
-            PersonaBinding.alex(
-                tenant_id, _required_live_setting(settings, "alex_object_id")
-            ),
-        ),
+        bindings=(PersonaBinding.alex(tenant_id, values["alex_object_id"]),),
     )
     credential = build_credential(settings)
     store = fabric_store(settings, credential)
+    operational_data = FabricLiveOperationalDataPort(store.engine)
     http = httpx.AsyncClient()
     work_iq = WorkIQEvidencePort(
         client=WorkIQClient(http=http),
         obo=build_obo_exchange(
             client_id=client_id,
-            client_secret=_required_live_setting(settings, "entra_client_secret"),
+            client_secret=values["entra_client_secret"],
             tenant_id=tenant_id,
             auth_service=auth_service,
         ),
-        tenant_sharepoint_host=_required_live_setting(
-            settings, "tenant_sharepoint_host"
-        ),
+        tenant_sharepoint_host=sharepoint_host,
     )
-    endpoint = _required_live_setting(settings, "foundry_project_endpoint")
+    endpoint = values["foundry_project_endpoint"]
     bindings = {
         role: FoundryAgentBinding(
             project_endpoint=endpoint,
-            agent_name=_required_live_setting(settings, f"foundry_{role}_agent_name"),
-            agent_version=_required_live_setting(
-                settings, f"foundry_{role}_agent_version"
-            ),
+            agent_name=values[f"foundry_{role}_agent_name"],
+            agent_version=values[f"foundry_{role}_agent_version"],
         )
         for role in ("signal", "context", "decision")
     }
@@ -315,24 +360,15 @@ def build_live_components(
         ),
         analyze_case,
     )
-    power_bi_url = validate_live_https_url(
-        _required_live_setting(settings, "power_bi_report_url"),
-        allowed_hosts={"app.powerbi.com"},
-    )
     analysis = LiveAnalysisApplicationService(
         store=store,
+        operational_data=operational_data,
         work_iq=work_iq,
         orchestrator=orchestrator,
-        supplier_source_id=_required_live_setting(
-            settings, "workiq_supplier_source_id"
-        ),
-        quality_source_id=_required_live_setting(settings, "workiq_quality_source_id"),
-        fabric_citation_base_url=_required_live_setting(
-            settings, "fabric_citation_base_url"
-        ),
-        tenant_sharepoint_host=_required_live_setting(
-            settings, "tenant_sharepoint_host"
-        ),
+        supplier_source_id=values["workiq_supplier_source_id"],
+        quality_source_id=values["workiq_quality_source_id"],
+        fabric_citation_base_url=values["fabric_citation_base_url"],
+        tenant_sharepoint_host=sharepoint_host,
         clock=clock,
     )
     return {
@@ -341,6 +377,33 @@ def build_live_components(
         "auth_service": auth_service,
         "power_bi_url": power_bi_url,
         "async_resources": (http,),
+        "operational_data": operational_data,
+        "readiness": FabricBoundReadiness(
+            engine=store.engine,
+            power_bi_receipt_verified=verify_power_bi_deployment_receipt(
+                power_bi_url, settings.power_bi_deployment_receipt
+            ),
+            work_iq_receipt_verified=verify_binding_receipt(
+                (
+                    values["workiq_corpus_version"],
+                    values["workiq_supplier_source_id"],
+                    values["workiq_quality_source_id"],
+                ),
+                settings.workiq_deployment_receipt,
+            ),
+            foundry_receipt_verified=verify_binding_receipt(
+                (
+                    endpoint,
+                    values["foundry_signal_agent_name"],
+                    values["foundry_signal_agent_version"],
+                    values["foundry_context_agent_name"],
+                    values["foundry_context_agent_version"],
+                    values["foundry_decision_agent_name"],
+                    values["foundry_decision_agent_version"],
+                ),
+                settings.foundry_deployment_receipt,
+            ),
+        ),
     }
 
 

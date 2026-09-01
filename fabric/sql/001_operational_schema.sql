@@ -430,6 +430,48 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.case_
     ON app.case_projection (current_decision_id);
 GO
 
+IF OBJECT_ID(N'app.analysis_claims', N'U') IS NULL
+BEGIN
+CREATE TABLE app.analysis_claims (
+    case_id nvarchar(128) NOT NULL,
+    material_version nvarchar(128) NOT NULL,
+    claim_id nvarchar(128) NOT NULL,
+    claimed_at datetimeoffset(6) NOT NULL,
+    claim_expires_at datetimeoffset(6) NOT NULL,
+    CONSTRAINT pk_analysis_claims PRIMARY KEY (case_id, material_version),
+    CONSTRAINT uq_analysis_claims_claim_id UNIQUE (claim_id),
+    CONSTRAINT fk_analysis_claims_case FOREIGN KEY (case_id)
+        REFERENCES app.case_instances (case_id)
+);
+END;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.analysis_claims') AND name = N'ix_analysis_claims_claim_expires_at')
+    CREATE INDEX ix_analysis_claims_claim_expires_at
+    ON app.analysis_claims (claim_expires_at);
+GO
+
+IF OBJECT_ID(N'app.live_operational_sources', N'U') IS NULL
+BEGIN
+CREATE TABLE app.live_operational_sources (
+    source_snapshot_id nvarchar(128) NOT NULL,
+    template_id nvarchar(128) NOT NULL,
+    effective_at datetimeoffset(6) NOT NULL,
+    is_verified bit NOT NULL,
+    snapshot_payload_json nvarchar(max) NOT NULL,
+    evidence_payload_json nvarchar(max) NOT NULL,
+    CONSTRAINT pk_live_operational_sources PRIMARY KEY (source_snapshot_id),
+    CONSTRAINT ck_live_operational_snapshot_json CHECK (ISJSON(snapshot_payload_json) = 1),
+    CONSTRAINT ck_live_operational_evidence_json CHECK (ISJSON(evidence_payload_json) = 1)
+);
+END;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.live_operational_sources') AND name = N'ix_live_operational_sources_current')
+    CREATE INDEX ix_live_operational_sources_current
+    ON app.live_operational_sources (template_id, is_verified, effective_at);
+GO
+
 MERGE app.schema_version WITH (HOLDLOCK) AS target
 USING (
     SELECT N'operational' AS component, 11 AS schema_version

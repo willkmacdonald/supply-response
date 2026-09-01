@@ -1,8 +1,7 @@
-from pathlib import Path
 import re
+from pathlib import Path
 
 from integrations.fabric.schema import split_go_batches
-
 
 OPERATIONAL = Path("fabric/sql/001_operational_schema.sql")
 ANALYTICS = Path("fabric/sql/002_analytics_views.sql")
@@ -17,6 +16,7 @@ def test_operational_schema_contains_the_complete_canonical_store_contract():
     required_tables = {
         "action_projection",
         "analysis_versions",
+        "analysis_claims",
         "approval_satisfactions",
         "case_instances",
         "case_projection",
@@ -31,6 +31,7 @@ def test_operational_schema_contains_the_complete_canonical_store_contract():
         "outcome_observations",
         "playbacks",
         "schema_version",
+        "live_operational_sources",
     }
 
     for table in required_tables:
@@ -113,7 +114,7 @@ def test_every_operational_table_and_inline_constraint_is_retry_guarded():
         assert constraints
         constraint_count += len(constraints)
 
-    assert table_count == 16
+    assert table_count == 18
     assert constraint_count >= 50
 
 
@@ -131,7 +132,7 @@ def test_every_operational_index_has_its_own_retry_guard():
                 re.IGNORECASE | re.DOTALL,
             ), index_name
 
-    assert len(indexes) == 24
+    assert len(indexes) == 26
 
 
 def test_schemas_views_and_version_publication_are_idempotent():
@@ -202,6 +203,6 @@ def test_partial_operational_application_and_double_retry_do_not_collide():
         for batch in script:
             execute(batch)
 
-    assert len({name for kind, name in existing if kind == "table"}) == 16
-    assert len({name for kind, name in existing if kind == "index"}) == 24
+    assert len({name for kind, name in existing if kind == "table"}) == 18
+    assert len({name for kind, name in existing if kind == "index"}) == 26
     assert schema_version == 12

@@ -1,10 +1,10 @@
 import type {AnalysisVersion} from "../types";
-import {trustedMicrosoftUrl} from "../security/trustedUrls";
+import {trustedServerCitation} from "../security/trustedUrls";
 
 export function EvidencePanel({analysis}: {analysis: AnalysisVersion | null}) {
   if (!analysis) return null;
   const missingRequiredLiveCitation = analysis.runtime_mode === "live" && analysis.evidence_items.some((item) =>
-    item.requirement === "required_authoritative" && !trustedMicrosoftUrl(item.citation_url)
+    item.requirement === "required_authoritative" && !trustedServerCitation(item.navigable_citation_url, item.citation_classification, item.citation_trusted_host)
   );
   return <section className="panel" aria-labelledby="evidence-heading">
     <div className="section-heading">
@@ -18,7 +18,7 @@ export function EvidencePanel({analysis}: {analysis: AnalysisVersion | null}) {
     <div className="card-grid">
       {analysis.evidence_items.map((item) => {
         const citation = analysis.runtime_mode === "live"
-          ? trustedMicrosoftUrl(item.citation_url)
+          ? trustedServerCitation(item.navigable_citation_url, item.citation_classification, item.citation_trusted_host)
           : item.citation_url;
         return <article className="evidence-card" key={item.evidence_id}>
         <div className="card-labels">

@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     alex_object_id: str | None = None
     workiq_supplier_source_id: str | None = None
     workiq_quality_source_id: str | None = None
+    workiq_corpus_version: str | None = None
+    workiq_deployment_receipt: str | None = None
     tenant_sharepoint_host: str | None = None
     foundry_project_endpoint: str | None = None
     foundry_signal_agent_name: str | None = None
@@ -39,6 +41,8 @@ class Settings(BaseSettings):
     foundry_decision_agent_version: str | None = None
     power_bi_report_url: str | None = None
     fabric_citation_base_url: str | None = None
+    power_bi_deployment_receipt: str | None = None
+    foundry_deployment_receipt: str | None = None
 
     @model_validator(mode="after")
     def validate_mode_specific_settings(self) -> "Settings":

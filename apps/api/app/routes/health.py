@@ -17,10 +17,12 @@ def health(
         "status": "ok",
         "runtime_mode": services.settings.runtime_mode.value,
     }
-    if services.fabric_schema_version is not None:
+    readiness = services.readiness.check()
+    schema_version = readiness.fabric_schema_version
+    if schema_version is not None:
         result.update(
             operational_store=services.operational_store,
-            schema_version=services.fabric_schema_version,
+            schema_version=schema_version,
         )
     return result
 
@@ -29,6 +31,12 @@ def health(
 def runtime(
     services: ApplicationServices = Depends(get_services),
 ) -> RuntimeResponse:
+    readiness = services.readiness.check()
+    power_bi_available = (
+        services.settings.runtime_mode.value == "live"
+        and readiness.power_bi_verified
+        and readiness.capability_health.get("power_bi") == "ready"
+    )
     return RuntimeResponse(
         runtime_mode=services.settings.runtime_mode,
         work_iq=(
@@ -38,12 +46,23 @@ def runtime(
         agent_runtime=(
             "foundry" if services.settings.runtime_mode.value == "live" else "local"
         ),
-        power_bi_available=services.power_bi_available,
-        power_bi_url=services.power_bi_url,
-        capability_health={
-            "operational_store": "ready",
-            "work_iq": "ready",
-            "agent_runtime": "ready",
-            "power_bi": "ready" if services.power_bi_available else "unavailable",
-        },
+        power_bi_available=power_bi_available,
+        power_bi_url=services.power_bi_url if power_bi_available else None,
+        capability_health=readiness.capability_health,
+        deployment_contract=(
+            {
+                "scenario_effective_time": services.settings.scenario_effective_time.isoformat(),
+                "corpus_version": services.settings.workiq_corpus_version or "",
+                "supplier_source_id": services.settings.workiq_supplier_source_id or "",
+                "quality_source_id": services.settings.workiq_quality_source_id or "",
+                "signal_agent_version": services.settings.foundry_signal_agent_version
+                or "",
+                "context_agent_version": services.settings.foundry_context_agent_version
+                or "",
+                "decision_agent_version": services.settings.foundry_decision_agent_version
+                or "",
+            }
+            if services.settings.runtime_mode.value == "live"
+            else None
+        ),
     )

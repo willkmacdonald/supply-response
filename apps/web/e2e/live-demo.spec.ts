@@ -1,43 +1,40 @@
-import {statSync} from "node:fs";
+import {execFileSync} from "node:child_process";
 import {resolve} from "node:path";
 import {expect, test} from "@playwright/test";
 
-const required = [
-  "SUPPLY_RESPONSE_LIVE_E2E",
-  "SUPPLY_RESPONSE_LIVE_BASE_URL",
-  "SUPPLY_RESPONSE_ALEX_STORAGE_STATE",
-  "SUPPLY_RESPONSE_EXPECTED_CORPUS_VERSION",
-  "SUPPLY_RESPONSE_EXPECTED_SIGNAL_AGENT_VERSION",
-  "SUPPLY_RESPONSE_EXPECTED_CONTEXT_AGENT_VERSION",
-  "SUPPLY_RESPONSE_EXPECTED_DECISION_AGENT_VERSION",
-] as const;
+type Evidence = {source_system: string; source_id: string; excerpt: string; navigable_citation_url: string; citation_classification: string};
 
-function liveGate(): {ready: true; storageState: string} | {ready: false; reason: string} {
-  const missing = required.filter((name) => !process.env[name]);
-  if (missing.length || process.env.SUPPLY_RESPONSE_LIVE_E2E !== "1") {
-    return {ready: false, reason: `live prerequisites are incomplete: ${missing.join(", ")}`};
-  }
-  const base = new URL(process.env.SUPPLY_RESPONSE_LIVE_BASE_URL!);
-  if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash) {
-    return {ready: false, reason: "live base URL is not exact trusted HTTPS"};
-  }
-  const state = resolve(process.env.SUPPLY_RESPONSE_ALEX_STORAGE_STATE!);
-  try {
-    if ((statSync(state).mode & 0o077) !== 0) {
-      return {ready: false, reason: "Alex storage state must be owner-only"};
-    }
-  } catch {
-    return {ready: false, reason: "Alex storage state is unavailable"};
-  }
-  return {ready: true, storageState: state};
+function verifyWorkIqArtifact(item: Evidence): void {
+  const script = resolve(import.meta.dirname, "../scripts/verify-workiq-citations.mjs");
+  const output = execFileSync("node", [script, process.env.SUPPLY_RESPONSE_ALEX_STORAGE_STATE!, process.env.SUPPLY_RESPONSE_TENANT_SHAREPOINT_HOST!], {
+    encoding: "utf8",
+    input: JSON.stringify({url: item.navigable_citation_url, expectedExcerpt: item.excerpt, sourceIdentity: item.source_id}),
+    stdio: ["pipe", "pipe", "pipe"],
+    timeout: 30_000,
+  });
+  expect(JSON.parse(output)).toMatchObject({ok: true, sourceIdentity: item.source_id});
 }
 
-const gate = liveGate();
-test.skip(!gate.ready, gate.ready ? undefined : gate.reason);
-
 test("canonical live showcase journey", async ({page, context}) => {
-  // This project disables trace, screenshot and video collection so bearer-bearing
-  // request headers can never enter Playwright artifacts.
+  // The configuration gate runs before servers/browser and disables every raw artifact.
+  const runtime = await page.request.get("/api/runtime").then((response) => response.json());
+  expect(runtime.runtime_mode).toBe("live");
+  expect(runtime.capability_health).toEqual({
+    operational_store: "ready",
+    work_iq: "ready",
+    agent_runtime: "ready",
+    power_bi: "ready",
+  });
+  expect(runtime.deployment_contract).toMatchObject({
+    scenario_effective_time: process.env.SUPPLY_RESPONSE_EXPECTED_SCENARIO_EFFECTIVE_TIME,
+    corpus_version: process.env.SUPPLY_RESPONSE_EXPECTED_CORPUS_VERSION,
+    supplier_source_id: process.env.SUPPLY_RESPONSE_EXPECTED_SUPPLIER_SOURCE_ID,
+    quality_source_id: process.env.SUPPLY_RESPONSE_EXPECTED_QUALITY_SOURCE_ID,
+    signal_agent_version: process.env.SUPPLY_RESPONSE_EXPECTED_SIGNAL_AGENT_VERSION,
+    context_agent_version: process.env.SUPPLY_RESPONSE_EXPECTED_CONTEXT_AGENT_VERSION,
+    decision_agent_version: process.env.SUPPLY_RESPONSE_EXPECTED_DECISION_AGENT_VERSION,
+  });
+
   await page.goto("/?purpose=showcase");
   await expect(page.getByText("Live mode")).toBeVisible();
   await page.getByRole("button", {name: "Create showcase case"}).click();
@@ -45,18 +42,33 @@ test("canonical live showcase journey", async ({page, context}) => {
   await expect(page.getByRole("heading", {name: "Evidence items"})).toBeVisible({timeout: 90_000});
   await expect(page.getByText("Required live citation missing")).toHaveCount(0);
 
-  for (const citation of await page.getByRole("link", {name: "Open citation"}).all()) {
-    const target = await citation.getAttribute("href");
-    expect(target).toMatch(new RegExp("^https://(?:teams\\.microsoft\\.com|outlook\\.office(?:365)?\\.com|[^.]+\\.sharepoint\\.com)/"));
+  const caseId = (await page.locator(".case-id").textContent())!.trim();
+  const analysis = await page.request.get(`/api/cases/${caseId}/analysis`).then((response) => response.json());
+  expect(analysis.scenario_effective_time).toBe(process.env.SUPPLY_RESPONSE_EXPECTED_SCENARIO_EFFECTIVE_TIME);
+  const supplier = analysis.evidence_items.find((item: Evidence) => item.source_id === process.env.SUPPLY_RESPONSE_EXPECTED_SUPPLIER_SOURCE_ID);
+  const quality = analysis.evidence_items.find((item: Evidence) => item.source_id === process.env.SUPPLY_RESPONSE_EXPECTED_QUALITY_SOURCE_ID);
+  expect(supplier?.citation_classification).toBe("work_iq");
+  expect(quality?.citation_classification).toBe("work_iq");
+  verifyWorkIqArtifact(supplier);
+  verifyWorkIqArtifact(quality);
+  for (const item of analysis.evidence_items.filter((value: Evidence) => value.citation_classification === "fabric")) {
+    expect(new URL(item.navigable_citation_url).hostname).toBe("app.powerbi.com");
   }
 
   await page.getByRole("button", {name: /Approve combine/i}).click();
   const receipt = page.getByTestId("decision-receipt");
   await expect(receipt).toBeVisible({timeout: 15_000});
   const decisionId = (await receipt.getByText(/^Decision RL-DECISION-/).textContent())!.replace("Decision ", "");
+  const decision = await page.request.get(`/api/decisions/${decisionId}`).then((response) => response.json());
+  expect(decision.analysis_id).toBe(analysis.analysis_id);
   await expect(page.getByTestId("execution-action")).toHaveCount(5, {timeout: 15_000});
+  const actions = await page.request.get(`/api/decisions/${decisionId}/actions`).then((response) => response.json());
+  expect(actions).toHaveLength(5);
+  expect(actions.every((item: {decision_id: string}) => item.decision_id === decisionId)).toBe(true);
   await page.getByRole("button", {name: /Start simulated playback/i}).click();
   await expect(page.getByText("Simulated", {exact: true}).first()).toBeVisible({timeout: 65_000});
+  const observations = await page.request.get(`/api/decisions/${decisionId}/observations`).then((response) => response.json());
+  expect(observations.every((item: {decision_id: string}) => item.decision_id === decisionId)).toBe(true);
 
   const report = page.getByRole("link", {name: "Open Power BI command center"});
   await expect(report).toBeVisible();

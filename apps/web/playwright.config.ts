@@ -2,18 +2,21 @@ import {randomUUID} from "node:crypto";
 import {mkdirSync} from "node:fs";
 import {resolve} from "node:path";
 import {defineConfig, devices} from "@playwright/test";
+import {resolveLiveGate} from "./e2e/liveGate";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const temporaryDirectory = resolve(repositoryRoot, ".tmp");
 const databasePath = resolve(temporaryDirectory, `e2e-${randomUUID()}.db`);
 
 mkdirSync(temporaryDirectory, {recursive: true});
+const liveRequested = process.argv.some((value) => value === "live" || value.includes("project=live"));
+const liveGate = liveRequested ? resolveLiveGate(process.env) : null;
 
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
   workers: 1,
-  timeout: 80_000,
+  timeout: 270_000,
   expect: {timeout: 15_000},
   outputDir: resolve(repositoryRoot, ".artifacts/playwright"),
   reporter: "list",
@@ -27,8 +30,8 @@ export default defineConfig({
       name: "live",
       testMatch: /live-demo\.spec\.ts/,
       use: {
-        baseURL: process.env.SUPPLY_RESPONSE_LIVE_BASE_URL,
-        storageState: process.env.SUPPLY_RESPONSE_ALEX_STORAGE_STATE,
+        baseURL: liveGate?.baseURL,
+        storageState: liveGate?.storageState,
         trace: "off",
         screenshot: "off",
         video: "off",
@@ -42,7 +45,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
-  webServer: process.env.SUPPLY_RESPONSE_E2E_EXTERNAL_SERVERS === "1" ? undefined : [
+  webServer: liveRequested || process.env.SUPPLY_RESPONSE_E2E_EXTERNAL_SERVERS === "1" ? undefined : [
     {
       command: "scripts/run_e2e_api.sh",
       cwd: repositoryRoot,

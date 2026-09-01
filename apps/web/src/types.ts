@@ -54,7 +54,8 @@ export interface RuntimeStatus {
   agent_runtime: "local" | "foundry";
   power_bi_available: boolean;
   power_bi_url?: string | null;
-  capability_health?: Record<string, "ready" | "unavailable">;
+  capability_health?: Record<string, "configured" | "unverified" | "ready" | "unavailable">;
+  deployment_contract?: Record<string, string> | null;
 }
 
 export interface Disruption {
@@ -193,6 +194,9 @@ export interface EvidenceItem {
   synthetic: boolean;
   requirement: EvidenceRequirement;
   uncertainty_state: UncertaintyState;
+  citation_classification?: "fabric" | "work_iq" | "untrusted" | null;
+  navigable_citation_url?: string | null;
+  citation_trusted_host?: string | null;
 }
 
 export interface AuthorizationConditions {

@@ -44,6 +44,7 @@ from services.analysis.service import (
 from services.persistence.ports import CaseStore
 from services.persistence.tables import (
     action_projection,
+    analysis_claims,
     analysis_versions,
     approval_satisfactions,
     case_instances,
@@ -82,6 +83,10 @@ class PersistenceIntegrityError(PersistenceError):
 
 class RuntimeModeConflict(PersistenceError):
     """Raised when state crosses a Case Instance runtime boundary."""
+
+
+class AnalysisClaimBusy(PersistenceError):
+    """Another process owns the bounded analysis material claim."""
 
 
 def serialize_model(value: BaseModel) -> str:
@@ -474,7 +479,12 @@ class SqlAlchemyStore:
                 )
             return snapshot
 
-    def save_analysis(self, analysis: AnalysisVersion) -> None:
+    def save_analysis(
+        self,
+        analysis: AnalysisVersion,
+        *,
+        projected_case: CaseInstance | None = None,
+    ) -> None:
         runtime_mode = analysis.material.runtime_mode
 
         try:
@@ -547,6 +557,21 @@ class SqlAlchemyStore:
                     "current_analysis_hash": analysis.material_hash,
                     "updated_at": datetime.now(UTC),
                 }
+                if projected_case is not None:
+                    stored_case = self._stored_case(connection, analysis.case_id)
+                    self._require_case_projection_integrity(
+                        {
+                            **projection,
+                            "status": projected_case.status.value,
+                            "payload_json": serialize_model(projected_case),
+                        },
+                        projected_case,
+                        stored_case,
+                    )
+                    values.update(
+                        status=projected_case.status.value,
+                        payload_json=serialize_model(projected_case),
+                    )
                 if (
                     projection["current_decision_id"] is not None
                     and projection["current_analysis_hash"] is not None
@@ -574,6 +599,91 @@ class SqlAlchemyStore:
                 f"analysis or nested immutable record already exists: "
                 f"{analysis.analysis_id}"
             ) from error
+
+    def try_claim_analysis(
+        self,
+        *,
+        case_id: str,
+        material_version: str,
+        claim_id: str,
+        claimed_at: datetime,
+        lease: timedelta = timedelta(minutes=5),
+    ) -> bool:
+        """Atomically claim material across workers, taking over only expired leases."""
+        import hashlib
+
+        version = hashlib.sha256(material_version.encode()).hexdigest()
+        expires_at = claimed_at + lease
+        try:
+            with self.engine.begin() as connection:
+                self._require_case_runtime(
+                    connection, case_id=case_id, runtime_mode=self.runtime_mode
+                )
+                connection.execute(
+                    insert(analysis_claims).values(
+                        case_id=case_id,
+                        material_version=version,
+                        claim_id=claim_id,
+                        claimed_at=claimed_at,
+                        claim_expires_at=expires_at,
+                    )
+                )
+            return True
+        except IntegrityError:
+            with self.engine.begin() as connection:
+                result = connection.execute(
+                    update(analysis_claims)
+                    .where(
+                        analysis_claims.c.case_id == case_id,
+                        analysis_claims.c.material_version == version,
+                        analysis_claims.c.claim_expires_at < claimed_at,
+                    )
+                    .values(
+                        claim_id=claim_id,
+                        claimed_at=claimed_at,
+                        claim_expires_at=expires_at,
+                    )
+                )
+                return result.rowcount == 1
+
+    def release_analysis_claim(
+        self, *, case_id: str, material_version: str, claim_id: str
+    ) -> None:
+        import hashlib
+
+        version = hashlib.sha256(material_version.encode()).hexdigest()
+        with self.engine.begin() as connection:
+            connection.execute(
+                analysis_claims.delete().where(
+                    analysis_claims.c.case_id == case_id,
+                    analysis_claims.c.material_version == version,
+                    analysis_claims.c.claim_id == claim_id,
+                )
+            )
+
+    def complete_analysis_claim(
+        self,
+        *,
+        analysis: AnalysisVersion,
+        projected_case: CaseInstance,
+        material_version: str,
+        claim_id: str,
+    ) -> AnalysisVersion:
+        """Persist immutable analysis and projection in the existing one transaction."""
+        import hashlib
+
+        version = hashlib.sha256(material_version.encode()).hexdigest()
+        with self.engine.connect() as connection:
+            owner = connection.scalar(
+                select(analysis_claims.c.claim_id).where(
+                    analysis_claims.c.case_id == analysis.case_id,
+                    analysis_claims.c.material_version == version,
+                )
+            )
+        if owner != claim_id:
+            raise AnalysisClaimBusy("analysis material claim is owned elsewhere")
+        self.save_analysis(analysis, projected_case=projected_case)
+        return analysis
 
     def get_analysis(self, analysis_id: str) -> AnalysisVersion:
         with self.engine.connect() as connection:

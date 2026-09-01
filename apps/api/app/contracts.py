@@ -56,7 +56,10 @@ class RuntimeResponse(BaseModel):
     agent_runtime: Literal["local", "foundry"]
     power_bi_available: bool
     power_bi_url: str | None = None
-    capability_health: dict[str, Literal["ready", "unavailable"]]
+    capability_health: dict[
+        str, Literal["configured", "unverified", "ready", "unavailable"]
+    ]
+    deployment_contract: dict[str, str] | None = None
 
 
 class CaseControls(BaseModel):

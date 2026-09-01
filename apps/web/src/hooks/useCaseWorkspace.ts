@@ -12,7 +12,7 @@ import type {
   ResponseOption,
   RuntimeStatus,
 } from "../types";
-import {trustedMicrosoftUrl} from "../security/trustedUrls";
+import {trustedServerCitation} from "../security/trustedUrls";
 
 export type WorkspaceOperation =
   | "initializing"
@@ -295,7 +295,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     const missingRequiredLiveCitation = analysis.runtime_mode === "live"
       && analysis.evidence_items.some((item) =>
         item.requirement === "required_authoritative"
-        && !trustedMicrosoftUrl(item.citation_url)
+        && !trustedServerCitation(item.navigable_citation_url, item.citation_classification, item.citation_trusted_host)
       );
     const superseded = caseInstance?.current_analysis_id !== null
       && caseInstance?.current_analysis_id !== analysis.analysis_id;

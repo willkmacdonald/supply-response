@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import field_validator
 
@@ -102,6 +103,9 @@ class EvidenceItem(FrozenModel):
     synthetic: bool
     requirement: EvidenceRequirement
     uncertainty_state: UncertaintyState
+    citation_classification: Literal["fabric", "work_iq", "untrusted"] | None = None
+    navigable_citation_url: str | None = None
+    citation_trusted_host: str | None = None
 
 
 class EvidenceConflict(FrozenModel):

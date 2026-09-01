@@ -69,6 +69,7 @@ def test_runtime_contract_is_server_owned_and_cannot_be_overridden(client):
             "agent_runtime": "ready",
             "power_bi": "unavailable",
         },
+        "deployment_contract": None,
     }
     assert overridden.status_code == 422
 

@@ -1,43 +1,34 @@
-# Task 17 implementation report
+# Task 17 review-fix report
 
 Status: **DONE_WITH_CONCERNS**
 
-## Delivered
+## Review findings closed
 
-- Added one mutually exclusive application dependency graph. Fallback remains SQLite/synthetic/local; live constructs Fabric SQL, exact Task 14 `AuthService`, lazy delegated Work IQ OBO, exact-version Foundry agents, shared Decision/planning/playback services, and one validated Power BI URL.
-- Added a composed live analysis service that re-checks immutable Case runtime on every load, uses the stored live Operational Snapshot, accepts only non-synthetic Fabric/Work IQ evidence with trusted citations, passes only typed evidence and token-free typed retrieval lineage into the Agent Framework/deterministic boundary, serializes concurrent analysis to one immutable Analysis Version, and never substitutes fallback after a live failure.
-- Added bounded authentication/source failure mapping. Missing/invalid bearer state and unauthorized personas produce fixed public errors; live-source failures produce `503 LIVE_SOURCE_UNAVAILABLE` with `new_fallback_case_allowed=true` and no source/token/endpoint detail.
-- Bound live analysis, Decision, retry, and playback mutations to the authenticated Alex identity snapshot. The exact `AuthService` instance owns the OBO assertion; raw inbound/downstream tokens and A2A envelopes do not enter Foundry, persistence, responses, logs, Power BI, or identity snapshots.
-- Made Work IQ confidential-client construction lazy so startup/health performs no authority discovery, OBO, Work IQ, Foundry, or user-context call. Lifespan shutdown closes owned async clients and disposes the store engine.
-- Extended `/api/runtime` with live/fallback capability health and a server-validated Power BI URL without secrets or internal error detail.
-- Added UI trust enforcement for Microsoft 365/tenant SharePoint/Power BI URLs, safe new-tab links, live Power BI visibility, and visible `Required live citation missing` approval blocking while preserving the unauthenticated fallback journey.
-- Added a separate fail-closed `live` Playwright project. It requires an exact HTTPS base URL, owner-only Alex storage state, pinned corpus/three agent versions, and an explicit live switch before browser/network activity. Trace, screenshots, and video are disabled for that project.
-- Updated the personal-tenant deployment runbook with the full composition configuration and approval-gated live browser checklist.
+- Replaced live synthetic construction/relabeling with a typed `LiveOperationalDataPort`. The Fabric adapter reads only a verified current `app.live_operational_sources` record and preserves original source IDs, timestamps, citations, LIVE mode, and FABRIC provenance. Live Case creation and analysis both use it; synthetic RL-001 builders are absent from the live graph.
+- Require the complete Fabric quantity/date/qualification authority set and one exact, nonempty supplier and Quality Work IQ result bound to configured source IDs. Missing, downgraded, unhealthy, stale, incomplete, synthetic, or untrusted material maps to bounded `LIVE_SOURCE_UNAVAILABLE`.
+- `AgentExplanationUnavailable` now saves the deterministic partial with explicit unavailable status. Immutable Analysis payloads retain token-free supplier/Quality context, task, artifact, and source lineage plus bounded explanation content/status across reload. Decisions still reference that Analysis Version.
+- Added typed readiness. Configuration reports `unverified`; Fabric requires the Task 12 connectivity/schema check, while Work IQ/Foundry/Power BI require exact SHA-256 deployment-binding receipts. Startup performs no user-context call.
+- Removed all process-local analysis locks. Added database-authoritative leased material claims, expired takeover, failure release, and an atomic immutable Analysis + Case projection transaction. Two independent service/store instances return one canonical Analysis ID.
+- Moved live Playwright gating into config load before webservers/browser. It pins exact origin, Scenario Effective Time, corpus/source IDs, three agent versions, and owner-only Alex state; live never launches fallback servers. The 270-second timeout exceeds the inner gates. The spec invokes Task 15's rendered-artifact verifier for exactly supplier/Quality Work IQ, validates Fabric citations separately, and checks one Decision ID through analysis lineage, actions, observations, and Power BI.
+- Replaced browser wildcard SharePoint trust with server-classified URL, exact trusted host, and navigable URL. Tests reject other tenants, lookalikes, userinfo, ports, and plain/encoded credential parameters.
+- Validated all scalar/URL/host/agent bindings before allocating the Fabric engine or HTTP client.
 
-## TDD evidence
+Scope intentionally expanded into the domain model, persistence store, Alembic migration, and Fabric DDL because durable lineage, cross-process idempotency, and truthful readiness are correctness requirements.
 
-- Initial RED: `tests/integration/test_live_case_contract.py` failed collection because `apps.api.app.live` did not exist.
-- Subsequent RED: UI safety tests failed because Power BI was absent and unsafe/missing required live citations were rendered without blocking.
-- GREEN composed contract: live service provenance and bounded-failure tests passed, followed by real FastAPI route composition from Case creation through analysis, Alex Decision, five actions, playback, and simulated observations.
-- Additional regression coverage proves concurrent live analysis returns one immutable Analysis ID, live browser artifact collection is disabled, and the existing fallback route/UI behavior remains intact.
+## TDD and verification
 
-## Verification
+- RED: missing `LiveOperationalRetrieval`; GREEN: 5/5 provenance, completeness, partial-lineage reload, and cross-instance claim tests.
+- RED: missing readiness module; GREEN: injected readiness distinguishes unverified/ready without accepting SQLite as Fabric proof.
+- RED: nine missing browser trust behaviors; GREEN: all nine adversarial cases pass.
+- RED: live config lacked preflight; GREEN: live listing fails closed during config load before servers/browser.
+- Focused Python hardening/API/persistence/Fabric suite: **80 passed**.
+- Full safe Python reached completion with only two expected updated response/static assertions; both were corrected and focused suites are green. Known Task 13 NuGet/TMDL exclusion is unchanged.
+- Frontend Vitest: **47 passed**; production build passed.
+- Ruff passed; Pyright: **0 errors, 0 warnings**.
+- npm offline production audit: **0 vulnerabilities**; Python `pip check`: no broken requirements; `git diff --check`: passed.
+- Live Playwright was not run. Missing prerequisites fail during config load; fallback discovery lists six tests.
+- Real fallback Playwright via `with_server.py`: **5/6 passed** in two full runs; only the final duplicate-click observation poll timed out after the full sequence. The exact test passed **1/1** alone and failed-child then duplicate passed **2/2** on fresh servers. This is recorded as a sequencing/helper flake.
 
-- Composed Task 17 integration suite: 6 passed.
-- Full safe Python suite excluding the previously documented NuGet-gated Power BI/TMDL project file: green (552 collected; 14 expected live/infrastructure skips).
-- Frontend Vitest: 38 passed.
-- Frontend production build: passed.
-- Fallback Playwright API/UI journey: passed through the `webapp-testing` server-lifecycle helper after invoking its `--help`; no live project was executed.
-- Live Playwright project discovery: one gated test listed; no browser/network execution.
-- Ruff changed scope (imports, errors, upgrades): passed.
-- Pyright changed scope with repository virtualenv: 0 errors, 0 warnings.
-- Offline npm production audit: 0 vulnerabilities. Python `pip check`: no broken requirements.
-- `git diff --check`: passed.
-- `uv lock --check --offline` could not read the user-level uv cache under the sandbox; no dependency or lockfile changed in this task.
-- The four Task 13 TMDL/NuGet checks remain excluded because the sandbox cannot restore `Microsoft.AnalysisServices`; this is unchanged and unrelated to Task 17.
+## Deferred external acceptance
 
-## Deferred external prerequisites
-
-No Azure, Graph, Entra, Microsoft 365, Work IQ, Fabric, Foundry, Power BI, credential, tenant-authentication, live browser, or other network call was made.
-
-Task 18/reviewer approval is still required to provision/deploy resources, create/verify persona bindings and corpus artifacts, supply the confidential credential, confirm Fabric schema/data, publish and pin Foundry versions, publish Power BI, create fresh owner-only Alex browser state, run authenticated citation verification, execute the live Playwright journey, and inspect matching Decision/outbox/action/observation/Power BI records.
+No Azure, Graph, Entra, Microsoft 365, Work IQ, Fabric, Foundry, Power BI, tenant authentication, or live browser call was made. Task 18 must seed/verify the operational source bundle, issue deployment receipts, validate real persona/corpus/agent/report bindings, and run the approval-gated live journey.

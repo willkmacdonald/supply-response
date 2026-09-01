@@ -28,6 +28,7 @@ from integrations.workiq.models import WorkIQRetrieval, WorkIQRetrievalLineage
 from services.analysis.service import analyze_case
 from services.execution.playback import ImmediateClock
 from services.persistence.sqlite import sqlite_store
+from tests.integration.test_live_hardening import ExplicitLiveOperationalPort
 from tests.integration.test_workiq_trust_boundaries import _actor_and_service
 
 NOW = datetime(2026, 8, 31, 18, 0, tzinfo=UTC)
@@ -123,6 +124,7 @@ async def test_live_analysis_uses_only_fabric_and_work_iq_provenance(live_store)
 
     service = LiveAnalysisApplicationService(
         store=live_store,
+        operational_data=ExplicitLiveOperationalPort(),
         work_iq=FakeWorkIQ(),
         orchestrator=CapturingOrchestrator(),  # type: ignore[arg-type]
         supplier_source_id="source-alpha",
@@ -150,6 +152,7 @@ async def test_live_analysis_uses_only_fabric_and_work_iq_provenance(live_store)
 async def test_live_source_failure_is_bounded_and_never_falls_back(live_store):
     service = LiveAnalysisApplicationService(
         store=live_store,
+        operational_data=ExplicitLiveOperationalPort(),
         work_iq=BrokenWorkIQ(),
         orchestrator=Orchestrator(LocalAgentSet.deterministic, analyze_case),
         supplier_source_id="source-alpha",
@@ -170,6 +173,7 @@ async def test_live_source_failure_is_bounded_and_never_falls_back(live_store):
 async def test_concurrent_live_analysis_reuses_one_immutable_version(live_store):
     service = LiveAnalysisApplicationService(
         store=live_store,
+        operational_data=ExplicitLiveOperationalPort(),
         work_iq=FakeWorkIQ(),
         orchestrator=Orchestrator(LocalAgentSet.deterministic, analyze_case),
         supplier_source_id="source-alpha",
@@ -195,6 +199,7 @@ def _live_app(tmp_path, work_iq):
     clock = ImmediateClock(NOW)
     analysis_service = LiveAnalysisApplicationService(
         store=store,
+        operational_data=ExplicitLiveOperationalPort(),
         work_iq=work_iq,
         orchestrator=Orchestrator(LocalAgentSet.deterministic, analyze_case),
         supplier_source_id="source-alpha",
@@ -218,6 +223,7 @@ def _live_app(tmp_path, work_iq):
             "analysis_service": analysis_service,
             "auth_service": auth_service,
             "power_bi_url": "https://app.powerbi.com/groups/demo/reports/report",
+            "operational_data": ExplicitLiveOperationalPort(),
         },
     )
     app = create_app(services=services)
@@ -279,6 +285,7 @@ def test_live_browser_project_disables_credential_bearing_artifacts():
     root = Path(__file__).resolve().parents[2]
     config = (root / "apps/web/playwright.config.ts").read_text()
     live_spec = (root / "apps/web/e2e/live-demo.spec.ts").read_text()
+    live_gate = (root / "apps/web/e2e/liveGate.ts").read_text()
 
     assert 'name: "live"' in config
     assert 'trace: "off"' in config
@@ -287,3 +294,8 @@ def test_live_browser_project_disables_credential_bearing_artifacts():
     assert "Authorization" not in live_spec
     assert "SUPPLY_RESPONSE_ALEX_STORAGE_STATE" in live_spec
     assert "SUPPLY_RESPONSE_EXPECTED_CORPUS_VERSION" in live_spec
+    assert "resolveLiveGate" in config
+    assert "SUPPLY_RESPONSE_EXPECTED_DEPLOYMENT_ORIGIN" in live_gate
+    assert "SUPPLY_RESPONSE_EXPECTED_SCENARIO_EFFECTIVE_TIME" in live_spec
+    assert "verify-workiq-citations.mjs" in live_spec
+    assert "timeout: 270_000" in config

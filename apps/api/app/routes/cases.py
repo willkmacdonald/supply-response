@@ -17,7 +17,7 @@ from apps.api.app.contracts import (
 )
 from apps.api.app.dependencies import ApplicationServices, get_actor, get_services
 from apps.api.app.live import LiveSourceUnavailable
-from data.domain import CaseStatus
+from data.domain import CaseStatus, RuntimeMode
 from data.synthetic.rl001 import instantiate_rl001
 from services.persistence.store import RecordNotFound
 
@@ -80,16 +80,42 @@ def analysis_response(analysis) -> AnalysisResponse:
 
 
 @router.post("", response_model=CaseResponse, status_code=201)
-def create_case(
+async def create_case(
     request: CreateCaseRequest,
     services: ApplicationServices = Depends(get_services),
 ) -> CaseResponse:
     case_id = f"RL-CASE-{uuid4()}"
-    case, snapshot = instantiate_rl001(
-        case_id=case_id,
-        purpose=request.purpose,
-        runtime_mode=services.settings.runtime_mode,
-    )
+    if services.settings.runtime_mode is RuntimeMode.LIVE:
+        if services.live_operational_data is None:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "LIVE_SOURCE_UNAVAILABLE",
+                    "new_fallback_case_allowed": True,
+                },
+            )
+        try:
+            live = await services.live_operational_data.retrieve(
+                case_id=case_id,
+                purpose=request.purpose,
+                analysis_id=f"case-bootstrap-{case_id}",
+                retrieved_at=services.clock(),
+            )
+            case, snapshot = live.case, live.snapshot
+        except Exception:  # noqa: BLE001 - live source errors are intentionally bounded
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "LIVE_SOURCE_UNAVAILABLE",
+                    "new_fallback_case_allowed": True,
+                },
+            ) from None
+    else:
+        case, snapshot = instantiate_rl001(
+            case_id=case_id,
+            purpose=request.purpose,
+            runtime_mode=services.settings.runtime_mode,
+        )
     services.store.create_case(case, snapshot)
     return case_response(services, case_id)
 

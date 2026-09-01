@@ -34,6 +34,7 @@ def test_health_and_runtime_report_the_composed_fallback_graph(tmp_path):
             "agent_runtime": "ready",
             "power_bi": "unavailable",
         },
+        "deployment_contract": None,
     }
 
 
@@ -47,7 +48,9 @@ def _live_settings() -> Settings:
     )
 
 
-def test_live_runtime_reports_injected_graph_without_source_calls(tmp_path):
+def test_live_runtime_reports_injected_graph_as_unverified_without_readiness_port(
+    tmp_path,
+):
     store = sqlite_store(
         f"sqlite:///{tmp_path / 'live-contract.db'}",
         runtime_mode=RuntimeMode.LIVE,
@@ -70,15 +73,59 @@ def test_live_runtime_reports_injected_graph_without_source_calls(tmp_path):
         "work_iq": "work_iq",
         "operational_store": "fabric_sql",
         "agent_runtime": "foundry",
-        "power_bi_available": True,
-        "power_bi_url": "https://app.powerbi.com/groups/demo/reports/report",
+        "power_bi_available": False,
+        "power_bi_url": None,
         "capability_health": {
-            "operational_store": "ready",
-            "work_iq": "ready",
-            "agent_runtime": "ready",
-            "power_bi": "ready",
+            "operational_store": "unverified",
+            "work_iq": "unverified",
+            "agent_runtime": "unverified",
+            "power_bi": "unverified",
+        },
+        "deployment_contract": {
+            "scenario_effective_time": "2026-09-01T09:00:00-05:00",
+            "corpus_version": "",
+            "supplier_source_id": "",
+            "quality_source_id": "",
+            "signal_agent_version": "",
+            "context_agent_version": "",
+            "decision_agent_version": "",
         },
     }
+
+
+def test_live_runtime_uses_typed_readiness_instead_of_store_enum(tmp_path):
+    from apps.api.app.readiness import ReadinessSnapshot
+
+    class Ready:
+        def check(self):
+            return ReadinessSnapshot(
+                capability_health={
+                    "operational_store": "ready",
+                    "work_iq": "ready",
+                    "agent_runtime": "ready",
+                    "power_bi": "ready",
+                },
+                fabric_schema_version=12,
+                power_bi_verified=True,
+            )
+
+    store = sqlite_store(
+        f"sqlite:///{tmp_path / 'typed-ready.db'}", runtime_mode=RuntimeMode.LIVE
+    )
+    services = build_composition(
+        _live_settings(),
+        live_components={
+            "store": store,
+            "analysis_service": object(),
+            "auth_service": object(),
+            "power_bi_url": "https://app.powerbi.com/groups/demo/reports/report",
+            "readiness": Ready(),
+        },
+    )
+    with TestClient(create_app(services=services)) as client:
+        payload = client.get("/api/runtime").json()
+    assert payload["power_bi_available"] is True
+    assert payload["capability_health"]["operational_store"] == "ready"
 
 
 def test_live_and_fallback_graphs_are_mutually_exclusive(tmp_path):

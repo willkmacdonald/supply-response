@@ -140,6 +140,7 @@ def test_shared_metadata_defines_closed_loop_schema():
     assert set(metadata.tables) == {
         "action_projection",
         "analysis_versions",
+        "analysis_claims",
         "approval_satisfactions",
         "case_instances",
         "case_projection",
@@ -575,13 +576,12 @@ def test_alembic_upgrade_and_downgrade_manage_shared_schema(tmp_path):
     case, snapshot = fallback_rl001_case("RL-CASE-MIGRATED-FOREIGN-KEYS")
     migrated_store.create_case(case, snapshot)
     for column_name in ("current_analysis_id", "current_decision_id"):
-        with pytest.raises(IntegrityError):
-            with migrated_store.engine.begin() as connection:
-                connection.execute(
-                    update(case_projection)
-                    .where(case_projection.c.case_id == case.case_id)
-                    .values({column_name: "RL-MISSING"})
-                )
+        with pytest.raises(IntegrityError), migrated_store.engine.begin() as connection:
+            connection.execute(
+                update(case_projection)
+                .where(case_projection.c.case_id == case.case_id)
+                .values({column_name: "RL-MISSING"})
+            )
     migrated_store.engine.dispose()
 
     command.downgrade(config, "base")
@@ -624,7 +624,7 @@ def test_alembic_upgrade_path_adds_pointer_foreign_keys_after_original_0001(
             connection.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-            == "0004_simulated_playback_observations"
+            == "0005_analysis_claims"
         )
     head_foreign_keys = {
         tuple(item["constrained_columns"])

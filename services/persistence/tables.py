@@ -66,6 +66,21 @@ operational_snapshots = Table(
     Column("payload_json", Text, nullable=False),
 )
 
+analysis_claims = Table(
+    "analysis_claims",
+    metadata,
+    Column(
+        "case_id",
+        String(128),
+        ForeignKey("case_instances.case_id"),
+        primary_key=True,
+    ),
+    Column("material_version", String(128), primary_key=True),
+    Column("claim_id", String(128), nullable=False, unique=True),
+    Column("claimed_at", DateTime(timezone=True), nullable=False, index=True),
+    Column("claim_expires_at", DateTime(timezone=True), nullable=False, index=True),
+)
+
 case_projection = Table(
     "case_projection",
     metadata,
