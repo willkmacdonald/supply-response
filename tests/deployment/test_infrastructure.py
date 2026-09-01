@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import textwrap
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -565,7 +566,12 @@ def test_rotation_script_is_dry_run_exact_scoped_and_always_cleans_secret_file()
     assert "CONFIRM_SUBSCRIPTION_ID" in rotation
     assert "CONFIRM_TENANT_ID" in rotation
     assert "CONFIRM_VAULT_ID" in rotation
+    assert "CONFIRM_CONTAINER_APP_ID" in rotation
     assert "CONFIRM_CONTAINER_APP_NAME" in rotation
+    assert "SUPPLY_RESPONSE_KEY_VAULT_URI" in rotation
+    assert "SUPPLY_RESPONSE_LIVE_BASE_URL" in rotation
+    assert "SUPPLY_RESPONSE_EXPECTED_DEPLOYMENT_ORIGIN" in rotation
+    assert 'app["properties"]["configuration"].get("secrets", [])' in rotation
     assert "create_temporary_kv_operator_access" in rotation
     assert "cleanup_temporary_kv_operator_access" in rotation
     assert "safe_before_diagnostics_cleanup" in rotation
@@ -577,6 +583,299 @@ def test_rotation_script_is_dry_run_exact_scoped_and_always_cleans_secret_file()
     assert "--project=live" in rotation
     assert "valid_secret_file" in rotation
     assert "scripts/rotate_entra_client_secret.sh --apply" in docs
+
+
+def _rotation_environment(tmp_path: Path, scenario: str) -> tuple[dict[str, str], Path]:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    state = tmp_path / "state.json"
+    state.write_text("{}")
+    replacement = tmp_path / "replacement-secret"
+    replacement.write_text("replacement-value")
+    replacement.chmod(0o600)
+    tenant = "22222222-2222-4222-8222-222222222222"
+    principal = "11111111-1111-4111-8111-111111111111"
+    subscription = "33333333-3333-4333-8333-333333333333"
+    resource_group = "rg-supply-response-demo"
+    app_name = "ca-sr-demo"
+    vault_name = "kv-sr-demo"
+    app_id = f"/subscriptions/{subscription}/resourceGroups/{resource_group}/providers/Microsoft.App/containerApps/{app_name}"
+    vault_id = f"/subscriptions/{subscription}/resourceGroups/{resource_group}/providers/Microsoft.KeyVault/vaults/{vault_name}"
+    vault_uri = f"https://{vault_name}.vault.azure.net/"
+    origin = "https://ca-sr-demo.example.test"
+
+    header = json.dumps({"alg": "none"}, separators=(",", ":"))
+    claims = json.dumps({"oid": principal, "tid": tenant}, separators=(",", ":"))
+    import base64
+
+    encode = lambda value: base64.urlsafe_b64encode(value.encode()).decode().rstrip("=")
+    token = f"{encode(header)}.{encode(claims)}.signature"
+
+    fake_az = fake_bin / "az"
+    fake_az.write_text(
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env python3
+            import json, os, signal, sys
+            from pathlib import Path
+
+            args = sys.argv[1:]
+            state_path = Path(os.environ["FAKE_STATE"])
+            state = json.loads(state_path.read_text())
+            state.setdefault("calls", []).append(args)
+            scenario = os.environ["FAKE_SCENARIO"]
+
+            def save():
+                state_path.write_text(json.dumps(state))
+
+            def output(value):
+                if isinstance(value, (dict, list)):
+                    print(json.dumps(value))
+                else:
+                    print(value)
+                save()
+                raise SystemExit(0)
+
+            if args[:2] == ["account", "show"]:
+                query = args[args.index("--query") + 1]
+                output({"id": os.environ["FAKE_SUBSCRIPTION"], "tenantId": os.environ["FAKE_TENANT"], "user.type": "user"}[query])
+            if args[:2] == ["account", "get-access-token"]:
+                output(os.environ["FAKE_TOKEN"])
+            if args[:2] == ["keyvault", "show"]:
+                value = {"id": os.environ["FAKE_VAULT_ID"], "properties": {"vaultUri": os.environ["FAKE_VAULT_URI"]}}
+                if scenario == "wrong-vault":
+                    value["id"] += "-wrong"
+                output(value)
+            if args[:2] == ["containerapp", "show"]:
+                secret_url = os.environ["FAKE_VAULT_URI"] + "secrets/entra-client-secret"
+                value = {
+                    "id": os.environ["FAKE_APP_ID"],
+                    "name": os.environ["FAKE_APP_NAME"],
+                    "identity": {"type": "SystemAssigned"},
+                    "properties": {
+                        "configuration": {"secrets": [{"name": "entra-client-secret", "keyVaultUrl": secret_url, "identity": "system"}], "ingress": {"fqdn": os.environ["FAKE_FQDN"]}},
+                        "latestReadyRevisionName": os.environ["FAKE_REVISION"],
+                    },
+                }
+                if scenario == "wrong-app":
+                    value["id"] += "-wrong"
+                if scenario == "wrong-secret-reference":
+                    value["properties"]["configuration"]["secrets"][0]["keyVaultUrl"] += "-wrong"
+                output(value)
+            if args[:3] == ["containerapp", "revision", "list"]:
+                revision_id = os.environ["FAKE_APP_ID"] + "/revisions/" + os.environ["FAKE_REVISION"]
+                if scenario == "wrong-revision-parent":
+                    revision_id = revision_id.replace("/containerApps/", "/containerApps/wrong-")
+                output([{"id": revision_id, "name": os.environ["FAKE_REVISION"], "properties": {"active": True}}])
+            if args[:3] == ["role", "assignment", "create"]:
+                state["role"] = True
+                save()
+                if scenario == "partial-role-create":
+                    raise SystemExit(7)
+                output({})
+            if args[:3] == ["role", "assignment", "list"]:
+                if state.get("role"):
+                    output([{
+                        "id": os.environ["KV_OPERATOR_ASSIGNMENT_ID"],
+                        "principalId": os.environ["KV_OPERATOR_PRINCIPAL_ID"],
+                        "principalType": os.environ["KV_OPERATOR_PRINCIPAL_TYPE"],
+                        "scope": os.environ["KV_OPERATOR_SCOPE"],
+                        "roleDefinitionId": os.environ["KV_OPERATOR_ROLE_RESOURCE_ID"],
+                    }])
+                output([])
+            if args[:3] == ["role", "assignment", "delete"]:
+                state["role"] = False
+                state["role_deleted"] = state.get("role_deleted", 0) + 1
+                save()
+                raise SystemExit(0)
+            if args[:3] == ["keyvault", "secret", "list"]:
+                output([{"name": "entra-client-secret"}])
+            if args[:3] == ["keyvault", "secret", "show"]:
+                output(os.environ["FAKE_VAULT_URI"] + "secrets/entra-client-secret/old-version")
+            if args[:3] == ["keyvault", "secret", "download"]:
+                target = Path(args[args.index("--file") + 1])
+                target.write_text("prior-value")
+                target.chmod(0o600)
+                state["rollback_file"] = str(target)
+                save()
+                raise SystemExit(0)
+            if args[:3] == ["keyvault", "secret", "set"]:
+                source = args[args.index("--file") + 1]
+                is_rollback = "rotation-rollback-secret" in source
+                state["rollback_sets" if is_rollback else "new_sets"] = state.get("rollback_sets" if is_rollback else "new_sets", 0) + 1
+                save()
+                if not is_rollback and scenario == "ambiguous-secret-set":
+                    raise SystemExit(9)
+                if is_rollback and scenario == "rollback-failure":
+                    raise SystemExit(10)
+                output(os.environ["FAKE_VAULT_URI"] + "secrets/entra-client-secret/new-version")
+            if args[:3] == ["containerapp", "revision", "restart"]:
+                state["restarts"] = state.get("restarts", 0) + 1
+                save()
+                if scenario in ("restart-failure", "rollback-failure") and state["restarts"] == 1:
+                    raise SystemExit(11)
+                raise SystemExit(0)
+            save()
+            print("unsupported fake az command", args, file=sys.stderr)
+            raise SystemExit(99)
+            """
+        )
+    )
+    fake_az.chmod(0o700)
+
+    fake_npm = fake_bin / "npm"
+    fake_npm.write_text(
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env python3
+            import json, os, signal, sys
+            from pathlib import Path
+            path = Path(os.environ["FAKE_STATE"])
+            state = json.loads(path.read_text())
+            state.setdefault("calls", []).append(["npm", *sys.argv[1:]])
+            state["npm_calls"] = state.get("npm_calls", 0) + 1
+            path.write_text(json.dumps(state))
+            if os.environ["FAKE_SCENARIO"] == "live-gate-failure" and state["npm_calls"] == 1:
+                raise SystemExit(12)
+            if os.environ["FAKE_SCENARIO"] == "signal-exit" and state["npm_calls"] == 1:
+                os.kill(os.getppid(), signal.SIGTERM)
+                raise SystemExit(13)
+            raise SystemExit(0)
+            """
+        )
+    )
+    fake_npm.chmod(0o700)
+
+    environment = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "FAKE_STATE": str(state),
+        "FAKE_SCENARIO": scenario,
+        "FAKE_SUBSCRIPTION": subscription,
+        "FAKE_TENANT": tenant,
+        "FAKE_TOKEN": token,
+        "FAKE_VAULT_ID": vault_id,
+        "FAKE_VAULT_URI": vault_uri,
+        "FAKE_APP_ID": app_id,
+        "FAKE_APP_NAME": app_name,
+        "FAKE_FQDN": origin.removeprefix("https://"),
+        "FAKE_REVISION": f"{app_name}--rev1",
+        "AZURE_SUBSCRIPTION_ID": subscription,
+        "AZURE_TENANT_ID": tenant,
+        "SUPPLY_RESPONSE_KEY_VAULT_ID": vault_id,
+        "SUPPLY_RESPONSE_KEY_VAULT_URI": vault_uri,
+        "SUPPLY_RESPONSE_KEY_VAULT_NAME": vault_name,
+        "SUPPLY_RESPONSE_RESOURCE_GROUP": resource_group,
+        "SUPPLY_RESPONSE_CONTAINER_APP_ID": app_id,
+        "SUPPLY_RESPONSE_CONTAINER_APP_NAME": app_name,
+        "SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID": principal,
+        "SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE": "User",
+        "SUPPLY_RESPONSE_ENTRA_CLIENT_SECRET_FILE": str(replacement),
+        "SUPPLY_RESPONSE_LIVE_BASE_URL": origin,
+        "SUPPLY_RESPONSE_EXPECTED_DEPLOYMENT_ORIGIN": origin,
+        "CONFIRM_SUBSCRIPTION_ID": subscription,
+        "CONFIRM_TENANT_ID": tenant,
+        "CONFIRM_VAULT_ID": vault_id,
+        "CONFIRM_CONTAINER_APP_ID": app_id,
+        "CONFIRM_CONTAINER_APP_NAME": app_name,
+    }
+    return environment, state
+
+
+def _run_rotation(
+    tmp_path: Path, scenario: str
+) -> tuple[subprocess.CompletedProcess[str], dict]:
+    environment, state_path = _rotation_environment(tmp_path, scenario)
+    if scenario == "wrong-origin":
+        environment["SUPPLY_RESPONSE_LIVE_BASE_URL"] = "https://wrong.example.test"
+    completed = subprocess.run(
+        ["/bin/bash", "scripts/rotate_entra_client_secret.sh", "--apply"],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    return completed, json.loads(state_path.read_text())
+
+
+def test_rotation_rejects_wrong_app_vault_reference_and_origin_before_mutation(
+    tmp_path,
+):
+    for scenario in (
+        "wrong-app",
+        "wrong-vault",
+        "wrong-secret-reference",
+        "wrong-origin",
+        "wrong-revision-parent",
+    ):
+        scenario_path = tmp_path / scenario
+        scenario_path.mkdir()
+        completed, state = _run_rotation(scenario_path, scenario)
+        assert completed.returncode != 0, scenario
+        assert state.get("new_sets", 0) == 0, scenario
+        assert not state.get("role", False), scenario
+
+
+def test_rotation_behaves_safely_across_command_failures_and_signal(tmp_path):
+    expected_rollbacks = {
+        "partial-role-create": 0,
+        "ambiguous-secret-set": 1,
+        "restart-failure": 1,
+        "live-gate-failure": 1,
+        "rollback-failure": 2,
+        "signal-exit": 1,
+    }
+    for scenario, minimum_rollbacks in expected_rollbacks.items():
+        scenario_path = tmp_path / scenario
+        scenario_path.mkdir()
+        completed, state = _run_rotation(scenario_path, scenario)
+        assert completed.returncode != 0, scenario
+        assert state.get("rollback_sets", 0) >= minimum_rollbacks, scenario
+        assert not state.get("role", False), scenario
+        assert state.get("role_deleted", 0) == 1, scenario
+        if scenario != "partial-role-create":
+            assert not Path(state["rollback_file"]).exists(), scenario
+
+    success_path = tmp_path / "success"
+    success_path.mkdir()
+    completed, state = _run_rotation(success_path, "success")
+    assert completed.returncode == 0, completed.stderr
+    assert state.get("new_sets", 0) == 1
+    assert state.get("rollback_sets", 0) == 0
+    assert state.get("npm_calls", 0) == 1
+    assert state.get("role_deleted", 0) == 1
+    assert not state.get("role", False)
+    assert not Path(state["rollback_file"]).exists()
+
+
+def test_personal_tenant_operator_is_interactive_user_only(tmp_path):
+    preflight = _read("scripts/preflight_personal_tenant.sh")
+    deploy = _read("scripts/deploy_personal_tenant.sh")
+    rotation = _read("scripts/rotate_entra_client_secret.sh")
+    docs = _read("docs/deployment/personal-tenant.md")
+
+    for source in (preflight, deploy, rotation):
+        assert "ServicePrincipal is not supported" in source
+        assert "== User" in source
+    assert "az login" in docs
+    assert "interactive User" in docs
+    assert "or ServicePrincipal" not in docs
+
+    environment, state_path = _rotation_environment(tmp_path, "success")
+    environment["SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE"] = "ServicePrincipal"
+    completed = subprocess.run(
+        ["/bin/bash", "scripts/rotate_entra_client_secret.sh", "--apply"],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert completed.returncode != 0
+    assert json.loads(state_path.read_text()).get("calls", []) == []
 
 
 def test_restart_safe_upgrade_never_replaces_final_with_placeholder():

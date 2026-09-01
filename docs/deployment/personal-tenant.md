@@ -233,6 +233,15 @@ alone cannot. Fabric SQL administration, tenant consent, persona assignment,
 Foundry publication, Power BI publication, and Demo Corpus work remain separate
 procedures and are never automated here.
 
+This personal-tenant workflow intentionally supports only an interactive Entra
+**User** operator. Before preflight, run `az login --tenant <confirmed-tenant-id>`
+and select the confirmed subscription; service-principal login is rejected by
+preflight, deployment, and rotation. The signed-in user must also be able to read
+the two application registrations through Microsoft Graph. Preflight exercises
+that existing delegated app-read path with exact `az ad app show --id` checks for
+the Web and API registrations; it does not perform a Graph lookup for the
+operator object ID because that ID comes from the ephemeral ARM token's `oid`.
+
 Configure azd values without putting secrets in its environment:
 
 ```bash
@@ -245,7 +254,7 @@ export AZURE_LOCATION=eastus2
 export SUPPLY_RESPONSE_RESOURCE_GROUP=rg-supply-response-demo
 export SUPPLY_RESPONSE_CONTAINER_APP_NAME=ca-sr-demo
 export SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID=<confirmed-current-object-id>
-export SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE=User # or ServicePrincipal
+export SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE=User
 azd env set AZURE_SUBSCRIPTION_ID <confirmed-subscription-id>
 azd env set AZURE_TENANT_ID <confirmed-tenant-id>
 azd env set AZURE_LOCATION eastus2
@@ -370,20 +379,32 @@ which is dry-run by default:
 ./scripts/rotate_entra_client_secret.sh
 ```
 
-The mutation path requires exact subscription, tenant, vault ID, Container App,
-current principal, and replacement-file settings plus matching
+The mutation path requires exact subscription, tenant, vault ID and URI,
+Container App ID and name, current interactive User principal, both deployed
+origin variables, and replacement-file settings plus matching
 `CONFIRM_SUBSCRIPTION_ID`, `CONFIRM_TENANT_ID`, `CONFIRM_VAULT_ID`, and
-`CONFIRM_CONTAINER_APP_NAME` values. Set every live Playwright gate variable
-listed earlier, then obtain separate approvals for temporary role creation,
-secret read/set, revision restart, the live-demo business actions, and possible
-rollback before running:
+`CONFIRM_CONTAINER_APP_ID` and `CONFIRM_CONTAINER_APP_NAME` values. In
+particular, set `SUPPLY_RESPONSE_KEY_VAULT_URI`,
+`SUPPLY_RESPONSE_CONTAINER_APP_ID`, `SUPPLY_RESPONSE_LIVE_BASE_URL`, and
+`SUPPLY_RESPONSE_EXPECTED_DEPLOYMENT_ORIGIN` to their separately confirmed exact
+values. Set every remaining live Playwright gate variable listed earlier, then
+obtain separate approvals for temporary role creation, secret read/set, revision
+restart, the live-demo business actions, and possible rollback before running:
 
 ```bash
 ./scripts/rotate_entra_client_secret.sh --apply
 ```
 
-The script creates one deterministic Key Vault Secrets Officer assignment at the
-exact vault scope. At that scope, the role supplies the required rotation actions:
+Before creating that assignment or reading a secret, the script fetches the exact
+Container App by its canonical ARM ID and requires the returned ID, resource
+group/name, and system-assigned identity to match. Its sole
+`entra-client-secret` reference must equal the confirmed vault URI plus
+`secrets/entra-client-secret`. The returned ingress FQDN derives the HTTPS origin;
+both live origin variables must equal it, and exactly one active latest-ready
+revision must belong to that app. Any mismatch stops before secret mutation.
+
+The script then creates one deterministic Key Vault Secrets Officer assignment at
+the exact vault scope. At that scope, the role supplies the required rotation actions:
 `Microsoft.KeyVault/vaults/secrets/readMetadata/action`,
 `Microsoft.KeyVault/vaults/secrets/getSecret/action`, and
 `Microsoft.KeyVault/vaults/secrets/setSecret/action`. It waits for real

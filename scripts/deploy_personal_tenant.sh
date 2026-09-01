@@ -12,6 +12,7 @@ EXPECTED_TENANT_ID="${AZURE_TENANT_ID:?Set AZURE_TENANT_ID to the separately con
 EXPECTED_LOCATION="${AZURE_LOCATION:?Set AZURE_LOCATION to the separately confirmed target}"
 EXPECTED_RESOURCE_GROUP="${SUPPLY_RESPONSE_RESOURCE_GROUP:?Set SUPPLY_RESPONSE_RESOURCE_GROUP to the separately confirmed target}"
 EXPECTED_CONTAINER_APP_NAME="${SUPPLY_RESPONSE_CONTAINER_APP_NAME:?Set SUPPLY_RESPONSE_CONTAINER_APP_NAME to the confirmed bounded name}"
+DEPLOYMENT_PRINCIPAL_TYPE="${SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE:?Set User for the current interactive deployment principal}"
 FINAL_PROVISION_MAX_ATTEMPTS="${FINAL_PROVISION_MAX_ATTEMPTS:-6}"
 SMOKE_MAX_ATTEMPTS="${SMOKE_MAX_ATTEMPTS:-12}"
 PLACEHOLDER_IMAGE='mcr.microsoft.com/k8se/quickstart:latest'
@@ -26,6 +27,7 @@ safe_before_diagnostics_cleanup() {
 
 [[ "$FINAL_PROVISION_MAX_ATTEMPTS" =~ ^[1-9][0-9]*$ ]] || { printf 'FINAL_PROVISION_MAX_ATTEMPTS must be a positive integer.\n' >&2; exit 2; }
 [[ "$SMOKE_MAX_ATTEMPTS" =~ ^[1-9][0-9]*$ ]] || { printf 'SMOKE_MAX_ATTEMPTS must be a positive integer.\n' >&2; exit 2; }
+[[ "$DEPLOYMENT_PRINCIPAL_TYPE" == User ]] || { printf 'This personal-tenant workflow supports only an interactive User deployment principal; ServicePrincipal is not supported.\n' >&2; exit 1; }
 
 case "${1:-}" in
   "") ;;
@@ -233,7 +235,7 @@ validate_secret_file() {
 }
 
 if [[ "$started_from_bootstrap" == true ]]; then
-  configure_temporary_kv_operator_access "$vault_id" "$SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID" "$SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE"
+  configure_temporary_kv_operator_access "$vault_id" "$SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID" "$DEPLOYMENT_PRINCIPAL_TYPE"
   create_temporary_kv_operator_access
   wait_for_bootstrap_operator_access
   if [[ "$existing_secret_count" == 0 ]]; then

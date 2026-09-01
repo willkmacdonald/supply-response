@@ -11,7 +11,7 @@ EXPECTED_LOCATION="${AZURE_LOCATION:?Set AZURE_LOCATION to the separately confir
 EXPECTED_AZD_ENVIRONMENT="${SUPPLY_RESPONSE_AZD_ENVIRONMENT:?Set SUPPLY_RESPONSE_AZD_ENVIRONMENT to the selected azd environment}"
 EXPECTED_CONTAINER_APP_NAME="${SUPPLY_RESPONSE_CONTAINER_APP_NAME:?Set the exact bounded Container App name}"
 DEPLOYMENT_PRINCIPAL_ID="${SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID:?Set the confirmed current deployment principal object ID}"
-DEPLOYMENT_PRINCIPAL_TYPE="${SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE:?Set User or ServicePrincipal for the current deployment principal}"
+DEPLOYMENT_PRINCIPAL_TYPE="${SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE:?Set User for the current interactive deployment principal}"
 FOUNDRY_PROJECT_RESOURCE_ID="${SUPPLY_RESPONSE_FOUNDRY_PROJECT_RESOURCE_ID:?Set the canonical Foundry project resource ID}"
 FOUNDRY_PROJECT_ENDPOINT="${SUPPLY_RESPONSE_FOUNDRY_PROJECT_ENDPOINT:?Set the canonical Foundry project endpoint}"
 FABRIC_WORKSPACE_ID="${SUPPLY_RESPONSE_FABRIC_WORKSPACE_ID:?Set the exact Fabric workspace ID}"
@@ -51,7 +51,7 @@ if ! valid_container_app_name "$EXPECTED_CONTAINER_APP_NAME"; then
 fi
 uuid_pattern='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 [[ "$DEPLOYMENT_PRINCIPAL_ID" =~ $uuid_pattern ]] || { printf 'SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID must be a UUID.\n' >&2; exit 1; }
-[[ "$DEPLOYMENT_PRINCIPAL_TYPE" == User || "$DEPLOYMENT_PRINCIPAL_TYPE" == ServicePrincipal ]] || { printf 'SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE must be User or ServicePrincipal.\n' >&2; exit 1; }
+[[ "$DEPLOYMENT_PRINCIPAL_TYPE" == User ]] || { printf 'This personal-tenant workflow supports only an interactive User deployment principal; ServicePrincipal is not supported.\n' >&2; exit 1; }
 
 safe_capture active_subscription account-subscription az account show --query id --output tsv
 safe_capture active_tenant account-tenant az account show --query tenantId --output tsv
@@ -68,11 +68,8 @@ case "$active_principal_type" in
   user|User)
     current_principal_type=User
     ;;
-  servicePrincipal|serviceprincipal|ServicePrincipal)
-    current_principal_type=ServicePrincipal
-    ;;
   *)
-    printf 'Azure CLI current principal type is unsupported.\n' >&2
+    printf 'Azure CLI must be signed in interactively as a User; service-principal login is not supported by this personal-tenant workflow.\n' >&2
     exit 1
     ;;
 esac

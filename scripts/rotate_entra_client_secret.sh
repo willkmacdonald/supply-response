@@ -30,17 +30,23 @@ fi
 EXPECTED_SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID:?Set the confirmed subscription ID}"
 EXPECTED_TENANT_ID="${AZURE_TENANT_ID:?Set the confirmed tenant ID}"
 EXPECTED_VAULT_ID="${SUPPLY_RESPONSE_KEY_VAULT_ID:?Set the exact Key Vault resource ID}"
+EXPECTED_VAULT_URI="${SUPPLY_RESPONSE_KEY_VAULT_URI:?Set the exact Key Vault URI}"
 VAULT_NAME="${SUPPLY_RESPONSE_KEY_VAULT_NAME:?Set the exact Key Vault name}"
 RESOURCE_GROUP="${SUPPLY_RESPONSE_RESOURCE_GROUP:?Set the exact app resource group}"
+EXPECTED_CONTAINER_APP_ID="${SUPPLY_RESPONSE_CONTAINER_APP_ID:?Set the exact Container App resource ID}"
 CONTAINER_APP_NAME="${SUPPLY_RESPONSE_CONTAINER_APP_NAME:?Set the exact Container App name}"
 PRINCIPAL_ID="${SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_ID:?Set the confirmed current principal object ID}"
-PRINCIPAL_TYPE="${SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE:?Set User or ServicePrincipal}"
+PRINCIPAL_TYPE="${SUPPLY_RESPONSE_DEPLOYMENT_PRINCIPAL_TYPE:?Set User for the current interactive deployment principal}"
 REPLACEMENT_FILE="${SUPPLY_RESPONSE_ENTRA_CLIENT_SECRET_FILE:?Set the replacement secret file}"
+LIVE_BASE_URL="${SUPPLY_RESPONSE_LIVE_BASE_URL:?Set the exact deployed HTTPS origin}"
+EXPECTED_DEPLOYMENT_ORIGIN="${SUPPLY_RESPONSE_EXPECTED_DEPLOYMENT_ORIGIN:?Set the exact expected deployment origin}"
 
 [[ "${CONFIRM_SUBSCRIPTION_ID:-}" == "$EXPECTED_SUBSCRIPTION_ID" ]] || { printf 'CONFIRM_SUBSCRIPTION_ID does not match.\n' >&2; exit 1; }
 [[ "${CONFIRM_TENANT_ID:-}" == "$EXPECTED_TENANT_ID" ]] || { printf 'CONFIRM_TENANT_ID does not match.\n' >&2; exit 1; }
 [[ "${CONFIRM_VAULT_ID:-}" == "$EXPECTED_VAULT_ID" ]] || { printf 'CONFIRM_VAULT_ID does not match.\n' >&2; exit 1; }
+[[ "${CONFIRM_CONTAINER_APP_ID:-}" == "$EXPECTED_CONTAINER_APP_ID" ]] || { printf 'CONFIRM_CONTAINER_APP_ID does not match.\n' >&2; exit 1; }
 [[ "${CONFIRM_CONTAINER_APP_NAME:-}" == "$CONTAINER_APP_NAME" ]] || { printf 'CONFIRM_CONTAINER_APP_NAME does not match.\n' >&2; exit 1; }
+[[ "$PRINCIPAL_TYPE" == User ]] || { printf 'Secret rotation supports only an interactive User deployment principal; ServicePrincipal is not supported.\n' >&2; exit 1; }
 valid_secret_file "$REPLACEMENT_FILE" || { printf 'Replacement secret file is invalid.\n' >&2; exit 1; }
 
 rollback_secret_file=''
@@ -74,17 +80,52 @@ token_tenant_id="$(printf '%s' "$arm_access_token" | python3 -c 'import base64,j
 unset arm_access_token
 case "$active_principal_type" in
   user|User) normalized_principal_type=User ;;
-  servicePrincipal|serviceprincipal|ServicePrincipal) normalized_principal_type=ServicePrincipal ;;
-  *) printf 'Current Azure principal type is unsupported.\n' >&2; exit 1 ;;
+  *) printf 'Azure CLI must be signed in interactively as a User; service-principal login is not supported for rotation.\n' >&2; exit 1 ;;
 esac
 [[ "$active_subscription" == "$EXPECTED_SUBSCRIPTION_ID" ]] || { printf 'Active subscription mismatch.\n' >&2; exit 1; }
 [[ "$active_tenant" == "$EXPECTED_TENANT_ID" && "$token_tenant_id" == "$EXPECTED_TENANT_ID" ]] || { printf 'Active tenant mismatch.\n' >&2; exit 1; }
 [[ "$active_principal_id" == "$PRINCIPAL_ID" && "$normalized_principal_type" == "$PRINCIPAL_TYPE" ]] || { printf 'Current deployment principal mismatch.\n' >&2; exit 1; }
 
-safe_capture actual_vault_id rotation-vault az keyvault show --name "$VAULT_NAME" --query id --output tsv
-[[ "$actual_vault_id" == "$EXPECTED_VAULT_ID" ]] || { printf 'Exact Key Vault ID mismatch.\n' >&2; exit 1; }
-safe_capture active_revision rotation-active-revision az containerapp revision list --resource-group "$RESOURCE_GROUP" --name "$CONTAINER_APP_NAME" --query '[?properties.active].name | [0]' --output tsv
-[[ -n "$active_revision" ]] || { printf 'No active Container App revision was found.\n' >&2; exit 1; }
+canonical_app_id="/subscriptions/${EXPECTED_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.App/containerApps/${CONTAINER_APP_NAME}"
+[[ "$EXPECTED_CONTAINER_APP_ID" == "$canonical_app_id" ]] || { printf 'Configured Container App ID is not the canonical confirmed subscription/resource-group/name binding.\n' >&2; exit 1; }
+canonical_vault_id="/subscriptions/${EXPECTED_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.KeyVault/vaults/${VAULT_NAME}"
+[[ "$EXPECTED_VAULT_ID" == "$canonical_vault_id" ]] || { printf 'Configured Key Vault ID is not the canonical confirmed subscription/resource-group/name binding.\n' >&2; exit 1; }
+[[ "$EXPECTED_VAULT_URI" == https://*.vault.azure.net/ ]] || { printf 'Configured Key Vault URI is not canonical.\n' >&2; exit 1; }
+
+safe_capture vault_json rotation-vault az keyvault show --subscription "$EXPECTED_SUBSCRIPTION_ID" --name "$VAULT_NAME" --output json
+actual_vault_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$vault_json")"
+actual_vault_uri="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["properties"]["vaultUri"])' <<<"$vault_json")"
+unset vault_json
+[[ "$actual_vault_id" == "$EXPECTED_VAULT_ID" && "$actual_vault_uri" == "$EXPECTED_VAULT_URI" ]] || { printf 'Exact Key Vault ID/URI binding mismatch.\n' >&2; exit 1; }
+
+safe_capture container_app_json rotation-container-app az containerapp show --subscription "$EXPECTED_SUBSCRIPTION_ID" --resource-group "$RESOURCE_GROUP" --name "$CONTAINER_APP_NAME" --output json
+APP_JSON="$container_app_json" EXPECTED_APP_ID="$EXPECTED_CONTAINER_APP_ID" EXPECTED_APP_NAME="$CONTAINER_APP_NAME" EXPECTED_SECRET_URL="${EXPECTED_VAULT_URI}secrets/entra-client-secret" python3 - <<'PY' || { printf 'Container App identity or Key Vault secret-reference binding mismatch.\n' >&2; exit 1; }
+import json
+import os
+
+app = json.loads(os.environ["APP_JSON"])
+assert app["id"] == os.environ["EXPECTED_APP_ID"]
+assert app["name"] == os.environ["EXPECTED_APP_NAME"]
+assert "SystemAssigned" in app.get("identity", {}).get("type", "").split(", ")
+matches = [
+    item
+    for item in app["properties"]["configuration"].get("secrets", [])
+    if item.get("name") == "entra-client-secret"
+]
+assert len(matches) == 1
+assert matches[0].get("keyVaultUrl") == os.environ["EXPECTED_SECRET_URL"]
+assert matches[0].get("identity") == "system"
+PY
+app_fqdn="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["properties"]["configuration"]["ingress"]["fqdn"])' <<<"$container_app_json")"
+latest_ready_revision="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["properties"]["latestReadyRevisionName"])' <<<"$container_app_json")"
+unset container_app_json
+deployment_origin="https://${app_fqdn}"
+[[ "$LIVE_BASE_URL" == "$deployment_origin" && "$EXPECTED_DEPLOYMENT_ORIGIN" == "$deployment_origin" ]] || { printf 'Live base URL and expected deployment origin must equal the exact Container App HTTPS origin.\n' >&2; exit 1; }
+
+safe_capture active_revisions_json rotation-active-revision az containerapp revision list --subscription "$EXPECTED_SUBSCRIPTION_ID" --resource-group "$RESOURCE_GROUP" --name "$CONTAINER_APP_NAME" --output json
+active_revision="$(APP_ID="$EXPECTED_CONTAINER_APP_ID" APP_NAME="$CONTAINER_APP_NAME" EXPECTED_REVISION="$latest_ready_revision" python3 -c 'import json,os,sys; items=[item for item in json.load(sys.stdin) if item.get("properties", {}).get("active") is True]; expected_id=os.environ["APP_ID"]+"/revisions/"+os.environ["EXPECTED_REVISION"]; matches=[item["name"] for item in items if item.get("id")==expected_id and item.get("name")==os.environ["EXPECTED_REVISION"] and item.get("name", "").startswith(os.environ["APP_NAME"]+"--")]; print(matches[0] if len(matches)==1 and len(items)==1 else "")' <<<"$active_revisions_json")"
+unset active_revisions_json
+[[ -n "$active_revision" ]] || { printf 'The exact app does not have one active latest-ready revision belonging to it.\n' >&2; exit 1; }
 
 configure_temporary_kv_operator_access "$EXPECTED_VAULT_ID" "$PRINCIPAL_ID" "$PRINCIPAL_TYPE"
 create_temporary_kv_operator_access
