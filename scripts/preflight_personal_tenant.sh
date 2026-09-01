@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${script_dir}/lib/safe_command.sh"
+safe_init_diagnostics
+
 EXPECTED_SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID:?Set AZURE_SUBSCRIPTION_ID to the separately confirmed target}"
 EXPECTED_TENANT_ID="${AZURE_TENANT_ID:?Set AZURE_TENANT_ID to the separately confirmed target}"
 EXPECTED_LOCATION="${AZURE_LOCATION:?Set AZURE_LOCATION to the separately confirmed target}"
@@ -39,19 +43,19 @@ require_command az
 require_command azd
 require_command python3
 
-if (( ${#EXPECTED_CONTAINER_APP_NAME} > 32 )) || [[ ! "$EXPECTED_CONTAINER_APP_NAME" =~ ^[a-z]([a-z0-9-]{0,30}[a-z0-9])?$ ]]; then
-  printf 'SUPPLY_RESPONSE_CONTAINER_APP_NAME must be 1-32 lowercase letters, numbers, or hyphens, starting with a letter and ending alphanumeric.\n' >&2
+if ! valid_container_app_name "$EXPECTED_CONTAINER_APP_NAME"; then
+  printf 'SUPPLY_RESPONSE_CONTAINER_APP_NAME must be 2-32 lowercase letters, numbers, or hyphens, starting with a letter, ending alphanumeric, and containing no consecutive hyphens.\n' >&2
   exit 1
 fi
 
-active_subscription="$(az account show --query id --output tsv)"
-active_tenant="$(az account show --query tenantId --output tsv)"
-selected_azd_environment="$(azd env get-value AZURE_ENV_NAME)"
+safe_capture active_subscription account-subscription az account show --query id --output tsv
+safe_capture active_tenant account-tenant az account show --query tenantId --output tsv
+safe_capture selected_azd_environment azd-environment azd env get-value AZURE_ENV_NAME
 assert_equal subscription "$active_subscription" "$EXPECTED_SUBSCRIPTION_ID"
 assert_equal tenant "$active_tenant" "$EXPECTED_TENANT_ID"
 assert_equal 'azd environment' "$selected_azd_environment" "$EXPECTED_AZD_ENVIRONMENT"
 
-environment_json="$(az containerapp env show --subscription "$EXPECTED_SUBSCRIPTION_ID" --resource-group "$SHARED_RESOURCE_GROUP" --name "$SHARED_ENVIRONMENT" --output json)"
+safe_capture environment_json container-environment az containerapp env show --subscription "$EXPECTED_SUBSCRIPTION_ID" --resource-group "$SHARED_RESOURCE_GROUP" --name "$SHARED_ENVIRONMENT" --output json
 environment_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$environment_json")"
 environment_location="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["location"].lower().replace(" ", ""))' <<<"$environment_json")"
 environment_internal="$(python3 -c 'import json,sys; print(str(json.load(sys.stdin).get("properties", {}).get("vnetConfiguration", {}).get("internal", False)).lower())' <<<"$environment_json")"
@@ -65,25 +69,25 @@ assert_equal 'Container Apps environment network mode' "$environment_internal" f
 expected_redirect_uri="https://${EXPECTED_CONTAINER_APP_NAME}.${environment_default_domain}/auth/callback"
 assert_equal 'registered Container App redirect' "$REGISTERED_REDIRECT_URI" "$expected_redirect_uri"
 
-web_app_json="$(az ad app show --id "$WEB_CLIENT_ID" --output json)"
+safe_capture web_app_json web-application az ad app show --id "$WEB_CLIENT_ID" --output json
 web_app_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["appId"])' <<<"$web_app_json")"
 web_redirects="$(python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin).get("spa", {}).get("redirectUris", [])))' <<<"$web_app_json")"
 unset web_app_json
 assert_equal 'Web application client' "$web_app_id" "$WEB_CLIENT_ID"
 assert_equal 'Web application redirect set' "$web_redirects" "$REGISTERED_REDIRECT_URI"
 
-api_app_json="$(az ad app show --id "$API_CLIENT_ID" --output json)"
+safe_capture api_app_json api-application az ad app show --id "$API_CLIENT_ID" --output json
 api_app_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["appId"])' <<<"$api_app_json")"
 api_scope_count="$(python3 -c 'import json,sys; print(sum(1 for scope in json.load(sys.stdin).get("api", {}).get("oauth2PermissionScopes", []) if scope.get("value") == "access_as_user" and scope.get("isEnabled") is True))' <<<"$api_app_json")"
 unset api_app_json
 assert_equal 'API application client' "$api_app_id" "$API_CLIENT_ID"
 assert_equal 'enabled access_as_user scope count' "$api_scope_count" 1
 
-registry_id="$(az acr show --subscription "$EXPECTED_SUBSCRIPTION_ID" --resource-group "$SHARED_RESOURCE_GROUP" --name "$SHARED_REGISTRY" --query id --output tsv)"
-registry_sku="$(az acr show --subscription "$EXPECTED_SUBSCRIPTION_ID" --resource-group "$SHARED_RESOURCE_GROUP" --name "$SHARED_REGISTRY" --query sku.name --output tsv)"
+safe_capture registry_id registry-id az acr show --subscription "$EXPECTED_SUBSCRIPTION_ID" --resource-group "$SHARED_RESOURCE_GROUP" --name "$SHARED_REGISTRY" --query id --output tsv
+safe_capture registry_sku registry-sku az acr show --subscription "$EXPECTED_SUBSCRIPTION_ID" --resource-group "$SHARED_RESOURCE_GROUP" --name "$SHARED_REGISTRY" --query sku.name --output tsv
 assert_equal 'ACR SKU' "$registry_sku" Standard
 
-workspace_json="$(az monitor log-analytics workspace show --subscription "$EXPECTED_SUBSCRIPTION_ID" --resource-group "$SHARED_RESOURCE_GROUP" --workspace-name "$SHARED_WORKSPACE" --output json)"
+safe_capture workspace_json log-analytics-workspace az monitor log-analytics workspace show --subscription "$EXPECTED_SUBSCRIPTION_ID" --resource-group "$SHARED_RESOURCE_GROUP" --workspace-name "$SHARED_WORKSPACE" --output json
 workspace_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$workspace_json")"
 workspace_customer_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["customerId"])' <<<"$workspace_json")"
 unset workspace_json
@@ -97,14 +101,14 @@ foundry_subscription_id="${BASH_REMATCH[1]}"
 foundry_account_name="${BASH_REMATCH[3]}"
 foundry_project_name="${BASH_REMATCH[4]}"
 assert_equal 'Foundry subscription' "$foundry_subscription_id" "$EXPECTED_SUBSCRIPTION_ID"
-foundry_type="$(az resource show --ids "$FOUNDRY_PROJECT_RESOURCE_ID" --api-version 2025-06-01 --query type --output tsv)"
+safe_capture foundry_type foundry-project az resource show --ids "$FOUNDRY_PROJECT_RESOURCE_ID" --api-version 2025-06-01 --query type --output tsv
 assert_equal 'Foundry resource type' "$foundry_type" 'Microsoft.CognitiveServices/accounts/projects'
 expected_foundry_endpoint="https://${foundry_account_name}.services.ai.azure.com/api/projects/${foundry_project_name}"
 assert_equal 'Foundry project endpoint' "$FOUNDRY_PROJECT_ENDPOINT" "$expected_foundry_endpoint"
 
-fabric_workspace_id="$(az rest --method get --url "https://api.fabric.microsoft.com/v1/workspaces/${FABRIC_WORKSPACE_ID}" --query id --output tsv)"
+safe_capture fabric_workspace_id fabric-workspace az rest --method get --url "https://api.fabric.microsoft.com/v1/workspaces/${FABRIC_WORKSPACE_ID}" --query id --output tsv
 fabric_item_contract=("type" "SQLDatabase")
-fabric_database_json="$(az rest --method get --url "https://api.fabric.microsoft.com/v1/workspaces/${FABRIC_WORKSPACE_ID}/items/${FABRIC_SQL_DATABASE_ID}" --output json)"
+safe_capture fabric_database_json fabric-database az rest --method get --url "https://api.fabric.microsoft.com/v1/workspaces/${FABRIC_WORKSPACE_ID}/items/${FABRIC_SQL_DATABASE_ID}" --output json
 fabric_database_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$fabric_database_json")"
 fabric_database_type="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["type"])' <<<"$fabric_database_json")"
 unset fabric_database_json
@@ -112,7 +116,7 @@ assert_equal 'Fabric workspace' "$fabric_workspace_id" "$FABRIC_WORKSPACE_ID"
 assert_equal 'Fabric SQL item' "$fabric_database_id" "$FABRIC_SQL_DATABASE_ID"
 assert_equal "Fabric item ${fabric_item_contract[0]}" "$fabric_database_type" "${fabric_item_contract[1]}"
 
-fabric_access_token="$(az account get-access-token --resource https://api.fabric.microsoft.com --query accessToken --output tsv)"
+safe_capture fabric_access_token fabric-token az account get-access-token --resource https://api.fabric.microsoft.com --query accessToken --output tsv
 fabric_token_tid="$(printf '%s' "$fabric_access_token" | python3 -c 'import base64,json,sys; part=sys.stdin.read().split(".")[1]; print(json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))["tid"])')"
 unset fabric_access_token
 assert_equal 'Fabric access-token tenant' "$fabric_token_tid" "$EXPECTED_TENANT_ID"

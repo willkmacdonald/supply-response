@@ -1,3 +1,5 @@
+@minLength(2)
+@maxLength(32)
 param appName string
 param sharedSubscriptionId string
 param sharedResourceGroupName string

@@ -39,11 +39,62 @@ def test_container_app_name_is_explicit_bounded_and_decoupled_from_azd_name():
     docs = _read("docs/deployment/personal-tenant.md")
 
     assert "param containerAppName string" in main
-    assert "appName: containerAppName" in main
     assert "ca-supply-response-${environmentName}" not in main
     assert "SUPPLY_RESPONSE_CONTAINER_APP_NAME:?" in preflight
-    assert "${#EXPECTED_CONTAINER_APP_NAME} > 32" in preflight
-    assert "1–32" in docs
+    assert "@minLength(2)" in main
+    assert "@maxLength(32)" in main
+    assert "validatedContainerAppName" in main
+    assert "contains(containerAppName, '--') ? '' : containerAppName" in main
+    assert "appName: validatedContainerAppName" in main
+    container_module = _read("infra/modules/container-apps.bicep")
+    assert "@minLength(2)" in container_module
+    assert "@maxLength(32)" in container_module
+    assert "valid_container_app_name" in preflight
+    assert "2–32" in docs
+    assert "consecutive hyphens" in docs
+
+
+def test_container_app_name_contract_rejects_invalid_values():
+    invalid_names = (
+        "a",
+        "-ab",
+        "ab-",
+        "ab--cd",
+        "Ab",
+        "a" * 33,
+    )
+    valid_names = ("ab", "ca-sr-demo", "a" * 32)
+
+    for name in invalid_names:
+        completed = subprocess.run(
+            [
+                "bash",
+                "-c",
+                'source scripts/lib/safe_command.sh; valid_container_app_name "$1"',
+                "contract",
+                name,
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert completed.returncode != 0, name
+    for name in valid_names:
+        completed = subprocess.run(
+            [
+                "bash",
+                "-c",
+                'source scripts/lib/safe_command.sh; valid_container_app_name "$1"',
+                "contract",
+                name,
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert completed.returncode == 0, name
 
 
 def test_template_reuses_shared_resources_and_contains_no_fixed_target_ids():
@@ -106,6 +157,22 @@ def test_one_argument_aware_image_build_path_is_explicit_and_immutable():
     assert deploy.count('--build-arg "VITE_ENTRA_') == 4
     assert "public_config_digest" in deploy
     assert "git_revision" in deploy
+    assert "az acr repository show" in deploy
+    assert "sha256:[0-9a-f]{64}" in deploy
+    assert 'image="${registry_server}/supply-response@${image_digest}"' in deploy
+    assert "build_context_changes" in deploy
+    for path in (
+        "Dockerfile",
+        "pyproject.toml",
+        "uv.lock",
+        "apps",
+        "agents",
+        "data",
+        "integrations",
+        "services",
+        "migrations",
+    ):
+        assert path in deploy
     assert "SUPPLY_RESPONSE_IMAGE_TAG:-" not in deploy
     assert "azd package" in docs
     assert "azd deploy" in docs
@@ -262,14 +329,73 @@ def test_secret_file_and_live_smoke_gate_fail_closed():
 
 def test_provision_diagnostics_are_protected_sanitized_and_not_streamed():
     deploy = _read("scripts/deploy_personal_tenant.sh")
+    preflight = _read("scripts/preflight_personal_tenant.sh")
+    helper = _read("scripts/lib/safe_command.sh")
 
-    assert "deployment_tmp" in deploy
-    assert "chmod 700" in deploy
-    assert "chmod 600" in deploy
-    assert "run_provision" in deploy
-    assert "sanitized_provision_summary" in deploy
+    assert 'source "${script_dir}/lib/safe_command.sh"' in deploy
+    assert 'source "${script_dir}/lib/safe_command.sh"' in preflight
+    assert "safe_init_diagnostics" in deploy
+    assert "safe_init_diagnostics" in preflight
+    assert "chmod 700" in helper
+    assert "chmod 600" in helper
+    assert "safe_sanitized_summary" in helper
     assert "sed -n '1,120p'" not in deploy
     assert not re.search(r"(?m)^azd provision --no-prompt\s*$", deploy)
+
+    for source in (deploy, preflight):
+        for line in source.splitlines():
+            stripped = line.strip()
+            if re.search(r"(^|[$(])(?:az|azd) ", stripped):
+                assert "safe_capture" in stripped or "safe_run" in stripped, stripped
+
+
+def test_safe_command_failure_summary_never_echoes_identifiers():
+    completed = subprocess.run(
+        [
+            "bash",
+            "-c",
+            (
+                "source scripts/lib/safe_command.sh; safe_init_diagnostics; "
+                "safe_run deliberate-failure bash -c "
+                "'printf \"ERROR vault=myvault-tenantname "
+                "/subscriptions/11111111-1111-1111-1111-111111111111 "
+                "https://tenant.example.test user@example.test\\n\" >&2; exit 7'"
+            ),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode != 0
+    for sensitive in (
+        "myvault-tenantname",
+        "11111111-1111-1111-1111-111111111111",
+        "tenant.example.test",
+        "user@example.test",
+    ):
+        assert sensitive not in completed.stderr
+    assert "error category detected" in completed.stderr.lower()
+
+
+def test_secret_is_seeded_only_during_true_bootstrap_and_rotation_is_separate():
+    deploy = _read("scripts/deploy_personal_tenant.sh")
+    docs = _read("docs/deployment/personal-tenant.md")
+
+    seed = deploy.index("az keyvault secret set")
+    bootstrap_guard = deploy.rfind(
+        'if [[ "$started_from_bootstrap" == true ]]', 0, seed
+    )
+    assert bootstrap_guard >= 0
+    assert "keyvault secret list" in deploy[bootstrap_guard:seed]
+    assert "existing seed version" in deploy
+    assert "normal apply does not rotate" in docs.lower()
+    assert "Capture the old version" in docs
+    assert "new_secret_id" in docs
+    assert '"$rotation_tmp/new-version"' in docs
+    assert "Rollback" in docs
+    assert "test_workiq_live.py" in docs
 
 
 def test_restart_safe_upgrade_never_replaces_final_with_placeholder():
@@ -315,9 +441,11 @@ def test_operator_permissions_are_exact_for_every_deployment_scope():
         "Microsoft.Resources/subscriptions/resourceGroups/write",
         "Microsoft.Authorization/roleAssignments/write",
         "Microsoft.ContainerRegistry/registries/scheduleRun/action",
-        "Microsoft.KeyVault/vaults/secrets/write",
+        "Microsoft.KeyVault/vaults/secrets/setSecret/action",
     ):
         assert permission in docs
+    assert "Key Vault Secrets Officer" in docs
+    assert "Microsoft.KeyVault/vaults/secrets/write" not in docs
     for scope in (
         "subscription scope",
         "shared ACR resource scope",

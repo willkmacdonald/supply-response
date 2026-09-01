@@ -6,7 +6,7 @@ param location string
 param subscriptionId string
 param tenantId string
 param resourceGroupName string
-@minLength(1)
+@minLength(2)
 @maxLength(32)
 param containerAppName string
 param sharedResourceGroupName string
@@ -46,6 +46,10 @@ var tags = {
   environment: environmentName
 }
 
+// Bicep has no stable regex decorator. Invalid consecutive hyphens become an
+// empty module parameter, which the nested template's minLength rejects.
+var validatedContainerAppName = contains(containerAppName, '--') ? '' : containerAppName
+
 resource applicationResourceGroup 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: resourceGroupName
   location: location
@@ -80,7 +84,7 @@ module app 'modules/container-apps.bicep' = {
   name: 'container-app'
   scope: applicationResourceGroup
   params: {
-    appName: containerAppName
+    appName: validatedContainerAppName
     sharedSubscriptionId: subscriptionId
     sharedResourceGroupName: sharedResourceGroupName
     sharedEnvironmentName: sharedContainerAppsEnvironmentName

@@ -85,7 +85,7 @@ The subscription currently has Microsoft cloud security benchmark and Defender a
 ### Runtime behavior
 
 - A Node build stage builds `apps/web/dist`.
-- The Container App name is an explicit 1–32-character deployment binding, independent of the azd environment name; this keeps resource naming valid and the redirect stable.
+- The Container App name is an explicit 2–32-character deployment binding with no consecutive hyphens, independent of the azd environment name; this keeps resource naming valid and the redirect stable.
 - A Python 3.12 runtime stage installs ODBC Driver 18 and locked Python dependencies, copies the SPA into `apps/api/static`, and runs as a nonroot user.
 - FastAPI registers `/api` and `/health` routes before static SPA handling. A focused application change and tests will prove API routes are never shadowed and SPA navigation resolves correctly.
 - The Uvicorn command is `uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8000 --proxy-headers`.
@@ -97,13 +97,13 @@ The subscription currently has Microsoft cloud security benchmark and Defender a
 - The deployment checks the active Azure tenant, subscription, Foundry resource, Fabric workspace/database, and token `tid` before mutation.
 - Scripts compare full immutable IDs but print only redacted IDs.
 - The Container App uses a system-assigned managed identity for ACR pull, Key Vault secret retrieval, Foundry access, and Fabric SQL authentication.
-- Confidential settings are Key Vault references. Client secrets, bearer tokens, Fabric connection strings, and browser storage state are never Bicep parameters, outputs, image layers, logs, or ordinary environment-variable values.
+- Confidential settings are Key Vault references. Client secrets, bearer tokens, Fabric connection strings, and browser storage state are never Bicep parameters, outputs, image layers, logs, or ordinary environment-variable values. Normal apply seeds the Entra secret only during a true bootstrap when no version exists; rotation is a separate approval-gated recovery-capable procedure.
 - Actual UPNs and Entra object IDs remain deployment-specific; domain history uses stable fictional persona IDs.
 - Key Vault uses RBAC authorization, soft delete, and purge protection. This deployment never uses ACR admin access.
 - The existing shared registry currently has its admin account enabled for other workloads. This deployment does not change that shared setting, does not read its admin credentials, and authenticates exclusively through managed identity. Disabling the shared admin account is a separate hardening decision because it could affect existing applications.
 - Public Container App ingress is HTTPS-only. The POC does not add a VNet/private endpoints; that is a documented nonproduction tradeoff.
 - The deploy script is fail-closed and requires an explicit apply flag plus exact subscription, tenant, region, and resource-group confirmation. Its default mode is validation/dry-run.
-- Deployment images use the Git revision plus a digest of the four public Entra bundle values, so a configuration change cannot silently reuse the prior revision tag. Raw provisioning diagnostics stay in owner-only temporary storage and only redacted summaries reach the console.
+- Deployment image lookup tags use the Git revision plus a digest of the four public Entra bundle values, so a configuration change cannot silently reuse the prior tag; Bicep receives the resolved immutable ACR manifest digest. Raw identifier-bearing command diagnostics stay in owner-only temporary storage and only categorical, fail-closed summaries reach the console.
 - No script automates tenant consent or sends messages, modifies orders, creates commitments, or performs other external business actions.
 
 ### Cost controls
@@ -211,14 +211,14 @@ dependencies. It is not `azure-validate` proof and does not authorize deployment
 
 | Check | Command | Result | Timestamp |
 |---|---|---|---|
-| TDD red phase | `.venv/bin/pytest tests/deployment/test_infrastructure.py tests/api/test_static_hosting.py -q` | Initial 8 expected failures, 9 first-review failures, and 9 second-review failures before their fixes | 2026-08-31 |
-| Focused infrastructure/API | `.venv/bin/pytest tests/deployment/test_infrastructure.py tests/api/test_static_hosting.py tests/api/test_telemetry.py -q` | 26 passed (22 deployment contracts plus static-hosting/telemetry), including an actual exact-Entra Vite production bundle | 2026-08-31 |
-| Relevant API/integration | `.venv/bin/pytest tests/api tests/test_api.py tests/integration/test_live_case_contract.py tests/integrations/test_fabric_health.py tests/deployment/test_infrastructure.py -q` | 71 passed | 2026-08-31 |
+| TDD red phase | `.venv/bin/pytest tests/deployment/test_infrastructure.py tests/api/test_static_hosting.py -q` | Initial 8 expected failures, 9 first-review failures, 9 second-review failures, and 8 final-hardening expected failures before their fixes | 2026-08-31 |
+| Focused infrastructure/API | `.venv/bin/pytest tests/deployment/test_infrastructure.py tests/api/test_static_hosting.py tests/api/test_telemetry.py -q` | 29 passed (25 deployment contracts plus static-hosting/telemetry), including an actual exact-Entra Vite production bundle | 2026-08-31 |
+| Relevant API/integration | `.venv/bin/pytest tests/api tests/test_api.py tests/integration/test_live_case_contract.py tests/integrations/test_fabric_health.py tests/deployment/test_infrastructure.py -q` | 74 passed | 2026-08-31 |
 | Full Python regression | Earlier Task 18 baseline with public NuGet access | Passed before review fixes; current review scope is covered by the focused and relevant suites above, while a new locked NuGet restore was not authorized | 2026-08-31 |
 | Web unit suite | `npm test -- --run` | 5 files, 49 tests passed | 2026-08-31 |
 | Web production build | `npm run build` | Passed; Vite built 179 modules | 2026-08-31 |
-| Python lint/type | `.venv/bin/ruff check ...`; `.venv/bin/pyright --pythonpath .venv/bin/python ...` | Passed; 0 type errors | 2026-08-31 |
-| Shell syntax | `bash -n scripts/preflight_personal_tenant.sh scripts/deploy_personal_tenant.sh` | Passed | 2026-08-31 |
+| Python lint/type | `.venv/bin/ruff check tests/deployment/test_infrastructure.py`; `.venv/bin/pyright --pythonpath .venv/bin/python tests/deployment/test_infrastructure.py` | Passed; 0 type errors in the final-hardening Python scope. A broad whole-repository Ruff run still reports 151 pre-existing findings outside this focused patch. | 2026-08-31 |
+| Shell syntax | `bash -n scripts/lib/safe_command.sh scripts/preflight_personal_tenant.sh scripts/deploy_personal_tenant.sh` | Passed | 2026-08-31 |
 | Bicep compilation | `bicep build infra/main.bicep` with temporary extraction directory | Passed without warnings | 2026-08-31 |
 | Production image | Initial Task 18 image built and ran; review-fix rebuild used `--network=none` with exact Entra args | Initial image passed; offline rebuild stopped at uncached Debian/ODBC packages, so the final image must be rebuilt when approved public package access is available | 2026-08-31 |
 | Local container | Initial Task 18 image plus `curl /health`, `/`, `/api/runtime` | Initial health, SPA, and API responses verified; exact-Entra final image smoke remains paired with the approved rebuild | 2026-08-31 |

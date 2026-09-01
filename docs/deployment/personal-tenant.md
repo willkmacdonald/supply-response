@@ -199,8 +199,7 @@ contract test runs locally without embedding tenant values in source.
 
 ### Approval-gated preparation
 
-The deployment principal needs these exact control-plane permissions before
-`--apply`:
+The deployment principal needs these exact permissions before `--apply`:
 
 - At **subscription scope**, `Microsoft.Resources/subscriptions/resourceGroups/write`
   plus deployment write/read permissions for the new resource group (normally
@@ -212,8 +211,10 @@ The deployment principal needs these exact control-plane permissions before
 - At the **project resource-group scope**, create/update rights for Container Apps,
   Application Insights, and Key Vault, plus
   `Microsoft.Authorization/roleAssignments/write` for the Key Vault assignment.
-  Secret population additionally requires
-  `Microsoft.KeyVault/vaults/secrets/write` on the new vault.
+  Initial secret population additionally requires the data-plane action
+  `Microsoft.KeyVault/vaults/secrets/setSecret/action`. The Key Vault Secrets Officer
+  role supplies it at the exact new-vault scope. A management-plane secret
+  write permission is not a substitute.
 - At the **Foundry project scope**,
   `Microsoft.Authorization/roleAssignments/write` for the exact `Azure AI User`
   assignment. Reader access is also required on the existing Container Apps
@@ -252,9 +253,10 @@ For an existing checkout, run `azd env list`, then explicitly run
 was last active. Preflight compares the selected `AZURE_ENV_NAME` to
 `SUPPLY_RESPONSE_AZD_ENVIRONMENT` and stops on drift.
 
-Export the nonsecret live settings listed above, the exact Foundry project
-resource ID, Fabric workspace and SQL item IDs for preflight, and a nonsymlink
-regular file containing the Entra confidential-client secret. The file must be
+Export the nonsecret live settings listed above and the exact Foundry project
+resource ID plus Fabric workspace and SQL item IDs for preflight. On a true
+bootstrap with no existing `entra-client-secret`, also supply a nonsymlink regular
+file containing the Entra confidential-client secret. The file must be
 owned by the current UID, have no group/world permission bits (mode `0600` or
 stricter), and contain no newline. Never pass the secret as a command argument or
 store it in azd. The deployment script writes it with `--file` and suppresses
@@ -266,7 +268,8 @@ four validated public Entra values are then embedded into the production Vite
 bundle as ACR build arguments. Before mutation, preflight also reads both Entra
 registrations and requires the exact Web redirect plus one enabled
 `access_as_user` API scope. Choose and freeze an explicit Container App name of
-1–32 lowercase letters, numbers, or hyphens (letter first, alphanumeric last).
+2–32 lowercase letters, numbers, or hyphens (letter first, alphanumeric last,
+with no consecutive hyphens).
 It is deliberately independent of the arbitrary-length azd environment name.
 The hostname combines that bounded name with the existing Container Apps
 environment's `properties.defaultDomain`. Update the Web registration under the
@@ -292,20 +295,85 @@ export SUPPLY_RESPONSE_ENTRA_CLIENT_SECRET_FILE=/owner-only/path/entra-client-se
 ./scripts/deploy_personal_tenant.sh --apply
 ```
 
-The restart-safe sequence is: same-tenant preflight; inspect the exact app; create
+The restart-safe sequence is: same-tenant preflight; reject tracked or untracked
+changes under the committed image build context; inspect the exact app; create
 the viable Microsoft placeholder only when the app/identity is absent; verify an
 existing non-placeholder revision is healthy before an upgrade; check exact
-managed-identity role records; write the Key Vault secret; build an image tagged
+managed-identity role records; seed the Key Vault secret only when a bootstrap
+has no existing seed version; build an image tagged
 with both the Git revision and a SHA-256 digest of the tenant, Web client, API
-scope, and exact redirect; then apply the declarative final revision. A role
+scope, and exact redirect; resolve its ACR manifest digest; and deploy only the
+immutable `registry/supply-response@sha256:...` reference. A role
 record is not treated as proof of data-plane propagation. Recognized ACR pull or
 Key Vault identity failures trigger bounded retries. The placeholder is restored
 only for a first deployment that started from it; an upgrade preserves the prior
-healthy final revision. Raw `azd provision` output is written only to mode-`0600`
+healthy final revision. Raw stdout and stderr from identifier-bearing Azure,
+azd, Fabric, Foundry, ACR, Key Vault, and role commands are written only to
+mode-`0600`
 files inside a mode-`0700` temporary directory, and the console receives a
 redacted categorized summary. Successful runs remove the directory; failed runs
 retain it and print its path so the owner can troubleshoot and then delete it.
 Other failures stop immediately.
+
+### Separate Entra client-secret rotation
+
+Normal apply does not rotate the confidential-client secret or create a new Key
+Vault version. Rotation is a separate, explicitly approved operation. Prepare
+the replacement in an owner-only, nonsymlink file with no newline and confirm
+the exact vault, Container App, tenant, and active revision.
+
+Capture the old version without printing its ID or value, create one controlled
+new version, restart the exact active revision so its versionless Key Vault
+reference refreshes, and run the authenticated delegated Work IQ check:
+
+```bash
+rotation_tmp="$(mktemp -d)"
+chmod 700 "$rotation_tmp"
+trap 'rm -rf "$rotation_tmp"' EXIT
+vault_name="$(azd env get-value SUPPLY_RESPONSE_KEY_VAULT_NAME)"
+old_secret_id="$(az keyvault secret show --vault-name "$vault_name" \
+  --name entra-client-secret --query id --output tsv)"
+old_version="${old_secret_id##*/}"
+printf '%s' "$old_version" >"$rotation_tmp/old-version"
+new_secret_id="$(az keyvault secret set --vault-name "$vault_name" \
+  --name entra-client-secret --file /owner-only/path/replacement-secret \
+  --query id --output tsv)"
+new_version="${new_secret_id##*/}"
+printf '%s' "$new_version" >"$rotation_tmp/new-version"
+chmod 600 "$rotation_tmp/old-version" "$rotation_tmp/new-version"
+active_revision="$(az containerapp revision list \
+  --resource-group "$SUPPLY_RESPONSE_RESOURCE_GROUP" \
+  --name "$SUPPLY_RESPONSE_CONTAINER_APP_NAME" \
+  --query "[?properties.active].name | [0]" --output tsv)"
+az containerapp revision restart \
+  --resource-group "$SUPPLY_RESPONSE_RESOURCE_GROUP" \
+  --name "$SUPPLY_RESPONSE_CONTAINER_APP_NAME" --revision "$active_revision"
+.venv/bin/pytest tests/integration/test_workiq_live.py -m workiq_live -q
+```
+
+Save a redacted receipt containing the old and new version suffixes, UTC time,
+revision name, and verification exit status; never record a secret value. If the
+deployed verification fails, **Rollback** by downloading the captured old version
+to a mode-`0600` temporary file, setting that value as a new current version,
+restarting the same controlled revision, and rerunning the live check:
+
+```bash
+old_version="$(<"$rotation_tmp/old-version")"
+rollback_file="$rotation_tmp/rollback-secret"
+install -m 600 /dev/null "$rollback_file"
+az keyvault secret download --vault-name "$vault_name" \
+  --name entra-client-secret --version "$old_version" \
+  --file "$rollback_file" --encoding utf-8 --output none
+az keyvault secret set --vault-name "$vault_name" --name entra-client-secret \
+  --file "$rollback_file" --output none
+az containerapp revision restart \
+  --resource-group "$SUPPLY_RESPONSE_RESOURCE_GROUP" \
+  --name "$SUPPLY_RESPONSE_CONTAINER_APP_NAME" --revision "$active_revision"
+.venv/bin/pytest tests/integration/test_workiq_live.py -m workiq_live -q
+```
+
+The old version remains available for this recovery path; do not disable or
+purge it until the separately approved rotation has a passing receipt.
 
 ### Separate Fabric SQL access procedure
 

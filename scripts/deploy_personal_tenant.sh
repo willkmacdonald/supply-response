@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "${script_dir}/.." && pwd)"
+source "${script_dir}/lib/safe_command.sh"
+safe_init_diagnostics
+
 EXPECTED_SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID:?Set AZURE_SUBSCRIPTION_ID to the separately confirmed target}"
 EXPECTED_TENANT_ID="${AZURE_TENANT_ID:?Set AZURE_TENANT_ID to the separately confirmed target}"
 EXPECTED_LOCATION="${AZURE_LOCATION:?Set AZURE_LOCATION to the separately confirmed target}"
@@ -22,13 +27,15 @@ case "${1:-}" in
 esac
 (( $# <= 1 )) || { printf 'Usage: %s [--apply|--smoke]\n' "$0" >&2; exit 2; }
 
-"$(dirname "$0")/preflight_personal_tenant.sh"
+"${script_dir}/preflight_personal_tenant.sh"
 
 resource_group="$EXPECTED_RESOURCE_GROUP"
 app_name="$EXPECTED_CONTAINER_APP_NAME"
 
 app_coordinates() {
-  app_url="https://$(az containerapp show --resource-group "$resource_group" --name "$app_name" --query properties.configuration.ingress.fqdn --output tsv)"
+  local app_fqdn
+  safe_capture app_fqdn app-fqdn az containerapp show --resource-group "$resource_group" --name "$app_name" --query properties.configuration.ingress.fqdn --output tsv
+  app_url="https://${app_fqdn}"
 }
 
 smoke_gate() {
@@ -36,8 +43,8 @@ smoke_gate() {
   smoke_dir="$(mktemp -d)"
   chmod 700 "$smoke_dir"
   for ((attempt=1; attempt<=SMOKE_MAX_ATTEMPTS; attempt++)); do
-    if curl --connect-timeout 5 --max-time 10 -fsS "${app_url}/health" -o "${smoke_dir}/health.json" \
-      && curl --connect-timeout 5 --max-time 10 -fsS "${app_url}/api/runtime" -o "${smoke_dir}/runtime.json" \
+    if safe_run smoke-health curl --connect-timeout 5 --max-time 10 -fsS "${app_url}/health" -o "${smoke_dir}/health.json" \
+      && safe_run smoke-runtime curl --connect-timeout 5 --max-time 10 -fsS "${app_url}/api/runtime" -o "${smoke_dir}/runtime.json" \
       && HEALTH_FILE="${smoke_dir}/health.json" RUNTIME_FILE="${smoke_dir}/runtime.json" python3 - <<'PY'
 import json
 import os
@@ -77,7 +84,8 @@ if [[ "$MODE" == dry-run ]]; then
   cat <<'EOF'
 DRY RUN ONLY. No Azure resource was changed.
 The apply workflow creates a placeholder only when the app/identity is absent,
-then waits for managed-identity RBAC, writes a protected-file secret, builds an
+then waits for managed-identity RBAC, seeds a protected-file secret only on a
+true bootstrap with no existing version, builds an
 immutable tenant/config-specific image with four exact Vite build arguments, and
 retries the declarative final revision. An existing healthy final revision is
 never replaced by the placeholder. Fabric SQL grants remain a separate approval.
@@ -92,69 +100,114 @@ fi
 [[ "${CONFIRM_LOCATION:-}" == "$EXPECTED_LOCATION" ]] || { printf 'CONFIRM_LOCATION does not match.\n' >&2; exit 1; }
 [[ "${CONFIRM_RESOURCE_GROUP:-}" == "$EXPECTED_RESOURCE_GROUP" ]] || { printf 'CONFIRM_RESOURCE_GROUP does not match.\n' >&2; exit 1; }
 
-deployment_tmp="$(mktemp -d)"
-chmod 700 "$deployment_tmp"
-cleanup_deployment_tmp() {
-  local status=$?
-  if [[ "$status" == 0 ]]; then
-    rm -rf "$deployment_tmp"
-  else
-    printf 'Protected raw diagnostics retained at %s (mode 0700); remove them after troubleshooting.\n' "$deployment_tmp" >&2
-  fi
-  return "$status"
-}
-trap cleanup_deployment_tmp EXIT
-
-sanitized_provision_summary() {
-  python3 - "$1" <<'PY'
-import re
-import sys
-from pathlib import Path
-
-text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
-selected = [
-    line.strip()
-    for line in text.splitlines()
-    if re.search(r"(?i)error|failed|denied|forbidden|unauthorized|not found", line)
-]
-if not selected:
-    print("Provisioning failed; protected diagnostics contained no categorized error line.")
-    raise SystemExit
-for line in selected[:12]:
-    line = re.sub(
-        r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
-        "[redacted-id]",
-        line,
-    )
-    line = re.sub(r"(?i)/subscriptions/[^\s'\"]+", "[redacted-resource-id]", line)
-    line = re.sub(r"https?://[^\s'\"]+", "[redacted-url]", line)
-    line = re.sub(r"(?i)eyJ[a-z0-9_-]{20,}", "[redacted-token]", line)
-    line = re.sub(
-        r"(SUPPLY_RESPONSE_[A-Z0-9_]+)\s*[=:]\s*[^,;\s]+",
-        r"\1=[redacted-value]",
-        line,
-    )
-    print(line[:500])
-PY
-}
+build_context_changes="$(git -C "$repo_root" status --porcelain=v1 --untracked-files=all -- Dockerfile pyproject.toml uv.lock apps agents data integrations services migrations)"
+if [[ -n "$build_context_changes" ]]; then
+  printf 'Refusing to build: a tracked or untracked deployment build-context path is dirty. Commit or remove those changes first.\n' >&2
+  exit 1
+fi
+unset build_context_changes
 
 last_provision_log=''
 run_provision() {
   local label="$1"
-  last_provision_log="${deployment_tmp}/${label}.log"
-  : >"$last_provision_log"
-  chmod 600 "$last_provision_log"
-  if azd provision --no-prompt >"$last_provision_log" 2>&1; then
+  if safe_run "$label" azd provision --no-prompt; then
     return 0
   fi
-  printf 'Provisioning step %s failed. Sanitized summary follows; raw diagnostics remain only in a protected temporary file for this run.\n' "$label" >&2
-  sanitized_provision_summary "$last_provision_log" >&2
+  last_provision_log="$SAFE_LAST_STDERR"
   return 1
 }
 
-secret_file="${SUPPLY_RESPONSE_ENTRA_CLIENT_SECRET_FILE:-}"
-[[ -f "$secret_file" ]] || { printf 'SUPPLY_RESPONSE_ENTRA_CLIENT_SECRET_FILE must identify a protected file.\n' >&2; exit 1; }
-python3 - "$secret_file" <<'PY' || { printf 'secret file must contain exactly one line without a trailing newline; it must also be a nonsymlink regular file owned by the current user with no group/world permissions.\n' >&2; exit 1; }
+required_runtime_settings=(
+  SUPPLY_RESPONSE_API_CLIENT_ID SUPPLY_RESPONSE_ALEX_OBJECT_ID
+  SUPPLY_RESPONSE_FABRIC_SQL_SERVER SUPPLY_RESPONSE_FABRIC_SQL_DATABASE
+  SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SOURCE_ID SUPPLY_RESPONSE_WORKIQ_QUALITY_SOURCE_ID
+  SUPPLY_RESPONSE_WORKIQ_CORPUS_VERSION SUPPLY_RESPONSE_WORKIQ_DEPLOYMENT_RECEIPT
+  SUPPLY_RESPONSE_TENANT_SHAREPOINT_HOST SUPPLY_RESPONSE_FOUNDRY_PROJECT_ENDPOINT
+  SUPPLY_RESPONSE_FOUNDRY_SIGNAL_AGENT_NAME SUPPLY_RESPONSE_FOUNDRY_SIGNAL_AGENT_VERSION
+  SUPPLY_RESPONSE_FOUNDRY_CONTEXT_AGENT_NAME SUPPLY_RESPONSE_FOUNDRY_CONTEXT_AGENT_VERSION
+  SUPPLY_RESPONSE_FOUNDRY_DECISION_AGENT_NAME SUPPLY_RESPONSE_FOUNDRY_DECISION_AGENT_VERSION
+  SUPPLY_RESPONSE_FOUNDRY_DEPLOYMENT_RECEIPT SUPPLY_RESPONSE_POWER_BI_REPORT_URL
+  SUPPLY_RESPONSE_POWER_BI_DEPLOYMENT_RECEIPT SUPPLY_RESPONSE_FABRIC_CITATION_BASE_URL
+)
+for setting in "${required_runtime_settings[@]}"; do
+  [[ -n "${!setting:-}" ]] || { printf 'Missing required runtime setting: %s\n' "$setting" >&2; exit 1; }
+  safe_run "azd-setting-${setting}" azd env set "$setting" "${!setting}"
+done
+uuid_pattern='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+[[ "${SUPPLY_RESPONSE_API_CLIENT_ID}" =~ $uuid_pattern ]] || { printf 'SUPPLY_RESPONSE_API_CLIENT_ID must be a UUID.\n' >&2; exit 1; }
+[[ "${SUPPLY_RESPONSE_WEB_CLIENT_ID:-}" =~ $uuid_pattern ]] || { printf 'SUPPLY_RESPONSE_WEB_CLIENT_ID must be a UUID.\n' >&2; exit 1; }
+api_scope="api://${SUPPLY_RESPONSE_API_CLIENT_ID}/access_as_user"
+
+verify_existing_final_health() {
+  local health_file="${SAFE_DIAGNOSTICS_DIR}/existing-health.json" attempt
+  : >"$health_file"
+  chmod 600 "$health_file"
+  for attempt in {1..6}; do
+    if safe_run existing-health curl --connect-timeout 5 --max-time 10 -fsS "${app_url}/health" -o "$health_file" \
+      && HEALTH_FILE="$health_file" python3 - <<'PY'
+import json
+import os
+
+with open(os.environ["HEALTH_FILE"], encoding="utf-8") as stream:
+    health = json.load(stream)
+assert health["status"] == "ok"
+assert health["runtime_mode"] == "live"
+PY
+    then
+      return 0
+    fi
+    sleep $(( attempt * 5 ))
+  done
+  return 1
+}
+
+existing_app_json=''
+started_from_bootstrap=false
+if safe_capture_quiet existing_app_json existing-app az containerapp show --resource-group "$resource_group" --name "$app_name" --output json; then
+  existing_app_image="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["properties"]["template"]["containers"][0]["image"])' <<<"$existing_app_json")"
+  existing_identity_type="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("identity", {}).get("type", ""))' <<<"$existing_app_json")"
+  app_url="https://$(python3 -c 'import json,sys; print(json.load(sys.stdin)["properties"]["configuration"]["ingress"]["fqdn"])' <<<"$existing_app_json")"
+  if [[ "$existing_app_image" == "$PLACEHOLDER_IMAGE" || "$existing_identity_type" != *SystemAssigned* ]]; then
+    started_from_bootstrap=true
+    safe_run azd-bootstrap-existing azd env set SUPPLY_RESPONSE_BOOTSTRAP_MODE true
+    run_provision bootstrap-existing || exit 1
+  else
+    verify_existing_final_health || { printf 'Existing non-placeholder app is not a healthy live revision; refusing to replace it.\n' >&2; exit 1; }
+  fi
+else
+  if ! grep -Eiq 'ResourceNotFound|not found|could not be found' "$SAFE_LAST_STDERR"; then
+    printf 'Could not safely determine whether the Container App exists.\n' >&2
+    safe_report_failure existing-app
+    exit 1
+  fi
+  started_from_bootstrap=true
+  safe_run azd-bootstrap-new azd env set SUPPLY_RESPONSE_BOOTSTRAP_MODE true
+  run_provision bootstrap-new || exit 1
+  app_coordinates
+fi
+unset existing_app_json
+
+expected_redirect_uri="${app_url}/auth/callback"
+[[ "${SUPPLY_RESPONSE_REDIRECT_URI:-}" == "$expected_redirect_uri" ]] || { printf 'SUPPLY_RESPONSE_REDIRECT_URI must exactly match the Container App callback.\n' >&2; exit 1; }
+
+safe_capture vault_name vault-name azd env get-value SUPPLY_RESPONSE_KEY_VAULT_NAME
+safe_capture registry_server registry-server azd env get-value SUPPLY_RESPONSE_ACR_LOGIN_SERVER
+registry_name="${registry_server%%.*}"
+safe_capture principal_id app-principal az containerapp identity show --resource-group "$resource_group" --name "$app_name" --query principalId --output tsv
+safe_capture registry_id registry-resource az acr show --name "$registry_name" --query id --output tsv
+safe_capture vault_id vault-resource az keyvault show --name "$vault_name" --query id --output tsv
+for attempt in {1..12}; do
+  safe_capture acr_ready acr-pull-role az role assignment list --assignee-object-id "$principal_id" --scope "$registry_id" --role AcrPull --query 'length(@)' --output tsv
+  safe_capture vault_ready vault-user-role az role assignment list --assignee-object-id "$principal_id" --scope "$vault_id" --role 'Key Vault Secrets User' --query 'length(@)' --output tsv
+  if [[ "$acr_ready" -ge 1 && "$vault_ready" -ge 1 ]]; then break; fi
+  if [[ "$attempt" == 12 ]]; then printf 'Managed-identity role records did not appear in time; the existing active revision was preserved.\n' >&2; exit 1; fi
+  sleep 10
+done
+
+validate_secret_file() {
+  local secret_file="$1"
+  [[ -f "$secret_file" ]] || { printf 'SUPPLY_RESPONSE_ENTRA_CLIENT_SECRET_FILE must identify a protected file.\n' >&2; return 1; }
+  python3 - "$secret_file" <<'PY' || { printf 'secret file must contain exactly one line without a trailing newline; it must also be a nonsymlink regular file owned by the current user with no group/world permissions.\n' >&2; return 1; }
 import os
 import stat
 import sys
@@ -178,120 +231,46 @@ with os.fdopen(descriptor, "rb") as stream:
 if not valid or not data or len(data) > 4096 or b"\n" in data or b"\r" in data:
     raise SystemExit(1)
 PY
-
-required_runtime_settings=(
-  SUPPLY_RESPONSE_API_CLIENT_ID SUPPLY_RESPONSE_ALEX_OBJECT_ID
-  SUPPLY_RESPONSE_FABRIC_SQL_SERVER SUPPLY_RESPONSE_FABRIC_SQL_DATABASE
-  SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SOURCE_ID SUPPLY_RESPONSE_WORKIQ_QUALITY_SOURCE_ID
-  SUPPLY_RESPONSE_WORKIQ_CORPUS_VERSION SUPPLY_RESPONSE_WORKIQ_DEPLOYMENT_RECEIPT
-  SUPPLY_RESPONSE_TENANT_SHAREPOINT_HOST SUPPLY_RESPONSE_FOUNDRY_PROJECT_ENDPOINT
-  SUPPLY_RESPONSE_FOUNDRY_SIGNAL_AGENT_NAME SUPPLY_RESPONSE_FOUNDRY_SIGNAL_AGENT_VERSION
-  SUPPLY_RESPONSE_FOUNDRY_CONTEXT_AGENT_NAME SUPPLY_RESPONSE_FOUNDRY_CONTEXT_AGENT_VERSION
-  SUPPLY_RESPONSE_FOUNDRY_DECISION_AGENT_NAME SUPPLY_RESPONSE_FOUNDRY_DECISION_AGENT_VERSION
-  SUPPLY_RESPONSE_FOUNDRY_DEPLOYMENT_RECEIPT SUPPLY_RESPONSE_POWER_BI_REPORT_URL
-  SUPPLY_RESPONSE_POWER_BI_DEPLOYMENT_RECEIPT SUPPLY_RESPONSE_FABRIC_CITATION_BASE_URL
-)
-for setting in "${required_runtime_settings[@]}"; do
-  [[ -n "${!setting:-}" ]] || { printf 'Missing required runtime setting: %s\n' "$setting" >&2; exit 1; }
-  azd env set "$setting" "${!setting}" >/dev/null
-done
-uuid_pattern='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-[[ "${SUPPLY_RESPONSE_API_CLIENT_ID}" =~ $uuid_pattern ]] || { printf 'SUPPLY_RESPONSE_API_CLIENT_ID must be a UUID.\n' >&2; exit 1; }
-[[ "${SUPPLY_RESPONSE_WEB_CLIENT_ID:-}" =~ $uuid_pattern ]] || { printf 'SUPPLY_RESPONSE_WEB_CLIENT_ID must be a UUID.\n' >&2; exit 1; }
-api_scope="api://${SUPPLY_RESPONSE_API_CLIENT_ID}/access_as_user"
-
-verify_existing_final_health() {
-  local health_file="${deployment_tmp}/existing-health.json" attempt
-  : >"$health_file"
-  chmod 600 "$health_file"
-  for attempt in {1..6}; do
-    if curl --connect-timeout 5 --max-time 10 -fsS "${app_url}/health" -o "$health_file" \
-      && HEALTH_FILE="$health_file" python3 - <<'PY'
-import json
-import os
-
-with open(os.environ["HEALTH_FILE"], encoding="utf-8") as stream:
-    health = json.load(stream)
-assert health["status"] == "ok"
-assert health["runtime_mode"] == "live"
-PY
-    then
-      return 0
-    fi
-    sleep $(( attempt * 5 ))
-  done
-  return 1
 }
 
-existing_app_stderr="${deployment_tmp}/existing-app.stderr"
-: >"$existing_app_stderr"
-chmod 600 "$existing_app_stderr"
-existing_app_json=''
-started_from_bootstrap=false
-if existing_app_json="$(az containerapp show --resource-group "$resource_group" --name "$app_name" --output json 2>"$existing_app_stderr")"; then
-  existing_app_image="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["properties"]["template"]["containers"][0]["image"])' <<<"$existing_app_json")"
-  existing_identity_type="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("identity", {}).get("type", ""))' <<<"$existing_app_json")"
-  app_url="https://$(python3 -c 'import json,sys; print(json.load(sys.stdin)["properties"]["configuration"]["ingress"]["fqdn"])' <<<"$existing_app_json")"
-  if [[ "$existing_app_image" == "$PLACEHOLDER_IMAGE" || "$existing_identity_type" != *SystemAssigned* ]]; then
-    started_from_bootstrap=true
-    azd env set SUPPLY_RESPONSE_BOOTSTRAP_MODE true >/dev/null
-    run_provision bootstrap-existing || exit 1
+if [[ "$started_from_bootstrap" == true ]]; then
+  safe_capture existing_secret_count existing-secret-count az keyvault secret list --vault-name "$vault_name" --query "[?name=='entra-client-secret'] | length(@)" --output tsv
+  if [[ "$existing_secret_count" == 0 ]]; then
+    secret_file="${SUPPLY_RESPONSE_ENTRA_CLIENT_SECRET_FILE:-}"
+    validate_secret_file "$secret_file"
+    safe_run seed-entra-secret az keyvault secret set --vault-name "$vault_name" --name entra-client-secret --file "$secret_file" --output none
+  elif [[ "$existing_secret_count" == 1 ]]; then
+    printf 'Bootstrap detected an existing seed version; preserving it. Normal apply never rotates this secret.\n'
   else
-    verify_existing_final_health || { printf 'Existing non-placeholder app is not a healthy live revision; refusing to replace it.\n' >&2; exit 1; }
-  fi
-else
-  if ! grep -Eiq 'ResourceNotFound|not found|could not be found' "$existing_app_stderr"; then
-    printf 'Could not safely determine whether the Container App exists.\n' >&2
+    printf 'Secret metadata was ambiguous; refusing to select or create a version.\n' >&2
     exit 1
   fi
-  started_from_bootstrap=true
-  azd env set SUPPLY_RESPONSE_BOOTSTRAP_MODE true >/dev/null
-  run_provision bootstrap-new || exit 1
-  app_coordinates
 fi
-unset existing_app_json
-
-expected_redirect_uri="${app_url}/auth/callback"
-[[ "${SUPPLY_RESPONSE_REDIRECT_URI:-}" == "$expected_redirect_uri" ]] || { printf 'SUPPLY_RESPONSE_REDIRECT_URI must exactly match the Container App callback.\n' >&2; exit 1; }
-
-vault_name="$(azd env get-value SUPPLY_RESPONSE_KEY_VAULT_NAME)"
-registry_server="$(azd env get-value SUPPLY_RESPONSE_ACR_LOGIN_SERVER)"
-registry_name="${registry_server%%.*}"
-principal_id="$(az containerapp identity show --resource-group "$resource_group" --name "$app_name" --query principalId --output tsv)"
-registry_id="$(az acr show --name "$registry_name" --query id --output tsv)"
-vault_id="$(az keyvault show --name "$vault_name" --query id --output tsv)"
-for attempt in {1..12}; do
-  acr_ready="$(az role assignment list --assignee-object-id "$principal_id" --scope "$registry_id" --role AcrPull --query 'length(@)' --output tsv)"
-  vault_ready="$(az role assignment list --assignee-object-id "$principal_id" --scope "$vault_id" --role 'Key Vault Secrets User' --query 'length(@)' --output tsv)"
-  if [[ "$acr_ready" -ge 1 && "$vault_ready" -ge 1 ]]; then break; fi
-  if [[ "$attempt" == 12 ]]; then printf 'Managed-identity role records did not appear in time; the existing active revision was preserved.\n' >&2; exit 1; fi
-  sleep 10
-done
-
-az keyvault secret set --vault-name "$vault_name" --name entra-client-secret --file "$secret_file" --output none
-git_revision="$(git rev-parse --short=12 HEAD)"
+git_revision="$(git -C "$repo_root" rev-parse --short=12 HEAD)"
 public_config_digest="$(printf '%s\n' "$EXPECTED_TENANT_ID" "${SUPPLY_RESPONSE_WEB_CLIENT_ID}" "$api_scope" "$expected_redirect_uri" | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest()[:16])')"
 image_tag="${git_revision}-${public_config_digest}"
-image="${registry_server}/supply-response:${image_tag}"
-az acr build --registry "$registry_name" --image "supply-response:${image_tag}" \
+safe_run acr-build az acr build --registry "$registry_name" --image "supply-response:${image_tag}" \
   --build-arg "VITE_ENTRA_TENANT_ID=${EXPECTED_TENANT_ID}" \
   --build-arg "VITE_ENTRA_WEB_CLIENT_ID=${SUPPLY_RESPONSE_WEB_CLIENT_ID}" \
   --build-arg "VITE_ENTRA_API_SCOPE=${api_scope}" \
   --build-arg "VITE_ENTRA_REDIRECT_URI=${expected_redirect_uri}" \
-  . --output none
-azd env set SUPPLY_RESPONSE_IMAGE_NAME "$image" >/dev/null
+  "$repo_root" --output none
+safe_capture image_digest acr-manifest-digest az acr repository show --name "$registry_name" --image "supply-response:${image_tag}" --query digest --output tsv
+[[ "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { printf 'ACR returned an invalid manifest digest; refusing a mutable image reference.\n' >&2; exit 1; }
+image="${registry_server}/supply-response@${image_digest}"
+safe_run azd-image-digest azd env set SUPPLY_RESPONSE_IMAGE_NAME "$image"
 
 recognized_identity_binding_failure() {
   grep -Eiq 'unauthorized|authentication required|pull access denied|failed to pull|key vault.*(not found|forbidden|denied)|secret.*(not found|forbidden|denied)|managed identity.*(not found|forbidden|denied|propagat|permission)|identity.*(propagat|permission)' "$1"
 }
 
 restore_bootstrap_revision() {
-  azd env set SUPPLY_RESPONSE_BOOTSTRAP_MODE true >/dev/null
+  safe_run azd-restore-bootstrap azd env set SUPPLY_RESPONSE_BOOTSTRAP_MODE true
   run_provision restore-bootstrap
 }
 
 for ((attempt=1; attempt<=FINAL_PROVISION_MAX_ATTEMPTS; attempt++)); do
-  azd env set SUPPLY_RESPONSE_BOOTSTRAP_MODE false >/dev/null
+  safe_run azd-final-mode azd env set SUPPLY_RESPONSE_BOOTSTRAP_MODE false
   if run_provision "final-${attempt}"; then
     printf 'Final declarative revision activated.\n'
     break
