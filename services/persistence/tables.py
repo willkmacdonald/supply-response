@@ -408,6 +408,8 @@ playbacks = Table(
     Column("status", String(32), nullable=False, index=True),
     Column("started_at", DateTime(timezone=True), nullable=False, index=True),
     Column("completed_at", DateTime(timezone=True), nullable=True, index=True),
+    Column("failed_at", DateTime(timezone=True), nullable=True, index=True),
+    Column("error_code", String(64), nullable=True),
     Column("payload_json", Text, nullable=False),
     UniqueConstraint("decision_id", name="uq_playback_per_decision"),
 )

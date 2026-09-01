@@ -125,6 +125,12 @@ class SqlAlchemyStore:
         return stored == expected
 
     @staticmethod
+    def _normalize_datetime(value: datetime) -> datetime:
+        return (
+            value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+        )
+
+    @staticmethod
     def _decode_case(payload: str, *, record_name: str) -> CaseInstance:
         try:
             return CaseInstance.model_validate_json(payload)
@@ -485,120 +491,123 @@ class SqlAlchemyStore:
         *,
         projected_case: CaseInstance | None = None,
     ) -> None:
-        runtime_mode = analysis.material.runtime_mode
-
         try:
             with self.engine.begin() as connection:
-                self._require_analysis_provenance(connection, analysis)
-                connection.execute(
-                    insert(analysis_versions).values(
-                        analysis_id=analysis.analysis_id,
-                        case_id=analysis.case_id,
-                        material_hash=analysis.material_hash,
-                        runtime_mode=runtime_mode.value,
-                        analysis_started_at=analysis.analysis_started_at,
-                        retrieval_window_ends_at=analysis.retrieval_window_ends_at,
-                        created_at=analysis.created_at,
-                        payload_json=serialize_model(analysis),
-                    )
-                )
-                if analysis.evidence_items:
-                    connection.execute(
-                        insert(evidence_items),
-                        [
-                            {
-                                "evidence_id": item.evidence_id,
-                                "analysis_id": analysis.analysis_id,
-                                "case_id": item.case_id,
-                                "kind": item.kind.value,
-                                "runtime_mode": item.runtime_mode.value,
-                                "source_system": item.source_system.value,
-                                "source_timestamp": item.source_timestamp,
-                                "retrieved_at": item.retrieved_at,
-                                "effective_at": item.effective_at,
-                                "expires_at": item.expires_at,
-                                "payload_json": serialize_model(item),
-                            }
-                            for item in analysis.evidence_items
-                        ],
-                    )
-                if analysis.approval_satisfactions:
-                    connection.execute(
-                        insert(approval_satisfactions),
-                        [
-                            {
-                                "analysis_id": analysis.analysis_id,
-                                "decision_id": None,
-                                "option_id": item.option_id,
-                                "authorization_id": item.authorization_id,
-                                "persona_id": item.persona_id,
-                                "role": item.role,
-                                "satisfied": item.satisfied,
-                                "payload_json": serialize_model(item),
-                            }
-                            for item in analysis.approval_satisfactions
-                        ],
-                    )
-                projection = (
-                    connection.execute(
-                        select(case_projection).where(
-                            case_projection.c.case_id == analysis.case_id
-                        )
-                    )
-                    .mappings()
-                    .one_or_none()
-                )
-                if projection is None:
-                    raise RecordNotFound(
-                        f"case projection does not exist: {analysis.case_id}"
-                    )
-                values = {
-                    "current_analysis_id": analysis.analysis_id,
-                    "current_analysis_hash": analysis.material_hash,
-                    "updated_at": datetime.now(UTC),
-                }
-                if projected_case is not None:
-                    stored_case = self._stored_case(connection, analysis.case_id)
-                    self._require_case_projection_integrity(
-                        {
-                            **projection,
-                            "status": projected_case.status.value,
-                            "payload_json": serialize_model(projected_case),
-                        },
-                        projected_case,
-                        stored_case,
-                    )
-                    values.update(
-                        status=projected_case.status.value,
-                        payload_json=serialize_model(projected_case),
-                    )
-                if (
-                    projection["current_decision_id"] is not None
-                    and projection["current_analysis_hash"] is not None
-                    and projection["current_analysis_hash"] != analysis.material_hash
-                ):
-                    projected_case = self._decode_case(
-                        projection["payload_json"],
-                        record_name="case projection",
-                    ).model_copy(update={"status": CaseStatus.REANALYSIS_REQUIRED})
-                    values.update(
-                        status=CaseStatus.REANALYSIS_REQUIRED.value,
-                        payload_json=serialize_model(projected_case),
-                    )
-                result = connection.execute(
-                    update(case_projection)
-                    .where(case_projection.c.case_id == analysis.case_id)
-                    .values(**values)
-                )
-                if result.rowcount != 1:
-                    raise RecordNotFound(
-                        f"case projection does not exist: {analysis.case_id}"
-                    )
+                self._save_analysis_connection(connection, analysis, projected_case)
         except IntegrityError as error:
             raise ImmutableRecordConflict(
                 f"analysis or nested immutable record already exists: "
                 f"{analysis.analysis_id}"
             ) from error
+
+    def _save_analysis_connection(
+        self,
+        connection: Connection,
+        analysis: AnalysisVersion,
+        projected_case: CaseInstance | None,
+    ) -> None:
+        """Insert an Analysis and advance its Case projection on one connection."""
+        runtime_mode = analysis.material.runtime_mode
+        self._require_analysis_provenance(connection, analysis)
+        connection.execute(
+            insert(analysis_versions).values(
+                analysis_id=analysis.analysis_id,
+                case_id=analysis.case_id,
+                material_hash=analysis.material_hash,
+                runtime_mode=runtime_mode.value,
+                analysis_started_at=analysis.analysis_started_at,
+                retrieval_window_ends_at=analysis.retrieval_window_ends_at,
+                created_at=analysis.created_at,
+                payload_json=serialize_model(analysis),
+            )
+        )
+        if analysis.evidence_items:
+            connection.execute(
+                insert(evidence_items),
+                [
+                    {
+                        "evidence_id": item.evidence_id,
+                        "analysis_id": analysis.analysis_id,
+                        "case_id": item.case_id,
+                        "kind": item.kind.value,
+                        "runtime_mode": item.runtime_mode.value,
+                        "source_system": item.source_system.value,
+                        "source_timestamp": item.source_timestamp,
+                        "retrieved_at": item.retrieved_at,
+                        "effective_at": item.effective_at,
+                        "expires_at": item.expires_at,
+                        "payload_json": serialize_model(item),
+                    }
+                    for item in analysis.evidence_items
+                ],
+            )
+        if analysis.approval_satisfactions:
+            connection.execute(
+                insert(approval_satisfactions),
+                [
+                    {
+                        "analysis_id": analysis.analysis_id,
+                        "decision_id": None,
+                        "option_id": item.option_id,
+                        "authorization_id": item.authorization_id,
+                        "persona_id": item.persona_id,
+                        "role": item.role,
+                        "satisfied": item.satisfied,
+                        "payload_json": serialize_model(item),
+                    }
+                    for item in analysis.approval_satisfactions
+                ],
+            )
+        projection = (
+            connection.execute(
+                select(case_projection)
+                .where(case_projection.c.case_id == analysis.case_id)
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if projection is None:
+            raise RecordNotFound(f"case projection does not exist: {analysis.case_id}")
+        values = {
+            "current_analysis_id": analysis.analysis_id,
+            "current_analysis_hash": analysis.material_hash,
+            "updated_at": datetime.now(UTC),
+        }
+        if projected_case is not None:
+            stored_case = self._stored_case(connection, analysis.case_id)
+            self._require_case_projection_integrity(
+                {
+                    **projection,
+                    "status": projected_case.status.value,
+                    "payload_json": serialize_model(projected_case),
+                },
+                projected_case,
+                stored_case,
+            )
+            values.update(
+                status=projected_case.status.value,
+                payload_json=serialize_model(projected_case),
+            )
+        if (
+            projection["current_decision_id"] is not None
+            and projection["current_analysis_hash"] is not None
+            and projection["current_analysis_hash"] != analysis.material_hash
+        ):
+            changed_case = self._decode_case(
+                projection["payload_json"], record_name="case projection"
+            ).model_copy(update={"status": CaseStatus.REANALYSIS_REQUIRED})
+            values.update(
+                status=CaseStatus.REANALYSIS_REQUIRED.value,
+                payload_json=serialize_model(changed_case),
+            )
+        result = connection.execute(
+            update(case_projection)
+            .where(case_projection.c.case_id == analysis.case_id)
+            .values(**values)
+        )
+        if result.rowcount != 1:
+            raise RecordNotFound(f"case projection does not exist: {analysis.case_id}")
 
     def try_claim_analysis(
         self,
@@ -668,21 +677,49 @@ class SqlAlchemyStore:
         projected_case: CaseInstance,
         material_version: str,
         claim_id: str,
+        completed_at: datetime,
     ) -> AnalysisVersion:
         """Persist immutable analysis and projection in the existing one transaction."""
         import hashlib
 
         version = hashlib.sha256(material_version.encode()).hexdigest()
-        with self.engine.connect() as connection:
-            owner = connection.scalar(
-                select(analysis_claims.c.claim_id).where(
-                    analysis_claims.c.case_id == analysis.case_id,
-                    analysis_claims.c.material_version == version,
+        try:
+            with self.engine.begin() as connection:
+                claim = (
+                    connection.execute(
+                        select(analysis_claims)
+                        .where(
+                            analysis_claims.c.case_id == analysis.case_id,
+                            analysis_claims.c.material_version == version,
+                        )
+                        .with_for_update()
+                    )
+                    .mappings()
+                    .one_or_none()
                 )
-            )
-        if owner != claim_id:
-            raise AnalysisClaimBusy("analysis material claim is owned elsewhere")
-        self.save_analysis(analysis, projected_case=projected_case)
+                if (
+                    claim is None
+                    or claim["claim_id"] != claim_id
+                    or self._normalize_datetime(claim["claim_expires_at"])
+                    < self._normalize_datetime(completed_at)
+                ):
+                    raise AnalysisClaimBusy(
+                        "analysis material claim is expired or owned elsewhere"
+                    )
+                self._save_analysis_connection(connection, analysis, projected_case)
+                deleted = connection.execute(
+                    analysis_claims.delete().where(
+                        analysis_claims.c.case_id == analysis.case_id,
+                        analysis_claims.c.material_version == version,
+                        analysis_claims.c.claim_id == claim_id,
+                    )
+                )
+                if deleted.rowcount != 1:
+                    raise AnalysisClaimBusy("analysis material claim changed")
+        except IntegrityError as error:
+            raise AnalysisClaimBusy(
+                "analysis completion lost its claim race"
+            ) from error
         return analysis
 
     def get_analysis(self, analysis_id: str) -> AnalysisVersion:
@@ -2105,6 +2142,17 @@ class SqlAlchemyExecutionRepository:
                     )
                 )
             )
+            or (playback.failed_at is None and row["failed_at"] is not None)
+            or (
+                playback.failed_at is not None
+                and (
+                    row["failed_at"] is None
+                    or not self._store._datetime_matches(
+                        row["failed_at"], playback.failed_at
+                    )
+                )
+            )
+            or playback.error_code != row["error_code"]
         ):
             raise PersistenceIntegrityError(
                 "Playback columns conflict with canonical JSON"
@@ -2172,20 +2220,21 @@ class SqlAlchemyExecutionRepository:
 
     def update_playback(self, playback: Playback) -> None:
         previous = self.get_playback(playback.playback_id)
+        restored = playback.model_copy(
+            update={
+                "status": PlaybackStatus.IN_PROGRESS,
+                "completed_at": None,
+                "failed_at": None,
+                "error_code": None,
+            }
+        )
         if (
             previous.status is not PlaybackStatus.IN_PROGRESS
-            or playback.status is not PlaybackStatus.COMPLETED
-            or playback.completed_at is None
-            or playback.model_copy(
-                update={
-                    "status": PlaybackStatus.IN_PROGRESS,
-                    "completed_at": None,
-                }
-            )
-            != previous
+            or playback.status not in {PlaybackStatus.COMPLETED, PlaybackStatus.FAILED}
+            or restored != previous
         ):
             raise ImmutableRecordConflict(
-                "Playback update may only record its completion"
+                "Playback update may only record one terminal result"
             )
         self._connection.execute(
             update(playbacks)
@@ -2193,6 +2242,8 @@ class SqlAlchemyExecutionRepository:
             .values(
                 status=playback.status.value,
                 completed_at=playback.completed_at,
+                failed_at=playback.failed_at,
+                error_code=playback.error_code,
                 payload_json=serialize_model(playback),
             )
         )

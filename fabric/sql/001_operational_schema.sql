@@ -333,6 +333,8 @@ CREATE TABLE app.playbacks (
     status nvarchar(32) NOT NULL,
     started_at datetimeoffset(6) NOT NULL,
     completed_at datetimeoffset(6) NULL,
+    failed_at datetimeoffset(6) NULL,
+    error_code nvarchar(64) NULL,
     payload_json nvarchar(max) NOT NULL,
     CONSTRAINT pk_playbacks PRIMARY KEY (playback_id),
     CONSTRAINT uq_playback_per_decision UNIQUE (decision_id),
@@ -343,6 +345,14 @@ CREATE TABLE app.playbacks (
     CONSTRAINT ck_playbacks_payload_json CHECK (ISJSON(payload_json) = 1)
 );
 END;
+GO
+
+IF COL_LENGTH(N'app.playbacks', N'failed_at') IS NULL
+    ALTER TABLE app.playbacks ADD failed_at datetimeoffset(6) NULL;
+GO
+
+IF COL_LENGTH(N'app.playbacks', N'error_code') IS NULL
+    ALTER TABLE app.playbacks ADD error_code nvarchar(64) NULL;
 GO
 
 IF OBJECT_ID(N'app.outcome_observations', N'U') IS NULL
@@ -474,7 +484,7 @@ GO
 
 MERGE app.schema_version WITH (HOLDLOCK) AS target
 USING (
-    SELECT N'operational' AS component, 11 AS schema_version
+    SELECT N'operational' AS component, 12 AS schema_version
 ) AS source
 ON target.component = source.component
 WHEN MATCHED AND target.schema_version < source.schema_version THEN

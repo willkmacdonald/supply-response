@@ -522,7 +522,7 @@ describe("progressive Case workspace", () => {
   });
 
   it("does not relabel synthetic observations from server responses as actual", async () => {
-    mockFallbackCaseLifecycle();
+    const fetchMock = mockFallbackCaseLifecycle();
     render(<App />);
     await screen.findByText("Fallback mode");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
@@ -530,11 +530,17 @@ describe("progressive Case workspace", () => {
     await screen.findByText("Combined response");
     await userEvent.click(screen.getByRole("button", {name: "Approve combined response"}));
     await screen.findAllByTestId("execution-action");
-    await userEvent.click(screen.getByRole("button", {name: "Start simulated execution"}));
+    const start = screen.getByRole("button", {name: "Start simulated execution"});
+    start.click();
+    start.click();
     const outcomeRows = await screen.findAllByTestId("outcome-observation");
     expect(outcomeRows).toHaveLength(10);
     outcomeRows.forEach((row) => expect(within(row).getByText("Simulated")).toBeVisible());
     expect(screen.queryByText("Actual")).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([input, init]) =>
+      input === "/api/decisions/RL-DECISION-1/playback"
+      && (init as RequestInit | undefined)?.method === "POST"
+    )).toHaveLength(1);
   });
 
   it("shows readable initialization failures", async () => {

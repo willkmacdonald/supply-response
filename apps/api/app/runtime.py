@@ -17,13 +17,17 @@ class RuntimeProgression:
         services: ApplicationServices,
         *,
         poll_interval_seconds: float = 0.25,
+        playback_max_attempts: int = 3,
     ) -> None:
         self._services = services
         self._poll_interval_seconds = poll_interval_seconds
         self._stop = asyncio.Event()
         self._loop_task: asyncio.Task[None] | None = None
         self._playback_tasks: dict[str, asyncio.Task[None]] = {}
-        self._failed_playbacks: set[str] = set()
+        if playback_max_attempts < 1:
+            raise ValueError("playback retry attempts must be positive")
+        self._playback_max_attempts = playback_max_attempts
+        self._playback_failures: dict[str, int] = {}
 
     async def start(self) -> None:
         reset = getattr(self._services.playback_clock, "reset", None)
@@ -69,10 +73,7 @@ class RuntimeProgression:
     async def _start_persisted_playbacks(self) -> None:
         playback_ids = await asyncio.to_thread(self._services.in_progress_playback_ids)
         for playback_id in playback_ids:
-            if (
-                playback_id in self._playback_tasks
-                or playback_id in self._failed_playbacks
-            ):
+            if playback_id in self._playback_tasks:
                 continue
             self._playback_tasks[playback_id] = asyncio.create_task(
                 self._run_playback(playback_id),
@@ -81,17 +82,32 @@ class RuntimeProgression:
 
     async def _run_playback(self, playback_id: str) -> None:
         try:
-            await asyncio.to_thread(
+            completed = await asyncio.to_thread(
                 self._services.playback_service.run_to_completion,
                 playback_id,
             )
+            if completed.status.value != "in_progress":
+                self._playback_failures.pop(playback_id, None)
         except PlaybackInterrupted:
             return
         except Exception:
-            self._failed_playbacks.add(playback_id)
+            failures = self._playback_failures.get(playback_id, 0) + 1
+            self._playback_failures[playback_id] = failures
             logger.exception(
                 "playback progression failed",
-                extra={"playback_id": playback_id},
+                extra={"playback_id": playback_id, "attempt": failures},
             )
+            if failures >= self._playback_max_attempts:
+                try:
+                    await asyncio.to_thread(
+                        self._services.playback_service.record_failure,
+                        playback_id,
+                    )
+                    self._playback_failures.pop(playback_id, None)
+                except Exception:
+                    logger.exception(
+                        "playback terminal failure could not be recorded",
+                        extra={"playback_id": playback_id},
+                    )
         finally:
             self._playback_tasks.pop(playback_id, None)

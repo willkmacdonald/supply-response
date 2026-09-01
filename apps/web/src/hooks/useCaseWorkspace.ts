@@ -73,6 +73,7 @@ async function pollWhile<T>(
 
 export function useCaseWorkspace(): CaseWorkspaceState {
   const initialized = useRef(false);
+  const playbackOperation = useRef<Promise<void> | null>(null);
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [caseInstance, setCaseInstance] = useState<CaseInstance | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisVersion | null>(null);
@@ -263,28 +264,36 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     }
   }, [decision]);
 
-  const startPlayback = useCallback(async () => {
-    if (!decision) return;
-    setOperation("playback");
-    setError(null);
-    try {
-      const started = await api.startPlayback(decision.decision_id);
-      setPlayback(started);
-      const nextPlayback = await pollWhile(
-        started,
-        () => api.playback(decision.decision_id),
-        (current) => current.status !== "completed" && current.status !== "failed",
-        "simulated playback",
-      );
-      setPlayback(nextPlayback);
-      if (nextPlayback.status === "failed") throw new Error("Simulated playback failed on the server.");
-      const nextObservations = await api.observations(decision.decision_id);
-      setObservations(nextObservations);
-    } catch (caught) {
-      setError(`Simulated execution failed. ${message(caught)}`);
-    } finally {
-      setOperation(null);
-    }
+  const startPlayback = useCallback((): Promise<void> => {
+    if (!decision) return Promise.resolve();
+    if (playbackOperation.current) return playbackOperation.current;
+    const running = (async () => {
+      setOperation("playback");
+      setError(null);
+      try {
+        const started = await api.startPlayback(decision.decision_id);
+        setPlayback(started);
+        const nextPlayback = await pollWhile(
+          started,
+          () => api.playback(decision.decision_id),
+          (current) => current.status !== "completed" && current.status !== "failed",
+          "simulated playback",
+        );
+        setPlayback(nextPlayback);
+        if (nextPlayback.status === "failed") throw new Error("Simulated playback failed on the server.");
+        const nextObservations = await api.observations(decision.decision_id);
+        setObservations(nextObservations);
+      } catch (caught) {
+        setError(`Simulated execution failed. ${message(caught)}`);
+      } finally {
+        setOperation(null);
+      }
+    })();
+    playbackOperation.current = running;
+    void running.finally(() => {
+      if (playbackOperation.current === running) playbackOperation.current = null;
+    });
+    return running;
   }, [decision]);
 
   const decisionBlocked = useMemo(() => {
@@ -295,12 +304,12 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     const missingRequiredLiveCitation = analysis.runtime_mode === "live"
       && analysis.evidence_items.some((item) =>
         item.requirement === "required_authoritative"
-        && !trustedServerCitation(item.navigable_citation_url, item.citation_classification, item.citation_trusted_host)
+        && !trustedServerCitation(item.navigable_citation_url, item.citation_classification, runtime?.deployment_contract?.tenant_sharepoint_host)
       );
     const superseded = caseInstance?.current_analysis_id !== null
       && caseInstance?.current_analysis_id !== analysis.analysis_id;
     return stale || blocked || superseded || missingRequiredLiveCitation;
-  }, [analysis, caseInstance]);
+  }, [analysis, caseInstance, runtime]);
 
   return {
     runtime,

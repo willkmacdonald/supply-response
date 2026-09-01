@@ -1,6 +1,7 @@
 import re
 from pathlib import Path
 
+from integrations.fabric.health import FABRIC_SCHEMA_VERSION
 from integrations.fabric.schema import split_go_batches
 
 OPERATIONAL = Path("fabric/sql/001_operational_schema.sql")
@@ -87,7 +88,7 @@ def test_live_schema_version_is_published_only_after_analytics_views_exist():
     operational = _normalized(OPERATIONAL)
     analytics = _normalized(ANALYTICS)
 
-    assert "select n'operational' as component, 11 as schema_version" in operational
+    assert "select n'operational' as component, 12 as schema_version" in operational
     assert "set schema_version = 12" in analytics
     assert analytics.index("create or alter view analytics.action_outcomes") < (
         analytics.index("set schema_version = 12")
@@ -155,7 +156,7 @@ def test_schemas_views_and_version_publication_are_idempotent():
     assert "@@ROWCOUNT" not in analytics
 
 
-def test_operational_version_publication_advances_to_11_without_downgrade():
+def test_operational_version_publication_advances_to_12_without_downgrade():
     version_batch = " ".join(
         split_go_batches(OPERATIONAL.read_text(encoding="utf-8"))[-1].lower().split()
     )
@@ -166,6 +167,8 @@ def test_operational_version_publication_advances_to_11_without_downgrade():
     )
     assert "when not matched then insert" in version_batch
     assert "values (source.component, source.schema_version)" in version_batch
+    assert "select n'operational' as component, 12 as schema_version" in version_batch
+    assert f"{FABRIC_SCHEMA_VERSION} as schema_version" in version_batch
 
 
 def test_partial_operational_application_and_double_retry_do_not_collide():
@@ -192,7 +195,7 @@ def test_partial_operational_application_and_double_retry_do_not_collide():
                 raise AssertionError(f"object collision: {creation}")
             existing.add(creation)
         if "MERGE app.schema_version WITH (HOLDLOCK)" in batch:
-            schema_version = max(schema_version or 0, 11)
+            schema_version = max(schema_version or 0, 12)
         if "SET schema_version = 12" in batch and schema_version is not None:
             schema_version = 12
 

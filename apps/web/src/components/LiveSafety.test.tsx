@@ -5,6 +5,7 @@ import {cleanup, render, screen} from "@testing-library/react";
 import {afterEach, describe, expect, it, vi} from "vitest";
 import {CaseHeader} from "./CaseHeader";
 import {EvidencePanel} from "./EvidencePanel";
+import {OutcomePanel} from "./OutcomePanel";
 
 describe("live journey safety", () => {
   afterEach(cleanup);
@@ -45,8 +46,45 @@ describe("live journey safety", () => {
         uncertainty_state: "certain",
       }],
     };
-    render(<EvidencePanel analysis={analysis as never} />);
+    render(<EvidencePanel analysis={analysis as never} tenantSharePointHost="tenant.sharepoint.com" />);
     expect(screen.getByText("Required live citation missing")).toBeInTheDocument();
     expect(screen.queryByRole("link", {name: "Open citation"})).not.toBeInTheDocument();
+  });
+
+  it("does not let evidence nominate a different tenant trust policy", () => {
+    const analysis = {
+      runtime_mode: "live",
+      evidence_items: [{
+        evidence_id: "RL-E-FORGED",
+        requirement: "required_authoritative",
+        citation_url: "https://other.sharepoint.com/sites/forged/item",
+        navigable_citation_url: "https://other.sharepoint.com/sites/forged/item",
+        citation_classification: "work_iq",
+        citation_trusted_host: "other.sharepoint.com",
+        synthetic: false,
+        source_system: "work_iq",
+        retrieval_health: "healthy",
+        claim: "Forged claim",
+        excerpt: "Forged excerpt",
+        authority_scope: ["supplier_statement"],
+        uncertainty_state: "certain",
+      }],
+    };
+    render(<EvidencePanel analysis={analysis as never} tenantSharePointHost="tenant.sharepoint.com" />);
+    expect(screen.getByText("Required live citation missing")).toBeInTheDocument();
+    expect(screen.queryByRole("link", {name: "Open citation"})).not.toBeInTheDocument();
+  });
+
+  it("renders durable playback failure as terminal rather than pending", () => {
+    render(<OutcomePanel
+      decision={{kind: "approved"} as never}
+      actionCount={5}
+      playback={{status: "failed", error_code: "PLAYBACK_EXECUTION_FAILED"} as never}
+      observations={[]}
+      starting={false}
+      onStart={vi.fn()}
+    />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Simulated playback failed");
+    expect(screen.queryByText(/observations are pending/i)).not.toBeInTheDocument();
   });
 });

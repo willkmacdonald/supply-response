@@ -17,7 +17,8 @@ export function OutcomePanel({decision, actionCount, playback, observations, sta
     {!playback && <button type="button" onClick={onStart} disabled={starting || actionCount !== 5}>
       {starting ? "Starting simulated execution…" : "Start simulated execution"}
     </button>}
-    {playback && observations.length === 0 && <p>Simulated playback started; observations are pending.</p>}
+    {playback?.status === "failed" && <p className="error" role="alert">Simulated playback failed. Retry requires starting a new Case.</p>}
+    {playback?.status === "in_progress" && observations.length === 0 && <p>Simulated playback started; observations are pending.</p>}
     {observations.length > 0 && <div className="outcome-list">
       {observations.map((observation) => <article data-testid="outcome-observation" key={observation.observation_id}>
         <span className="badge accent">{observation.synthetic ? "Simulated" : observation.display_label}</span>

@@ -29,7 +29,7 @@ export default function App() {
       onCreate={workspace.create}
       onAnalyze={workspace.analyze}
     />
-    <EvidencePanel analysis={workspace.analysis} />
+    <EvidencePanel analysis={workspace.analysis} tenantSharePointHost={workspace.runtime?.deployment_contract?.tenant_sharepoint_host} />
     <ExposurePanel analysis={workspace.analysis} />
     <OptionComparison
       analysis={workspace.analysis}

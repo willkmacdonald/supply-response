@@ -163,6 +163,8 @@ class PlaybackResponse(BaseModel):
     status: str
     started_at: datetime
     completed_at: datetime | None
+    failed_at: datetime | None
+    error_code: Literal["PLAYBACK_EXECUTION_FAILED"] | None
     runtime_mode: RuntimeMode
     scenario_effective_time: datetime
 

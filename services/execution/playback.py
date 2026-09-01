@@ -104,8 +104,7 @@ class ImmediateClock:
         return self._current
 
     def wait_until(self, target: datetime) -> None:
-        if target > self._current:
-            self._current = target
+        self._current = max(self._current, target)
 
 
 def _deterministic_id(prefix: str, decision_id: str, material: str) -> str:
@@ -187,6 +186,8 @@ class PlaybackService:
             playback = uow.execution.get_playback(playback_id)
             if playback.status is PlaybackStatus.COMPLETED:
                 return playback
+            if playback.status is PlaybackStatus.FAILED:
+                return playback
             actions = uow.execution.list_actions(decision_id=playback.decision_id)
         by_kind = {action.kind: action for action in actions}
 
@@ -200,6 +201,23 @@ class PlaybackService:
             )
 
         return self._record_completion(playback, actions, active_clock)
+
+    def record_failure(self, playback_id: str) -> Playback:
+        """Durably end a playback after its bounded runtime retries are exhausted."""
+        with self._uow_factory() as uow:
+            current = uow.execution.get_playback(playback_id)
+            if current.status is not PlaybackStatus.IN_PROGRESS:
+                return current
+            failed = current.model_copy(
+                update={
+                    "status": PlaybackStatus.FAILED,
+                    "failed_at": self._clock.now(),
+                    "error_code": "PLAYBACK_EXECUTION_FAILED",
+                }
+            )
+            uow.execution.update_playback(failed)
+            uow.commit()
+            return failed
 
     def _complete_action(
         self,

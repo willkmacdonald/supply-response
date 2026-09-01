@@ -418,6 +418,8 @@ export interface Playback {
   status: string;
   started_at: string;
   completed_at: string | null;
+  failed_at?: string | null;
+  error_code?: "PLAYBACK_EXECUTION_FAILED" | null;
   runtime_mode: RuntimeMode;
   scenario_effective_time: string;
 }

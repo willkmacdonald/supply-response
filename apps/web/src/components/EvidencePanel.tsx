@@ -1,10 +1,10 @@
 import type {AnalysisVersion} from "../types";
 import {trustedServerCitation} from "../security/trustedUrls";
 
-export function EvidencePanel({analysis}: {analysis: AnalysisVersion | null}) {
+export function EvidencePanel({analysis, tenantSharePointHost}: {analysis: AnalysisVersion | null; tenantSharePointHost?: string | null}) {
   if (!analysis) return null;
   const missingRequiredLiveCitation = analysis.runtime_mode === "live" && analysis.evidence_items.some((item) =>
-    item.requirement === "required_authoritative" && !trustedServerCitation(item.navigable_citation_url, item.citation_classification, item.citation_trusted_host)
+    item.requirement === "required_authoritative" && !trustedServerCitation(item.navigable_citation_url, item.citation_classification, tenantSharePointHost)
   );
   return <section className="panel" aria-labelledby="evidence-heading">
     <div className="section-heading">
@@ -18,7 +18,7 @@ export function EvidencePanel({analysis}: {analysis: AnalysisVersion | null}) {
     <div className="card-grid">
       {analysis.evidence_items.map((item) => {
         const citation = analysis.runtime_mode === "live"
-          ? trustedServerCitation(item.navigable_citation_url, item.citation_classification, item.citation_trusted_host)
+          ? trustedServerCitation(item.navigable_citation_url, item.citation_classification, tenantSharePointHost)
           : item.citation_url;
         return <article className="evidence-card" key={item.evidence_id}>
         <div className="card-labels">

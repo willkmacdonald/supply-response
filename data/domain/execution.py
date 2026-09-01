@@ -92,7 +92,7 @@ class ExecutionAction(FrozenModel):
     draft_artifact_id: str | None = None
 
     @model_validator(mode="after")
-    def validate_owner_and_draft(self) -> "ExecutionAction":
+    def validate_owner_and_draft(self) -> ExecutionAction:
         if self.kind is ExecutionActionKind.UPDATE_DISRUPTION_STATUS:
             if (
                 self.owner_kind is not ExecutionOwnerKind.SYSTEM
@@ -122,7 +122,7 @@ class DraftArtifact(FrozenModel):
     sent: Literal[False] = False
 
     @model_validator(mode="after")
-    def validate_content(self) -> "DraftArtifact":
+    def validate_content(self) -> DraftArtifact:
         if (self.subject is None) != (self.body is None):
             raise ValueError("Draft Artifact subject and body must be filled together")
         return self
@@ -170,6 +170,7 @@ class OutboxClaim(FrozenModel):
 class PlaybackStatus(StrEnum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class PlaybackStep(FrozenModel):
@@ -177,7 +178,7 @@ class PlaybackStep(FrozenModel):
     action_kind: str
 
     @model_validator(mode="after")
-    def validate_offset(self) -> "PlaybackStep":
+    def validate_offset(self) -> PlaybackStep:
         if self.offset_seconds < 0:
             raise ValueError("playback offset must be nonnegative")
         ExecutionActionKind(self.action_kind)
@@ -192,11 +193,31 @@ class Playback(FrozenModel):
     status: PlaybackStatus = PlaybackStatus.IN_PROGRESS
     started_at: datetime
     completed_at: datetime | None = None
+    failed_at: datetime | None = None
+    error_code: Literal["PLAYBACK_EXECUTION_FAILED"] | None = None
 
     @model_validator(mode="after")
-    def validate_status_time(self) -> "Playback":
-        if (self.status is PlaybackStatus.COMPLETED) != (self.completed_at is not None):
-            raise ValueError("completed playback must have completed_at")
+    def validate_status_time(self) -> Playback:
+        if self.status is PlaybackStatus.COMPLETED:
+            valid = (
+                self.completed_at is not None
+                and self.failed_at is None
+                and self.error_code is None
+            )
+        elif self.status is PlaybackStatus.FAILED:
+            valid = (
+                self.completed_at is None
+                and self.failed_at is not None
+                and self.error_code == "PLAYBACK_EXECUTION_FAILED"
+            )
+        else:
+            valid = (
+                self.completed_at is None
+                and self.failed_at is None
+                and self.error_code is None
+            )
+        if not valid:
+            raise ValueError("playback terminal fields conflict with status")
         return self
 
 
@@ -225,7 +246,7 @@ class OutcomeObservation(FrozenModel):
     synthetic: bool
 
     @model_validator(mode="after")
-    def validate_provenance(self) -> "OutcomeObservation":
+    def validate_provenance(self) -> OutcomeObservation:
         if self.kind is ObservationKind.ACTUAL and self.synthetic:
             raise ValueError("actual observation cannot be synthetic")
         if self.kind is ObservationKind.SIMULATED and not self.synthetic:

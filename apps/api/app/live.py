@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Protocol
@@ -172,6 +173,49 @@ def _require_item(
         validate_live_citation_url(item.citation_url, allowed_hosts=citation_hosts)
 
 
+def _validate_live_collection(
+    items: tuple[EvidenceItem, ...],
+    *,
+    system: EvidenceSourceSystem,
+    allowed_scopes: set[AuthorityScope],
+    source_id: str | None,
+    analysis_id: str,
+    case_id: str,
+    started_at: datetime,
+    citation_hosts: set[str],
+) -> tuple[EvidenceItem, ...]:
+    """Validate every item at its retrieval boundary before classification."""
+    if not items:
+        raise ValueError("live evidence collection is empty")
+    validated: list[EvidenceItem] = []
+    for item in items:
+        scopes = set(item.authority_scope)
+        if (
+            item.source_system is not system
+            or item.case_id != case_id
+            or item.retrieved_for_analysis_id != analysis_id
+            or item.runtime_mode is not RuntimeMode.LIVE
+            or item.synthetic
+            or item.requirement is not EvidenceRequirement.REQUIRED_AUTHORITATIVE
+            or item.retrieval_health is not RetrievalHealth.HEALTHY
+            or item.source_timestamp is None
+            or item.retrieved_at is None
+            or not item.source_id.strip()
+            or (source_id is not None and item.source_id != source_id)
+            or not scopes
+            or not scopes.issubset(allowed_scopes)
+            or not (item.excerpt or "").strip()
+            or not item.citation_url
+            or abs(started_at - item.source_timestamp) > timedelta(hours=24)
+            or abs(started_at - item.retrieved_at) > timedelta(hours=24)
+            or (item.expires_at is not None and item.expires_at < started_at)
+        ):
+            raise ValueError("live evidence collection contains an invalid item")
+        validate_live_citation_url(item.citation_url, allowed_hosts=citation_hosts)
+        validated.append(item)
+    return tuple(validated)
+
+
 class LiveAnalysisApplicationService:
     def __init__(
         self,
@@ -184,6 +228,10 @@ class LiveAnalysisApplicationService:
         quality_source_id: str,
         clock,
         tenant_sharepoint_host: str = "tenant.sharepoint.com",
+        analysis_wait_budget_seconds: float = 90.0,
+        analysis_poll_interval_seconds: float = 0.1,
+        monotonic=time.monotonic,
+        sleep=asyncio.sleep,
         **legacy: Any,
     ) -> None:
         del legacy
@@ -203,6 +251,14 @@ class LiveAnalysisApplicationService:
             tenant_sharepoint_host,
         }
         self._clock = clock
+        if not 0 < analysis_wait_budget_seconds <= 90:
+            raise ValueError("analysis wait budget must be within 90 seconds")
+        if not 0 < analysis_poll_interval_seconds <= analysis_wait_budget_seconds:
+            raise ValueError("analysis poll interval must fit within its budget")
+        self._analysis_wait_budget_seconds = analysis_wait_budget_seconds
+        self._analysis_poll_interval_seconds = analysis_poll_interval_seconds
+        self._monotonic = monotonic
+        self._sleep = sleep
 
     async def create(
         self, case_id: str, *, actor: AuthenticatedActor
@@ -260,7 +316,41 @@ class LiveAnalysisApplicationService:
                 or not operational.source_snapshot_id.strip()
             ):
                 raise ValueError("live operational snapshot changed or is incomplete")
-            evidence = (*operational.evidence, *supplier.evidence, *quality.evidence)
+            fabric_evidence = _validate_live_collection(
+                operational.evidence,
+                system=EvidenceSourceSystem.FABRIC,
+                allowed_scopes={
+                    AuthorityScope.OPERATIONAL_QUANTITY,
+                    AuthorityScope.OPERATIONAL_DATE,
+                    AuthorityScope.QUALIFICATION_STATE,
+                },
+                source_id=None,
+                analysis_id=analysis_id,
+                case_id=case_id,
+                started_at=started_at,
+                citation_hosts={"app.powerbi.com"},
+            )
+            supplier_evidence = _validate_live_collection(
+                supplier.evidence,
+                system=EvidenceSourceSystem.WORK_IQ,
+                allowed_scopes={AuthorityScope.SUPPLIER_STATEMENT},
+                source_id=self._supplier_source_id,
+                analysis_id=analysis_id,
+                case_id=case_id,
+                started_at=started_at,
+                citation_hosts=self._citation_hosts - {"app.powerbi.com"},
+            )
+            quality_evidence = _validate_live_collection(
+                quality.evidence,
+                system=EvidenceSourceSystem.WORK_IQ,
+                allowed_scopes={AuthorityScope.COLLABORATION_STATEMENT},
+                source_id=self._quality_source_id,
+                analysis_id=analysis_id,
+                case_id=case_id,
+                started_at=started_at,
+                citation_hosts=self._citation_hosts - {"app.powerbi.com"},
+            )
+            evidence = (*fabric_evidence, *supplier_evidence, *quality_evidence)
             for scope in (
                 AuthorityScope.OPERATIONAL_QUANTITY,
                 AuthorityScope.OPERATIONAL_DATE,
@@ -372,6 +462,7 @@ class LiveAnalysisApplicationService:
                 ),
                 material_version=material_version,
                 claim_id=claim_id,
+                completed_at=self._clock(),
             )
         except RuntimeModeConflict:
             raise
@@ -390,12 +481,15 @@ class LiveAnalysisApplicationService:
             raise LiveSourceUnavailable() from None
 
     async def _wait_for_winner(self, case_id: str) -> AnalysisVersion:
-        for _ in range(100):
+        deadline = self._monotonic() + self._analysis_wait_budget_seconds
+        while True:
             try:
                 projection = self._store.get_projection(case_id)
                 if projection.current_analysis_id is not None:
                     return self._store.get_analysis(projection.current_analysis_id)
             except Exception:  # noqa: BLE001 - persistence detail must remain bounded
                 raise LiveSourceUnavailable() from None
-            await asyncio.sleep(0.01)
-        raise LiveSourceUnavailable()
+            remaining = deadline - self._monotonic()
+            if remaining <= 0:
+                raise LiveSourceUnavailable()
+            await self._sleep(min(self._analysis_poll_interval_seconds, remaining))

@@ -624,7 +624,7 @@ def test_alembic_upgrade_path_adds_pointer_foreign_keys_after_original_0001(
             connection.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-            == "0005_analysis_claims"
+            == "0006_playback_terminal_failure"
         )
     head_foreign_keys = {
         tuple(item["constrained_columns"])
@@ -638,6 +638,10 @@ def test_alembic_upgrade_path_adds_pointer_foreign_keys_after_original_0001(
     assert {
         item["name"] for item in inspect(engine).get_unique_constraints("playbacks")
     } >= {"uq_playback_per_decision"}
+    assert {item["name"] for item in inspect(engine).get_columns("playbacks")} >= {
+        "failed_at",
+        "error_code",
+    }
     migrated_store = sqlite_store(database_url)
     assert migrated_store.get_case(original_case.case_id) == original_case
     assert migrated_store.list_cases() == (original_case,)

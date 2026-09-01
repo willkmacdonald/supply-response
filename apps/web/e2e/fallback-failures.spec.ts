@@ -84,7 +84,7 @@ test("a failed child action retries without replacing sibling actions", async ({
   expect(actionIdsAfter.sort()).toEqual(actionIdsBefore.sort());
 });
 
-test("a second playback click reuses one playback and produces no duplicate outcomes", async ({page}) => {
+test("duplicate playback clicks coalesce into one operation and no duplicate outcomes", async ({page}) => {
   await createAutomatedTestCase(page);
   await analyze(page);
   await approve(page);
@@ -101,9 +101,6 @@ test("a second playback click reuses one playback and produces no duplicate outc
     button.click();
     button.click();
   });
-  await expect.poll(() => responses.length).toBe(2);
-  const first = await responses[0].json();
-  const second = await responses[1].json();
-  expect(second.playback_id).toBe(first.playback_id);
+  await expect.poll(() => responses.length).toBe(1);
   await expect(page.getByTestId("outcome-observation")).toHaveCount(10, {timeout: 65_000});
 });

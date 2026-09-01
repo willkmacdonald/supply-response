@@ -89,6 +89,7 @@ def test_live_runtime_reports_injected_graph_as_unverified_without_readiness_por
             "signal_agent_version": "",
             "context_agent_version": "",
             "decision_agent_version": "",
+            "tenant_sharepoint_host": "",
         },
     }
 

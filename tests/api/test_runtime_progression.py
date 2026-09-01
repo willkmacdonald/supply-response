@@ -167,3 +167,81 @@ def test_lifespan_recovers_persisted_in_progress_playback_after_restart(tmp_path
         )
 
     assert completed["playback_id"] == playback.playback_id
+
+
+def test_playback_worker_retries_transient_failure_and_recovers(tmp_path):
+    clock = ImmediateClock(datetime.now(UTC))
+    app = create_app(
+        Settings(
+            runtime_mode=RuntimeMode.FALLBACK,
+            database_url=f"sqlite:///{tmp_path / 'playback-transient.db'}",
+        ),
+        clock=clock.now,
+        playback_clock=clock,
+    )
+    attempts = 0
+    original = app.state.services.playback_service.run_to_completion
+
+    def transient(playback_id):
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise RuntimeError("transient playback fault")
+        return original(playback_id)
+
+    app.state.services.playback_service.run_to_completion = transient
+    with TestClient(app) as client:
+        _, approved = _create_and_approve(client)
+        decision_id = approved["decision_id"]
+        _wait_for_json(
+            client,
+            f"/api/decisions/{decision_id}",
+            lambda item: item["action_planning_status"] == "complete",
+        )
+        client.post(f"/api/decisions/{decision_id}/playback")
+        completed = _wait_for_json(
+            client,
+            f"/api/decisions/{decision_id}/playback",
+            lambda item: item["status"] == "completed",
+            timeout=2,
+        )
+
+    assert completed["error_code"] is None
+    assert attempts == 3
+
+
+def test_playback_worker_records_bounded_terminal_failure(tmp_path):
+    clock = ImmediateClock(datetime.now(UTC))
+    app = create_app(
+        Settings(
+            runtime_mode=RuntimeMode.FALLBACK,
+            database_url=f"sqlite:///{tmp_path / 'playback-terminal.db'}",
+        ),
+        clock=clock.now,
+        playback_clock=clock,
+    )
+
+    def always_fail(playback_id):
+        del playback_id
+        raise RuntimeError("secret internal playback failure detail")
+
+    app.state.services.playback_service.run_to_completion = always_fail
+    with TestClient(app) as client:
+        _, approved = _create_and_approve(client)
+        decision_id = approved["decision_id"]
+        _wait_for_json(
+            client,
+            f"/api/decisions/{decision_id}",
+            lambda item: item["action_planning_status"] == "complete",
+        )
+        client.post(f"/api/decisions/{decision_id}/playback")
+        failed = _wait_for_json(
+            client,
+            f"/api/decisions/{decision_id}/playback",
+            lambda item: item["status"] == "failed",
+            timeout=2,
+        )
+
+    assert failed["error_code"] == "PLAYBACK_EXECUTION_FAILED"
+    assert failed["completed_at"] is None
+    assert "secret" not in str(failed).lower()

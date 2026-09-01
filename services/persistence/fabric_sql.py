@@ -39,17 +39,20 @@ class FabricSqlStore(SqlAlchemyStore):
                     :status AS status,
                     :started_at AS started_at,
                     :completed_at AS completed_at,
+                    :failed_at AS failed_at,
+                    :error_code AS error_code,
                     :payload_json AS payload_json
                 ) AS source
                 ON target.decision_id = source.decision_id
                 WHEN NOT MATCHED THEN
                     INSERT (
                         playback_id, case_id, decision_id, status,
-                        started_at, completed_at, payload_json
+                        started_at, completed_at, failed_at, error_code, payload_json
                     )
                     VALUES (
                         source.playback_id, source.case_id, source.decision_id,
                         source.status, source.started_at, source.completed_at,
+                        source.failed_at, source.error_code,
                         source.payload_json
                     )
                 OUTPUT $action;
@@ -62,6 +65,8 @@ class FabricSqlStore(SqlAlchemyStore):
                 "status": playback.status.value,
                 "started_at": playback.started_at,
                 "completed_at": playback.completed_at,
+                "failed_at": playback.failed_at,
+                "error_code": playback.error_code,
                 "payload_json": serialize_model(playback),
             },
         )

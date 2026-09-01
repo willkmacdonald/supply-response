@@ -61,6 +61,8 @@ def runtime(
                 or "",
                 "decision_agent_version": services.settings.foundry_decision_agent_version
                 or "",
+                "tenant_sharepoint_host": services.settings.tenant_sharepoint_host
+                or "",
             }
             if services.settings.runtime_mode.value == "live"
             else None

@@ -25,6 +25,8 @@ class SqliteStore(SqlAlchemyStore):
                 status=playback.status.value,
                 started_at=playback.started_at,
                 completed_at=playback.completed_at,
+                failed_at=playback.failed_at,
+                error_code=playback.error_code,
                 payload_json=serialize_model(playback),
             )
             .on_conflict_do_nothing(index_elements=[playbacks.c.decision_id])
