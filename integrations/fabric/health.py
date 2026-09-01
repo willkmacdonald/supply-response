@@ -5,8 +5,8 @@ from typing import Literal
 
 from sqlalchemy import Engine, text
 
-
 FABRIC_SCHEMA_VERSION = 12
+REQUIRED_ANALYTICS_VIEW_COUNT = 4
 
 
 class FabricSchemaError(RuntimeError):
@@ -29,10 +29,24 @@ def check_fabric_health(engine: Engine) -> FabricHealth:
                 "WHERE component = 'operational'"
             )
         ).scalar_one()
-    if schema_version != FABRIC_SCHEMA_VERSION:
+        if schema_version != FABRIC_SCHEMA_VERSION:
+            raise FabricSchemaError(
+                "Fabric SQL schema version mismatch: "
+                f"expected {FABRIC_SCHEMA_VERSION}, found {schema_version}"
+            )
+        required_view_count = connection.execute(
+            text(
+                "SELECT COUNT(*) FROM sys.views AS v JOIN sys.schemas AS s "
+                "ON s.schema_id = v.schema_id WHERE (s.name = 'app' AND v.name IN "
+                "('analysis_projection', 'decision_projection')) OR "
+                "(s.name = 'analytics' AND v.name IN "
+                "('case_command_center', 'action_outcomes'))"
+            )
+        ).scalar_one()
+    if required_view_count != REQUIRED_ANALYTICS_VIEW_COUNT:
         raise FabricSchemaError(
-            "Fabric SQL schema version mismatch: "
-            f"expected {FABRIC_SCHEMA_VERSION}, found {schema_version}"
+            "Fabric SQL required analytics views are missing: "
+            f"expected {REQUIRED_ANALYTICS_VIEW_COUNT}, found {required_view_count}"
         )
     return FabricHealth(
         operational_store="fabric_sql",

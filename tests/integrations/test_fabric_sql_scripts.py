@@ -1,8 +1,17 @@
 import re
+from contextlib import nullcontext
 from pathlib import Path
+from typing import cast
 
-from integrations.fabric.health import FABRIC_SCHEMA_VERSION
-from integrations.fabric.schema import split_go_batches
+import pytest
+from sqlalchemy import Engine
+
+from integrations.fabric.health import (
+    FABRIC_SCHEMA_VERSION,
+    FabricSchemaError,
+    check_fabric_health,
+)
+from integrations.fabric.schema import apply_sql_script, split_go_batches
 
 OPERATIONAL = Path("fabric/sql/001_operational_schema.sql")
 ANALYTICS = Path("fabric/sql/002_analytics_views.sql")
@@ -88,7 +97,8 @@ def test_live_schema_version_is_published_only_after_analytics_views_exist():
     operational = _normalized(OPERATIONAL)
     analytics = _normalized(ANALYTICS)
 
-    assert "select n'operational' as component, 12 as schema_version" in operational
+    assert "select n'operational' as component, 11 as schema_version" in operational
+    assert "12 as schema_version" not in operational
     assert "set schema_version = 12" in analytics
     assert analytics.index("create or alter view analytics.action_outcomes") < (
         analytics.index("set schema_version = 12")
@@ -156,7 +166,7 @@ def test_schemas_views_and_version_publication_are_idempotent():
     assert "@@ROWCOUNT" not in analytics
 
 
-def test_operational_version_publication_advances_to_12_without_downgrade():
+def test_operational_version_publication_advances_to_11_without_downgrade():
     version_batch = " ".join(
         split_go_batches(OPERATIONAL.read_text(encoding="utf-8"))[-1].lower().split()
     )
@@ -167,8 +177,89 @@ def test_operational_version_publication_advances_to_12_without_downgrade():
     )
     assert "when not matched then insert" in version_batch
     assert "values (source.component, source.schema_version)" in version_batch
-    assert "select n'operational' as component, 12 as schema_version" in version_batch
-    assert f"{FABRIC_SCHEMA_VERSION} as schema_version" in version_batch
+    assert "select n'operational' as component, 11 as schema_version" in version_batch
+    assert f"{FABRIC_SCHEMA_VERSION} as schema_version" not in version_batch
+
+
+class _SequencedResult:
+    def __init__(self, value: int) -> None:
+        self._value = value
+
+    def scalar_one(self) -> int:
+        return self._value
+
+
+class _SequencedFabricEngine:
+    """Exercise the production script runner while tracking publication state."""
+
+    def __init__(self) -> None:
+        self.schema_version: int | None = None
+        self.views: set[str] = set()
+
+    def begin(self):
+        return nullcontext(self)
+
+    def connect(self):
+        return nullcontext(self)
+
+    def exec_driver_sql(self, batch: str) -> None:
+        for schema_name, view_name in re.findall(
+            r"CREATE OR ALTER VIEW\s+(\w+)\.(\w+)", batch, re.IGNORECASE
+        ):
+            self.views.add(f"{schema_name.lower()}.{view_name.lower()}")
+        version_match = re.search(
+            r"SELECT\s+N'operational'\s+AS\s+component,\s+(\d+)\s+AS\s+schema_version",
+            batch,
+            re.IGNORECASE,
+        )
+        if version_match:
+            self.schema_version = max(
+                self.schema_version or 0, int(version_match.group(1))
+            )
+        if re.search(r"SET\s+schema_version\s*=\s*12", batch, re.IGNORECASE):
+            self.schema_version = 12
+
+    def execute(self, statement):
+        query = str(statement)
+        if query == "SELECT 1":
+            return _SequencedResult(1)
+        if "FROM app.schema_version" in query:
+            assert self.schema_version is not None
+            return _SequencedResult(self.schema_version)
+        if "FROM sys.views" in query:
+            required = {
+                "app.analysis_projection",
+                "app.decision_projection",
+                "analytics.case_command_center",
+                "analytics.action_outcomes",
+            }
+            return _SequencedResult(len(required & self.views))
+        raise AssertionError(f"unexpected health query: {query}")
+
+
+def test_real_script_sequence_promotes_readiness_only_after_analytics():
+    engine = _SequencedFabricEngine()
+    typed_engine = cast(Engine, engine)
+
+    apply_sql_script(typed_engine, OPERATIONAL.read_text(encoding="utf-8"))
+
+    assert engine.schema_version == 11
+    assert engine.views == set()
+    with pytest.raises(FabricSchemaError, match="expected 12, found 11"):
+        check_fabric_health(typed_engine)
+
+    apply_sql_script(typed_engine, ANALYTICS.read_text(encoding="utf-8"))
+
+    assert engine.schema_version == FABRIC_SCHEMA_VERSION
+    assert engine.views == {
+        "app.analysis_projection",
+        "app.decision_projection",
+        "analytics.case_command_center",
+        "analytics.action_outcomes",
+    }
+    health = check_fabric_health(typed_engine)
+    assert health.schema_version == FABRIC_SCHEMA_VERSION
+    assert health.power_bi_available is True
 
 
 def test_partial_operational_application_and_double_retry_do_not_collide():
@@ -195,7 +286,7 @@ def test_partial_operational_application_and_double_retry_do_not_collide():
                 raise AssertionError(f"object collision: {creation}")
             existing.add(creation)
         if "MERGE app.schema_version WITH (HOLDLOCK)" in batch:
-            schema_version = max(schema_version or 0, 12)
+            schema_version = max(schema_version or 0, 11)
         if "SET schema_version = 12" in batch and schema_version is not None:
             schema_version = 12
 

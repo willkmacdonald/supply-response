@@ -70,3 +70,40 @@ Status: **DONE_WITH_CONCERNS**
 - npm offline production audit: **0 vulnerabilities**; Python `pip check`: no broken requirements; `git diff --check`: passed.
 
 No live browser, tenant authentication, external network, Azure, Graph, Entra, Microsoft 365, Work IQ, Fabric, Foundry, or Power BI operation was performed. The approval-gated Task 18 live acceptance remains deferred.
+
+## Final Fabric readiness staging correction
+
+The final independent review found that the prior Task 17 schema addition had
+accidentally moved the live-ready version publication into the operational
+script. The Task 12 fail-closed boundary is restored:
+
+- `001_operational_schema.sql` creates the complete operational schema,
+  including Task 17's analysis-claim and verified live-source tables, and
+  publishes only schema version 11.
+- `002_analytics_views.sql` creates both app projections and both analytics
+  views, verifies that all four view objects exist, and is the sole promotion
+  to schema version 12.
+- `check_fabric_health` now requires both exact schema version 12 and the exact
+  four required views before returning Fabric/Power BI readiness. A stray or
+  prematurely written v12 row therefore cannot advertise an operational-only
+  database as live ready.
+- A stateful sequencing test runs the checked-in SQL through the production
+  `apply_sql_script` batch runner. It proves the intermediate state after 001
+  is v11 with no views and rejected health, then proves the state after 002 is
+  v12 with all four views and accepted health.
+
+### Final correction TDD and verification
+
+- RED: focused Fabric tests produced five expected failures: script 001 still
+  published v12, the staged-sequence test observed v12 after 001, and health
+  accepted v12 with only three required views.
+- GREEN: focused Fabric script/health tests: **16 passed**.
+- Focused Task 17 live hardening, Fabric/readiness, persistence, execution, and
+  API suite: **180 passed** (only the existing Starlette/httpx deprecation
+  warning).
+- Focused Ruff: passed.
+- Changed-scope Pyright with the project virtualenv interpreter: **0 errors, 0
+  warnings**. A whole-repository invocation still reports 47 pre-existing
+  errors in unchanged analysis/test modules; none are in this correction's
+  files.
+- No external, network, cloud, tenant, or live-service operation was made.

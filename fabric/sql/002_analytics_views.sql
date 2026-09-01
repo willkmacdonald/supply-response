@@ -106,6 +106,12 @@ JOIN app.outcome_observations AS o
     ON o.decision_id = d.decision_id;
 GO
 
+IF OBJECT_ID(N'app.analysis_projection', N'V') IS NULL
+    OR OBJECT_ID(N'app.decision_projection', N'V') IS NULL
+    OR OBJECT_ID(N'analytics.case_command_center', N'V') IS NULL
+    OR OBJECT_ID(N'analytics.action_outcomes', N'V') IS NULL
+    THROW 51000, 'Required analytics views are missing.', 1;
+
 UPDATE app.schema_version
 SET schema_version = 12,
     applied_at = SYSDATETIMEOFFSET()

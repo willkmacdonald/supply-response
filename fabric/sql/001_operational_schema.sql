@@ -484,7 +484,7 @@ GO
 
 MERGE app.schema_version WITH (HOLDLOCK) AS target
 USING (
-    SELECT N'operational' AS component, 12 AS schema_version
+    SELECT N'operational' AS component, 11 AS schema_version
 ) AS source
 ON target.component = source.component
 WHEN MATCHED AND target.schema_version < source.schema_version THEN
