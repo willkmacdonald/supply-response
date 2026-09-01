@@ -316,14 +316,17 @@ def test_preflight_requires_exact_foundry_fabric_and_azd_environment_contracts()
 def test_secret_file_and_live_smoke_gate_fail_closed():
     deploy = _read("scripts/deploy_personal_tenant.sh")
     helper = _read("scripts/lib/safe_command.sh")
+    health_helper = _read("scripts/lib/deployment_health.sh")
 
     assert (
         "secret file must contain exactly one line without a trailing newline" in deploy
     )
     assert "SMOKE_MAX_ATTEMPTS" in deploy
-    assert 'health["runtime_mode"] == "live"' in deploy
-    assert 'runtime["capability_health"]["operational_store"] == "ready"' in deploy
-    assert 'runtime["capability_health"]["agent_runtime"] == "ready"' in deploy
+    assert 'health.get("runtime_mode") == "live"' in health_helper
+    assert 'capabilities.get("operational_store") == "ready"' in health_helper
+    assert 'capabilities.get("agent_runtime") == "ready"' in health_helper
+    assert 'type(health.get("schema_version")) is int' in health_helper
+    assert "raise SystemExit(1)" in health_helper
     smoke_body = deploy.split("smoke_gate()", 1)[1].split("\n}\n", 1)[0]
     assert "SUPPLY_RESPONSE_WORKIQ" not in smoke_body
     assert "valid_secret_file" in deploy
@@ -571,7 +574,7 @@ def test_rotation_script_is_dry_run_exact_scoped_and_always_cleans_secret_file()
     assert "SUPPLY_RESPONSE_KEY_VAULT_URI" in rotation
     assert "SUPPLY_RESPONSE_LIVE_BASE_URL" in rotation
     assert "SUPPLY_RESPONSE_EXPECTED_DEPLOYMENT_ORIGIN" in rotation
-    assert 'app["properties"]["configuration"].get("secrets", [])' in rotation
+    assert '.get("configuration", {}).get("secrets", [])' in rotation
     assert "create_temporary_kv_operator_access" in rotation
     assert "cleanup_temporary_kv_operator_access" in rotation
     assert "safe_before_diagnostics_cleanup" in rotation
@@ -876,6 +879,158 @@ def test_personal_tenant_operator_is_interactive_user_only(tmp_path):
     )
     assert completed.returncode != 0
     assert json.loads(state_path.read_text()).get("calls", []) == []
+
+
+def test_optimized_python_cannot_bypass_rotation_binding(tmp_path):
+    for scenario in ("wrong-app", "wrong-secret-reference"):
+        scenario_path = tmp_path / scenario
+        scenario_path.mkdir()
+        environment, state_path = _rotation_environment(scenario_path, scenario)
+        environment["PYTHONOPTIMIZE"] = "1"
+        completed = subprocess.run(
+            ["/bin/bash", "scripts/rotate_entra_client_secret.sh", "--apply"],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        state = json.loads(state_path.read_text())
+        assert completed.returncode != 0, scenario
+        assert state.get("new_sets", 0) == 0, scenario
+        assert not state.get("role", False), scenario
+
+
+def test_optimized_python_cannot_bypass_deployment_health_guards(tmp_path):
+    helper = ROOT / "scripts/lib/deployment_health.sh"
+    assert helper.exists()
+    health = tmp_path / "health.json"
+    runtime = tmp_path / "runtime.json"
+
+    bad_contracts = (
+        (
+            "validate_live_smoke_contract",
+            {
+                "status": "broken",
+                "runtime_mode": "fallback",
+                "operational_store": "sqlite",
+                "schema_version": "12",
+            },
+            {
+                "runtime_mode": "fallback",
+                "capability_health": {
+                    "operational_store": "ready",
+                    "agent_runtime": "ready",
+                },
+            },
+        ),
+        (
+            "validate_live_smoke_contract",
+            {
+                "status": "ok",
+                "runtime_mode": "live",
+                "operational_store": "fabric_sql",
+                "schema_version": 12,
+            },
+            {
+                "runtime_mode": "live",
+                "capability_health": {
+                    "operational_store": "unverified",
+                    "agent_runtime": "ready",
+                },
+            },
+        ),
+        (
+            "validate_existing_final_health_contract",
+            {"status": "broken", "runtime_mode": "live"},
+            {},
+        ),
+    )
+    for index, (function, health_payload, runtime_payload) in enumerate(bad_contracts):
+        health.write_text(json.dumps(health_payload))
+        runtime.write_text(json.dumps(runtime_payload))
+        command = f'source "{helper}"; {function} "$HEALTH_FILE" "$RUNTIME_FILE"'
+        completed = subprocess.run(
+            ["/bin/bash", "-c", command],
+            env={
+                **os.environ,
+                "PYTHONOPTIMIZE": "1",
+                "HEALTH_FILE": str(health),
+                "RUNTIME_FILE": str(runtime),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert completed.returncode != 0, index
+
+    health.write_text(
+        json.dumps(
+            {
+                "status": "ok",
+                "runtime_mode": "live",
+                "operational_store": "fabric_sql",
+                "schema_version": 12,
+            }
+        )
+    )
+    runtime.write_text(
+        json.dumps(
+            {
+                "runtime_mode": "live",
+                "capability_health": {
+                    "operational_store": "ready",
+                    "agent_runtime": "ready",
+                },
+            }
+        )
+    )
+    completed = subprocess.run(
+        [
+            "/bin/bash",
+            "-c",
+            f'source "{helper}"; validate_live_smoke_contract "$HEALTH_FILE" "$RUNTIME_FILE"',
+        ],
+        env={
+            **os.environ,
+            "PYTHONOPTIMIZE": "1",
+            "HEALTH_FILE": str(health),
+            "RUNTIME_FILE": str(runtime),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+    health.write_text(json.dumps({"status": "ok", "runtime_mode": "live"}))
+    completed = subprocess.run(
+        [
+            "/bin/bash",
+            "-c",
+            f'source "{helper}"; validate_existing_final_health_contract "$HEALTH_FILE"',
+        ],
+        env={**os.environ, "PYTHONOPTIMIZE": "1", "HEALTH_FILE": str(health)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_deployment_shell_runtime_python_contains_no_assert_statements():
+    shell_sources = [
+        *ROOT.glob("scripts/*.sh"),
+        *ROOT.glob("scripts/lib/*.sh"),
+    ]
+    runtime_assert = re.compile(r"\bassert\b")
+    offenders = [
+        path.relative_to(ROOT)
+        for path in shell_sources
+        if runtime_assert.search(path.read_text())
+    ]
+    assert offenders == []
 
 
 def test_restart_safe_upgrade_never_replaces_final_with_placeholder():

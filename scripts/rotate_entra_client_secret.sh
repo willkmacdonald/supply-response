@@ -104,17 +104,23 @@ import json
 import os
 
 app = json.loads(os.environ["APP_JSON"])
-assert app["id"] == os.environ["EXPECTED_APP_ID"]
-assert app["name"] == os.environ["EXPECTED_APP_NAME"]
-assert "SystemAssigned" in app.get("identity", {}).get("type", "").split(", ")
+if app.get("id") != os.environ["EXPECTED_APP_ID"]:
+    raise SystemExit(1)
+if app.get("name") != os.environ["EXPECTED_APP_NAME"]:
+    raise SystemExit(1)
+if "SystemAssigned" not in app.get("identity", {}).get("type", "").split(", "):
+    raise SystemExit(1)
 matches = [
     item
-    for item in app["properties"]["configuration"].get("secrets", [])
+    for item in app.get("properties", {}).get("configuration", {}).get("secrets", [])
     if item.get("name") == "entra-client-secret"
 ]
-assert len(matches) == 1
-assert matches[0].get("keyVaultUrl") == os.environ["EXPECTED_SECRET_URL"]
-assert matches[0].get("identity") == "system"
+if len(matches) != 1:
+    raise SystemExit(1)
+if matches[0].get("keyVaultUrl") != os.environ["EXPECTED_SECRET_URL"]:
+    raise SystemExit(1)
+if matches[0].get("identity") != "system":
+    raise SystemExit(1)
 PY
 app_fqdn="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["properties"]["configuration"]["ingress"]["fqdn"])' <<<"$container_app_json")"
 latest_ready_revision="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["properties"]["latestReadyRevisionName"])' <<<"$container_app_json")"

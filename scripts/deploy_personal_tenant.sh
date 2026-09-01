@@ -5,6 +5,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
 source "${script_dir}/lib/safe_command.sh"
 source "${script_dir}/lib/key_vault_operator_access.sh"
+source "${script_dir}/lib/deployment_health.sh"
 safe_init_diagnostics
 
 EXPECTED_SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID:?Set AZURE_SUBSCRIPTION_ID to the separately confirmed target}"
@@ -55,23 +56,7 @@ smoke_gate() {
   for ((attempt=1; attempt<=SMOKE_MAX_ATTEMPTS; attempt++)); do
     if safe_run smoke-health curl --connect-timeout 5 --max-time 10 -fsS "${app_url}/health" -o "${smoke_dir}/health.json" \
       && safe_run smoke-runtime curl --connect-timeout 5 --max-time 10 -fsS "${app_url}/api/runtime" -o "${smoke_dir}/runtime.json" \
-      && HEALTH_FILE="${smoke_dir}/health.json" RUNTIME_FILE="${smoke_dir}/runtime.json" python3 - <<'PY'
-import json
-import os
-
-with open(os.environ["HEALTH_FILE"], encoding="utf-8") as stream:
-    health = json.load(stream)
-with open(os.environ["RUNTIME_FILE"], encoding="utf-8") as stream:
-    runtime = json.load(stream)
-
-assert health["status"] == "ok"
-assert health["runtime_mode"] == "live"
-assert health["operational_store"] == "fabric_sql"
-assert isinstance(health["schema_version"], int)
-assert runtime["runtime_mode"] == "live"
-assert runtime["capability_health"]["operational_store"] == "ready"
-assert runtime["capability_health"]["agent_runtime"] == "ready"
-PY
+      && validate_live_smoke_contract "${smoke_dir}/health.json" "${smoke_dir}/runtime.json"
     then
       rm -rf "$smoke_dir"
       printf 'Live Fabric and Foundry readiness gate passed; no delegated user operation was invoked.\n'
@@ -154,15 +139,7 @@ verify_existing_final_health() {
   chmod 600 "$health_file"
   for attempt in {1..6}; do
     if safe_run existing-health curl --connect-timeout 5 --max-time 10 -fsS "${app_url}/health" -o "$health_file" \
-      && HEALTH_FILE="$health_file" python3 - <<'PY'
-import json
-import os
-
-with open(os.environ["HEALTH_FILE"], encoding="utf-8") as stream:
-    health = json.load(stream)
-assert health["status"] == "ok"
-assert health["runtime_mode"] == "live"
-PY
+      && validate_existing_final_health_contract "$health_file"
     then
       return 0
     fi
