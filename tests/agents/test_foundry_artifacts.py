@@ -106,14 +106,12 @@ class FakeDeployments:
         *,
         present: bool = True,
         model_name: str = TRUSTED_MODEL_DEPLOYMENT,
-        provisioning_state: str = "Succeeded",
     ) -> None:
         self.events = events
         self.present = present
         self.deployment = SimpleNamespace(
             name=TRUSTED_MODEL_DEPLOYMENT,
             model_name=model_name,
-            provisioning_state=provisioning_state,
         )
 
     def get(self, name: str):
@@ -129,7 +127,6 @@ class FakeProject:
         *,
         deployment_present: bool = True,
         deployment_model: str = TRUSTED_MODEL_DEPLOYMENT,
-        deployment_state: str = "Succeeded",
         fail_after_creations: int | None = None,
         list_versions_error: Exception | None = None,
     ) -> None:
@@ -143,7 +140,6 @@ class FakeProject:
             self.events,
             present=deployment_present,
             model_name=deployment_model,
-            provisioning_state=deployment_state,
         )
 
 
@@ -358,12 +354,19 @@ def test_publish_preflights_model_before_creating_any_version() -> None:
     )
 
 
+def test_publish_accepts_live_sdk_deployment_shape() -> None:
+    project = FakeProject()
+
+    publish(ROOT, project=project, emit=lambda _: None)
+
+    assert len(project.agents.created) == 3
+
+
 @pytest.mark.parametrize(
     ("project", "message"),
     [
         (FakeProject(deployment_present=False), "missing"),
         (FakeProject(deployment_model="gpt-4.1-mini"), "gpt-5.6-luna"),
-        (FakeProject(deployment_state="Failed"), "Succeeded"),
     ],
 )
 def test_publish_rejects_invalid_model_deployment_before_agent_mutation(

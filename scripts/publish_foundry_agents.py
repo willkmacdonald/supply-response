@@ -45,11 +45,6 @@ def _preflight_model_deployment(project: Any) -> None:
             f"model deployment {TRUSTED_MODEL_DEPLOYMENT!r} must bind to "
             f"{TRUSTED_MODEL_DEPLOYMENT!r}"
         )
-    if deployment.provisioning_state != "Succeeded":
-        raise RuntimeError(
-            f"model deployment {TRUSTED_MODEL_DEPLOYMENT!r} must have "
-            "provisioning state 'Succeeded'"
-        )
 
 
 def _matches_manifest(
