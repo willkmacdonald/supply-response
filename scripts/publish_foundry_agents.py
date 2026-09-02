@@ -90,7 +90,7 @@ def publish(
             "supply_response_role": manifest.role,
         }
         try:
-            versions = project.agents.list_versions(manifest.agent_name)
+            versions = list(project.agents.list_versions(manifest.agent_name))
         except ResourceNotFoundError:
             versions = []
         matching = [

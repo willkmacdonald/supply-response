@@ -51,9 +51,11 @@ class FakeAgents:
         events: list[str],
         *,
         fail_after_creations: int | None = None,
+        list_versions_error: Exception | None = None,
     ) -> None:
         self.events = events
         self.fail_after_creations = fail_after_creations
+        self.list_versions_error = list_versions_error
         self.created: list[dict[str, object]] = []
         self.remote: dict[tuple[str, str], object] = {}
         self.versions: dict[str, list[object]] = {}
@@ -80,10 +82,20 @@ class FakeAgents:
 
     def list_versions(self, agent_name: str):
         self.events.append(f"list:{agent_name}")
+        if self.list_versions_error is not None:
+            return LazyVersionPage(self.list_versions_error)
         return list(self.versions.get(agent_name, []))
 
     def get_version(self, *, agent_name: str, agent_version: str):
         return self.remote[(agent_name, agent_version)]
+
+
+class LazyVersionPage:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def __iter__(self):
+        raise self.error
 
 
 class FakeDeployments:
@@ -118,11 +130,13 @@ class FakeProject:
         deployment_model: str = TRUSTED_MODEL_DEPLOYMENT,
         deployment_state: str = "Succeeded",
         fail_after_creations: int | None = None,
+        list_versions_error: Exception | None = None,
     ) -> None:
         self.events: list[str] = []
         self.agents = FakeAgents(
             self.events,
             fail_after_creations=fail_after_creations,
+            list_versions_error=list_versions_error,
         )
         self.deployments = FakeDeployments(
             self.events,
@@ -391,6 +405,25 @@ def test_repeat_publish_reuses_every_version_without_creating() -> None:
     assert project.agents.created == []
     assert second == first
     assert tuple(emitted) == first
+
+
+def test_publish_treats_lazy_page_not_found_as_no_existing_versions() -> None:
+    project = FakeProject(
+        list_versions_error=ResourceNotFoundError("agent not found during iteration")
+    )
+
+    publish(ROOT, project=project, emit=lambda _: None)
+
+    assert len(project.agents.created) == 3
+
+
+def test_publish_propagates_other_lazy_page_iteration_errors() -> None:
+    project = FakeProject(list_versions_error=RuntimeError("version page unavailable"))
+
+    with pytest.raises(RuntimeError, match="version page unavailable"):
+        publish(ROOT, project=project, emit=lambda _: None)
+
+    assert project.agents.created == []
 
 
 def test_failed_publish_retries_without_duplicating_created_version() -> None:
