@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 from pathlib import Path
 from typing import Any
@@ -17,8 +18,8 @@ def _versions_from_environment(
     result: dict[str, str] = {}
     for item in manifests:
         prefix = f"SUPPLY_RESPONSE_FOUNDRY_{item.role.upper()}"
-        configured_name = os.getenv(f"{prefix}_NAME", "")
-        version = os.getenv(f"{prefix}_VERSION", "")
+        configured_name = os.getenv(f"{prefix}_AGENT_NAME", "")
+        version = os.getenv(f"{prefix}_AGENT_VERSION", "")
         if (
             configured_name != item.agent_name
             or not version.isdigit()
@@ -29,6 +30,23 @@ def _versions_from_environment(
             )
         result[item.agent_name] = version
     return result
+
+
+def deployment_receipt(
+    project_endpoint: str,
+    versions: tuple[tuple[str, str], ...],
+) -> str:
+    """Bind the endpoint and exact signal/context/decision versions."""
+    if (
+        not isinstance(versions, tuple)
+        or len(versions) != 3
+        or any(not isinstance(item, tuple) or len(item) != 2 for item in versions)
+    ):
+        raise TypeError("versions must be an ordered signal/context/decision tuple")
+    parts = (project_endpoint,) + tuple(
+        part for name_version in versions for part in name_version
+    )
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
 
 
 def verify(
@@ -101,8 +119,24 @@ def main() -> int:
     if project is None:
         print("Validated three local manifests; no credentials or network used.")
     else:
+        assert versions is not None
         for item in checked:
             print(item)
+        manifests_by_role = {item.role: item for item in manifests}
+        ordered_versions = tuple(
+            (
+                manifests_by_role[role].agent_name,
+                versions[manifests_by_role[role].agent_name],
+            )
+            for role in ("signal", "context", "decision")
+        )
+        print(
+            "SUPPLY_RESPONSE_FOUNDRY_DEPLOYMENT_RECEIPT="
+            + deployment_receipt(
+                os.environ["SUPPLY_RESPONSE_FOUNDRY_PROJECT_ENDPOINT"],
+                ordered_versions,
+            )
+        )
     return 0
 
 

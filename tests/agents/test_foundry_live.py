@@ -7,12 +7,12 @@ import pytest
 REQUIRED = (
     "SUPPLY_RESPONSE_ENTRA_TENANT_ID",
     "SUPPLY_RESPONSE_FOUNDRY_PROJECT_ENDPOINT",
-    "SUPPLY_RESPONSE_FOUNDRY_SIGNAL_NAME",
-    "SUPPLY_RESPONSE_FOUNDRY_SIGNAL_VERSION",
-    "SUPPLY_RESPONSE_FOUNDRY_CONTEXT_NAME",
-    "SUPPLY_RESPONSE_FOUNDRY_CONTEXT_VERSION",
-    "SUPPLY_RESPONSE_FOUNDRY_DECISION_NAME",
-    "SUPPLY_RESPONSE_FOUNDRY_DECISION_VERSION",
+    "SUPPLY_RESPONSE_FOUNDRY_SIGNAL_AGENT_NAME",
+    "SUPPLY_RESPONSE_FOUNDRY_SIGNAL_AGENT_VERSION",
+    "SUPPLY_RESPONSE_FOUNDRY_CONTEXT_AGENT_NAME",
+    "SUPPLY_RESPONSE_FOUNDRY_CONTEXT_AGENT_VERSION",
+    "SUPPLY_RESPONSE_FOUNDRY_DECISION_AGENT_NAME",
+    "SUPPLY_RESPONSE_FOUNDRY_DECISION_AGENT_VERSION",
     "SUPPLY_RESPONSE_FOUNDRY_LIVE",
 )
 
@@ -42,8 +42,10 @@ async def test_foundry_live_rl001_requires_complete_exact_bindings() -> None:
     bindings = {
         role: FoundryAgentBinding(
             project_endpoint=endpoint,
-            agent_name=os.environ[f"SUPPLY_RESPONSE_FOUNDRY_{role.upper()}_NAME"],
-            agent_version=os.environ[f"SUPPLY_RESPONSE_FOUNDRY_{role.upper()}_VERSION"],
+            agent_name=os.environ[f"SUPPLY_RESPONSE_FOUNDRY_{role.upper()}_AGENT_NAME"],
+            agent_version=os.environ[
+                f"SUPPLY_RESPONSE_FOUNDRY_{role.upper()}_AGENT_VERSION"
+            ],
         )
         for role in manifests
     }

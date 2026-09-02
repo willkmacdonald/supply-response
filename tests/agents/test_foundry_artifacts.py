@@ -13,6 +13,7 @@ from agent_framework import AgentResponse, Content, Message
 from azure.core.exceptions import ResourceNotFoundError
 from pydantic import ValidationError
 
+import scripts.verify_foundry_agents as verify_script
 from agents.foundry import (
     FoundryAgentBinding,
     FoundryJsonAgent,
@@ -506,6 +507,130 @@ def test_verify_rejects_remote_instruction_or_tool_drift() -> None:
         verify(ROOT, project=project, versions=versions)
 
 
+def _set_foundry_binding_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    versions_by_role: dict[str, str],
+    *,
+    canonical: bool,
+) -> None:
+    for item in load_manifests(ROOT):
+        prefix = f"SUPPLY_RESPONSE_FOUNDRY_{item.role.upper()}"
+        infix = "_AGENT" if canonical else ""
+        monkeypatch.setenv(f"{prefix}{infix}_NAME", item.agent_name)
+        monkeypatch.setenv(f"{prefix}{infix}_VERSION", versions_by_role[item.role])
+
+
+def _set_exact_remote_versions(
+    project: FakeProject,
+    versions_by_role: dict[str, str],
+) -> None:
+    for item in load_manifests(ROOT):
+        version = versions_by_role[item.role]
+        project.agents.remote[(item.agent_name, version)] = SimpleNamespace(
+            name=item.agent_name,
+            version=version,
+            description=item.description,
+            definition=SimpleNamespace(
+                model=item.model,
+                instructions=item.instructions,
+                tools=[],
+            ),
+        )
+
+
+def test_verify_reads_canonical_agent_environment_bindings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    versions_by_role = {"signal": "11", "context": "12", "decision": "13"}
+    _set_foundry_binding_environment(monkeypatch, versions_by_role, canonical=True)
+
+    assert verify_script._versions_from_environment(load_manifests(ROOT)) == {
+        item.agent_name: versions_by_role[item.role] for item in load_manifests(ROOT)
+    }
+
+
+def test_verify_rejects_legacy_environment_bindings_without_agent_infix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    versions_by_role = {"signal": "11", "context": "12", "decision": "13"}
+    for item in load_manifests(ROOT):
+        prefix = f"SUPPLY_RESPONSE_FOUNDRY_{item.role.upper()}"
+        monkeypatch.delenv(f"{prefix}_AGENT_NAME", raising=False)
+        monkeypatch.delenv(f"{prefix}_AGENT_VERSION", raising=False)
+    _set_foundry_binding_environment(monkeypatch, versions_by_role, canonical=False)
+
+    with pytest.raises(SystemExit, match="pinned versions"):
+        verify_script._versions_from_environment(load_manifests(ROOT))
+
+
+def test_deployment_receipt_uses_runtime_binding_order() -> None:
+    assert (
+        verify_script.deployment_receipt(
+            "https://example.services.ai.azure.com/api/projects/demo",
+            (
+                ("supply-response-signal", "11"),
+                ("supply-response-context", "12"),
+                ("supply-response-decision", "13"),
+            ),
+        )
+        == "0bdb068692b0d82bdfd563adad8a8c1ed249669e9b6fbe7fcad6b7566c1f7778"
+    )
+
+
+def test_live_verify_emits_receipt_after_all_exact_remote_checks(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    endpoint = "https://example.services.ai.azure.com/api/projects/demo"
+    versions_by_role = {"signal": "11", "context": "12", "decision": "13"}
+    project = FakeProject()
+    _set_exact_remote_versions(project, versions_by_role)
+    _set_foundry_binding_environment(monkeypatch, versions_by_role, canonical=True)
+    monkeypatch.setenv("SUPPLY_RESPONSE_FOUNDRY_PROJECT_ENDPOINT", endpoint)
+    monkeypatch.setenv("SUPPLY_RESPONSE_ENTRA_TENANT_ID", "tenant")
+    monkeypatch.setattr(sys, "argv", ["verify_foundry_agents.py", "--live"])
+    monkeypatch.setattr(verify_script, "_live_project", lambda: project)
+
+    assert verify_script.main() == 0
+
+    output = capsys.readouterr().out.splitlines()
+    assert set(output[:-1]) == {
+        "supply-response-signal=11",
+        "supply-response-context=12",
+        "supply-response-decision=13",
+    }
+    assert output[-1] == (
+        "SUPPLY_RESPONSE_FOUNDRY_DEPLOYMENT_RECEIPT="
+        "0bdb068692b0d82bdfd563adad8a8c1ed249669e9b6fbe7fcad6b7566c1f7778"
+    )
+
+
+def test_live_verify_emits_no_receipt_when_a_remote_field_drifts(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    versions_by_role = {"signal": "11", "context": "12", "decision": "13"}
+    project = FakeProject()
+    _set_exact_remote_versions(project, versions_by_role)
+    signal = next(item for item in load_manifests(ROOT) if item.role == "signal")
+    cast(
+        Any, project.agents.remote[(signal.agent_name, versions_by_role["signal"])]
+    ).description = "remote drift"
+    _set_foundry_binding_environment(monkeypatch, versions_by_role, canonical=True)
+    monkeypatch.setenv(
+        "SUPPLY_RESPONSE_FOUNDRY_PROJECT_ENDPOINT",
+        "https://example.services.ai.azure.com/api/projects/demo",
+    )
+    monkeypatch.setenv("SUPPLY_RESPONSE_ENTRA_TENANT_ID", "tenant")
+    monkeypatch.setattr(sys, "argv", ["verify_foundry_agents.py", "--live"])
+    monkeypatch.setattr(verify_script, "_live_project", lambda: project)
+
+    with pytest.raises(RuntimeError, match="drift"):
+        verify_script.main()
+
+    assert "SUPPLY_RESPONSE_FOUNDRY_DEPLOYMENT_RECEIPT" not in capsys.readouterr().out
+
+
 def test_publish_and_verify_default_to_offline_validation(monkeypatch) -> None:
     monkeypatch.delenv("SUPPLY_RESPONSE_FOUNDRY_PROJECT_ENDPOINT", raising=False)
     monkeypatch.delenv("SUPPLY_RESPONSE_FOUNDRY_PUBLISH", raising=False)
@@ -527,8 +652,8 @@ def test_live_verify_validates_bindings_before_constructing_credentials(
     monkeypatch.setenv("SUPPLY_RESPONSE_ENTRA_TENANT_ID", "tenant")
     for item in manifests:
         prefix = f"SUPPLY_RESPONSE_FOUNDRY_{item.role.upper()}"
-        monkeypatch.setenv(f"{prefix}_NAME", item.agent_name)
-        monkeypatch.delenv(f"{prefix}_VERSION", raising=False)
+        monkeypatch.setenv(f"{prefix}_AGENT_NAME", item.agent_name)
+        monkeypatch.delenv(f"{prefix}_AGENT_VERSION", raising=False)
 
     constructed = False
 

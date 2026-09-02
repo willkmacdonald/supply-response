@@ -476,23 +476,19 @@ already been separately published and pinned, run:
 ```bash
 export SUPPLY_RESPONSE_ENTRA_TENANT_ID="$AZURE_TENANT_ID"
 .venv/bin/python scripts/verify_foundry_agents.py --live
-export SUPPLY_RESPONSE_FOUNDRY_DEPLOYMENT_RECEIPT="$(python3 - <<'PY'
-import hashlib
-import os
-
-parts = (
-    os.environ["SUPPLY_RESPONSE_FOUNDRY_PROJECT_ENDPOINT"],
-    os.environ["SUPPLY_RESPONSE_FOUNDRY_SIGNAL_AGENT_NAME"],
-    os.environ["SUPPLY_RESPONSE_FOUNDRY_SIGNAL_AGENT_VERSION"],
-    os.environ["SUPPLY_RESPONSE_FOUNDRY_CONTEXT_AGENT_NAME"],
-    os.environ["SUPPLY_RESPONSE_FOUNDRY_CONTEXT_AGENT_VERSION"],
-    os.environ["SUPPLY_RESPONSE_FOUNDRY_DECISION_AGENT_NAME"],
-    os.environ["SUPPLY_RESPONSE_FOUNDRY_DECISION_AGENT_VERSION"],
-)
-print(hashlib.sha256("\n".join(parts).encode()).hexdigest())
-PY
-)"
 ```
+
+The verifier prints the three checked immutable versions first and, only after
+all exact remote checks succeed, ends with an assignment in this form:
+
+```text
+SUPPLY_RESPONSE_FOUNDRY_DEPLOYMENT_RECEIPT=<64-lowercase-hexadecimal-characters>
+```
+
+Copy that exact emitted assignment into the selected ignored azd environment
+(`.azure/<environment-name>/.env`) and export the same exact value in the shell
+used for deployment. Do not calculate or edit the receipt manually, and do not
+put an actual receipt in this runbook.
 
 Record the verified names, immutable versions, project resource ID, timestamp,
 and receipt in ignored `.artifacts/deployment/foundry-receipt.txt`. If verification
