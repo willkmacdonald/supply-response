@@ -1,160 +1,179 @@
 # Supply Response
 
-Portable-core scaffold for the Supply Response prototype. Local fallback mode remains self-contained; Fabric SQL Database persistence is available only through explicit live configuration, while other Microsoft cloud integrations remain deferred.
+Supply Response is a decision-support demonstration for managing a fictional supplier disruption from detection through analysis, human approval, bounded execution, and outcome observation.
 
-## Implemented now
+The project combines a deterministic supply-response core with a FastAPI application, a React decision console, durable SQLite or Fabric SQL persistence, and a two-page Power BI project. Microsoft 365 and Azure integrations are added through explicit adapters so the complete live demonstration can use Work IQ, Microsoft Fabric, Microsoft Foundry, Microsoft Agent Framework, Entra ID, and Power BI without coupling the business logic to those services.
 
-- Python 3.12-compatible FastAPI backend.
-- React + TypeScript/Vite frontend shell.
-- Portable Pydantic schemas for the proposed synthetic tables.
-- Deterministic, seeded, fictional `RL-` synthetic dataset generator.
-- Deterministic usable-inventory, time-phased projection, stockout, shortage, affected-order, revenue, margin, and OTIF exposure calculations.
-- Initial scenario contracts and deterministic Supplier Beta qualification constraint.
-- Proposed case/scenario/approval/dashboard API routes.
-- Durable local SQLite case, Decision, action, playback, and observation storage.
-- Opt-in Fabric SQL Database persistence with Entra token authentication and read-only analytics views.
-- Pytest and Vitest coverage.
+> **Current status (2026-09-02):** The complete fallback journey and the local implementation for Entra authentication, Work IQ retrieval, Foundry orchestration, and the end-to-end live Case path are implemented and tested. The `willmacdonald.com` Entra registrations, delegated consent, and fictional persona assignments are configured and verified. Three immutable prompt agents are published and verified on `gpt-5.6-luna` in the selected East US 2 Foundry project. Fabric, the Work IQ Demo Corpus, Power BI, infrastructure deployment, live invocation, and final rehearsal gates remain incomplete. See the [roadmap](docs/ROADMAP.md).
+
+## What the demo shows
+
+The canonical `RL-001` Demo Template follows one closed-loop story:
+
+1. **Detect** — retrieve and structure a fictional supplier signal with source evidence.
+2. **Analyze** — calculate inventory, production, customer, revenue, margin, and OTIF exposure deterministically.
+3. **Decide** — compare feasible Response Options, recommend one using thresholded lexicographic ranking, and let Alex Morgan approve or reject it.
+4. **Execute** — preserve the immutable Decision, create five bounded Execution Actions, and explicitly start visibly labeled Simulated Execution.
+5. **Observe** — append Simulated Observations and compare predicted and observed results in the web console and, in live mode, Power BI.
+
+All personas, organizations, supplier records, communications, orders, and outcomes are fictional and use the `RL-` namespace.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    WI[Work IQ] --> ADAPTERS[Integration adapters]
+    FAB[Fabric SQL] --> ADAPTERS
+    SYN[Synthetic evidence] --> ADAPTERS
+    SQLITE[SQLite] --> ADAPTERS
+
+    ADAPTERS --> ORCH[Foundry-hosted or local orchestration]
+    ORCH --> API[FastAPI application boundary]
+    API --> CORE[Deterministic decision core]
+    CORE --> ANALYSIS[Immutable Analysis Version]
+    ANALYSIS --> WEB[React decision console]
+    WEB --> DECISION[Immutable Decision]
+    DECISION --> OUTBOX[Transactional outbox]
+    OUTBOX --> ACTIONS[Bounded Execution Actions]
+    ACTIONS --> OUTCOMES[Outcome Observations]
+    OUTCOMES --> WEB
+    DECISION --> PBI[Power BI command center]
+    OUTCOMES --> PBI
+```
+
+The Decision is the immutable pivot between analysis and downstream activity. Authoritative calculations, feasibility, ranking, and approval policy remain in deterministic services rather than an LLM or agent.
+
+## Implemented capabilities
+
+- Canonical domain contracts for Case Instances, Evidence Items, Analysis Versions, Response Options, Decisions, Execution Actions, attempts, and Outcome Observations.
+- Deterministic `RL-001` data, exposure calculations, option evaluation, Approval Satisfaction, and thresholded lexicographic ranking.
+- Integrated validation for all ten focused `RL-EVAL-*` cases.
+- Append-only, idempotent Decisions and transactional outbox processing.
+- Exactly five bounded Execution Actions with durable attempt history.
+- Explicit, idempotent Simulated Execution with permanently labeled observations.
+- Progressive React case workspace for evidence, exposure, options, Decisions, execution, and outcomes.
+- Durable fallback persistence through SQLite and a complete browser end-to-end gate.
+- Opt-in Fabric SQL persistence, Entra token authentication, schema health checks, and read-only analytics views.
+- A locally validated two-page Power BI project for **Command Center** and **Actions and Outcomes**.
+- Single-tenant Entra authentication, strict persona authorization, deployment manifests, and idempotent tenant-configuration tooling. The target-tenant registrations, consent grants, and Alex/Jordan/Taylor role assignments are verified.
+- A delegated Work IQ OBO client, bounded A2A retrieval, strict citation normalization, captured-style fixtures, and an approval-gated live retrieval gate. Tenant enablement and delegated consent are verified; corpus creation and live retrieval remain pending.
+- Microsoft Agent Framework orchestration that preserves deterministic decision authority, plus fail-closed Foundry publication and verification tooling.
+- Three immutable Foundry prompt agents—signal, context, and decision—published as version `1` and verified against their committed contracts on `gpt-5.6-luna`.
+- Personal-tenant Azure infrastructure, deployment orchestration, and validation contracts prepared for East US 2. Provision preview is currently blocked by ten external Fabric, Work IQ/SharePoint, and Power BI bindings.
+
+Live Microsoft service integration is not yet complete. Published or configured cloud prerequisites do not count as live acceptance until their approval-gated invocation, data, browser, and cross-service consistency gates pass. The [roadmap](docs/ROADMAP.md) records the verified boundary between implemented, configured, and pending work.
+
+## Runtime modes
+
+Each Case Instance has exactly one immutable runtime mode. State never merges implicitly between modes.
+
+| Mode | Purpose | Persistence | Integrations |
+|---|---|---|---|
+| `fallback` | Local development, automated tests, rehearsals, and cloud-outage recovery | SQLite | Synthetic evidence and local orchestration; Power BI unavailable |
+| `live` | Final demonstration acceptance | Fabric SQL | Entra ID, Work IQ, Fabric, Foundry Agent Service, Microsoft Agent Framework, and Power BI |
+
+Fallback mode is always explicit and never counts as proof that a live integration passed. Business data remains fictional in both modes.
 
 ## Repository layout
 
-The structure follows the project brief. Remaining integration folders are retained as extension points so later work can be added without reorganizing the repository.
-
 ```text
 supply-response/
-  apps/
-    web/
-    api/
-  agents/
-    orchestrator/
-    signal/
-    context/
-    decision/
-  services/
-    exposure/
-    scenarios/
-    policy/
-  data/
-    schemas/
-    synthetic/
-    fixtures/
-  fabric/
-    notebooks/
-    sql/
-    semantic-model/
-    ontology/
-    power-bi/
-  evaluations/
-    datasets/
-    expected-results/
-  tests/
-  docs/
-    architecture/
-    demo-script/
-  .env.example
-  README.md
+├── apps/
+│   ├── api/                 # FastAPI application and HTTP contracts
+│   └── web/                 # React/Vite decision console
+├── data/
+│   ├── domain/              # Canonical domain models
+│   ├── schemas/             # Portable source-data schemas
+│   └── synthetic/           # Deterministic Demo Corpus generation
+├── services/
+│   ├── analysis/            # Exposure, options, ranking, and analysis
+│   ├── decisions/           # Decision and outbox application services
+│   ├── execution/           # Action planning, workers, and playback
+│   ├── persistence/         # SQLite/Fabric persistence contracts
+│   └── policy/              # Evidence, approval, and threshold policies
+├── integrations/fabric/     # Fabric configuration, schema, and health
+├── fabric/
+│   ├── sql/                 # Operational schema and analytics views
+│   └── power-bi/            # Power BI Project (PBIP)
+├── evaluations/             # Focused cases and frozen expected results
+├── tests/                   # Unit, contract, integration, and live gates
+├── docs/                    # Architecture, ADRs, specs, plans, and roadmap
+└── scripts/                 # Local verification entry points
 ```
 
-## Project references
-
-- [Project brief](Supply-Response-Project-Brief.md)
-- [Portable-core architecture](docs/architecture/portable-core.md)
-- [Evaluation catalog](evaluations/datasets/evaluation_cases.json)
-- [RL-001 known-answer result](evaluations/expected-results/rl-001.json)
-
-## Local setup
+## Local development
 
 ### Prerequisites
 
-- Python **3.12**
+- Python 3.12
+- [uv](https://docs.astral.sh/uv/)
 - Node.js 20+ and npm
-- ODBC Driver 18 for SQL Server (only for opt-in Fabric SQL live mode)
+- Chromium installed through Playwright for browser tests
+- ODBC Driver 18 for SQL Server only when using live Fabric SQL
 
-### Backend
+### Install
 
 From the repository root:
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-python -m pip install --upgrade pip
-pip install -e '.[dev]'
-pytest
-uvicorn apps.api.app.main:app --reload
-```
-
-The API is then available at `http://localhost:8000`; OpenAPI docs are at `/docs`.
-
-### Frontend
-
-In a second terminal:
-
-```bash
-cd apps/web
-npm install
-npm test
-npm run dev
-```
-
-The frontend calls same-origin `/api` routes. Vite proxies those requests to the local API at `http://127.0.0.1:8000` during development.
-
-### Complete fallback browser gate
-
-Install the locked frontend dependencies and Playwright's pinned Chromium once:
-
-```bash
+uv sync --python 3.12
 npm --prefix apps/web ci
 (cd apps/web && npx playwright install chromium)
 ```
 
-Then run the full Python, Vitest, production-build, and real-browser fallback gate:
+### Run the fallback application
+
+Start the API:
+
+```bash
+export SUPPLY_RESPONSE_RUNTIME_MODE=fallback
+export SUPPLY_RESPONSE_DATABASE_URL=sqlite:///./supply-response.db
+uv run --python 3.12 uvicorn apps.api.app.main:app --reload
+```
+
+In another terminal, start the web console:
+
+```bash
+npm --prefix apps/web run dev
+```
+
+Open `http://localhost:5173`. The API is available at `http://localhost:8000`, with OpenAPI documentation at `http://localhost:8000/docs`.
+
+### Verify the fallback journey
+
+After installing the dependencies and Playwright Chromium, run:
 
 ```bash
 scripts/run_fallback_demo.sh
 ```
 
-The script resolves the repository root from its own location, uses a fresh temporary SQLite database for each Playwright run, and exits nonzero on the first failed gate. Playwright starts only local Uvicorn and Vite servers; Microsoft cloud access is neither configured nor required. Test-only one-shot failure hooks are registered only when Playwright enables automated-test fault support, accept only `automated_test` Cases, and are absent in normal production/showcase configuration.
+This gate runs the Python suite, Vitest suite, production web build, and real-browser fallback tests against a fresh temporary SQLite database. It does not require or contact Microsoft cloud services.
 
-## API contracts
+Individual checks are also available:
 
-Implemented routes:
-
-```text
-POST /api/cases
-GET  /api/cases/{caseId}
-POST /api/cases/{caseId}/analyze
-GET  /api/cases/{caseId}/scenarios
-POST /api/cases/{caseId}/approve
-POST /api/cases/{caseId}/reject
-GET  /api/dashboard/summary
+```bash
+uv run --python 3.12 pytest -q
+npm --prefix apps/web test
+npm --prefix apps/web run build
 ```
 
-Approval is bounded: a non-executable scenario (including the default Supplier Beta scenario) cannot be approved.
+## Live integration safety
 
-## Synthetic data
+Live mode fails closed when configuration, identity, connectivity, or schema validation is incomplete; it never silently falls back to SQLite. Tenant IDs, Entra object IDs, UPNs, workspace IDs, database endpoints, and other deployment bindings must remain in environment-specific configuration rather than committed source.
 
-`data.synthetic.generator.generate_dataset()` is deterministic for a given seed. Small defaults keep local development fast; the function accepts counts so larger demonstration-scale datasets can be generated without changing schemas or calculation contracts.
+Cloud deployment and live tests are intentionally approval-gated because they authenticate to external services and may create or modify tenant resources. Deployment guidance, verified cloud evidence, remaining bindings, and required settings are recorded in [the personal-tenant deployment plan](.azure/deployment-plan.md), the implementation plan, and the task reports under `.superpowers/sdd/`.
 
-All generated identifiers and names are fictional and prefixed with `RL-`.
+## Project documentation
 
-## Calculation behavior
+- [Frozen demo contract](docs/superpowers/specs/2026-08-30-supply-response-demo-contract-design.md) — controlling product scope and acceptance criteria
+- [Implementation plan](docs/superpowers/plans/2026-08-30-supply-response-demo-implementation.md) — Tasks 0–19
+- [Roadmap and current status](docs/ROADMAP.md)
+- [Canonical domain language](CONTEXT.md)
+- [Architecture decisions](docs/adr/)
+- [Portable-core architecture](docs/architecture/portable-core.md)
+- [Current acceptance traceability](docs/current-baseline-and-acceptance-traceability.md)
+- [Original project brief](Supply-Response-Project-Brief.md) — product vision; the frozen contract controls when they differ
 
-The portable calculation service implements:
+## Scope boundaries
 
-```text
-usable inventory = on hand - quality hold - protected allocation
-projected balance = prior balance + confirmed receipts + approved transfers - component demand
-```
-
-Results include calculation version, timestamp, assumptions, and source-data lineage. Authoritative arithmetic stays outside any future LLM/agent implementation.
-
-## What is intentionally deferred
-
-- Azure hosting/deployment
-- Microsoft Foundry agents / Agent Framework
-- Work IQ
-- Fabric semantic model and Power BI live journeys
-- Fabric IQ ontology/MCP
-- Managed identity and tenant configuration
-- Real email, Teams, supplier, ERP, or customer data
-
-The preserved directories are the extension points for those later phases.
+The project does not send supplier communications, modify purchase orders, make financial or contractual commitments, use real business data, or permit an agent to perform authoritative arithmetic. Fabric IQ is optional for the core demonstration. Foundry IQ retrieval of SOPs, policies, supplier-risk documents, and continuity playbooks remains a separately designed backlog item.
