@@ -105,12 +105,13 @@ class FakeDeployments:
         events: list[str],
         *,
         present: bool = True,
+        name: str = TRUSTED_MODEL_DEPLOYMENT,
         model_name: str = TRUSTED_MODEL_DEPLOYMENT,
     ) -> None:
         self.events = events
         self.present = present
         self.deployment = SimpleNamespace(
-            name=TRUSTED_MODEL_DEPLOYMENT,
+            name=name,
             model_name=model_name,
         )
 
@@ -126,6 +127,7 @@ class FakeProject:
         self,
         *,
         deployment_present: bool = True,
+        deployment_name: str = TRUSTED_MODEL_DEPLOYMENT,
         deployment_model: str = TRUSTED_MODEL_DEPLOYMENT,
         fail_after_creations: int | None = None,
         list_versions_error: Exception | None = None,
@@ -139,6 +141,7 @@ class FakeProject:
         self.deployments = FakeDeployments(
             self.events,
             present=deployment_present,
+            name=deployment_name,
             model_name=deployment_model,
         )
 
@@ -366,6 +369,7 @@ def test_publish_accepts_live_sdk_deployment_shape() -> None:
     ("project", "message"),
     [
         (FakeProject(deployment_present=False), "missing"),
+        (FakeProject(deployment_name="gpt-4.1-mini"), "gpt-5.6-luna"),
         (FakeProject(deployment_model="gpt-4.1-mini"), "gpt-5.6-luna"),
     ],
 )
@@ -376,7 +380,7 @@ def test_publish_rejects_invalid_model_deployment_before_agent_mutation(
     with pytest.raises(RuntimeError, match=message):
         publish(ROOT, project=project)
 
-    assert project.agents.created == []
+    assert project.events == [f"deployment:{TRUSTED_MODEL_DEPLOYMENT}"]
 
 
 def test_first_publish_creates_three_fingerprinted_versions() -> None:
