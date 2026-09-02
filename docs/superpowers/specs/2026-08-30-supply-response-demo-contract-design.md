@@ -82,6 +82,22 @@ Case Instances are never reset or overwritten. The ten `RL-EVAL-*` cases remain 
 
 Foundry Agent Service is not Foundry IQ. Requiring Foundry-hosted agents does not bring SOP, policy, supplier-risk, or playbook retrieval into active scope.
 
+### Foundry prompt-agent model binding
+
+The Signal, Context, and Decision prompt agents bind to the existing
+`gpt-5.6-luna` deployment in the selected Foundry project. The deployment name is
+committed in each versioned agent manifest and is not a runtime override. Agent
+names, instructions, descriptions, and empty tool sets remain source-controlled.
+
+This binding replaces the earlier implementation-time `gpt-4.1-mini` choice.
+Microsoft now classifies that model as Legacy, while `gpt-5.6-luna` is GA and is
+already deployed in the approved East US 2 project. The migration changes no
+business authority: models may extract bounded facts and explain deterministic
+results, but they may not perform authoritative arithmetic, feasibility,
+approval, ranking, Decision, or execution work. The approved migration rationale
+and verification contract are recorded in
+`docs/superpowers/specs/2026-09-01-foundry-model-migration-design.md`.
+
 ## Architecture Decision Records
 
 - [ADR 0001: Isolate runtime provenance by Case Instance](../../adr/0001-isolate-runtime-provenance-by-case.md)
