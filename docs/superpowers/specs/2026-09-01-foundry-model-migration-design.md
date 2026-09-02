@@ -59,11 +59,16 @@ Implementation will:
 1. Change the three manifest model values to exactly `gpt-5.6-luna`.
 2. Update contract tests to reject any other model deployment name.
 3. Run the local manifest and Foundry artifact tests before publication.
-4. Publish exactly one new immutable version of each agent into the selected
+4. Verify the exact deployment name and model through the Foundry data-plane
+   SDK, and verify `Succeeded` provisioning state through Azure Resource Manager
+   immediately before publication. The data-plane `ModelDeployment` contract
+   does not expose provisioning state, so neither check substitutes for the
+   other.
+5. Publish exactly one new immutable version of each agent into the selected
    `m365-resource/m365` project.
-5. Verify each published name, version, model, instruction hash, and empty-tool
+6. Verify each published name, version, model, instruction hash, and empty-tool
    contract against its committed manifest.
-6. Store only the resulting agent names, versions, endpoint, immutable project
+7. Store only the resulting agent names, versions, endpoint, immutable project
    resource ID, and deterministic deployment receipt in the ignored azd
    environment. No token, credential, or prompt payload enters deployment state.
 

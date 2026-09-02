@@ -118,7 +118,8 @@ Extend the existing fake agents collection so it can:
 - return an empty list when an agent does not exist;
 - record calls to `create_version` including metadata;
 - simulate failure after one successful creation;
-- expose a fake `deployments.get(name)` result with `name`, `model_name`, and provisioning state.
+- expose a fake `deployments.get(name)` result with the real data-plane SDK
+  shape: `name` and `model_name`, without a provisioning-state field.
 
 Keep this fake local to the test module. It must model only SDK behavior used by the publisher.
 
@@ -127,7 +128,8 @@ Keep this fake local to the test module. It must model only SDK behavior used by
 Add focused tests for these observable behaviors:
 
 1. Model preflight happens before the first `create_version` call.
-2. Missing or mismatched `gpt-5.6-luna` deployment fails before any agent mutation.
+2. Missing or mismatched `gpt-5.6-luna` deployment identity fails before any
+   agent mutation.
 3. First publication creates exactly three versions with metadata keys:
    - `supply_response_contract_sha256`
    - `supply_response_role`
@@ -174,7 +176,7 @@ metadata = {
 
 The fingerprint excludes tenant and version data so identical committed contracts reconcile consistently across deployments.
 
-- [ ] **Step 5: Preflight the exact Luna deployment before mutation**
+- [ ] **Step 5: Preflight the exact Luna data-plane identity before mutation**
 
 Call:
 
@@ -182,7 +184,12 @@ Call:
 deployment = project.deployments.get(TRUSTED_MODEL_DEPLOYMENT)
 ```
 
-Require the deployment name/model binding and successful provisioning state expected from the SDK object. Raise a descriptive error before processing any manifest when it is missing, failed, or points to a different model. Do not create or update a model deployment.
+Require the exact deployment name/model binding. Raise a descriptive error
+before processing any manifest when it is missing or points to a different
+model. Do not inspect a nonexistent provisioning-state attribute: the live
+`azure-ai-projects` `ModelDeployment` contract exposes identity and model
+metadata, but not Azure Resource Manager provisioning state. Do not create or
+update a model deployment.
 
 - [ ] **Step 6: Reconcile immutable agent versions**
 
@@ -351,7 +358,10 @@ Then use the repository's existing Foundry inspection command or SDK check to ve
 
 - project endpoint is `https://m365-resource.services.ai.azure.com/api/projects/m365`;
 - region is East US 2;
-- `gpt-5.6-luna` exists and provisioning succeeded;
+- the Foundry data-plane SDK returns deployment name and model name exactly
+  `gpt-5.6-luna`;
+- an Azure Resource Manager read of the exact deployment reports provisioning
+  state `Succeeded` immediately before publication;
 - current identity can read deployments and agent versions.
 
 Also confirm the endpoint and immutable project resource ID still equal the
