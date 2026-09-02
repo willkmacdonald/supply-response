@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import stat
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -101,12 +101,16 @@ def run(script: str, fixture: str, *, env: dict[str, str] | None = None):
     )
 
 
-def test_configure_dry_run_validates_fixture_without_azure_calls():
-    result = run("configure.sh", "configure.json")
+def test_configure_dry_run_validates_fixture_without_azure_calls(tmp_path: Path):
+    state_file = tmp_path / ".env.tenant"
+    env = _env()
+    env["SUPPLY_RESPONSE_ENTRA_STATE_FILE"] = str(state_file)
+
+    result = run("configure.sh", "configure.json", env=env)
     assert result.returncode == 0, result.stderr
     assert "DRY_RUN_VALID" in result.stdout
     assert "WorkIQAgent.Ask" in result.stdout
-    assert not (ENTRA / ".env.tenant").exists()
+    assert not state_file.exists()
 
 
 def test_configure_fails_closed_on_tenant_mismatch():

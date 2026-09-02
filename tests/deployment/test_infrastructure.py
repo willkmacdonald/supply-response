@@ -8,11 +8,23 @@ import subprocess
 import textwrap
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
+
+_COMMITTED_TARGET_ID = re.compile(
+    r"\b(?:tenant|subscription)[\s_-]+(?:id|uuid)\b(?:\s+is\s+|\s*(?::|=|-)\s*|\s+)"
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+    flags=re.IGNORECASE,
+)
 
 
 def _read(relative: str) -> str:
     return (ROOT / relative).read_text()
+
+
+def _contains_committed_target_id(text: str) -> bool:
+    return bool(_COMMITTED_TARGET_ID.search(text))
 
 
 def test_azd_is_infrastructure_only_and_uses_environment_parameters():
@@ -1122,11 +1134,36 @@ def test_target_ids_are_required_from_environment_not_committed_literals():
     )
     assert "AZURE_SUBSCRIPTION_ID:?" in deployment_assets
     assert "AZURE_TENANT_ID:?" in deployment_assets
-    assert not re.search(
-        r"(?:tenant|subscription)[^\n]{0,40}[0-9a-f]{8}-[0-9a-f-]{27}",
-        deployment_assets,
-        flags=re.IGNORECASE,
-    )
+    assert not _contains_committed_target_id(deployment_assets)
+
+
+@pytest.mark.parametrize(
+    "labelled_target",
+    (
+        "tenant ID: 11111111-1111-4111-8111-111111111111",
+        "tenant_id=22222222-2222-4222-8222-222222222222",
+        "subscription-id 33333333-3333-4333-8333-333333333333",
+        "subscription UUID is 44444444-4444-4444-8444-444444444444",
+    ),
+)
+def test_target_id_guard_rejects_semantically_labelled_uuid(labelled_target):
+    assert _contains_committed_target_id(labelled_target)
+
+
+@pytest.mark.parametrize(
+    "public_identifier_prose",
+    (
+        (
+            "Use the public Work IQ application ID "
+            "fdcc1f0c-4f76-4d4a-9c0a-9f8a8b8cf7a1 for tenant enablement."
+        ),
+        "Tenant enablement: public scope UUID 55555555-5555-4555-8555-555555555555.",
+    ),
+)
+def test_target_id_guard_accepts_unrelated_public_identifier_uuid_prose(
+    public_identifier_prose,
+):
+    assert not _contains_committed_target_id(public_identifier_prose)
 
 
 def test_bicep_compiles_to_an_arm_template(tmp_path):
