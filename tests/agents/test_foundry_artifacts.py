@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import pytest
 from agent_framework import AgentResponse, Content, Message
+from pydantic import ValidationError
 
 from agents.foundry import (
     FoundryAgentBinding,
@@ -15,11 +16,30 @@ from agents.foundry import (
     build_foundry_agent,
     validate_project_endpoint,
 )
-from agents.manifests import ManifestError, load_manifests
+from agents.manifests import (
+    TRUSTED_MODEL_DEPLOYMENT,
+    AgentManifest,
+    ManifestError,
+    load_manifests,
+)
 from scripts.publish_foundry_agents import publish
 from scripts.verify_foundry_agents import verify
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture
+def valid_manifest() -> dict[str, object]:
+    return {
+        "role": "signal",
+        "agent_name": "supply-response-signal",
+        "model": TRUSTED_MODEL_DEPLOYMENT,
+        "instructions_path": ROOT / "agents/signal/instructions.md",
+        "instructions": "x" * 100,
+        "instructions_sha256": "0" * 64,
+        "description": "A valid prompt agent manifest.",
+        "tools": (),
+    }
 
 
 class FakeAgents:
@@ -47,6 +67,20 @@ def test_committed_manifests_are_frozen_safe_and_tool_free() -> None:
     assert all(item.tools == () for item in manifests)
     assert all(item.instructions_path.is_relative_to(ROOT) for item in manifests)
     assert all(item.instructions_sha256 for item in manifests)
+
+
+def test_committed_manifests_use_only_the_trusted_model() -> None:
+    manifests = load_manifests(ROOT)
+    assert TRUSTED_MODEL_DEPLOYMENT == "gpt-5.6-luna"
+    assert {manifest.model for manifest in manifests} == {TRUSTED_MODEL_DEPLOYMENT}
+
+
+def test_manifest_rejects_a_different_model(
+    valid_manifest: dict[str, object],
+) -> None:
+    valid_manifest["model"] = "gpt-4.1-mini"
+    with pytest.raises(ValidationError, match="gpt-5.6-luna"):
+        AgentManifest.model_validate(valid_manifest)
 
 
 def test_manifest_loader_rejects_path_escape_duplicate_names_and_extra_fields(

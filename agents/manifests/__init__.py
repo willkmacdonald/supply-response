@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 _NAME = re.compile(r"^[a-z][a-z0-9-]{2,62}$")
-_MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,127}$")
+TRUSTED_MODEL_DEPLOYMENT = "gpt-5.6-luna"
 _EXPECTED_ROLES = {"signal", "context", "decision"}
 _EXPECTED_INSTRUCTIONS = {
     "signal": Path("agents/signal/instructions.md"),
@@ -40,8 +40,8 @@ class _ManifestDocument(BaseModel):
     @field_validator("model")
     @classmethod
     def valid_model(cls, value: str) -> str:
-        if not _MODEL.fullmatch(value) or value.lower() == "latest":
-            raise ValueError("model deployment name is outside the trusted policy")
+        if value != TRUSTED_MODEL_DEPLOYMENT:
+            raise ValueError(f"model deployment must be {TRUSTED_MODEL_DEPLOYMENT}")
         return value
 
     @field_validator("tools")
@@ -63,6 +63,13 @@ class AgentManifest(BaseModel):
     instructions_sha256: str
     description: str
     tools: tuple[object, ...] = ()
+
+    @field_validator("model")
+    @classmethod
+    def valid_model(cls, value: str) -> str:
+        if value != TRUSTED_MODEL_DEPLOYMENT:
+            raise ValueError(f"model deployment must be {TRUSTED_MODEL_DEPLOYMENT}")
+        return value
 
 
 def load_manifests(root: Path) -> tuple[AgentManifest, ...]:
