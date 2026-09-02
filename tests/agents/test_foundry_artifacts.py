@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 from agent_framework import AgentResponse, Content, Message
+from azure.core.exceptions import ResourceNotFoundError
 from pydantic import ValidationError
 
 from agents.foundry import (
@@ -43,21 +46,90 @@ def valid_manifest() -> dict[str, object]:
 
 
 class FakeAgents:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        events: list[str],
+        *,
+        fail_after_creations: int | None = None,
+    ) -> None:
+        self.events = events
+        self.fail_after_creations = fail_after_creations
         self.created: list[dict[str, object]] = []
         self.remote: dict[tuple[str, str], object] = {}
+        self.versions: dict[str, list[object]] = {}
 
     def create_version(self, **kwargs):  # allowed: injected SDK test double
+        if (
+            self.fail_after_creations is not None
+            and len(self.created) >= self.fail_after_creations
+        ):
+            raise RuntimeError("simulated create failure")
         self.created.append(kwargs)
-        return type("Created", (), {"name": kwargs["agent_name"], "version": "7"})()
+        agent_name = cast(str, kwargs["agent_name"])
+        version = str(len(self.versions.get(agent_name, [])) + 1)
+        created = SimpleNamespace(
+            name=agent_name,
+            version=version,
+            description=kwargs["description"],
+            definition=kwargs["definition"],
+            metadata=kwargs["metadata"],
+        )
+        self.versions.setdefault(agent_name, []).append(created)
+        self.events.append(f"create:{agent_name}")
+        return created
+
+    def list_versions(self, agent_name: str):
+        self.events.append(f"list:{agent_name}")
+        return list(self.versions.get(agent_name, []))
 
     def get_version(self, *, agent_name: str, agent_version: str):
         return self.remote[(agent_name, agent_version)]
 
 
+class FakeDeployments:
+    def __init__(
+        self,
+        events: list[str],
+        *,
+        present: bool = True,
+        model_name: str = TRUSTED_MODEL_DEPLOYMENT,
+        provisioning_state: str = "Succeeded",
+    ) -> None:
+        self.events = events
+        self.present = present
+        self.deployment = SimpleNamespace(
+            name=TRUSTED_MODEL_DEPLOYMENT,
+            model_name=model_name,
+            provisioning_state=provisioning_state,
+        )
+
+    def get(self, name: str):
+        self.events.append(f"deployment:{name}")
+        if not self.present:
+            raise ResourceNotFoundError("deployment not found")
+        return self.deployment
+
+
 class FakeProject:
-    def __init__(self) -> None:
-        self.agents = FakeAgents()
+    def __init__(
+        self,
+        *,
+        deployment_present: bool = True,
+        deployment_model: str = TRUSTED_MODEL_DEPLOYMENT,
+        deployment_state: str = "Succeeded",
+        fail_after_creations: int | None = None,
+    ) -> None:
+        self.events: list[str] = []
+        self.agents = FakeAgents(
+            self.events,
+            fail_after_creations=fail_after_creations,
+        )
+        self.deployments = FakeDeployments(
+            self.events,
+            present=deployment_present,
+            model_name=deployment_model,
+            provisioning_state=deployment_state,
+        )
 
 
 def test_committed_manifests_are_frozen_safe_and_tool_free() -> None:
@@ -245,17 +317,129 @@ async def test_foundry_response_rejects_every_non_text_content(
         await FoundryJsonAgent(Agent()).invoke({"evidence": []})
 
 
-def test_publish_uses_create_version_and_prints_only_name_version() -> None:
+def _expected_fingerprint(manifest: AgentManifest) -> str:
+    contract = {
+        "agent_name": manifest.agent_name,
+        "description": manifest.description,
+        "instructions_sha256": manifest.instructions_sha256,
+        "model": manifest.model,
+        "role": manifest.role,
+        "tools": [],
+    }
+    canonical = json.dumps(contract, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def test_publish_preflights_model_before_creating_any_version() -> None:
     project = FakeProject()
     emitted: list[str] = []
     publish(ROOT, project=project, emit=emitted.append)
-    assert len(project.agents.created) == 3
-    assert all(
-        cast(Any, call["definition"]).tools == [] for call in project.agents.created
+
+    assert project.events[0] == f"deployment:{TRUSTED_MODEL_DEPLOYMENT}"
+    assert project.events.index(project.events[0]) < next(
+        index
+        for index, event in enumerate(project.events)
+        if event.startswith("create:")
     )
-    assert emitted == sorted(emitted)
+
+
+@pytest.mark.parametrize(
+    ("project", "message"),
+    [
+        (FakeProject(deployment_present=False), "missing"),
+        (FakeProject(deployment_model="gpt-4.1-mini"), "gpt-5.6-luna"),
+        (FakeProject(deployment_state="Failed"), "Succeeded"),
+    ],
+)
+def test_publish_rejects_invalid_model_deployment_before_agent_mutation(
+    project: FakeProject,
+    message: str,
+) -> None:
+    with pytest.raises(RuntimeError, match=message):
+        publish(ROOT, project=project)
+
+    assert project.agents.created == []
+
+
+def test_first_publish_creates_three_fingerprinted_versions() -> None:
+    project = FakeProject()
+    emitted: list[str] = []
+    manifests = load_manifests(ROOT)
+
+    result = publish(ROOT, project=project, emit=emitted.append)
+
+    assert len(project.agents.created) == 3
+    for manifest, call in zip(manifests, project.agents.created, strict=True):
+        assert cast(Any, call["definition"]).tools == []
+        assert call["metadata"] == {
+            "supply_response_contract_sha256": _expected_fingerprint(manifest),
+            "supply_response_role": manifest.role,
+        }
+    assert result == tuple(emitted)
     assert all(line.count("=") == 1 for line in emitted)
     assert "https://" not in "".join(emitted)
+
+
+def test_repeat_publish_reuses_every_version_without_creating() -> None:
+    project = FakeProject()
+    first = publish(ROOT, project=project, emit=lambda _: None)
+    project.agents.created.clear()
+    emitted: list[str] = []
+
+    second = publish(ROOT, project=project, emit=emitted.append)
+
+    assert project.agents.created == []
+    assert second == first
+    assert tuple(emitted) == first
+
+
+def test_failed_publish_retries_without_duplicating_created_version() -> None:
+    project = FakeProject(fail_after_creations=1)
+    emitted: list[str] = []
+
+    with pytest.raises(RuntimeError, match="simulated create failure"):
+        publish(ROOT, project=project, emit=emitted.append)
+
+    assert len(project.agents.created) == 1
+    assert emitted == [
+        f"{project.agents.created[0]['agent_name']}=1",
+    ]
+
+    project.agents.fail_after_creations = None
+    project.agents.created.clear()
+    retried = publish(ROOT, project=project, emit=emitted.append)
+
+    assert len(project.agents.created) == 2
+    assert retried[0] == emitted[0]
+    assert len(retried) == 3
+
+
+def test_publish_rejects_matching_fingerprint_with_remote_field_drift() -> None:
+    project = FakeProject()
+    publish(ROOT, project=project, emit=lambda _: None)
+    existing = project.agents.versions[load_manifests(ROOT)[0].agent_name][0]
+    cast(Any, existing).description = "remote drift"
+    project.agents.created.clear()
+
+    with pytest.raises(RuntimeError, match="drift"):
+        publish(ROOT, project=project, emit=lambda _: None)
+
+    assert project.agents.created == []
+
+
+def test_publish_rejects_ambiguous_matching_fingerprints() -> None:
+    project = FakeProject()
+    publish(ROOT, project=project, emit=lambda _: None)
+    manifest = load_manifests(ROOT)[0]
+    duplicate = SimpleNamespace(**vars(project.agents.versions[manifest.agent_name][0]))
+    duplicate.version = "2"
+    project.agents.versions[manifest.agent_name].append(duplicate)
+    project.agents.created.clear()
+
+    with pytest.raises(RuntimeError, match=f"{manifest.agent_name}.*1.*2"):
+        publish(ROOT, project=project, emit=lambda _: None)
+
+    assert project.agents.created == []
 
 
 def test_verify_rejects_remote_instruction_or_tool_drift() -> None:
