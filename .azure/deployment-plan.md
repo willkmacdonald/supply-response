@@ -2,7 +2,7 @@
 
 > **Status:** Ready for Validation; preview is blocked on Fabric, Work IQ corpus, and Power BI bindings
 
-Generated: 2026-08-31; validation evidence updated 2026-09-01
+Generated: 2026-08-31; validation evidence updated 2026-09-02
 
 ## 1. Project overview
 
