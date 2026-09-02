@@ -1,8 +1,8 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Ready for local validation; final image rebuild requires separately approved public package access
+> **Status:** Ready for Validation; preview is blocked on Fabric, Work IQ corpus, and Power BI bindings
 
-Generated: 2026-08-31
+Generated: 2026-08-31; validation evidence updated 2026-09-01
 
 ## 1. Project overview
 
@@ -138,7 +138,7 @@ Read-only checks were performed on 2026-08-31 for the confirmed subscription and
 | File | Purpose | Status |
 |---|---|---|
 | `.azure/deployment-plan.md` | Deployment source of truth | Ready for validation |
-| `Dockerfile`, `.dockerignore` | Reproducible nonroot production image | Contract-tested; final exact-Entra rebuild pending approved public package access |
+| `Dockerfile`, `.dockerignore` | Reproducible nonroot production image | Contract-tested; tenant-exact public-dependency rebuild and local fallback smoke test passed |
 | `azure.yaml` | Infrastructure-only azd project definition; image build stays in the approved argument-aware script | Complete |
 | `infra/main.bicep`, `infra/main.parameters.json` | Subscription target and azd-compatible environment parameters | Complete; compiles locally |
 | `infra/modules/registry.bicep` | Reference the existing ACR and grant managed-identity `AcrPull` without admin credentials | Complete |
@@ -185,16 +185,28 @@ Read-only checks were performed on 2026-08-31 for the confirmed subscription and
 - [x] Generate fail-closed preflight and deployment scripts.
 - [x] Update personal-tenant deployment documentation.
 - [x] Run Python, web, infrastructure, shell, and Bicep local verification.
-- [ ] Rebuild and smoke-test the final exact-Entra image after separate public package/network approval.
+- [x] Rebuild and smoke-test the production image with nonsecret fixture Entra build values after public package/network approval.
+- [x] Rebuild and smoke-test the final tenant-exact image after the Entra registrations exist.
 - [x] Mark this plan `Ready for Validation` only when preparation tests pass.
 
 ### Phase 3 — validation
 
-- [ ] Invoke `azure-validate`; do not deploy directly.
-- [ ] Compile Bicep and validate parameter contracts.
-- [ ] Run a read-only what-if/policy check only after separate approval if it contacts Azure.
-- [ ] Verify the container starts locally, `/health` works, SPA navigation works, and `/api` remains reachable.
-- [ ] Record validation proof and mark the plan `Validated` only when all required checks pass.
+- [x] Invoke `azure-validate`; do not deploy directly.
+- [ ] All validation checks pass.
+  - [x] AZD installation (`azd 1.30.0`) and local project/schema inspection.
+  - [x] AZD environment setup and exact selected-environment verification (`supply-response-personal`).
+  - [x] Azure and azd authentication check (interactive User account).
+  - [x] Confirmed subscription, tenant, and `eastus2` environment-value check.
+  - [x] Aspire checks skipped: this is not a .NET Aspire project.
+  - [ ] Approval-gated provision preview / what-if.
+  - [x] Application, web bundle, shell, type, lint, and Bicep build verification.
+  - [x] Docker build-context contract and locked package-file validation.
+  - [x] Public-dependency container rebuild and local fallback runtime smoke test with nonsecret fixture Entra values.
+  - [x] Final tenant-exact container image build and smoke test after the Entra registrations exist.
+  - [ ] Approval-gated Azure Policy validation.
+  - [x] Post-provision Aspire checks skipped: this is not a .NET Aspire project.
+  - [x] Static least-privilege role-assignment verification.
+- [ ] Record validation proof and mark the plan `Validated` only when every required check passes.
 
 ### Phase 4 — deployment, separately authorized
 
@@ -221,11 +233,58 @@ dependencies. It is not `azure-validate` proof and does not authorize deployment
 | Python lint/type | `.venv/bin/ruff check tests/deployment/test_infrastructure.py`; `.venv/bin/pyright --pythonpath .venv/bin/python tests/deployment/test_infrastructure.py` | Passed; 0 type errors in the final-hardening Python scope. A broad whole-repository Ruff run still reports 151 pre-existing findings outside this focused patch. | 2026-08-31 |
 | Shell syntax | `/bin/bash -n scripts/lib/safe_command.sh scripts/lib/key_vault_operator_access.sh scripts/lib/deployment_health.sh scripts/preflight_personal_tenant.sh scripts/deploy_personal_tenant.sh scripts/rotate_entra_client_secret.sh` | Passed on Bash 3.2 | 2026-08-31 |
 | Bicep compilation | `bicep build infra/main.bicep` with temporary extraction directory | Passed without warnings | 2026-08-31 |
-| Production image | Initial Task 18 image built and ran; review-fix rebuild used `--network=none` with exact Entra args | Initial image passed; offline rebuild stopped at uncached Debian/ODBC packages, so the final image must be rebuilt when approved public package access is available | 2026-08-31 |
-| Local container | Initial Task 18 image plus `curl /health`, `/`, `/api/runtime` | Initial health, SPA, and API responses verified; exact-Entra final image smoke remains paired with the approved rebuild | 2026-08-31 |
+| Production image | Initial Task 18 image built and ran; review-fix rebuild used `--network=none` with exact Entra args | Initial image passed; offline rebuild stopped at uncached Debian/ODBC packages; superseded by the approved 2026-09-01 public-dependency rebuild below | 2026-08-31 |
+| Local container | Initial Task 18 image plus `curl /health`, `/`, `/api/runtime` | Initial health, SPA, and API responses verified; superseded by the rebuilt-image smoke below | 2026-08-31 |
+| AZD environment | `azd env new supply-response-personal` plus local environment-value inspection | Environment created with the confirmed immutable subscription and tenant IDs, `eastus2`, target/shared resource names, `minReplicas=0`, and bootstrap mode; no cloud resources changed | 2026-09-01 |
+| Azure identity | `azd auth login --check-status`; `az account show` | Passed for the interactive User account in the confirmed Azure Dev subscription and tenant | 2026-09-01 |
+| Shared resources | Read-only Container Apps environment, ACR, and Log Analytics inspection | `shared-services-env` is an external East US 2 Consumption environment; `wkmsharedservicesacr` is Standard; `shared-services-logs` is East US 2 PerGB2018; no settings changed | 2026-09-01 |
+| Subscription policy | Read-only policy-assignment inspection | Microsoft cloud security benchmark and Defender initiatives found; no explicit allowed-region, required-tag, resource-type, or SKU denial found; final template evaluation remains pending | 2026-09-01 |
+| Production image rebuild | `docker build` with locked dependencies and nonsecret fixture Entra build values | Passed; ODBC Driver 18 installed and image runs as nonroot (`supply-response:validation-e57ba7a`) | 2026-09-01 |
+| Rebuilt-image smoke | Local container on `127.0.0.1:18080`; `GET /health`, `/api/runtime`, `/`, and exact `/api` | Health returned `runtime_mode=fallback`; runtime contract and SPA passed; exact `/api` correctly returned 404; container stopped cleanly | 2026-09-01 |
+| Entra discovery | Read-only exact display-name queries for `Supply Response API` and `Supply Response Web` | Neither registration exists; tenant-exact Vite bundle and client-secret binding cannot yet be produced | 2026-09-01 |
+| Work IQ tenant enablement | `az ad sp create --id fdcc1f02-fc51-4226-8753-f668596af7f7` followed by an exact read-only service-principal query | Explicitly authorized Microsoft first-party principal created and enabled; identifier URI is `api://workiq.svc.cloud.microsoft` and the one enabled `WorkIQAgent.Ask` delegated scope has Microsoft-published ID `0b1715fd-f4bf-4c63-b16d-5be31f9847c2`; no consent granted | 2026-09-01 |
+| Supply Response Entra registrations | `infra/entra/configure.sh --apply` followed by `--check` | Explicitly authorized API and SPA registrations plus service principals created in the confirmed tenant; exact manifest, `access_as_user`, `WorkIQAgent.Ask`, and canonical callback contracts passed; ignored tenant state is owner-only mode `0600`; no consent or persona role assignment performed | 2026-09-01 |
+| Entra administrator consent | `az ad app permission admin-consent` for the verified API and Web client IDs followed by exact OAuth grant queries | Explicitly authorized tenant-wide delegated grants verified: API to Work IQ has only `WorkIQAgent.Ask`; Web to API has only `access_as_user`; both target the expected service principal and neither has a user-specific principal | 2026-09-01 |
+| Entra persona assignments | `infra/entra/assign-personas.sh --apply` followed by `--check` | Explicitly authorized fixed mapping created and exactly verified: Alex has Material Planner and Response Approver, Jordan has Quality Approver, and Taylor has Finance Approver; no missing or excess Supply Response roles | 2026-09-01 |
+| AZD Entra bindings | `azd env set` plus value-by-value equality checks in `supply-response-personal` | Verified API/Web client IDs, three persona object IDs, Work IQ resource app ID, and canonical redirect promoted into the ignored local azd environment without printing values | 2026-09-01 |
+| Tenant-exact image | `docker build` with the verified four-value public Entra bundle | Passed with locked dependencies and production Vite bundle; local tag `supply-response:validation-entra-e57ba7a` | 2026-09-01 |
+| Tenant-exact image smoke | Local container on `127.0.0.1:18081`; health, runtime, SPA, exact `/api`, and image-user checks | Fallback health/runtime contract passed; SPA title served; exact `/api` returned 404; image user is `appuser`; container stopped automatically | 2026-09-01 |
+| Foundry discovery | Read-only project-resource inventory | Six projects found across East US and East US 2; user selected existing `m365-resource/m365` in East US 2 | 2026-09-01 |
+| Foundry local tooling | Foundry skill dependency check plus explicitly authorized extension compatibility update | `azure.ai.agents` upgraded from beta.2 to beta.7 and `microsoft.foundry` beta.2 installed with its declared local dependencies; no cloud resource changed | 2026-09-01 |
+| Foundry project binding | Read-only ARM/account inspection followed by local azd equality checks | Existing project `m365-resource/m365` in `DefaultResourceGroup-NCUS` is provisioned, East US 2, and public-network enabled; immutable resource ID and canonical project endpoint promoted into `supply-response-personal`; no agent published or role assigned | 2026-09-01 |
+| Foundry Luna publication preflight | Fresh exact account/project reads, data-plane SDK inspection, per-agent version reads, and immediate ARM deployment read | Active tenant/subscription and retained project bindings matched; `m365-resource/m365` is provisioned in East US 2; data plane returned deployment/model `gpt-5.6-luna`; immediate ARM read returned `Succeeded`; current identity read deployments and agent versions | 2026-09-02 |
+| Foundry prompt-agent publication | `AZURE_DEV_USER_AGENT=microsoft_foundry_skill uv run python scripts/publish_foundry_agents.py --publish` | Created three previously absent matching contracts: `supply-response-signal=1`, `supply-response-context=1`, and `supply-response-decision=1`; reused none | 2026-09-02 |
+| Foundry live verification and promotion | Canonical `_AGENT_` name/version variables plus `scripts/verify_foundry_agents.py --live`, seven exact `azd env set` operations, read-back comparison, and ignored operator receipt | All three immutable remote contracts matched their manifests; receipt fingerprint `8fb99387be06…9adad68c271c`; seven bindings read back exactly; ignored receipt is mode `0600`. No agent invocation or evaluation was performed | 2026-09-02 |
+| Fabric discovery | Read-only Fabric workspace API request | Returned Unauthorized for the current token; workspace, SQL database, and item bindings could not be verified | 2026-09-01 |
+| Provision preview | `azd provision --preview --no-prompt` | No changes attempted. Initial preview reported 20 missing bindings, verified Entra promotion reduced it to 18, and selected Foundry project binding reduced it to 17; remaining inputs cover Fabric, three Foundry agent publications, Work IQ corpus/SharePoint, and Power BI | 2026-09-01 |
+| Post-publication provision preview | `AZURE_DEV_USER_AGENT=microsoft_foundry_skill azd provision --preview --no-prompt --environment supply-response-personal` | No changes attempted. Verified Foundry promotion reduced missing inputs from 17 to 10; all remaining inputs are Fabric, Work IQ/SharePoint, or Power BI bindings | 2026-09-02 |
+
+### Outstanding validation prerequisites
+
+The real azd environment intentionally contains no synthetic substitute for a live
+tenant binding. The preview requires the following prerequisite groups before it
+can safely reach Azure what-if:
+
+- Entra: the API/Web registrations, client IDs, delegated administrator consent,
+  all three persona bindings, exact app-role assignments, selected-azd-environment
+  promotion, and tenant-exact image are verified.
+- Fabric: citation base URL, SQL server/database, workspace/item IDs, and an
+  identity that can perform the required read-only verification.
+- Foundry: complete. The existing East US 2 project is bound; exact immutable
+  signal/context/decision version `1` contracts and their verified publication
+  receipt are promoted in the ignored azd environment.
+- Work IQ: the first-party resource service principal is enabled and the API has
+  tenant-wide consent for its exact delegated scope; corpus version,
+  supplier/quality source IDs, and deployment receipt remain.
+- Power BI: canonical report URL and deployment receipt.
+
+These are outputs of earlier external setup tasks, not values Task 18 should invent.
+The plan remains `Ready for Validation`; it is not `Validated` until the remaining
+external bindings exist and preview/policy evaluation pass.
 
 ## 11. Next step
 
-Perform independent implementation review, then invoke `azure-validate` only as a
-separate controller step. Stop again before any read-only cloud what-if and before
-the first cloud mutation.
+Complete the remaining external prerequisite tasks in dependency order. Establish
+Fabric read access and exact data bindings, record Work IQ and Power BI receipts,
+and resume `azure-validate` at the provision-preview step. Each cloud mutation
+still requires a new explicit approval.
