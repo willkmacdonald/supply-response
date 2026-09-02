@@ -3,13 +3,23 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import re
 from pathlib import Path
 from typing import Any
 
-from agents.foundry import validate_project_endpoint
+from agents.foundry import (
+    is_active_immutable_agent_version,
+    validate_project_endpoint,
+)
 from agents.manifests import AgentManifest, load_manifests
 
 ROOT = Path(__file__).resolve().parents[1]
+_AGENT_NAMES = (
+    "supply-response-signal",
+    "supply-response-context",
+    "supply-response-decision",
+)
+_PINNED_VERSION = re.compile(r"^[1-9][0-9]{0,9}$")
 
 
 def _versions_from_environment(
@@ -43,7 +53,15 @@ def deployment_receipt(
         or any(not isinstance(item, tuple) or len(item) != 2 for item in versions)
     ):
         raise TypeError("versions must be an ordered signal/context/decision tuple")
-    parts = (project_endpoint,) + tuple(
+    if tuple(name for name, _ in versions) != _AGENT_NAMES:
+        raise ValueError("versions must use the exact ordered agent names")
+    if any(
+        not isinstance(version, str) or not _PINNED_VERSION.fullmatch(version)
+        for _, version in versions
+    ):
+        raise ValueError("versions must use exact pinned version strings")
+    trusted_endpoint = validate_project_endpoint(project_endpoint)
+    parts = (trusted_endpoint,) + tuple(
         part for name_version in versions for part in name_version
     )
     return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
@@ -75,7 +93,8 @@ def verify(
         )
         definition = remote.definition
         matches = (
-            remote.name == manifest.agent_name
+            is_active_immutable_agent_version(remote)
+            and remote.name == manifest.agent_name
             and str(remote.version) == version
             and remote.description == manifest.description
             and definition.model == manifest.model

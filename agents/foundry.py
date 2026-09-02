@@ -63,6 +63,18 @@ def validate_project_endpoint(value: str) -> str:
     return value
 
 
+def is_active_immutable_agent_version(remote: Any) -> bool:
+    """Accept active SDK versions and older representations without lifecycle data."""
+
+    if getattr(remote, "draft", None) is True:
+        return False
+    status = getattr(remote, "status", None)
+    if status is None:
+        return True
+    normalized_status = getattr(status, "value", status)
+    return isinstance(normalized_status, str) and normalized_status == "active"
+
+
 def build_foundry_agent(
     binding: FoundryAgentBinding,
     *,
@@ -100,7 +112,10 @@ class FoundryJsonAgent:
             if not isinstance(contents, list) or not contents:
                 raise RuntimeError("Foundry response must contain plain text only")
             for content in contents:
-                if getattr(content, "type", None) != "text":
+                content_type = getattr(content, "type", None)
+                if content_type == "text_reasoning":
+                    continue
+                if content_type != "text":
                     raise RuntimeError("Foundry response must contain plain text only")
                 item = getattr(content, "text", None)
                 if not isinstance(item, str):

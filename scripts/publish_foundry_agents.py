@@ -8,7 +8,10 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from agents.foundry import validate_project_endpoint
+from agents.foundry import (
+    is_active_immutable_agent_version,
+    validate_project_endpoint,
+)
 from agents.manifests import TRUSTED_MODEL_DEPLOYMENT, AgentManifest, load_manifests
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,11 +57,12 @@ def _matches_manifest(
 ) -> bool:
     metadata = remote.metadata or {}
     return (
-        remote.name == manifest.agent_name
+        is_active_immutable_agent_version(remote)
+        and remote.name == manifest.agent_name
         and remote.description == manifest.description
         and remote.definition.model == manifest.model
         and remote.definition.instructions == manifest.instructions
-        and remote.definition.tools == []
+        and list(remote.definition.tools or []) == []
         and metadata.get("supply_response_role") == manifest.role
         and metadata.get("supply_response_contract_sha256") == fingerprint
     )

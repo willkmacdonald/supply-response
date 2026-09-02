@@ -10,6 +10,7 @@ from typing import Any, cast
 
 import pytest
 from agent_framework import AgentResponse, Content, Message
+from azure.ai.projects.models import AgentVersionStatus
 from azure.core.exceptions import ResourceNotFoundError
 from pydantic import ValidationError
 
@@ -308,6 +309,47 @@ async def test_foundry_response_rejects_tool_content_alongside_valid_json() -> N
 
 
 @pytest.mark.anyio
+async def test_foundry_response_accepts_reasoning_alongside_valid_json() -> None:
+    class Agent:
+        async def run(self, prompt: str) -> AgentResponse:
+            return AgentResponse(
+                messages=[
+                    Message(
+                        "assistant",
+                        [
+                            Content(type="text_reasoning", text="private reasoning"),
+                            Content(
+                                type="text", text='{"facts":[],"uncertainties":[]}'
+                            ),
+                        ],
+                    )
+                ]
+            )
+
+    assert await FoundryJsonAgent(Agent()).invoke({"evidence": []}) == {
+        "facts": [],
+        "uncertainties": [],
+    }
+
+
+@pytest.mark.anyio
+async def test_foundry_response_rejects_reasoning_without_json_text() -> None:
+    class Agent:
+        async def run(self, prompt: str) -> AgentResponse:
+            return AgentResponse(
+                messages=[
+                    Message(
+                        "assistant",
+                        [Content(type="text_reasoning", text="private reasoning")],
+                    )
+                ]
+            )
+
+    with pytest.raises(RuntimeError, match="bounded JSON"):
+        await FoundryJsonAgent(Agent()).invoke({"evidence": []})
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "content_type",
     [
@@ -415,6 +457,19 @@ def test_repeat_publish_reuses_every_version_without_creating() -> None:
     assert tuple(emitted) == first
 
 
+def test_repeat_publish_reuses_tool_free_version_with_none_tools() -> None:
+    project = FakeProject()
+    first = publish(ROOT, project=project, emit=lambda _: None)
+    for versions in project.agents.versions.values():
+        cast(Any, versions[0]).definition.tools = None
+    project.agents.created.clear()
+
+    second = publish(ROOT, project=project, emit=lambda _: None)
+
+    assert project.agents.created == []
+    assert second == first
+
+
 def test_publish_treats_lazy_page_not_found_as_no_existing_versions() -> None:
     project = FakeProject(
         list_versions_error=ResourceNotFoundError("agent not found during iteration")
@@ -483,6 +538,58 @@ def test_publish_rejects_ambiguous_matching_fingerprints() -> None:
     assert project.agents.created == []
 
 
+def test_publish_rejects_draft_matching_version() -> None:
+    project = FakeProject()
+    publish(ROOT, project=project, emit=lambda _: None)
+    first_versions = next(iter(project.agents.versions.values()))
+    cast(Any, first_versions[0]).draft = True
+    project.agents.created.clear()
+
+    with pytest.raises(RuntimeError, match="drift"):
+        publish(ROOT, project=project, emit=lambda _: None)
+
+    assert project.agents.created == []
+
+
+@pytest.mark.parametrize(
+    "status",
+    (
+        AgentVersionStatus.CREATING,
+        AgentVersionStatus.FAILED,
+        AgentVersionStatus.DELETING,
+        AgentVersionStatus.DELETED,
+    ),
+)
+def test_publish_rejects_matching_version_that_is_not_active(
+    status: AgentVersionStatus,
+) -> None:
+    project = FakeProject()
+    publish(ROOT, project=project, emit=lambda _: None)
+    first_versions = next(iter(project.agents.versions.values()))
+    cast(Any, first_versions[0]).status = status
+    project.agents.created.clear()
+
+    with pytest.raises(RuntimeError, match="drift"):
+        publish(ROOT, project=project, emit=lambda _: None)
+
+    assert project.agents.created == []
+
+
+@pytest.mark.parametrize("status", (AgentVersionStatus.ACTIVE, "active", None))
+def test_publish_reuses_active_or_unspecified_immutable_version(
+    status: AgentVersionStatus | str | None,
+) -> None:
+    project = FakeProject()
+    expected = publish(ROOT, project=project, emit=lambda _: None)
+    for versions in project.agents.versions.values():
+        cast(Any, versions[0]).draft = None
+        cast(Any, versions[0]).status = status
+    project.agents.created.clear()
+
+    assert publish(ROOT, project=project, emit=lambda _: None) == expected
+    assert project.agents.created == []
+
+
 def test_verify_rejects_remote_instruction_or_tool_drift() -> None:
     project = FakeProject()
     manifests = load_manifests(ROOT)
@@ -545,6 +652,70 @@ def _set_exact_remote_versions(
         )
 
 
+def test_verify_rejects_draft_immutable_version() -> None:
+    versions_by_role = {"signal": "11", "context": "12", "decision": "13"}
+    project = FakeProject()
+    _set_exact_remote_versions(project, versions_by_role)
+    manifest = load_manifests(ROOT)[0]
+    remote = project.agents.remote[
+        (manifest.agent_name, versions_by_role[manifest.role])
+    ]
+    cast(Any, remote).draft = True
+
+    with pytest.raises(RuntimeError, match="drift"):
+        verify(
+            ROOT,
+            project=project,
+            versions={
+                item.agent_name: versions_by_role[item.role]
+                for item in load_manifests(ROOT)
+            },
+        )
+
+
+@pytest.mark.parametrize("status", ("creating", "failed", "deleting", "deleted"))
+def test_verify_rejects_immutable_version_that_is_not_active(status: str) -> None:
+    versions_by_role = {"signal": "11", "context": "12", "decision": "13"}
+    project = FakeProject()
+    _set_exact_remote_versions(project, versions_by_role)
+    manifest = load_manifests(ROOT)[0]
+    remote = project.agents.remote[
+        (manifest.agent_name, versions_by_role[manifest.role])
+    ]
+    cast(Any, remote).status = status
+
+    with pytest.raises(RuntimeError, match="drift"):
+        verify(
+            ROOT,
+            project=project,
+            versions={
+                item.agent_name: versions_by_role[item.role]
+                for item in load_manifests(ROOT)
+            },
+        )
+
+
+@pytest.mark.parametrize("status", (AgentVersionStatus.ACTIVE, "active", None))
+def test_verify_accepts_active_or_unspecified_immutable_version(
+    status: AgentVersionStatus | str | None,
+) -> None:
+    versions_by_role = {"signal": "11", "context": "12", "decision": "13"}
+    project = FakeProject()
+    _set_exact_remote_versions(project, versions_by_role)
+    for remote in project.agents.remote.values():
+        cast(Any, remote).draft = None
+        cast(Any, remote).status = status
+
+    verify(
+        ROOT,
+        project=project,
+        versions={
+            item.agent_name: versions_by_role[item.role]
+            for item in load_manifests(ROOT)
+        },
+    )
+
+
 def test_verify_reads_canonical_agent_environment_bindings(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -582,6 +753,56 @@ def test_deployment_receipt_uses_runtime_binding_order() -> None:
         )
         == "0bdb068692b0d82bdfd563adad8a8c1ed249669e9b6fbe7fcad6b7566c1f7778"
     )
+
+
+@pytest.mark.parametrize(
+    "versions",
+    (
+        (
+            ("supply-response-context", "12"),
+            ("supply-response-signal", "11"),
+            ("supply-response-decision", "13"),
+        ),
+        (
+            ("signal", "11"),
+            ("context", "12"),
+            ("decision", "13"),
+        ),
+    ),
+)
+def test_deployment_receipt_rejects_noncanonical_agent_name_order(
+    versions: tuple[tuple[str, str], ...],
+) -> None:
+    with pytest.raises(ValueError, match="names"):
+        verify_script.deployment_receipt(
+            "https://example.services.ai.azure.com/api/projects/demo",
+            versions,
+        )
+
+
+@pytest.mark.parametrize("version", ("0", "01", "١", "12345678901", 7))
+def test_deployment_receipt_rejects_invalid_pinned_version(version: object) -> None:
+    with pytest.raises((TypeError, ValueError), match="version"):
+        verify_script.deployment_receipt(
+            "https://example.services.ai.azure.com/api/projects/demo",
+            (
+                ("supply-response-signal", cast(Any, version)),
+                ("supply-response-context", "12"),
+                ("supply-response-decision", "13"),
+            ),
+        )
+
+
+def test_deployment_receipt_rejects_untrusted_project_endpoint() -> None:
+    with pytest.raises(ValueError, match="trusted"):
+        verify_script.deployment_receipt(
+            "https://example.invalid/api/projects/demo",
+            (
+                ("supply-response-signal", "11"),
+                ("supply-response-context", "12"),
+                ("supply-response-decision", "13"),
+            ),
+        )
 
 
 def test_live_verify_emits_receipt_after_all_exact_remote_checks(
