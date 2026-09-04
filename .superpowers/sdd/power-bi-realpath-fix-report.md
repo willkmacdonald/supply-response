@@ -54,3 +54,38 @@ lookup and the publication-boundary path argument.
 ## Commit
 
 - Branch: `main` (recorded in Git history with this fix)
+
+## Compatibility-test isolation follow-up
+
+The upstream private-API reproduction now lives in
+`tests/fabric/test_fabric_cicd_1_3_0_path_compatibility.py`, whose module name,
+docstring, test name, and version assertion explicitly pin it to
+`fabric-cicd 1.3.0`. The ordinary project test retains only the local
+`_publish()` boundary assertion: it uses local fake import modules, a synthetic
+credential, and a symlinked temporary directory without importing or calling
+`fabric_cicd` internals.
+
+Verification:
+
+```text
+uv run pytest tests/fabric/test_power_bi_project.py::test_publish_resolves_aliased_staged_repository_for_report_dependency tests/fabric/test_fabric_cicd_1_3_0_path_compatibility.py::test_fabric_cicd_1_3_0_rejects_aliased_repository_report_dependency -q
+..                                                                       [100%]
+```
+
+```text
+uv run pytest tests/fabric/test_power_bi_project.py -q
+...........................................................
+```
+
+The bounded project file exited `0`.
+
+```text
+uv run ruff check fabric/deploy.py tests/fabric/test_power_bi_project.py tests/fabric/test_fabric_cicd_1_3_0_path_compatibility.py
+All checks passed!
+```
+
+```text
+git diff --check
+```
+
+Exit code `0`. No cloud command, authentication, or Fabric publication was run.
