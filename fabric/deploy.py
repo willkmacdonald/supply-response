@@ -5,16 +5,15 @@ import hashlib
 import importlib
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 from typing import Any, NoReturn
 from urllib.parse import urldefrag, urljoin, urlparse
 from uuid import UUID
-
 
 POWER_BI = Path(__file__).resolve().parent / "power-bi"
 SCHEMA_CATALOG = Path(__file__).resolve().parent / "schemas" / "microsoft"
@@ -77,7 +76,7 @@ EXPECTED_QUERY_REFS = {
         "ActionOutcomes.observation_kind",
         "ActionOutcomes.Observed Variance",
         "ActionOutcomes.Projection Refresh Time",
-        "ActionOutcomes.Scenario Effective Time",
+        "ActionOutcomes.Action Scenario Effective Time",
     },
 }
 
@@ -439,8 +438,8 @@ EXPECTED_VISUALS = {
                     "Data",
                     "Measure",
                     "ActionOutcomes",
-                    "Scenario Effective Time",
-                    "ActionOutcomes.Scenario Effective Time",
+                    "Action Scenario Effective Time",
+                    "ActionOutcomes.Action Scenario Effective Time",
                     display_name="Scenario Effective Time",
                 ),
             ),

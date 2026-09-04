@@ -9,8 +9,8 @@
         "Data": {
           "projections": [
             {
-              "field": {"Measure": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "Scenario Effective Time"}},
-              "queryRef": "ActionOutcomes.Scenario Effective Time",
+              "field": {"Measure": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "Action Scenario Effective Time"}},
+              "queryRef": "ActionOutcomes.Action Scenario Effective Time",
               "displayName": "Scenario Effective Time"
             }
           ]

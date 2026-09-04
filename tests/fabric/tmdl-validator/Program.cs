@@ -45,7 +45,7 @@ var expectedMeasures = new Dictionary<string, HashSet<string>>
         "Action Completion %",
         "Observed Variance",
         "Projection Refresh Time",
-        "Scenario Effective Time",
+        "Action Scenario Effective Time",
     },
 };
 foreach (var (tableName, requiredMeasures) in expectedMeasures)

@@ -6,7 +6,6 @@ from uuid import uuid4
 
 import pytest
 
-
 LIVE_SETTINGS = (
     "SUPPLY_RESPONSE_API_BASE_URL",
     "SUPPLY_RESPONSE_ALLOWED_TENANT_ID",
@@ -116,7 +115,7 @@ ROW(
   "action_completion", ActionOutcomes[Action Completion %],
   "simulated_observation_count", CALCULATE(COUNTROWS(ActionOutcomes), ActionOutcomes[decision_id] = "{decision["decision_id"]}", ActionOutcomes[observation_kind] = "simulated"),
   "observation_kind", CALCULATE(SELECTEDVALUE(ActionOutcomes[observation_kind]), ActionOutcomes[decision_id] = "{decision["decision_id"]}", ActionOutcomes[record_type] = "observation"),
-  "scenario_effective_time", ActionOutcomes[Scenario Effective Time],
+  "scenario_effective_time", ActionOutcomes[Action Scenario Effective Time],
   "projection_refresh_time", ActionOutcomes[Projection Refresh Time]
 )'''
     variance_dax = f'''EVALUATE

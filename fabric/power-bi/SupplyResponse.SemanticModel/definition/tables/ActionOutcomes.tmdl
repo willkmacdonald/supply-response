@@ -114,7 +114,7 @@ table ActionOutcomes
       RETURN CALCULATE(MAX(ActionOutcomes[projection_updated_at]), REMOVEFILTERS(ActionOutcomes), ActionOutcomes[decision_id] = DecisionId)
     formatString: General Date
 
-  measure 'Scenario Effective Time' =
+  measure 'Action Scenario Effective Time' =
       VAR DecisionId = [Current Decision ID]
       RETURN CALCULATE(MAX(ActionOutcomes[scenario_effective_time]), REMOVEFILTERS(ActionOutcomes), ActionOutcomes[decision_id] = DecisionId)
     formatString: General Date

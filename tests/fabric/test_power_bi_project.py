@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
-from typing import Any
 from decimal import Decimal
+from pathlib import Path
+from typing import Any
 
 import pytest
-
 
 ROOT = Path(__file__).resolve().parents[2]
 POWER_BI = ROOT / "fabric" / "power-bi"
@@ -79,7 +78,7 @@ QUERY_REF_ALLOWLIST = {
         "ActionOutcomes.observation_kind",
         "ActionOutcomes.Observed Variance",
         "ActionOutcomes.Projection Refresh Time",
-        "ActionOutcomes.Scenario Effective Time",
+        "ActionOutcomes.Action Scenario Effective Time",
     },
 }
 
@@ -485,7 +484,7 @@ def _mutate_projection_column_to_measure(value: dict[str, Any]) -> None:
     projection["field"] = {
         "Measure": {
             "Expression": {"SourceRef": {"Entity": "ActionOutcomes"}},
-            "Property": "Scenario Effective Time",
+            "Property": "Action Scenario Effective Time",
         }
     }
 
@@ -749,9 +748,12 @@ def test_actions_page_binds_scenario_effective_time_card() -> None:
     )
     projections = scenario["visual"]["query"]["queryState"]["Data"]["projections"]
     assert [projection["queryRef"] for projection in projections] == [
-        "ActionOutcomes.Scenario Effective Time"
+        "ActionOutcomes.Action Scenario Effective Time"
     ]
-    assert projections[0]["field"]["Measure"]["Property"] == ("Scenario Effective Time")
+    assert projections[0]["field"]["Measure"]["Property"] == (
+        "Action Scenario Effective Time"
+    )
+    assert projections[0]["displayName"] == "Scenario Effective Time"
 
 
 def test_action_and_observation_visuals_have_locked_record_type_scope() -> None:
@@ -863,6 +865,26 @@ def test_semantic_model_exposes_decision_and_simulation_measures() -> None:
         assert f"measure '{required}'" in text
 
 
+def test_semantic_model_measure_names_are_unique() -> None:
+    declarations = [
+        (match.group(1), path.relative_to(ROOT))
+        for path in sorted(SEMANTIC_MODEL.rglob("*.tmdl"))
+        for match in re.finditer(
+            r"^  measure '([^']+)'", path.read_text(), re.MULTILINE
+        )
+    ]
+    by_name: dict[str, list[Path]] = {}
+    for name, path in declarations:
+        by_name.setdefault(name, []).append(path)
+
+    duplicates = {
+        name: [str(path) for path in paths]
+        for name, paths in by_name.items()
+        if len(paths) > 1
+    }
+    assert duplicates == {}
+
+
 def test_tmdl_folder_has_strong_structural_contract() -> None:
     model = (SEMANTIC_MODEL / "model.tmdl").read_text(encoding="utf-8")
     assert model.startswith("model Model\n")
@@ -937,7 +959,7 @@ def test_tmdl_folder_has_strong_structural_contract() -> None:
     assert "ActionOutcomes[projection_updated_at]" in action_text
     assert "ActionOutcomes[observed_value]" in action_text
     assert "ActionOutcomes[predicted_value]" in action_text
-    assert "measure 'Scenario Effective Time'" in action_text
+    assert "measure 'Action Scenario Effective Time'" in action_text
     assert "ActionOutcomes[scenario_effective_time]" in action_text
 
     variance = re.search(
@@ -1239,7 +1261,7 @@ def test_live_contract_queries_required_measures_and_variance_contexts() -> None
         "CaseCommandCenter[Current Decision ID]",
         "ActionOutcomes[Action Completion %]",
         "ActionOutcomes[Observed Variance]",
-        "ActionOutcomes[Scenario Effective Time]",
+        "ActionOutcomes[Action Scenario Effective Time]",
         "ActionOutcomes[Projection Refresh Time]",
         'ActionOutcomes[metric] = "response_cost"',
         'ActionOutcomes[metric] = "remaining_alpha_recovery_date"',
