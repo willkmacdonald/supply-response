@@ -80,7 +80,7 @@ The subscription currently has Microsoft cloud security benchmark and Defender a
 | Fabric SQL | Existing `SupplyResponseDemo` SQL Database in the dedicated `Supply Response Demo` workspace | Exact workspace/database bindings are verified; schema version 12, SQL authentication, idempotent double-application, and health are live-validated; the future Container App managed-identity database grant remains an explicit approval-gated deployment step and is not created by Bicep |
 | Work IQ | Existing tenant capability | Confidential API client secret stored in Key Vault; OBO only after an authenticated Alex request |
 | Entra web/API apps | Existing or separately provisioned tenant registrations | IDs are environment-specific configuration; client secret resides only in Key Vault |
-| Power BI | Existing/published Fabric-backed report | Canonical report URL and receipt are deployment configuration, not provisioned here |
+| Power BI | Source-controlled Fabric-backed report; publication pending | Canonical report URL and receipt are deployment outputs; the report is not provisioned here |
 
 ### Runtime behavior
 

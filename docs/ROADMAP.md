@@ -69,6 +69,9 @@ Completed locally:
 - Two-page Power BI Project: **Command Center** and **Actions and Outcomes**
 - DirectQuery semantic model and deployment preflight
 - Offline Microsoft schema validation and semantic-model parsing
+
+Verified live:
+
 - Dedicated `Supply Response Demo` workspace and `SupplyResponseDemo` SQL Database
   discovered and bound exactly
 - Operational and analytics scripts applied twice without collisions; schema version
