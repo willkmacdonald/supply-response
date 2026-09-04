@@ -325,6 +325,21 @@ def test_preflight_requires_exact_foundry_fabric_and_azd_environment_contracts()
     assert "printf '%s' \"$fabric_access_token\"" in preflight
 
 
+def test_preflight_requests_fabric_audience_for_every_fabric_rest_call():
+    preflight = _read("scripts/preflight_personal_tenant.sh")
+    fabric_rest_lines = [
+        line
+        for line in preflight.splitlines()
+        if "az rest" in line and "https://api.fabric.microsoft.com/" in line
+    ]
+
+    assert len(fabric_rest_lines) == 2
+    assert all(
+        "--resource https://api.fabric.microsoft.com" in line
+        for line in fabric_rest_lines
+    )
+
+
 def test_secret_file_and_live_smoke_gate_fail_closed():
     deploy = _read("scripts/deploy_personal_tenant.sh")
     helper = _read("scripts/lib/safe_command.sh")

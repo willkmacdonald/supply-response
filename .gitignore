@@ -16,3 +16,6 @@ test-results/
 *.db
 tests/fabric/tmdl-validator/bin/
 tests/fabric/tmdl-validator/obj/
+
+# Deployment-specific environment record (resource identifiers; never secrets).
+/docs/local/supply-response-personal-environment.md

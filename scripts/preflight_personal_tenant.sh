@@ -128,9 +128,9 @@ assert_equal 'Foundry resource type' "$foundry_type" 'Microsoft.CognitiveService
 expected_foundry_endpoint="https://${foundry_account_name}.services.ai.azure.com/api/projects/${foundry_project_name}"
 assert_equal 'Foundry project endpoint' "$FOUNDRY_PROJECT_ENDPOINT" "$expected_foundry_endpoint"
 
-safe_capture fabric_workspace_id fabric-workspace az rest --method get --url "https://api.fabric.microsoft.com/v1/workspaces/${FABRIC_WORKSPACE_ID}" --query id --output tsv
+safe_capture fabric_workspace_id fabric-workspace az rest --resource https://api.fabric.microsoft.com --method get --url "https://api.fabric.microsoft.com/v1/workspaces/${FABRIC_WORKSPACE_ID}" --query id --output tsv
 fabric_item_contract=("type" "SQLDatabase")
-safe_capture fabric_database_json fabric-database az rest --method get --url "https://api.fabric.microsoft.com/v1/workspaces/${FABRIC_WORKSPACE_ID}/items/${FABRIC_SQL_DATABASE_ID}" --output json
+safe_capture fabric_database_json fabric-database az rest --resource https://api.fabric.microsoft.com --method get --url "https://api.fabric.microsoft.com/v1/workspaces/${FABRIC_WORKSPACE_ID}/items/${FABRIC_SQL_DATABASE_ID}" --output json
 fabric_database_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$fabric_database_json")"
 fabric_database_type="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["type"])' <<<"$fabric_database_json")"
 unset fabric_database_json

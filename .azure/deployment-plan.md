@@ -1,8 +1,8 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Ready for Validation; preview is blocked on Fabric, Work IQ corpus, and Power BI bindings
+> **Status:** Ready for Validation; Fabric SQL is live-validated, while provision preview, Work IQ corpus, Power BI publication, and the future Container App identity grant remain
 
-Generated: 2026-08-31; validation evidence updated 2026-09-02
+Generated: 2026-08-31; validation evidence updated 2026-09-04
 
 ## 1. Project overview
 
@@ -77,7 +77,7 @@ The subscription currently has Microsoft cloud security benchmark and Defender a
 | Runtime secrets | New project-specific Azure Key Vault Standard | RBAC authorization; Container App Key Vault references; no confidential Bicep outputs or plain environment-variable values |
 | Logs and traces | Existing `shared-services-logs` plus a new workspace-based Application Insights component | Application-level sampling and bounded verbosity; connection string provided as nonsecret runtime configuration |
 | Foundry | Existing project in the confirmed tenant | Existing resource ID parameter; least-privilege runtime role assignment only after approval |
-| Fabric SQL | Existing Fabric SQL Database in the confirmed tenant | Managed-identity database principal/grants performed by an explicit approval-gated command; not created by Bicep |
+| Fabric SQL | Existing `SupplyResponseDemo` SQL Database in the dedicated `Supply Response Demo` workspace | Exact workspace/database bindings are verified; schema version 12, SQL authentication, idempotent double-application, and health are live-validated; the future Container App managed-identity database grant remains an explicit approval-gated deployment step and is not created by Bicep |
 | Work IQ | Existing tenant capability | Confidential API client secret stored in Key Vault; OBO only after an authenticated Alex request |
 | Entra web/API apps | Existing or separately provisioned tenant registrations | IDs are environment-specific configuration; client secret resides only in Key Vault |
 | Power BI | Existing/published Fabric-backed report | Canonical report URL and receipt are deployment configuration, not provisioned here |
@@ -255,9 +255,12 @@ dependencies. It is not `azure-validate` proof and does not authorize deployment
 | Foundry Luna publication preflight | Fresh exact account/project reads, data-plane SDK inspection, per-agent version reads, and immediate ARM deployment read | Active tenant/subscription and retained project bindings matched; `m365-resource/m365` is provisioned in East US 2; data plane returned deployment/model `gpt-5.6-luna`; immediate ARM read returned `Succeeded`; current identity read deployments and agent versions | 2026-09-02 |
 | Foundry prompt-agent publication | `AZURE_DEV_USER_AGENT=microsoft_foundry_skill uv run python scripts/publish_foundry_agents.py --publish` | Created three previously absent matching contracts: `supply-response-signal=1`, `supply-response-context=1`, and `supply-response-decision=1`; reused none | 2026-09-02 |
 | Foundry live verification and promotion | Canonical `_AGENT_` name/version variables plus `scripts/verify_foundry_agents.py --live`, seven exact `azd env set` operations, read-back comparison, and ignored operator receipt | All three immutable remote contracts matched their manifests; receipt fingerprint `8fb99387be06…9adad68c271c`; seven bindings read back exactly; ignored receipt is mode `0600`. No agent invocation or evaluation was performed | 2026-09-02 |
-| Fabric discovery | Read-only Fabric workspace API request | Returned Unauthorized for the current token; workspace, SQL database, and item bindings could not be verified | 2026-09-01 |
-| Provision preview | `azd provision --preview --no-prompt` | No changes attempted. Initial preview reported 20 missing bindings, verified Entra promotion reduced it to 18, and selected Foundry project binding reduced it to 17; remaining inputs cover Fabric, three Foundry agent publications, Work IQ corpus/SharePoint, and Power BI | 2026-09-01 |
-| Post-publication provision preview | `AZURE_DEV_USER_AGENT=microsoft_foundry_skill azd provision --preview --no-prompt --environment supply-response-personal` | No changes attempted. Verified Foundry promotion reduced missing inputs from 17 to 10; all remaining inputs are Fabric, Work IQ/SharePoint, or Power BI bindings | 2026-09-02 |
+| Fabric discovery and binding | Read-only Fabric workspace and item API requests using the Fabric resource audience | Verified the dedicated `Supply Response Demo` workspace and exact `SupplyResponseDemo` SQL Database item binding; workspace/database IDs match the ignored azd environment; no identifiers are printed here | 2026-09-04 |
+| Fabric SQL authentication | Approval-gated live SQL connection using Entra authentication | Successful SQL authentication against the exact Fabric server/database binding; no connection values or tokens were recorded | 2026-09-04 |
+| Fabric schema application | Approval-gated live schema deployment | Operational and analytics scripts applied twice; both runs were idempotent, with schema version 12 and the required analytics views present | 2026-09-04 |
+| Fabric live integration and health | Approval-gated live integration test and health check | Passed against the live Fabric SQL store; schema version 12, `operational_store=fabric_sql`, and Fabric health/provenance checks matched the contract | 2026-09-04 |
+| Provision preview | `azd provision --preview --no-prompt` | No changes attempted. The approval-gated preview remains pending after the verified Fabric setup; remaining inputs cover the Container App managed-identity grant, Work IQ/SharePoint, and Power BI | 2026-09-04 |
+| Post-publication provision preview | `AZURE_DEV_USER_AGENT=microsoft_foundry_skill azd provision --preview --no-prompt --environment supply-response-personal` | No changes attempted. Verified Foundry and Fabric bindings are recorded; preview remains pending for Work IQ/SharePoint and Power BI inputs and the later Container App identity grant | 2026-09-04 |
 
 ### Outstanding validation prerequisites
 
@@ -268,23 +271,27 @@ can safely reach Azure what-if:
 - Entra: the API/Web registrations, client IDs, delegated administrator consent,
   all three persona bindings, exact app-role assignments, selected-azd-environment
   promotion, and tenant-exact image are verified.
-- Fabric: citation base URL, SQL server/database, workspace/item IDs, and an
-  identity that can perform the required read-only verification.
+- Fabric: complete for workspace/database discovery, SQL authentication, schema
+  version 12, idempotent double-application, live integration, and health. The
+  future Container App managed-identity database grant remains.
 - Foundry: complete. The existing East US 2 project is bound; exact immutable
   signal/context/decision version `1` contracts and their verified publication
   receipt are promoted in the ignored azd environment.
 - Work IQ: the first-party resource service principal is enabled and the API has
   tenant-wide consent for its exact delegated scope; corpus version,
   supplier/quality source IDs, and deployment receipt remain.
-- Power BI: canonical report URL and deployment receipt.
+- Power BI: publication, canonical report URL, and deployment receipt.
 
 These are outputs of earlier external setup tasks, not values Task 18 should invent.
 The plan remains `Ready for Validation`; it is not `Validated` until the remaining
-external bindings exist and preview/policy evaluation pass.
+external bindings exist, the future identity grant is approved and applied, and
+preview/policy evaluation pass.
 
 ## 11. Next step
 
-Complete the remaining external prerequisite tasks in dependency order. Establish
-Fabric read access and exact data bindings, record Work IQ and Power BI receipts,
-and resume `azure-validate` at the provision-preview step. Each cloud mutation
-still requires a new explicit approval.
+Complete the remaining external prerequisite tasks in dependency order. Apply the
+future Container App managed-identity grant through its separate approval gate,
+create and bind the Work IQ corpus, publish and verify Power BI, record their
+receipts, and resume `azure-validate` at the provision-preview step. The complete
+live Case journey remains pending, and each cloud mutation still requires a new
+explicit approval.
