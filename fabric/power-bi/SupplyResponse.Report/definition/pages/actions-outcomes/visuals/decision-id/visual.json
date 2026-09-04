@@ -9,8 +9,8 @@
         "Data": {
           "projections": [
             {
-              "field": {"Column": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "decision_id"}},
-              "queryRef": "ActionOutcomes.decision_id",
+              "field": {"Measure": {"Expression": {"SourceRef": {"Entity": "CaseCommandCenter"}}, "Property": "Current Decision ID"}},
+              "queryRef": "CaseCommandCenter.Current Decision ID",
               "displayName": "Decision ID"
             }
           ]

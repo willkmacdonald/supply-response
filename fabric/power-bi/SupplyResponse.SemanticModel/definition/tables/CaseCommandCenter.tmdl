@@ -66,6 +66,10 @@ table CaseCommandCenter
       VAR LatestCase = [Latest Showcase Case]
       RETURN CALCULATE(SELECTEDVALUE(CaseCommandCenter[decision_id]), REMOVEFILTERS(CaseCommandCenter), CaseCommandCenter[case_id] = LatestCase)
 
+  measure 'Current Decision Status' =
+      VAR LatestCase = [Latest Showcase Case]
+      RETURN CALCULATE(SELECTEDVALUE(CaseCommandCenter[status]), REMOVEFILTERS(CaseCommandCenter), CaseCommandCenter[case_id] = LatestCase)
+
   measure 'Revenue At Risk' =
       VAR LatestCase = [Latest Showcase Case]
       RETURN CALCULATE(MAX(CaseCommandCenter[revenue_at_risk]), REMOVEFILTERS(CaseCommandCenter), CaseCommandCenter[case_id] = LatestCase)

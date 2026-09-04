@@ -30,8 +30,9 @@
               "queryRef": "ActionOutcomes.action_kind"
             },
             {
-              "field": {"Column": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "action_status"}},
-              "queryRef": "ActionOutcomes.action_status"
+              "field": {"Measure": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "Current Action Status"}},
+              "queryRef": "ActionOutcomes.Current Action Status",
+              "displayName": "Action Status"
             }
           ]
         }

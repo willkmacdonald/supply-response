@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Ready for Validation; Fabric SQL is live-validated, while provision preview, Work IQ corpus, Power BI publication, and the future Container App identity grant remain
+> **Status:** Ready for Validation; Fabric SQL and Power BI publication are live-validated, while provision preview, Work IQ corpus, populated report parity, and the future Container App identity grant remain
 
 Generated: 2026-08-31; validation evidence updated 2026-09-04
 
@@ -80,7 +80,7 @@ The subscription currently has Microsoft cloud security benchmark and Defender a
 | Fabric SQL | Existing `SupplyResponseDemo` SQL Database in the dedicated `Supply Response Demo` workspace | Exact workspace/database bindings are verified; schema version 12, SQL authentication, idempotent double-application, and health are live-validated; the future Container App managed-identity database grant remains an explicit approval-gated deployment step and is not created by Bicep |
 | Work IQ | Existing tenant capability | Confidential API client secret stored in Key Vault; OBO only after an authenticated Alex request |
 | Entra web/API apps | Existing or separately provisioned tenant registrations | IDs are environment-specific configuration; client secret resides only in Key Vault |
-| Power BI | Source-controlled Fabric-backed report; publication pending | Canonical report URL and receipt are deployment outputs; the report is not provisioned here |
+| Power BI | Published source-controlled Fabric-backed report | Canonical report URL and receipt are stored only in the ignored deployment environment; populated Decision-ID parity remains a post-deployment gate |
 
 ### Runtime behavior
 
@@ -259,6 +259,7 @@ dependencies. It is not `azure-validate` proof and does not authorize deployment
 | Fabric SQL authentication | Approval-gated live SQL connection using Entra authentication | Successful SQL authentication against the exact Fabric server/database binding; no connection values or tokens were recorded | 2026-09-04 |
 | Fabric schema application | Approval-gated live schema deployment | Operational and analytics scripts applied twice; both runs were idempotent, with schema version 12 and the required analytics views present | 2026-09-04 |
 | Fabric live integration and health | Approval-gated live integration test and health check | Passed against the live Fabric SQL store; schema version 12, `operational_store=fabric_sql`, and Fabric health/provenance checks matched the contract | 2026-09-04 |
+| Power BI publication and empty-state render | Approval-gated semantic-model/report deployment, DAX smoke query, and browser inspection | Published both items, bound Fabric SQL with OAuth2, executed DAX successfully, and rendered both required pages without visual errors; populated parity remains pending | 2026-09-04 |
 | Provision preview | `azd provision --preview --no-prompt` | No changes attempted. The approval-gated preview remains pending after the verified Fabric setup; remaining inputs cover the Container App managed-identity grant, Work IQ/SharePoint, and Power BI | 2026-09-04 |
 | Post-publication provision preview | `AZURE_DEV_USER_AGENT=microsoft_foundry_skill azd provision --preview --no-prompt --environment supply-response-personal` | No changes attempted. Verified Foundry and Fabric bindings are recorded; preview remains pending for Work IQ/SharePoint and Power BI inputs and the later Container App identity grant | 2026-09-04 |
 
@@ -280,7 +281,7 @@ can safely reach Azure what-if:
 - Work IQ: the first-party resource service principal is enabled and the API has
   tenant-wide consent for its exact delegated scope; corpus version,
   supplier/quality source IDs, and deployment receipt remain.
-- Power BI: publication, canonical report URL, and deployment receipt.
+- Power BI: populated showcase-case consistency and Decision-ID parity after application deployment.
 
 These are outputs of earlier external setup tasks, not values Task 18 should invent.
 The plan remains `Ready for Validation`; it is not `Validated` until the remaining
@@ -291,7 +292,8 @@ preview/policy evaluation pass.
 
 Complete the remaining external prerequisite tasks in dependency order. Apply the
 future Container App managed-identity grant through its separate approval gate,
-create and bind the Work IQ corpus, publish and verify Power BI, record their
-receipts, and resume `azure-validate` at the provision-preview step. The complete
-live Case journey remains pending, and each cloud mutation still requires a new
-explicit approval.
+create and bind the Work IQ corpus, and resume `azure-validate` at the
+provision-preview step. Power BI publication, its canonical URL, and its receipt
+are complete; populated parity remains part of the later live Case journey. The
+complete live Case journey remains pending, and each cloud mutation still requires
+the applicable explicit approval.

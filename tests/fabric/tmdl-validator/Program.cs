@@ -36,6 +36,7 @@ var expectedMeasures = new Dictionary<string, HashSet<string>>
     {
         "Latest Showcase Case",
         "Current Decision ID",
+        "Current Decision Status",
         "Revenue At Risk",
         "OTIF Loss %",
         "Scenario Effective Time",
@@ -43,6 +44,8 @@ var expectedMeasures = new Dictionary<string, HashSet<string>>
     ["ActionOutcomes"] = new()
     {
         "Action Completion %",
+        "Current Action Status",
+        "Current Observation Kind",
         "Observed Variance",
         "Projection Refresh Time",
         "Action Scenario Effective Time",

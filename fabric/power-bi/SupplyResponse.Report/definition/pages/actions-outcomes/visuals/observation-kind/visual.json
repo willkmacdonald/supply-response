@@ -26,8 +26,8 @@
         "Data": {
           "projections": [
             {
-              "field": {"Column": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "observation_kind"}},
-              "queryRef": "ActionOutcomes.observation_kind",
+              "field": {"Measure": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "Current Observation Kind"}},
+              "queryRef": "ActionOutcomes.Current Observation Kind",
               "displayName": "Observation Kind"
             }
           ]

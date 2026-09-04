@@ -13,10 +13,12 @@ final takeover verification and is committed with the fix.
   `_publish()` before `FabricWorkspace` construction.
 - `tests/fabric/test_power_bi_project.py` adds a regression test which:
   - stages a repository below a symlinked temporary prefix;
-  - proves the real local `fabric-cicd` report processor raises
-    `ItemDependencyError` for the unresolved alias; and
   - captures `_publish()` to assert it passes the resolved repository path,
     preserves `SemanticModel` then `Report`, and uses a synthetic credential.
+- `tests/fabric/test_fabric_cicd_1_3_0_path_compatibility.py` contains the
+  version-pinned upstream compatibility proof that the real local
+  `fabric-cicd` report processor raises `ItemDependencyError` for the
+  unresolved alias.
 
 No report or semantic-model content, IDs, database/schema values, or deployment
 parameters changed. The test does not authenticate or make Fabric calls.
@@ -48,8 +50,9 @@ git diff --check
 Exit code `0`.
 
 Per takeover direction, no full suite, Power BI dry-run, or cloud command was
-run. The focused test exercises the actual local `fabric-cicd` report dependency
-lookup and the publication-boundary path argument.
+run. The focused project test verifies the publication-boundary path argument.
+The separate version-pinned compatibility test verifies the real local
+`fabric-cicd` report dependency lookup.
 
 ## Commit
 

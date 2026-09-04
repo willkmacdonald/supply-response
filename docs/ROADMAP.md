@@ -14,12 +14,12 @@ This roadmap reports the durable, reviewed repository baseline. Uncommitted or a
 | Durable closed-loop backend | Complete | SQLite persistence, immutable Decisions, outbox, five actions, attempts, playback, and observations are covered |
 | Web decision console | Complete in fallback mode | Progressive workspace and browser journey pass locally |
 | Fabric SQL | Live setup validated; managed-identity grant pending | Dedicated `Supply Response Demo` workspace and `SupplyResponseDemo` SQL Database exist; schema version 12 is live, both scripts were applied twice, and the approval-gated live SQL integration test and health check passed; the future Container App managed-identity grant remains |
-| Power BI | Implemented locally; deployment pending | Two-page PBIP project and deployment preflight are locally validated; no workspace deployment or live visual inspection has been run |
+| Power BI | Published; empty-state live render validated | The semantic model and two-page report are published, OAuth2-bound to Fabric SQL, DAX-queryable, and visually clean with an empty database; populated Decision-ID parity remains a post-application-deployment gate |
 | Entra ID and persona authorization | Implemented and tenant-configured; live gate pending | API/SPA registrations, exact delegated consent, persona bindings, and role assignments are verified in `willmacdonald.com`; deployed authenticated flows have not run |
 | Work IQ | Implemented locally; corpus and live gate pending | First-party tenant enablement and exact delegated consent are verified; Demo Corpus source bindings, confidential credential, receipt, and live cited retrieval remain |
 | Foundry orchestration | Implemented and agents published; invocation pending | Signal, context, and decision agents are verified as immutable version `1` contracts on `gpt-5.6-luna`; no live invocation or evaluation has run |
 | Complete live Case journey | Implemented locally; live gate pending | Fail-closed live composition, durable lineage, readiness, and browser contracts are covered; external bindings and a full live run remain |
-| Personal-tenant deployment and hardening | Prepared; validation blocked | Infrastructure and deployment tooling are implemented; provision preview, Work IQ/SharePoint, Power BI publication, and the future Container App managed-identity grant remain |
+| Personal-tenant deployment and hardening | Prepared; validation blocked | Infrastructure and deployment tooling are implemented; provision preview, Work IQ/SharePoint, populated Power BI parity, and the future Container App managed-identity grant remain |
 
 ## Delivery sequence
 
@@ -55,11 +55,11 @@ Tasks 10–11 delivered and proved the local decision experience.
 - Explicit fallback and simulation labeling
 - Full Python, Vitest, production-build, and Playwright fallback gate
 
-### 4. Fabric and Power BI — Fabric live SQL validated; Power BI live gate pending
+### 4. Fabric and Power BI — live SQL and Power BI publication validated
 
 Tasks 12–13 implemented the live persistence and reporting artifacts. The dedicated
-Fabric SQL setup was completed under approval-gated live checks; Power BI publication
-remains pending.
+Fabric SQL setup and Power BI publication were completed under approval-gated live
+checks.
 
 Completed locally:
 
@@ -77,14 +77,16 @@ Verified live:
 - Operational and analytics scripts applied twice without collisions; schema version
   12 is live
 - Approval-gated live Fabric SQL integration test and health check passed
+- `SupplyResponse` semantic model and report published to the dedicated workspace
+- Fabric SQL OAuth2 data-source binding and live DAX query succeeded
+- Both required report pages rendered their empty state without visual errors
 
 Still required:
 
 - Grant the deployed Container App managed identity the exact Fabric SQL database
   permissions through its separately approved deployment gate
-- Deploy the semantic model and report after explicit approval
-- Run the approval-gated Power BI live consistency test
-- Inspect both report pages, refresh behavior, filters, and Decision ID parity
+- Run the approval-gated populated Power BI live consistency test after application deployment
+- Verify refresh behavior, filters, and Decision ID parity against a live showcase case
 
 ### 5. Identity, Work IQ, Foundry, and live composition — implemented locally; external gates pending
 
@@ -104,7 +106,7 @@ Still required:
 
 - Create the fictional Work IQ Demo Corpus, capture its supplier and Quality source IDs, bind the confidential-client credential, and record the deployment receipt.
 - Invoke and evaluate the published Foundry agents through a separately approved live gate.
-- Complete the remaining Fabric managed-identity grant and Power BI publication
+- Complete the remaining Fabric managed-identity grant and populated Power BI parity
   required by live readiness.
 - Run deployed Entra authentication, Work IQ citation navigation, and the complete live browser journey.
 
@@ -154,12 +156,12 @@ remaining deployment outputs must not be invented or replaced with synthetic val
 | 10 | Progressive Case workspace | Complete |
 | 11 | Complete fallback browser journey | Complete |
 | 12 | Fabric SQL adapter and analytics views | Complete; live Fabric SQL setup, schema, idempotency, and health checks passed |
-| 13 | Two-page Power BI project | Complete locally; deployment and live-render gate pending |
+| 13 | Two-page Power BI project | Published; OAuth2 binding, DAX smoke query, and empty-state live render passed; populated parity pending |
 | 14 | Single-tenant Entra authentication and persona roles | Complete locally; tenant configuration verified; deployed auth gate pending |
 | 15 | Cited Microsoft 365 evidence through Work IQ | Complete locally; tenant enablement/consent verified; corpus and live retrieval pending |
 | 16 | Foundry-managed Agent Framework orchestration | Complete locally; three Luna agents published and verified; invocation/evaluation pending |
 | 17 | Complete live Case journey | Complete locally; external readiness bindings and live browser gate pending |
-| 18 | Personal-tenant provisioning and deployment | Prepared; managed-identity grant, Work IQ/SharePoint, Power BI, and provision preview pending |
+| 18 | Personal-tenant provisioning and deployment | Prepared; managed-identity grant, Work IQ/SharePoint, populated Power BI parity, and provision preview pending |
 | 19 | Privacy, parity, failure, timing, and rehearsal gates | Planned |
 
 ## Backlog outside active acceptance

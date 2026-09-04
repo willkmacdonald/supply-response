@@ -77,6 +77,15 @@ table ActionOutcomes
       RETURN DIVIDE(COUNTROWS(FILTER(Actions, ActionOutcomes[action_status] = "completed")), COUNTROWS(Actions))
     formatString: 0%;-0%;0%
 
+  measure 'Current Action Status' =
+      VAR DecisionId = [Current Decision ID]
+      VAR ActionKind = SELECTEDVALUE(ActionOutcomes[action_kind])
+      RETURN CALCULATE(SELECTEDVALUE(ActionOutcomes[action_status]), REMOVEFILTERS(ActionOutcomes), ActionOutcomes[decision_id] = DecisionId, ActionOutcomes[record_type] = "action", ActionOutcomes[action_kind] = ActionKind)
+
+  measure 'Current Observation Kind' =
+      VAR DecisionId = [Current Decision ID]
+      RETURN CALCULATE(SELECTEDVALUE(ActionOutcomes[observation_kind]), REMOVEFILTERS(ActionOutcomes), ActionOutcomes[decision_id] = DecisionId, ActionOutcomes[record_type] = "observation")
+
   measure 'Observed Variance' =
       VAR DecisionId = [Current Decision ID]
       VAR RecordType = SELECTEDVALUE(ActionOutcomes[record_type])

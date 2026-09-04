@@ -66,16 +66,18 @@ QUERY_REF_ALLOWLIST = {
         "CaseCommandCenter.status",
         "CaseCommandCenter.Latest Showcase Case",
         "CaseCommandCenter.Current Decision ID",
+        "CaseCommandCenter.Current Decision Status",
         "CaseCommandCenter.Revenue At Risk",
         "CaseCommandCenter.OTIF Loss %",
         "CaseCommandCenter.Scenario Effective Time",
     },
     "actions-outcomes": {
-        "ActionOutcomes.decision_id",
+        "CaseCommandCenter.Current Decision ID",
         "ActionOutcomes.action_kind",
-        "ActionOutcomes.action_status",
+        "ActionOutcomes.Current Action Status",
         "ActionOutcomes.metric",
         "ActionOutcomes.observation_kind",
+        "ActionOutcomes.Current Observation Kind",
         "ActionOutcomes.Observed Variance",
         "ActionOutcomes.Projection Refresh Time",
         "ActionOutcomes.Action Scenario Effective Time",
@@ -476,15 +478,15 @@ def _visual_path(repository: Path, page: str, visual: str) -> Path:
 
 def _mutate_projection_field_queryref_disagreement(value: dict[str, Any]) -> None:
     projection = value["visual"]["query"]["queryState"]["Data"]["projections"][0]
-    projection["field"]["Column"]["Property"] = "observation_kind"
+    projection["field"]["Measure"]["Property"] = "Revenue At Risk"
 
 
-def _mutate_projection_column_to_measure(value: dict[str, Any]) -> None:
+def _mutate_projection_measure_to_column(value: dict[str, Any]) -> None:
     projection = value["visual"]["query"]["queryState"]["Data"]["projections"][0]
     projection["field"] = {
-        "Measure": {
+        "Column": {
             "Expression": {"SourceRef": {"Entity": "ActionOutcomes"}},
-            "Property": "Action Scenario Effective Time",
+            "Property": "decision_id",
         }
     }
 
@@ -525,7 +527,7 @@ def _mutate_unknown_filter_shape(value: dict[str, Any]) -> None:
             "decision-id",
             _mutate_projection_field_queryref_disagreement,
         ),
-        ("actions-outcomes", "decision-id", _mutate_projection_column_to_measure),
+        ("actions-outcomes", "decision-id", _mutate_projection_measure_to_column),
         ("command-center", "active-cases", _mutate_aggregation_function),
         ("actions-outcomes", "decision-id", _mutate_projection_display_name),
         ("actions-outcomes", "decision-id", _mutate_projection_role),
@@ -535,7 +537,7 @@ def _mutate_unknown_filter_shape(value: dict[str, Any]) -> None:
     ],
     ids=(
         "field-queryref-disagreement",
-        "column-to-measure",
+        "measure-to-column",
         "aggregation-function",
         "display-name",
         "role",
@@ -803,16 +805,54 @@ def test_action_and_observation_visuals_have_locked_record_type_scope() -> None:
 
 def test_latest_showcase_decision_is_the_default_visual_context() -> None:
     actions_page = _load(REPORT / "pages" / "actions-outcomes" / "page.json")
-    actions_filters = actions_page["filterConfig"]["filters"]
-    assert [item["name"] for item in actions_filters] == [
-        "FilterCurrentShowcaseDecision"
-    ]
-    actions_comparison = actions_filters[0]["filter"]["Where"][0]["Condition"][
-        "Comparison"
-    ]
-    assert actions_comparison["ComparisonKind"] == 0
-    assert actions_comparison["Left"]["Column"]["Property"] == "decision_id"
-    assert actions_comparison["Right"]["Measure"]["Property"] == ("Current Decision ID")
+    assert actions_page.get("filterConfig", {}).get("filters", []) == []
+
+    decision_card = _load(
+        REPORT
+        / "pages"
+        / "actions-outcomes"
+        / "visuals"
+        / "decision-id"
+        / "visual.json"
+    )
+    decision_projection = decision_card["visual"]["query"]["queryState"]["Data"][
+        "projections"
+    ][0]
+    assert decision_projection["queryRef"] == "CaseCommandCenter.Current Decision ID"
+
+    action_table = _load(
+        REPORT
+        / "pages"
+        / "actions-outcomes"
+        / "visuals"
+        / "action-status"
+        / "visual.json"
+    )
+    action_refs = {
+        item["queryRef"]
+        for item in action_table["visual"]["query"]["queryState"]["Values"][
+            "projections"
+        ]
+    }
+    assert action_refs == {
+        "ActionOutcomes.action_kind",
+        "ActionOutcomes.Current Action Status",
+    }
+
+    observation_card = _load(
+        REPORT
+        / "pages"
+        / "actions-outcomes"
+        / "visuals"
+        / "observation-kind"
+        / "visual.json"
+    )
+    observation_projection = observation_card["visual"]["query"]["queryState"]["Data"][
+        "projections"
+    ][0]
+    assert observation_projection["queryRef"] == (
+        "ActionOutcomes.Current Observation Kind"
+    )
 
     current_decision = _load(
         REPORT
@@ -822,17 +862,14 @@ def test_latest_showcase_decision_is_the_default_visual_context() -> None:
         / "current-decision"
         / "visual.json"
     )
-    latest_filter = current_decision["filterConfig"]["filters"]
-    assert [item["name"] for item in latest_filter] == [
-        "FilterCurrentDecisionLatestCase"
+    assert current_decision.get("filterConfig", {}).get("filters", []) == []
+    projections = current_decision["visual"]["query"]["queryState"]["Values"][
+        "projections"
     ]
-    current_comparison = latest_filter[0]["filter"]["Where"][0]["Condition"][
-        "Comparison"
+    assert [projection["queryRef"] for projection in projections] == [
+        "CaseCommandCenter.Current Decision ID",
+        "CaseCommandCenter.Current Decision Status",
     ]
-    assert current_comparison["Left"]["Column"]["Property"] == "case_id"
-    assert current_comparison["Right"]["Measure"]["Property"] == (
-        "Latest Showcase Case"
-    )
 
 
 def test_report_has_no_embedded_rows_or_environment_specific_identifiers() -> None:
@@ -855,6 +892,9 @@ def test_semantic_model_exposes_decision_and_simulation_measures() -> None:
     for required in (
         "Latest Showcase Case",
         "Current Decision ID",
+        "Current Decision Status",
+        "Current Action Status",
+        "Current Observation Kind",
         "Revenue At Risk",
         "OTIF Loss %",
         "Action Completion %",
@@ -883,6 +923,37 @@ def test_semantic_model_measure_names_are_unique() -> None:
         if len(paths) > 1
     }
     assert duplicates == {}
+
+
+def test_current_context_measures_are_scoped_to_latest_showcase_decision() -> None:
+    case_text = (SEMANTIC_MODEL / "tables" / "CaseCommandCenter.tmdl").read_text(
+        encoding="utf-8"
+    )
+    action_text = (SEMANTIC_MODEL / "tables" / "ActionOutcomes.tmdl").read_text(
+        encoding="utf-8"
+    )
+
+    status_body = case_text.split("measure 'Current Decision Status' =", 1)[1].split(
+        "measure 'Revenue At Risk' =", 1
+    )[0]
+    assert "VAR LatestCase = [Latest Showcase Case]" in status_body
+    assert "REMOVEFILTERS(CaseCommandCenter)" in status_body
+    assert "CaseCommandCenter[case_id] = LatestCase" in status_body
+
+    action_status_body = action_text.split("measure 'Current Action Status' =", 1)[
+        1
+    ].split("measure 'Current Observation Kind' =", 1)[0]
+    assert "VAR DecisionId = [Current Decision ID]" in action_status_body
+    assert "REMOVEFILTERS(ActionOutcomes)" in action_status_body
+    assert 'ActionOutcomes[record_type] = "action"' in action_status_body
+    assert "ActionOutcomes[action_kind] = ActionKind" in action_status_body
+
+    observation_body = action_text.split("measure 'Current Observation Kind' =", 1)[
+        1
+    ].split("measure 'Observed Variance' =", 1)[0]
+    assert "VAR DecisionId = [Current Decision ID]" in observation_body
+    assert "REMOVEFILTERS(ActionOutcomes)" in observation_body
+    assert 'ActionOutcomes[record_type] = "observation"' in observation_body
 
 
 def test_tmdl_folder_has_strong_structural_contract() -> None:
