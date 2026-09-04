@@ -1170,6 +1170,101 @@ def test_deploy_preflight_stages_complete_environment_substitution(
     }
 
 
+def test_publish_resolves_aliased_staged_repository_for_report_dependency(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from azure.core.credentials import AccessToken, TokenCredential
+    from fabric_cicd import FabricWorkspace
+    from fabric_cicd._common._exceptions import ItemDependencyError
+    from fabric_cicd._items._report import func_process_file
+
+    from fabric import deploy
+
+    class SyntheticTokenCredential(TokenCredential):
+        def get_token(self, *scopes: str, **kwargs: object) -> AccessToken:
+            return AccessToken("synthetic-token", 4_000_000_000)
+
+    values = {
+        "SUPPLY_RESPONSE_ALLOWED_TENANT_ID": "00000000-0000-4000-8000-000000000001",
+        "SUPPLY_RESPONSE_FABRIC_WORKSPACE_ID": "00000000-0000-4000-8000-000000000002",
+        "FABRIC_SQL_SERVER": "server.example.invalid",
+        "FABRIC_SQL_DATABASE": "database-name",
+    }
+    physical_root = tmp_path / "physical"
+    physical_root.mkdir()
+    aliased_root = tmp_path / "aliased"
+    aliased_root.symlink_to(physical_root, target_is_directory=True)
+    monkeypatch.setattr(deploy, "_validate_staged_repository", lambda *_args: None)
+
+    staged_repository = deploy._staged_repository(values, aliased_root)
+    unresolved_workspace = FabricWorkspace(
+        workspace_id=values["SUPPLY_RESPONSE_FABRIC_WORKSPACE_ID"],
+        environment="dev",
+        repository_directory=str(staged_repository),
+        item_type_in_scope=["SemanticModel", "Report"],
+        token_credential=SyntheticTokenCredential(),
+    )
+    unresolved_workspace._refresh_repository_items()
+    unresolved_report = unresolved_workspace.repository_items["Report"][
+        "SupplyResponse"
+    ]
+    unresolved_definition = next(
+        file for file in unresolved_report.item_files if file.name == "definition.pbir"
+    )
+    with pytest.raises(ItemDependencyError, match="Semantic model not found"):
+        func_process_file(
+            unresolved_workspace, unresolved_report, unresolved_definition
+        )
+
+    publish_physical_root = tmp_path / "publish-physical"
+    publish_physical_root.mkdir()
+    publish_aliased_root = tmp_path / "publish-aliased"
+    publish_aliased_root.symlink_to(publish_physical_root, target_is_directory=True)
+    captured: dict[str, object] = {}
+
+    class CapturingWorkspace:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    class AliasTemporaryDirectory:
+        def __enter__(self) -> str:
+            return str(publish_aliased_root)
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    class FakeIdentity:
+        AzureCliCredential = SyntheticTokenCredential
+
+    class FakeFabricCicd:
+        FabricWorkspace = CapturingWorkspace
+
+        @staticmethod
+        def publish_all_items(_workspace: CapturingWorkspace) -> None:
+            return None
+
+    def fake_import(module_name: str) -> object:
+        if module_name == "azure.identity":
+            return FakeIdentity
+        if module_name == "fabric_cicd":
+            return FakeFabricCicd
+        raise AssertionError(f"unexpected import: {module_name}")
+
+    monkeypatch.setattr(deploy.importlib, "import_module", fake_import)
+    monkeypatch.setattr(
+        deploy.tempfile,
+        "TemporaryDirectory",
+        lambda **_kwargs: AliasTemporaryDirectory(),
+    )
+    deploy._publish(values)
+
+    assert captured["repository_directory"] == str(
+        (publish_aliased_root / "power-bi").resolve()
+    )
+    assert captured["item_type_in_scope"] == ["SemanticModel", "Report"]
+    assert isinstance(captured["token_credential"], SyntheticTokenCredential)
+
+
 def test_staged_preflight_fails_on_missing_extra_or_broken_items(
     tmp_path: Path,
 ) -> None:

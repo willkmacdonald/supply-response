@@ -1320,7 +1320,7 @@ def _publish(values: dict[str, str]) -> None:
         tenant_id=values["SUPPLY_RESPONSE_ALLOWED_TENANT_ID"]
     )
     with tempfile.TemporaryDirectory(prefix="supply-response-power-bi-") as directory:
-        repository = _staged_repository(values, Path(directory))
+        repository = _staged_repository(values, Path(directory)).resolve()
         workspace = fabric_cicd.FabricWorkspace(
             workspace_id=values["SUPPLY_RESPONSE_FABRIC_WORKSPACE_ID"],
             environment="dev",
