@@ -16,10 +16,10 @@ This roadmap reports the durable, reviewed repository baseline. Uncommitted or a
 | Fabric SQL | Live setup validated; managed-identity grant pending | Dedicated `Supply Response Demo` workspace and `SupplyResponseDemo` SQL Database exist; schema version 12 is live, both scripts were applied twice, and the approval-gated live SQL integration test and health check passed; the future Container App managed-identity grant remains |
 | Power BI | Published; empty-state live render validated | The semantic model and two-page report are published, OAuth2-bound to Fabric SQL, DAX-queryable, and visually clean with an empty database; populated Decision-ID parity remains a post-application-deployment gate |
 | Entra ID and persona authorization | Implemented and tenant-configured; live gate pending | API/SPA registrations, exact delegated consent, persona bindings, and role assignments are verified in `willmacdonald.com`; deployed authenticated flows have not run |
-| Work IQ | Implemented locally; corpus and live gate pending | First-party tenant enablement and exact delegated consent are verified; Demo Corpus source bindings, confidential credential, receipt, and live cited retrieval remain |
+| Work IQ | Demo Corpus configured; live retrieval pending | Tenant enablement, exact delegated consent, supplier email and Jordan-authored Quality sources, deployment bindings, and the deterministic receipt are verified; approval-gated live cited retrieval remains |
 | Foundry orchestration | Implemented and agents published; invocation pending | Signal, context, and decision agents are verified as immutable version `1` contracts on `gpt-5.6-luna`; no live invocation or evaluation has run |
-| Complete live Case journey | Implemented locally; live gate pending | Fail-closed live composition, durable lineage, readiness, and browser contracts are covered; external bindings and a full live run remain |
-| Personal-tenant deployment and hardening | Prepared; validation blocked | Infrastructure and deployment tooling are implemented; provision preview, Work IQ/SharePoint, populated Power BI parity, and the future Container App managed-identity grant remain |
+| Complete live Case journey | Implemented locally; live gate pending | Fail-closed live composition, durable lineage, readiness, and browser contracts are covered; deployment-dependent bindings and a full live run remain |
+| Personal-tenant deployment and hardening | Validated; deployment pending | Infrastructure, deployment tooling, build/package checks, policy review, and provision preview pass; no Azure application resources have been deployed |
 
 ## Delivery sequence
 
@@ -88,7 +88,7 @@ Still required:
 - Run the approval-gated populated Power BI live consistency test after application deployment
 - Verify refresh behavior, filters, and Decision ID parity against a live showcase case
 
-### 5. Identity, Work IQ, Foundry, and live composition — implemented locally; external gates pending
+### 5. Identity, Work IQ, Foundry, and live composition — tenant prerequisites configured; invocation gates pending
 
 Tasks 14–17 implement the live case journey. Their local code and contract gates are complete; tenant-backed acceptance is not.
 
@@ -101,10 +101,11 @@ Completed implementation and tenant setup:
 2. Implemented cited supplier and Quality retrieval through Work IQ, including delegated OBO, bounded A2A parsing, source binding, and citation validation. The Work IQ service principal and exact delegated consent are configured in the tenant.
 3. Implemented Foundry Agent Service and Microsoft Agent Framework orchestration while deterministic services retain decision authority. The three committed prompt-agent contracts are published and verified as immutable version `1` agents using `gpt-5.6-luna`.
 4. Implemented the complete live Detect → Analyze → Decide → Execute → Observe composition with fail-closed readiness and Decision-linked lineage.
+5. Created the fictional Work IQ Demo Corpus, verified the supplier email in Alex's mailbox and the Jordan-authored Quality post in Teams, recorded their deployment-specific source bindings, and verified the deterministic binding receipt.
 
 Still required:
 
-- Create the fictional Work IQ Demo Corpus, capture its supplier and Quality source IDs, bind the confidential-client credential, and record the deployment receipt.
+- Run the approval-gated Work IQ retrieval and verify both citations resolve to the accepted supplier and Quality sources.
 - Invoke and evaluate the published Foundry agents through a separately approved live gate.
 - Complete the remaining Fabric managed-identity grant and populated Power BI parity
   required by live readiness.
@@ -112,12 +113,12 @@ Still required:
 
 Exit conditions include authenticated Alex approval/rejection, independently satisfied Quality and Finance prerequisites, navigable citations, and Decision-linked downstream work.
 
-### 6. Deployment and release hardening — planned
+### 6. Deployment and release hardening — validation complete; deployment planned
 
-Tasks 18–19 deploy the runtime to the personal `willmacdonald.com` tenant and prove the final contract. Task 18 infrastructure, deployment scripts, and local validation contracts are prepared, but no application infrastructure has been provisioned.
+Tasks 18–19 deploy the runtime to the personal `willmacdonald.com` tenant and prove the final contract. Task 18 infrastructure and deployment scripts are prepared, and the complete Azure validation workflow—including build, package, policy, role-assignment, and provision-preview checks—passes. No application infrastructure has been provisioned.
 
-- Provision Azure/Fabric resources and configure deployment-specific persona bindings
-- Deploy the API, web console, Fabric schema, semantic model, and report
+- Provision the Azure application resources and configure deployment-specific bindings
+- Deploy the API and web console, then connect them to the verified Fabric, Work IQ, Foundry, Entra, and Power BI prerequisites
 - Verify live/fallback contract parity without mixing provenance
 - Prove evidence conflict, staleness, citation, retry, and failure behavior
 - Verify Demo Corpus privacy and the absence of real business data
@@ -128,16 +129,15 @@ Tasks 18–19 deploy the runtime to the personal `willmacdonald.com` tenant and 
 
 Final completion requires all 20 frozen acceptance criteria to pass. Local implementation alone is not sufficient for live-demo acceptance.
 
-### Current deployment prerequisites
+### Remaining deployment and acceptance gates
 
-The configured Entra, Foundry, and Fabric prerequisites are recorded above. The
-remaining deployment outputs must not be invented or replaced with synthetic values:
+The Entra, Foundry, Fabric SQL, Work IQ Demo Corpus, and Power BI prerequisites
+are configured and recorded in deployment-local storage. The remaining gates are:
 
-1. Grant the future Container App managed identity exact Fabric SQL database access
-   through the separately approved deployment gate.
-2. Create and bind the Work IQ/SharePoint Demo Corpus, source IDs, corpus version, and deployment receipt.
-3. Publish and verify the Power BI report, then record its canonical URL and deployment receipt.
-4. Resume the approval-gated Azure validation workflow at provision preview. Each cloud mutation still requires explicit approval.
+1. Deploy the Azure application through the separately authorized deployment workflow and verify its authenticated health and readiness.
+2. Grant the resulting Container App managed identity exact Fabric SQL database access through that deployment gate.
+3. Run live Work IQ retrieval, Foundry invocation/evaluation, and the complete authenticated browser journey.
+4. Load the showcase Case and verify Power BI refresh, filters, and Decision-ID parity against the application.
 
 ## Task-level status
 
@@ -158,10 +158,10 @@ remaining deployment outputs must not be invented or replaced with synthetic val
 | 12 | Fabric SQL adapter and analytics views | Complete; live Fabric SQL setup, schema, idempotency, and health checks passed |
 | 13 | Two-page Power BI project | Published; OAuth2 binding, DAX smoke query, and empty-state live render passed; populated parity pending |
 | 14 | Single-tenant Entra authentication and persona roles | Complete locally; tenant configuration verified; deployed auth gate pending |
-| 15 | Cited Microsoft 365 evidence through Work IQ | Complete locally; tenant enablement/consent verified; corpus and live retrieval pending |
+| 15 | Cited Microsoft 365 evidence through Work IQ | Complete locally; tenant consent, Demo Corpus sources, bindings, and receipt verified; live retrieval pending |
 | 16 | Foundry-managed Agent Framework orchestration | Complete locally; three Luna agents published and verified; invocation/evaluation pending |
 | 17 | Complete live Case journey | Complete locally; external readiness bindings and live browser gate pending |
-| 18 | Personal-tenant provisioning and deployment | Prepared; managed-identity grant, Work IQ/SharePoint, populated Power BI parity, and provision preview pending |
+| 18 | Personal-tenant provisioning and deployment | Azure validation and provision preview complete; deployment, managed-identity grant, and post-deployment gates pending |
 | 19 | Privacy, parity, failure, timing, and rehearsal gates | Planned |
 
 ## Backlog outside active acceptance

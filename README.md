@@ -4,7 +4,7 @@ Supply Response is a decision-support demonstration for managing a fictional sup
 
 The project combines a deterministic supply-response core with a FastAPI application, a React decision console, durable SQLite or Fabric SQL persistence, and a two-page Power BI project. Microsoft 365 and Azure integrations are added through explicit adapters so the complete live demonstration can use Work IQ, Microsoft Fabric, Microsoft Foundry, Microsoft Agent Framework, Entra ID, and Power BI without coupling the business logic to those services.
 
-> **Current status (2026-09-02):** The complete fallback journey and the local implementation for Entra authentication, Work IQ retrieval, Foundry orchestration, and the end-to-end live Case path are implemented and tested. The `willmacdonald.com` Entra registrations, delegated consent, and fictional persona assignments are configured and verified. Three immutable prompt agents are published and verified on `gpt-5.6-luna` in the selected East US 2 Foundry project. Fabric, the Work IQ Demo Corpus, Power BI, infrastructure deployment, live invocation, and final rehearsal gates remain incomplete. See the [roadmap](docs/ROADMAP.md).
+> **Current status (2026-09-04):** The complete fallback journey and the local implementation for Entra authentication, Work IQ retrieval, Foundry orchestration, and the end-to-end live Case path are implemented and tested. The `willmacdonald.com` Entra registrations, delegated consent, fictional persona assignments, Fabric SQL database, Work IQ Demo Corpus, and two-page Power BI report are configured and verified at their current predeployment gates. Three immutable prompt agents are published and verified on `gpt-5.6-luna` in the selected East US 2 Foundry project, and the Azure provision preview passes. Azure application deployment, its Fabric managed-identity grant, live Work IQ and Foundry invocation, populated Power BI parity, the deployed browser journey, and final rehearsals remain. See the [roadmap](docs/ROADMAP.md).
 
 ## What the demo shows
 
@@ -54,12 +54,12 @@ The Decision is the immutable pivot between analysis and downstream activity. Au
 - Progressive React case workspace for evidence, exposure, options, Decisions, execution, and outcomes.
 - Durable fallback persistence through SQLite and a complete browser end-to-end gate.
 - Opt-in Fabric SQL persistence, Entra token authentication, schema health checks, and read-only analytics views.
-- A locally validated two-page Power BI project for **Command Center** and **Actions and Outcomes**.
+- A published two-page Power BI project for **Command Center** and **Actions and Outcomes**, with its Fabric SQL OAuth2 binding, DAX access, and empty-state rendering verified live.
 - Single-tenant Entra authentication, strict persona authorization, deployment manifests, and idempotent tenant-configuration tooling. The target-tenant registrations, consent grants, and Alex/Jordan/Taylor role assignments are verified.
-- A delegated Work IQ OBO client, bounded A2A retrieval, strict citation normalization, captured-style fixtures, and an approval-gated live retrieval gate. Tenant enablement and delegated consent are verified; corpus creation and live retrieval remain pending.
+- A delegated Work IQ OBO client, bounded A2A retrieval, strict citation normalization, captured-style fixtures, and an approval-gated live retrieval gate. Tenant enablement, delegated consent, the fictional supplier email, the Jordan-authored Quality post, deployment-specific source bindings, and the deterministic binding receipt are verified; live cited retrieval remains pending.
 - Microsoft Agent Framework orchestration that preserves deterministic decision authority, plus fail-closed Foundry publication and verification tooling.
 - Three immutable Foundry prompt agents—signal, context, and decision—published as version `1` and verified against their committed contracts on `gpt-5.6-luna`.
-- Personal-tenant Azure infrastructure, deployment orchestration, and validation contracts prepared for East US 2. Provision preview is currently blocked by ten external Fabric, Work IQ/SharePoint, and Power BI bindings.
+- Personal-tenant Azure infrastructure, deployment orchestration, and validation contracts prepared for East US 2. The full validation workflow and provision preview pass; no Azure application resources have been deployed.
 
 Live Microsoft service integration is not yet complete. Published or configured cloud prerequisites do not count as live acceptance until their approval-gated invocation, data, browser, and cross-service consistency gates pass. The [roadmap](docs/ROADMAP.md) records the verified boundary between implemented, configured, and pending work.
 
