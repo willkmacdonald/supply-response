@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Ready for Validation; Fabric SQL and Power BI publication are live-validated, while provision preview, Work IQ corpus, populated report parity, and the future Container App identity grant remain
+> **Status:** Validated; Azure provision preview and external bindings pass, while live Work IQ retrieval, populated report parity, and the future Container App identity grant remain post-provision acceptance gates
 
 Generated: 2026-08-31; validation evidence updated 2026-09-04
 
@@ -192,21 +192,21 @@ Read-only checks were performed on 2026-08-31 for the confirmed subscription and
 ### Phase 3 — validation
 
 - [x] Invoke `azure-validate`; do not deploy directly.
-- [ ] All validation checks pass.
-  - [x] AZD installation (`azd 1.30.0`) and local project/schema inspection.
-  - [x] AZD environment setup and exact selected-environment verification (`supply-response-personal`).
-  - [x] Azure and azd authentication check (interactive User account).
-  - [x] Confirmed subscription, tenant, and `eastus2` environment-value check.
-  - [x] Aspire checks skipped: this is not a .NET Aspire project.
-  - [ ] Approval-gated provision preview / what-if.
-  - [x] Application, web bundle, shell, type, lint, and Bicep build verification.
-  - [x] Docker build-context contract and locked package-file validation.
-  - [x] Public-dependency container rebuild and local fallback runtime smoke test with nonsecret fixture Entra values.
-  - [x] Final tenant-exact container image build and smoke test after the Entra registrations exist.
-  - [ ] Approval-gated Azure Policy validation.
-  - [x] Post-provision Aspire checks skipped: this is not a .NET Aspire project.
+- [x] All validation checks pass.
+  - [x] 1. AZD Installation.
+  - [x] 2. Schema Validation.
+  - [x] 3. Environment Setup.
+  - [x] 4. Authentication Check.
+  - [x] 5. Subscription/Location Check.
+  - [x] 6. Aspire Pre-Provisioning Checks (not applicable; this is not a .NET Aspire project).
+  - [x] 7. Provision Preview.
+  - [x] 8. Build Verification.
+  - [x] 9. Docker Build Context Validation.
+  - [x] 10. Package Validation.
+  - [x] 11. Azure Policy Validation.
+  - [x] 12. Aspire Post-Provisioning Checks (not applicable; this is not a .NET Aspire project).
   - [x] Static least-privilege role-assignment verification.
-- [ ] Record validation proof and mark the plan `Validated` only when every required check passes.
+- [x] Record validation proof and mark the plan `Validated` only when every required check passes.
 
 ### Phase 4 — deployment, separately authorized
 
@@ -216,6 +216,14 @@ Read-only checks were performed on 2026-08-31 for the confirmed subscription and
 - [ ] Smoke-test the deployed `/health` endpoint without invoking Work IQ as an unauthenticated user.
 - [ ] Perform separately approved Entra, Fabric, Work IQ, Foundry, Power BI, and live-browser gates in their documented order.
 - [ ] Record endpoint, immutable resource IDs, receipts, and verification evidence without secrets.
+
+## Role Assignment Verification
+
+- Status: Verified.
+- Identity checked: the Supply Response Container App system-assigned managed identity.
+- Roles confirmed: `AcrPull` scoped to the exact shared registry, `Key Vault Secrets User` scoped to the project vault, and `Azure AI User` scoped to the exact Foundry project.
+- External data access: Fabric SQL remains an explicit post-provision contained-user grant; Work IQ uses Alex's delegated OBO flow and does not use ARM RBAC.
+- Issues: None. No subscription- or resource-group-wide runtime role assignment is present.
 
 ## 10. Local preparation proof
 
@@ -262,6 +270,12 @@ dependencies. It is not `azure-validate` proof and does not authorize deployment
 | Power BI publication and empty-state render | Approval-gated semantic-model/report deployment, DAX smoke query, and browser inspection | Published both items, bound Fabric SQL with OAuth2, executed DAX successfully, and rendered both required pages without visual errors; populated parity remains pending | 2026-09-04 |
 | Provision preview | `azd provision --preview --no-prompt` | No changes attempted. The approval-gated preview remains pending after the verified Fabric setup; remaining inputs cover the Container App managed-identity grant, Work IQ/SharePoint, and Power BI | 2026-09-04 |
 | Post-publication provision preview | `AZURE_DEV_USER_AGENT=microsoft_foundry_skill azd provision --preview --no-prompt --environment supply-response-personal` | No changes attempted. Verified Foundry and Fabric bindings are recorded; preview remains pending for Work IQ/SharePoint and Power BI inputs and the later Container App identity grant | 2026-09-04 |
+| Work IQ corpus binding | Exact Outlook/Teams artifact verification, Alex visibility checks, source-ID promotion, and SHA-256 receipt verification | Supplier and Jordan Quality artifacts are bound as `rl-001-v1`; exact tenant SharePoint host recorded; erroneous Will-authored Teams duplicate soft-deleted while Jordan's source remained intact | 2026-09-04 |
+| Azure recipe prerequisites | `azd version`; `azd auth login --check-status`; exact azd/Azure account comparison; Aspire detection; `az bicep build` | Passed with azd 1.30.0, authenticated Will identity, confirmed subscription/tenant/`eastus2`, no Aspire project, and warning-free Bicep compilation | 2026-09-04 |
+| Final provision preview | `azd provision --preview --no-prompt --environment supply-response-personal` | Passed in 20 seconds; preview only, with four creates (resource group, Container App, Application Insights, and Key Vault) and no Azure changes applied | 2026-09-04 |
+| Current build and package verification | `uv run pytest -q`; `npm test -- --run`; `npm run build`; Docker context inspection; `azd package --no-prompt --environment supply-response-personal` | Passed: Python exit 0 with expected skips and one third-party deprecation warning; 49 web tests; 179-module production bundle; locked npm context; azd package success | 2026-09-04 |
+| Azure Policy validation | Read-only assignment inventory plus successful final what-if | Existing benchmark and Defender assignments remain; no location, resource-type, SKU, or tag policy blocked the exact four-resource preview | 2026-09-04 |
+| Static RBAC review | Exact principal/role/scope review across `infra/main.bicep` and RBAC modules | Passed: exact-resource `AcrPull`, `Key Vault Secrets User`, and project-scoped `Azure AI User`; Fabric SQL post-provision grant and delegated Work IQ boundary remain explicit | 2026-09-04 |
 
 ### Outstanding validation prerequisites
 
@@ -279,8 +293,9 @@ can safely reach Azure what-if:
   signal/context/decision version `1` contracts and their verified publication
   receipt are promoted in the ignored azd environment.
 - Work IQ: the first-party resource service principal is enabled and the API has
-  tenant-wide consent for its exact delegated scope; corpus version,
-  supplier/quality source IDs, and deployment receipt remain.
+  tenant-wide consent for its exact delegated scope. The `rl-001-v1` corpus,
+  supplier/quality source IDs, exact SharePoint host, and deployment receipt are
+  bound; live retrieval and citation navigation remain final acceptance checks.
 - Power BI: populated showcase-case consistency and Decision-ID parity after application deployment.
 
 These are outputs of earlier external setup tasks, not values Task 18 should invent.
