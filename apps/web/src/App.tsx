@@ -5,10 +5,11 @@ import {ExecutionPanel} from "./components/ExecutionPanel";
 import {ExposurePanel} from "./components/ExposurePanel";
 import {OptionComparison} from "./components/OptionComparison";
 import {OutcomePanel} from "./components/OutcomePanel";
+import {useAuth} from "./auth/AuthProvider";
 import {useCaseWorkspace} from "./hooks/useCaseWorkspace";
 import "./styles.css";
 
-export default function App() {
+function CaseWorkspace() {
   const workspace = useCaseWorkspace();
   const createPurpose = new URLSearchParams(window.location.search).get("purpose") === "automated_test"
     ? "automated_test"
@@ -54,4 +55,16 @@ export default function App() {
       onStart={workspace.startPlayback}
     />
   </main>;
+}
+
+export default function App() {
+  const auth = useAuth();
+  if (auth.mode === "entra" && auth.account === null) {
+    return <main className="case-workspace">
+      <h1>Supply Response</h1>
+      <p>Sign in with the Alex demo account to open the live Case workspace.</p>
+      <button type="button" onClick={() => void auth.signIn()}>Sign in as Alex</button>
+    </main>;
+  }
+  return <CaseWorkspace />;
 }

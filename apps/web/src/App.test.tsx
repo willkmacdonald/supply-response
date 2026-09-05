@@ -6,8 +6,35 @@ import userEvent from "@testing-library/user-event";
 import {StrictMode} from "react";
 import {afterEach, describe, expect, it, vi} from "vitest";
 import App from "./App";
+import {AuthProvider, type AuthClient} from "./auth/AuthProvider";
 
 const scenarioTime = "2026-09-01T09:00:00-05:00";
+
+const entraConfig = {
+  tenantId: "11111111-1111-4111-8111-111111111111",
+  webClientId: "22222222-2222-4222-8222-222222222222",
+  apiScope: "api://33333333-3333-4333-8333-333333333333/access_as_user",
+  redirectUri: "http://localhost:5173/auth/callback",
+};
+
+function unauthenticatedClient(): AuthClient {
+  return {
+    initialize: vi.fn().mockResolvedValue(undefined),
+    handleRedirectPromise: vi.fn().mockResolvedValue(null),
+    getAllAccounts: vi.fn().mockReturnValue([]),
+    getActiveAccount: vi.fn().mockReturnValue(null),
+    setActiveAccount: vi.fn(),
+    loginRedirect: vi.fn().mockResolvedValue(undefined),
+    acquireTokenSilent: vi.fn().mockResolvedValue({accessToken: "test-api-token"}),
+    acquireTokenRedirect: vi.fn(),
+  };
+}
+
+function authenticatedClient(): AuthClient {
+  const client = unauthenticatedClient();
+  client.getAllAccounts = vi.fn().mockReturnValue([{homeAccountId: "alex", name: "Alex Morgan"}]);
+  return client;
+}
 
 const runtime = {
   runtime_mode: "fallback",
@@ -366,6 +393,31 @@ afterEach(() => {
 });
 
 describe("progressive Case workspace", () => {
+  it("gates protected Case APIs until Alex signs in", async () => {
+    const client = unauthenticatedClient();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AuthProvider config={entraConfig} client={client}><App /></AuthProvider>);
+
+    const signIn = await screen.findByRole("button", {name: "Sign in as Alex"});
+    expect(fetchMock).not.toHaveBeenCalled();
+    await userEvent.click(signIn);
+    expect(client.loginRedirect).toHaveBeenCalledWith({scopes: [entraConfig.apiScope]});
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("renders the Case workspace after Entra resolves Alex", async () => {
+    const client = authenticatedClient();
+    const fetchMock = mockFallbackCaseLifecycle();
+
+    render(<AuthProvider config={entraConfig} client={client}><App /></AuthProvider>);
+
+    expect(await screen.findByText("Fallback mode")).toBeVisible();
+    expect(screen.queryByRole("button", {name: "Sign in as Alex"})).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("/api/runtime", undefined);
+  });
+
   it("loads fallback provenance without silently creating a Case", async () => {
     let resolveCase!: (value: Response) => void;
     const created = new Promise<Response>((resolve) => { resolveCase = resolve; });
