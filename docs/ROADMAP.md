@@ -19,7 +19,7 @@ This roadmap reports the durable, reviewed repository baseline. Uncommitted or a
 | Work IQ | Demo Corpus configured; live retrieval pending | Tenant enablement, exact delegated consent, supplier email and Jordan-authored Quality sources, deployment bindings, and the deterministic receipt are verified; approval-gated live cited retrieval remains |
 | Foundry orchestration | Implemented and agents published; invocation pending | Signal, context, and decision agents are verified as immutable version `1` contracts on `gpt-5.6-luna`; no live invocation or evaluation has run |
 | Complete live Case journey | Implemented locally; live gate pending | Fail-closed live composition, durable lineage, readiness, and browser contracts are covered; deployment-dependent bindings and a full live run remain |
-| Personal-tenant deployment and hardening | Validated; deployment pending | Infrastructure, deployment tooling, build/package checks, policy review, and provision preview pass; no Azure application resources have been deployed |
+| Personal-tenant deployment and hardening | Azure application deployed; post-deployment gates pending | The resource group, Container App, Application Insights, Key Vault, immutable image, secret binding, and exact Azure RBAC assignments are live; Fabric SQL identity access and live acceptance checks remain |
 
 ## Delivery sequence
 
@@ -113,9 +113,9 @@ Still required:
 
 Exit conditions include authenticated Alex approval/rejection, independently satisfied Quality and Finance prerequisites, navigable citations, and Decision-linked downstream work.
 
-### 6. Deployment and release hardening — validation complete; deployment planned
+### 6. Deployment and release hardening — Azure application deployed; acceptance pending
 
-Tasks 18–19 deploy the runtime to the personal `willmacdonald.com` tenant and prove the final contract. Task 18 infrastructure and deployment scripts are prepared, and the complete Azure validation workflow—including build, package, policy, role-assignment, and provision-preview checks—passes. No application infrastructure has been provisioned.
+Tasks 18–19 deploy the runtime to the personal `willmacdonald.com` tenant and prove the final contract. The Azure application infrastructure and immutable Container App image are deployed, the first revision is ready and running, and exact ACR, Key Vault, and Foundry RBAC assignments are verified. Fabric SQL identity access and the live acceptance journey remain.
 
 - Provision the Azure application resources and configure deployment-specific bindings
 - Deploy the API and web console, then connect them to the verified Fabric, Work IQ, Foundry, Entra, and Power BI prerequisites
@@ -134,9 +134,9 @@ Final completion requires all 20 frozen acceptance criteria to pass. Local imple
 The Entra, Foundry, Fabric SQL, Work IQ Demo Corpus, and Power BI prerequisites
 are configured and recorded in deployment-local storage. The remaining gates are:
 
-1. Deploy the Azure application through the separately authorized deployment workflow and verify its authenticated health and readiness.
-2. Grant the resulting Container App managed identity exact Fabric SQL database access through that deployment gate.
-3. Run live Work IQ retrieval, Foundry invocation/evaluation, and the complete authenticated browser journey.
+1. Grant the deployed Container App managed identity exact Fabric SQL database access through its separate approval gate.
+2. Verify the pinned Foundry agents and run the user-context-free live smoke check.
+3. Run live Work IQ retrieval and the complete authenticated browser journey.
 4. Load the showcase Case and verify Power BI refresh, filters, and Decision-ID parity against the application.
 
 ## Task-level status
@@ -161,7 +161,7 @@ are configured and recorded in deployment-local storage. The remaining gates are
 | 15 | Cited Microsoft 365 evidence through Work IQ | Complete locally; tenant consent, Demo Corpus sources, bindings, and receipt verified; live retrieval pending |
 | 16 | Foundry-managed Agent Framework orchestration | Complete locally; three Luna agents published and verified; invocation/evaluation pending |
 | 17 | Complete live Case journey | Complete locally; external readiness bindings and live browser gate pending |
-| 18 | Personal-tenant provisioning and deployment | Azure validation and provision preview complete; deployment, managed-identity grant, and post-deployment gates pending |
+| 18 | Personal-tenant provisioning and deployment | Azure application deployed with live Azure RBAC verified; Fabric SQL grant and post-deployment acceptance gates pending |
 | 19 | Privacy, parity, failure, timing, and rehearsal gates | Planned |
 
 ## Backlog outside active acceptance

@@ -80,7 +80,7 @@ assert_equal 'current deployment principal ID' "$current_principal_id" "$DEPLOYM
 safe_capture environment_json container-environment az containerapp env show --subscription "$EXPECTED_SUBSCRIPTION_ID" --resource-group "$SHARED_RESOURCE_GROUP" --name "$SHARED_ENVIRONMENT" --output json
 environment_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$environment_json")"
 environment_location="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["location"].lower().replace(" ", ""))' <<<"$environment_json")"
-environment_internal="$(python3 -c 'import json,sys; print(str(json.load(sys.stdin).get("properties", {}).get("vnetConfiguration", {}).get("internal", False)).lower())' <<<"$environment_json")"
+environment_internal="$(python3 -c 'import json,sys; print(str((json.load(sys.stdin).get("properties", {}).get("vnetConfiguration") or {}).get("internal", False)).lower())' <<<"$environment_json")"
 environment_law_customer_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("properties", {}).get("appLogsConfiguration", {}).get("logAnalyticsConfiguration", {}).get("customerId", ""))' <<<"$environment_json")"
 environment_default_domain="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("properties", {}).get("defaultDomain", ""))' <<<"$environment_json")"
 consumption_profiles="$(python3 -c 'import json,sys; print(sum(1 for item in json.load(sys.stdin).get("properties", {}).get("workloadProfiles", []) if item.get("workloadProfileType") == "Consumption" or item.get("name") == "Consumption"))' <<<"$environment_json")"

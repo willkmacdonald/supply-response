@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated; Azure provision preview and external bindings pass, while live Work IQ retrieval, populated report parity, and the future Container App identity grant remain post-provision acceptance gates
+> **Status:** Deployed; the Azure application revision and exact Azure RBAC assignments are live, while the Fabric SQL identity grant, live smoke check, Work IQ/Foundry invocation, populated report parity, and final browser gates remain
 
 Generated: 2026-08-31; validation evidence updated 2026-09-04
 
@@ -210,20 +210,29 @@ Read-only checks were performed on 2026-08-31 for the confirmed subscription and
 
 ### Phase 4 — deployment, separately authorized
 
-- [ ] Obtain explicit approval immediately before the first cloud mutation.
-- [ ] Invoke `azure-deploy`; do not call `azd up` or `azd deploy` outside that workflow.
-- [ ] Provision infrastructure, push the image, populate Key Vault, apply narrowly scoped identity access, and bind external prerequisites.
+- [x] Obtain explicit approval immediately before the first cloud mutation.
+- [x] Invoke `azure-deploy`; do not call `azd up` or `azd deploy` outside that workflow.
+- [x] Provision the Azure infrastructure, push the immutable image, populate Key Vault, and apply narrowly scoped Azure identity access.
+- [ ] Grant the deployed Container App identity exact Fabric SQL access and complete the remaining external post-provision bindings.
 - [ ] Smoke-test the deployed `/health` endpoint without invoking Work IQ as an unauthenticated user.
 - [ ] Perform separately approved Entra, Fabric, Work IQ, Foundry, Power BI, and live-browser gates in their documented order.
-- [ ] Record endpoint, immutable resource IDs, receipts, and verification evidence without secrets.
+- [x] Record endpoint, immutable resource IDs, receipts, and verification evidence without secrets.
 
 ## Role Assignment Verification
 
-- Status: Verified.
+- Status: Verified in live Azure state.
 - Identity checked: the Supply Response Container App system-assigned managed identity.
 - Roles confirmed: `AcrPull` scoped to the exact shared registry, `Key Vault Secrets User` scoped to the project vault, and `Azure AI User` scoped to the exact Foundry project.
 - External data access: Fabric SQL remains an explicit post-provision contained-user grant; Work IQ uses Alex's delegated OBO flow and does not use ARM RBAC.
 - Issues: None. No subscription- or resource-group-wide runtime role assignment is present.
+
+### Live role verification — 2026-09-05 UTC
+
+- The Container App system identity has one `AcrPull` assignment at the exact shared registry scope.
+- The identity has one `Key Vault Secrets User` assignment at the exact project vault scope.
+- The identity has role-definition `53ca6127-db72-4b80-b1b0-d745d6d5456d` at the exact Foundry project scope; the CLI did not resolve its display name, so the immutable role-definition ID was used.
+- The temporary operator `Key Vault Secrets Officer` assignment count is zero after bootstrap cleanup.
+- Fabric SQL remains a separate contained-database-user grant and is not represented by Azure RBAC.
 
 ## 10. Local preparation proof
 
@@ -276,12 +285,14 @@ dependencies. It is not `azure-validate` proof and does not authorize deployment
 | Current build and package verification | `uv run pytest -q`; `npm test -- --run`; `npm run build`; Docker context inspection; `azd package --no-prompt --environment supply-response-personal` | Passed: Python exit 0 with expected skips and one third-party deprecation warning; 49 web tests; 179-module production bundle; locked npm context; azd package success | 2026-09-04 |
 | Azure Policy validation | Read-only assignment inventory plus successful final what-if | Existing benchmark and Defender assignments remain; no location, resource-type, SKU, or tag policy blocked the exact four-resource preview | 2026-09-04 |
 | Static RBAC review | Exact principal/role/scope review across `infra/main.bicep` and RBAC modules | Passed: exact-resource `AcrPull`, `Key Vault Secrets User`, and project-scoped `Azure AI User`; Fabric SQL post-provision grant and delegated Work IQ boundary remain explicit | 2026-09-04 |
+| Azure deployment | `scripts/deploy_personal_tenant.sh --apply` through `azure-deploy` | Passed: preflight matched the confirmed environment; the resource group, Container App, Application Insights, and Key Vault were provisioned; the protected secret was seeded; the immutable ACR digest was activated as the first ready/running revision; the temporary local secret file and operator vault role were removed | 2026-09-05 |
+| Live Azure RBAC | Exact-scope role-assignment reads for the deployed Container App principal | Passed: one ACR Pull, one Key Vault Secrets User, and the expected immutable Foundry role-definition assignment; no temporary operator Secrets Officer assignment remains | 2026-09-05 |
 
-### Outstanding validation prerequisites
+### Outstanding post-deployment acceptance prerequisites
 
 The real azd environment intentionally contains no synthetic substitute for a live
-tenant binding. The preview requires the following prerequisite groups before it
-can safely reach Azure what-if:
+tenant binding. Azure provisioning is complete; the following post-deployment
+acceptance groups remain:
 
 - Entra: the API/Web registrations, client IDs, delegated administrator consent,
   all three persona bindings, exact app-role assignments, selected-azd-environment
@@ -298,17 +309,16 @@ can safely reach Azure what-if:
   bound; live retrieval and citation navigation remain final acceptance checks.
 - Power BI: populated showcase-case consistency and Decision-ID parity after application deployment.
 
-These are outputs of earlier external setup tasks, not values Task 18 should invent.
-The plan remains `Ready for Validation`; it is not `Validated` until the remaining
-external bindings exist, the future identity grant is approved and applied, and
-preview/policy evaluation pass.
+These are outputs of external setup and acceptance tasks, not values Task 18 should
+invent. The deployment does not count as a complete live Case journey until the
+Fabric identity grant and all approval-gated invocation, parity, and browser checks
+pass.
 
 ## 11. Next step
 
-Complete the remaining external prerequisite tasks in dependency order. Apply the
-future Container App managed-identity grant through its separate approval gate,
-create and bind the Work IQ corpus, and resume `azure-validate` at the
-provision-preview step. Power BI publication, its canonical URL, and its receipt
-are complete; populated parity remains part of the later live Case journey. The
-complete live Case journey remains pending, and each cloud mutation still requires
-the applicable explicit approval.
+Apply the deployed Container App managed-identity Fabric SQL grant through its
+separate approval gate, verify the pinned Foundry agents, and run the user-context-
+free live smoke check. Then run the approval-gated Work IQ, authenticated browser,
+and populated Power BI parity checks in their documented order. The complete live
+Case journey remains pending, and each additional cloud mutation or delegated live
+invocation still requires the applicable explicit approval.

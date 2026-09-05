@@ -325,6 +325,15 @@ def test_preflight_requires_exact_foundry_fabric_and_azd_environment_contracts()
     assert "printf '%s' \"$fabric_access_token\"" in preflight
 
 
+def test_preflight_accepts_null_vnet_configuration_for_public_environment():
+    preflight = _read("scripts/preflight_personal_tenant.sh")
+
+    assert (
+        '(json.load(sys.stdin).get("properties", {}).get("vnetConfiguration") '
+        'or {}).get("internal", False)'
+    ) in preflight
+
+
 def test_preflight_requests_fabric_audience_for_every_fabric_rest_call():
     preflight = _read("scripts/preflight_personal_tenant.sh")
     fabric_rest_lines = [
