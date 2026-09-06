@@ -1,8 +1,9 @@
 from dataclasses import replace
 from datetime import UTC, timedelta
+from typing import cast
 
 import pytest
-from sqlalchemy import DateTime
+from sqlalchemy import Connection, DateTime
 from sqlalchemy.dialects.mssql.pyodbc import MSDialect_pyodbc
 
 from data.domain import RuntimeMode
@@ -43,6 +44,10 @@ class FakeConnection:
             self.inserts.append(dict(parameters or {}))
             return _MappingsResult(None)
         raise AssertionError(f"Unexpected SQL: {sql}")
+
+
+def _ensure(connection: FakeConnection, bundle, *, apply: bool):
+    return ensure_rl001_live_source(cast(Connection, connection), bundle, apply=apply)
 
 
 def _row(bundle):
@@ -99,7 +104,7 @@ def test_dry_run_plans_without_inserting():
     )
     connection = FakeConnection()
 
-    assert ensure_rl001_live_source(connection, bundle, apply=False) == "planned"
+    assert _ensure(connection, bundle, apply=False) == "planned"
     assert connection.inserts == []
 
 
@@ -109,10 +114,10 @@ def test_apply_inserts_once_and_exact_repeat_is_unchanged():
     )
     connection = FakeConnection()
 
-    assert ensure_rl001_live_source(connection, bundle, apply=True) == "inserted"
+    assert _ensure(connection, bundle, apply=True) == "inserted"
     assert connection.inserts == [_row(bundle)]
     connection.row = _row(bundle)
-    assert ensure_rl001_live_source(connection, bundle, apply=True) == "unchanged"
+    assert _ensure(connection, bundle, apply=True) == "unchanged"
     assert connection.inserts == [_row(bundle)]
 
 
@@ -122,7 +127,7 @@ def test_insert_datetimeoffset_bind_preserves_the_source_offset():
     )
     connection = FakeConnection()
 
-    ensure_rl001_live_source(connection, bundle, apply=True)
+    _ensure(connection, bundle, apply=True)
 
     effective_at_bind = connection.statement_objects[1]._bindparams["effective_at"]
     assert isinstance(effective_at_bind.type, DateTime)
@@ -139,7 +144,7 @@ def test_apply_locks_the_source_key_before_checking_for_an_existing_row():
     )
     connection = FakeConnection()
 
-    ensure_rl001_live_source(connection, bundle, apply=True)
+    _ensure(connection, bundle, apply=True)
 
     assert "WITH (UPDLOCK, HOLDLOCK)" in connection.statements[0]
 
@@ -152,7 +157,7 @@ def test_datetimeoffset_returned_in_utc_matches_the_same_instant():
     existing["effective_at"] = bundle.effective_at.astimezone(UTC)
     connection = FakeConnection(existing)
 
-    assert ensure_rl001_live_source(connection, bundle, apply=True) == "unchanged"
+    assert _ensure(connection, bundle, apply=True) == "unchanged"
     assert connection.inserts == []
 
 
@@ -165,7 +170,7 @@ def test_mismatched_existing_source_fails_without_mutation():
     connection = FakeConnection(existing)
 
     with pytest.raises(RuntimeError, match="differs from the canonical bundle"):
-        ensure_rl001_live_source(connection, bundle, apply=True)
+        _ensure(connection, bundle, apply=True)
 
     assert connection.inserts == []
 
@@ -193,7 +198,7 @@ def test_manually_constructed_or_modified_bundle_is_rejected_before_sql(bundle):
     connection = FakeConnection()
 
     with pytest.raises(ValueError, match="canonical RL-001"):
-        ensure_rl001_live_source(connection, bundle, apply=True)
+        _ensure(connection, bundle, apply=True)
 
     assert connection.statements == []
 
@@ -207,6 +212,6 @@ def test_naive_datetimeoffset_from_driver_is_rejected_as_ambiguous():
     connection = FakeConnection(existing)
 
     with pytest.raises(RuntimeError, match="timezone-aware"):
-        ensure_rl001_live_source(connection, bundle, apply=True)
+        _ensure(connection, bundle, apply=True)
 
     assert connection.inserts == []
