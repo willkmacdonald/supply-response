@@ -456,7 +456,36 @@ The first result must be `12`; the second must contain exactly `DELETE`,
 `INSERT`, `SELECT`, and `UPDATE`, all in `GRANT` state. Save the redacted workspace
 ID, SQL item ID, principal ID, schema version, timestamp, and command exit status
 in ignored `.artifacts/deployment/fabric-sql-receipt.txt`; never save an access
-token. Recovery is a separate approved SQL change:
+token.
+
+### Load the canonical RL-001 operational source
+
+The live application fails closed until Fabric contains the verified fictional
+RL-001 source bundle. Load it only after schema version 12 and the contained-user
+permissions have been verified. The command defaults to a read-only plan and
+uses the selected Azure CLI tenant; it never prints credentials or payload JSON.
+
+```bash
+set -a
+source .azure/supply-response-personal/.env
+set +a
+export SUPPLY_RESPONSE_RUNTIME_MODE=live
+export SUPPLY_RESPONSE_CREDENTIAL_MODE=azure_cli
+export SUPPLY_RESPONSE_ALLOWED_TENANT_ID="$AZURE_TENANT_ID"
+uv run python scripts/load_fabric_rl001.py
+```
+
+After separate approval to insert the verified fictional bundle:
+
+```bash
+uv run python scripts/load_fabric_rl001.py --apply
+```
+
+The first apply reports `inserted`; an exact repeat reports `unchanged`. A
+different payload under `RL-001-OPERATIONAL-V1` fails without updating or
+deleting the existing authoritative row.
+
+Recovery is a separate approved SQL change:
 
 ```sql
 REVOKE SELECT, INSERT, UPDATE, DELETE ON SCHEMA::app FROM [ca-supply-response];
