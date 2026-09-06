@@ -12,6 +12,8 @@ from apps.api.app.live import (
     LiveAnalysisApplicationService,
     LiveOperationalRetrieval,
     LiveSourceUnavailable,
+    _require_item,
+    _validate_live_collection,
 )
 from data.domain import CasePurpose, RuntimeMode
 from data.domain.evidence import (
@@ -23,7 +25,7 @@ from data.domain.evidence import (
     RetrievalHealth,
     UncertaintyState,
 )
-from data.synthetic.rl001 import instantiate_rl001
+from data.synthetic.rl001 import SCENARIO_EFFECTIVE_TIME, instantiate_rl001
 from integrations.workiq.models import WorkIQRetrieval, WorkIQRetrievalLineage
 from services.analysis.service import analyze_case
 from services.persistence.sqlite import sqlite_store
@@ -35,6 +37,49 @@ from services.persistence.tables import (
 from tests.integration.test_workiq_trust_boundaries import _actor_and_service
 
 NOW = datetime(2026, 8, 31, 18, 0, tzinfo=UTC)
+
+
+def test_live_boundary_accepts_fixed_scenario_evidence_retrieved_on_a_later_date():
+    presentation_time = datetime(2026, 10, 15, 16, 0, tzinfo=UTC)
+    item = _evidence(
+        evidence_id="RL-ALPHA-OPTIONAL-3000",
+        case_id="RL-CASE-LIVE",
+        analysis_id="RL-ANALYSIS-LIVE",
+        source_system=EvidenceSourceSystem.FABRIC,
+        source_id="fabric.supply_receipt/RL-ALPHA-OPTIONAL-3000",
+        scope=AuthorityScope.OPERATIONAL_QUANTITY,
+        citation="https://app.powerbi.com/groups/demo/reports/report",
+        source_timestamp=SCENARIO_EFFECTIVE_TIME,
+    ).model_copy(
+        update={
+            "retrieved_at": presentation_time,
+            "effective_at": SCENARIO_EFFECTIVE_TIME,
+            "expires_at": SCENARIO_EFFECTIVE_TIME + timedelta(days=1),
+        }
+    )
+
+    validated = _validate_live_collection(
+        (item,),
+        system=EvidenceSourceSystem.FABRIC,
+        allowed_scopes={AuthorityScope.OPERATIONAL_QUANTITY},
+        source_id=None,
+        analysis_id="RL-ANALYSIS-LIVE",
+        case_id="RL-CASE-LIVE",
+        started_at=presentation_time,
+        citation_hosts={"app.powerbi.com"},
+    )
+    _require_item(
+        validated,
+        system=EvidenceSourceSystem.FABRIC,
+        scope=AuthorityScope.OPERATIONAL_QUANTITY,
+        source_id=None,
+        analysis_id="RL-ANALYSIS-LIVE",
+        case_id="RL-CASE-LIVE",
+        started_at=presentation_time,
+        citation_hosts={"app.powerbi.com"},
+    )
+
+    assert validated == (item,)
 
 
 def _evidence(
@@ -169,8 +214,11 @@ class ExactWorkIQ:
                     source_id=kwargs["source_id"],
                     scope=AuthorityScope.SUPPLIER_STATEMENT,
                     citation="https://teams.microsoft.com/l/entity/supplier",
-                    source_timestamp=NOW
-                    - (timedelta(days=2) if self.stale else timedelta()),
+                ).model_copy(
+                    update={
+                        "retrieved_at": NOW
+                        - (timedelta(days=2) if self.stale else timedelta())
+                    }
                 ),
             )
         return WorkIQRetrieval(
@@ -263,7 +311,7 @@ async def test_live_analysis_fails_closed_for_incomplete_or_stale_sources(
         {"retrieval_health": RetrievalHealth.UNHEALTHY},
         {"authority_scope": (AuthorityScope.SUPPLIER_STATEMENT,)},
         {"citation_url": "https://other.sharepoint.com/sites/forged/item"},
-        {"source_timestamp": NOW - timedelta(days=2)},
+        {"retrieved_at": NOW - timedelta(days=2)},
     ],
 )
 async def test_live_analysis_rejects_any_invalid_extra_operational_item(
@@ -301,7 +349,7 @@ async def test_live_analysis_rejects_any_invalid_extra_operational_item(
         {"authority_scope": (AuthorityScope.OPERATIONAL_QUANTITY,)},
         {"source_id": "wrong-source"},
         {"citation_url": "https://other.sharepoint.com/sites/forged/item"},
-        {"source_timestamp": NOW - timedelta(days=2)},
+        {"retrieved_at": NOW - timedelta(days=2)},
     ],
 )
 async def test_live_analysis_rejects_any_invalid_extra_workiq_item(

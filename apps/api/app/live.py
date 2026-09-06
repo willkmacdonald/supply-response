@@ -167,7 +167,6 @@ def _require_item(
             or not item.source_id.strip()
             or not (item.excerpt or "").strip()
             or not item.citation_url
-            or abs(started_at - item.source_timestamp) > timedelta(hours=24)
         ):
             raise ValueError("required authoritative live evidence is incomplete")
         validate_live_citation_url(item.citation_url, allowed_hosts=citation_hosts)
@@ -206,9 +205,7 @@ def _validate_live_collection(
             or not scopes.issubset(allowed_scopes)
             or not (item.excerpt or "").strip()
             or not item.citation_url
-            or abs(started_at - item.source_timestamp) > timedelta(hours=24)
             or abs(started_at - item.retrieved_at) > timedelta(hours=24)
-            or (item.expires_at is not None and item.expires_at < started_at)
         ):
             raise ValueError("live evidence collection contains an invalid item")
         validate_live_citation_url(item.citation_url, allowed_hosts=citation_hosts)
