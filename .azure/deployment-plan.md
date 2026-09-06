@@ -1,8 +1,49 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed; the Azure application revision and exact Azure RBAC assignments are live, while the Fabric SQL identity grant, live smoke check, Work IQ/Foundry invocation, populated report parity, and final browser gates remain
+> **Status:** Deployed and smoke-verified for the 2026-09-06 RL-001 loader update. Canonical source loading and live Case creation passed; Alex-authenticated analysis and downstream acceptance remain pending.
 
-Generated: 2026-08-31; validation evidence updated 2026-09-04
+Generated: 2026-08-31; validation evidence updated 2026-09-06
+
+## Validation Proof — RL-001 loader update, 2026-09-06
+
+This section supersedes older setup/pending-state notes below, which retain the
+historical provisioning record.
+
+- Final review fixed pyodbc timezone loss with an explicitly typed bind. A
+  read-only live probe proved the original offset and instant are preserved.
+  Final 24 loader tests and scoped checks passed; full regression passed after the
+  production fix, and package rebuild passed.
+- Approved loader runs returned `planned`, `inserted`, then `unchanged`. Both
+  applies passed full stored-data and production-adapter readback.
+- Approved deployment activated a ready immutable revision; live Fabric/Foundry
+  smoke and exact runtime role verification passed. Identifiers are recorded in
+  the ignored environment record.
+- Browser Case creation succeeded. Analysis returned 401 `INVALID_ACCESS_TOKEN`;
+  the application's Entra sign-in record identifies the administrator, not Alex.
+  Public signing-key validation passed in the container. A fresh Alex session,
+  delegated invocation, Decision/execution/outcomes, and report parity remain.
+
+- Existing environment and interactive Azure authentication verified with
+  `azd version`, `azd auth login --check-status`, and
+  `scripts/preflight_personal_tenant.sh`. Exact tenant/subscription/region,
+  shared resource, Foundry and Fabric bindings passed.
+- `azd provision --preview --no-prompt --environment supply-response-personal`
+  passed (20 seconds); no new resources, existing app and Insights updates only.
+  `azd package --no-prompt --environment supply-response-personal` passed.
+- Current policy-assignment inventory and successful preview showed no denial of
+  the intended update. No Aspire application is present.
+- `uv build` produced the source distribution and wheel; web tests (51) and Vite
+  production build passed. Locked npm and Python inputs remain in Docker context;
+  private environment files are excluded.
+- Each loader task's full `uv run pytest -q` passed. Scoped Ruff/Pyright passed.
+  Existing broad lint/type debt (82 Ruff findings and 47 Pyright errors in
+  untouched files) and one third-party Starlette warning remain, and are not
+  represented as clean global static checks.
+- Static resource-specific managed-identity roles remain exact ACR Pull,
+  vault Secrets User and Foundry Azure AI User; no role/schema changes are part
+  of the loader update.
+- Local read-only Fabric SQL access passed and confirmed zero source rows before
+  the loader. `/health` returned live/Fabric SQL/schema version 12.
 
 ## 1. Project overview
 

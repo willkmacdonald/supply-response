@@ -1,6 +1,6 @@
 # Supply Response Roadmap
 
-**Last updated:** 2026-09-04
+**Last updated:** 2026-09-06
 **Source of truth:** [Frozen demo contract](superpowers/specs/2026-08-30-supply-response-demo-contract-design.md) and [implementation plan](superpowers/plans/2026-08-30-supply-response-demo-implementation.md)
 
 This roadmap reports the durable, reviewed repository baseline. Uncommitted or actively developed work is not counted as complete.
@@ -13,13 +13,13 @@ This roadmap reports the durable, reviewed repository baseline. Uncommitted or a
 | Deterministic decision quality | Complete | Canonical RL-001 and all ten focused evaluation cases are integrated |
 | Durable closed-loop backend | Complete | SQLite persistence, immutable Decisions, outbox, five actions, attempts, playback, and observations are covered |
 | Web decision console | Complete in fallback mode | Progressive workspace and browser journey pass locally |
-| Fabric SQL | Live setup validated; managed-identity grant pending | Dedicated `Supply Response Demo` workspace and `SupplyResponseDemo` SQL Database exist; schema version 12 is live, both scripts were applied twice, and the approval-gated live SQL integration test and health check passed; the future Container App managed-identity grant remains |
+| Fabric SQL | Canonical source loaded and verified live | Schema version 12; canonical RL-001 loader passed planned → inserted → unchanged with exact metadata/payload and production-adapter readback; deployed app created a live Case |
 | Power BI | Published; empty-state live render validated | The semantic model and two-page report are published, OAuth2-bound to Fabric SQL, DAX-queryable, and visually clean with an empty database; populated Decision-ID parity remains a post-application-deployment gate |
-| Entra ID and persona authorization | Implemented and tenant-configured; live gate pending | API/SPA registrations, exact delegated consent, persona bindings, and role assignments are verified in `willmacdonald.com`; deployed authenticated flows have not run |
+| Entra ID and persona authorization | Tenant-configured; Alex-authenticated gate pending | Browser signed in as the administrator; analysis returned `INVALID_ACCESS_TOKEN`. API token version and public signing-key access are verified; a fresh Alex session is required |
 | Work IQ | Demo Corpus configured; live retrieval pending | Tenant enablement, exact delegated consent, supplier email and Jordan-authored Quality sources, deployment bindings, and the deterministic receipt are verified; approval-gated live cited retrieval remains |
 | Foundry orchestration | Implemented and agents published; invocation pending | Signal, context, and decision agents are verified as immutable version `1` contracts on `gpt-5.6-luna`; no live invocation or evaluation has run |
-| Complete live Case journey | Implemented locally; live gate pending | Fail-closed live composition, durable lineage, readiness, and browser contracts are covered; deployment-dependent bindings and a full live run remain |
-| Personal-tenant deployment and hardening | Azure application deployed; post-deployment gates pending | The resource group, Container App, Application Insights, Key Vault, immutable image, secret binding, and exact Azure RBAC assignments are live; Fabric SQL identity access and live acceptance checks remain |
+| Complete live Case journey | Live Case creation passed; analysis gated | Correct fixed scenario time displayed; delegated analysis, Decision, five actions, ten observations, and populated Power BI parity remain unverified |
+| Personal-tenant deployment and hardening | Updated application and readiness verified | New immutable revision ready; exact Azure roles and live Fabric/Foundry readiness passed; delegated acceptance checks remain |
 
 ## Delivery sequence
 
@@ -80,11 +80,12 @@ Verified live:
 - `SupplyResponse` semantic model and report published to the dedicated workspace
 - Fabric SQL OAuth2 data-source binding and live DAX query succeeded
 - Both required report pages rendered their empty state without visual errors
+- Canonical `RL-001-OPERATIONAL-V1` inserted once and exact repeat returned
+  `unchanged`; full stored metadata/JSON and production-adapter readback passed
+- Deployed app created a live showcase Case with the fixed Scenario Effective Time
 
 Still required:
 
-- Grant the deployed Container App managed identity the exact Fabric SQL database
-  permissions through its separately approved deployment gate
 - Run the approval-gated populated Power BI live consistency test after application deployment
 - Verify refresh behavior, filters, and Decision ID parity against a live showcase case
 
@@ -107,15 +108,14 @@ Still required:
 
 - Run the approval-gated Work IQ retrieval and verify both citations resolve to the accepted supplier and Quality sources.
 - Invoke and evaluate the published Foundry agents through a separately approved live gate.
-- Complete the remaining Fabric managed-identity grant and populated Power BI parity
-  required by live readiness.
+- Complete populated Power BI parity after an approved live Decision.
 - Run deployed Entra authentication, Work IQ citation navigation, and the complete live browser journey.
 
 Exit conditions include authenticated Alex approval/rejection, independently satisfied Quality and Finance prerequisites, navigable citations, and Decision-linked downstream work.
 
 ### 6. Deployment and release hardening — Azure application deployed; acceptance pending
 
-Tasks 18–19 deploy the runtime to the personal `willmacdonald.com` tenant and prove the final contract. The Azure application infrastructure and immutable Container App image are deployed, the first revision is ready and running, and exact ACR, Key Vault, and Foundry RBAC assignments are verified. Fabric SQL identity access and the live acceptance journey remain.
+Tasks 18–19 deploy the runtime to the personal tenant and prove the final contract. The updated immutable Container App revision is ready, exact Azure roles and live readiness are verified, and live Fabric-backed Case creation passes. Alex-authenticated analysis and the downstream acceptance journey remain.
 
 - Provision the Azure application resources and configure deployment-specific bindings
 - Deploy the API and web console, then connect them to the verified Fabric, Work IQ, Foundry, Entra, and Power BI prerequisites
@@ -134,10 +134,15 @@ Final completion requires all 20 frozen acceptance criteria to pass. Local imple
 The Entra, Foundry, Fabric SQL, Work IQ Demo Corpus, and Power BI prerequisites
 are configured and recorded in deployment-local storage. The remaining gates are:
 
-1. Grant the deployed Container App managed identity exact Fabric SQL database access through its separate approval gate.
-2. Verify the pinned Foundry agents and run the user-context-free live smoke check.
-3. Run live Work IQ retrieval and the complete authenticated browser journey.
-4. Load the showcase Case and verify Power BI refresh, filters, and Decision-ID parity against the application.
+1. Establish a fresh Alex browser session; the observed administrator session was rejected at analysis with `INVALID_ACCESS_TOKEN`.
+2. Run live analysis, cited Work IQ retrieval, and pinned Foundry invocation.
+3. Record the approved Decision, verify five linked actions and ten simulated observations.
+4. Verify Power BI refresh, filters, and Decision-ID parity for that same Case.
+
+The reviewed loader update passed full Python regression, 51 web tests, package
+and web builds, and scoped lint/type checks. Existing repository-wide static-check
+debt remains (82 Ruff findings and 47 Pyright errors in unchanged files), plus a
+third-party Starlette deprecation warning; these are not reported as clean gates.
 
 ## Task-level status
 
@@ -160,8 +165,8 @@ are configured and recorded in deployment-local storage. The remaining gates are
 | 14 | Single-tenant Entra authentication and persona roles | Complete locally; tenant configuration verified; deployed auth gate pending |
 | 15 | Cited Microsoft 365 evidence through Work IQ | Complete locally; tenant consent, Demo Corpus sources, bindings, and receipt verified; live retrieval pending |
 | 16 | Foundry-managed Agent Framework orchestration | Complete locally; three Luna agents published and verified; invocation/evaluation pending |
-| 17 | Complete live Case journey | Complete locally; external readiness bindings and live browser gate pending |
-| 18 | Personal-tenant provisioning and deployment | Azure application deployed with live Azure RBAC verified; Fabric SQL grant and post-deployment acceptance gates pending |
+| 17 | Complete live Case journey | Live Case creation passed; Alex-authenticated analysis and downstream browser gates pending |
+| 18 | Personal-tenant provisioning and deployment | Updated Azure revision, exact roles, and live readiness verified; delegated acceptance pending |
 | 19 | Privacy, parity, failure, timing, and rehearsal gates | Planned |
 
 ## Backlog outside active acceptance
