@@ -2,6 +2,8 @@ from dataclasses import replace
 from datetime import UTC, timedelta
 
 import pytest
+from sqlalchemy import DateTime
+from sqlalchemy.dialects.mssql.pyodbc import MSDialect_pyodbc
 
 from data.domain import RuntimeMode
 from data.domain.evidence import AuthorityScope, EvidenceSourceSystem
@@ -29,10 +31,12 @@ class FakeConnection:
         self.row = row
         self.inserts = []
         self.statements = []
+        self.statement_objects = []
 
     def execute(self, statement, parameters=None):
         sql = str(statement).strip().upper()
         self.statements.append(sql)
+        self.statement_objects.append(statement)
         if sql.startswith("SELECT"):
             return _MappingsResult(self.row)
         if sql.startswith("INSERT"):
@@ -110,6 +114,23 @@ def test_apply_inserts_once_and_exact_repeat_is_unchanged():
     connection.row = _row(bundle)
     assert ensure_rl001_live_source(connection, bundle, apply=True) == "unchanged"
     assert connection.inserts == [_row(bundle)]
+
+
+def test_insert_datetimeoffset_bind_preserves_the_source_offset():
+    bundle = build_rl001_live_source(
+        "https://app.powerbi.com/groups/demo/reports/report"
+    )
+    connection = FakeConnection()
+
+    ensure_rl001_live_source(connection, bundle, apply=True)
+
+    effective_at_bind = connection.statement_objects[1]._bindparams["effective_at"]
+    assert isinstance(effective_at_bind.type, DateTime)
+    assert effective_at_bind.type.timezone is True
+    processor = effective_at_bind.type._cached_bind_processor(MSDialect_pyodbc())
+    processed = processor(bundle.effective_at) if processor else bundle.effective_at
+    assert isinstance(processed, str)
+    assert processed.endswith("-05:00")
 
 
 def test_apply_locks_the_source_key_before_checking_for_an_existing_row():

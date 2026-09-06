@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from sqlalchemy import Connection, text
+from sqlalchemy import Connection, DateTime, bindparam, text
 
 from apps.api.app.live import validate_live_https_url
 from data.domain import RuntimeMode
@@ -207,14 +207,12 @@ def ensure_rl001_live_source(
         return "unchanged"
     if not apply:
         return "planned"
-    connection.execute(
-        text(
-            "INSERT INTO app.live_operational_sources "
-            "(source_snapshot_id, template_id, effective_at, is_verified, "
-            "snapshot_payload_json, evidence_payload_json) VALUES "
-            "(:source_snapshot_id, :template_id, :effective_at, :is_verified, "
-            ":snapshot_payload_json, :evidence_payload_json)"
-        ),
-        bundle.parameters(),
-    )
+    insert = text(
+        "INSERT INTO app.live_operational_sources "
+        "(source_snapshot_id, template_id, effective_at, is_verified, "
+        "snapshot_payload_json, evidence_payload_json) VALUES "
+        "(:source_snapshot_id, :template_id, :effective_at, :is_verified, "
+        ":snapshot_payload_json, :evidence_payload_json)"
+    ).bindparams(bindparam("effective_at", type_=DateTime(timezone=True)))
+    connection.execute(insert, bundle.parameters())
     return "inserted"

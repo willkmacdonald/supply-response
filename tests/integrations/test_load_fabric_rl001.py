@@ -345,12 +345,67 @@ def test_verify_readback_requires_exactly_one_row(
         def scalar_one(self):
             return 2
 
+    class StoredResult:
+        def mappings(self):
+            return self
+
+        def one_or_none(self):
+            return bundle.parameters()
+
     class CountConnection:
-        def execute(self, *args, **kwargs):
-            return CountResult()
+        def execute(self, statement, *args, **kwargs):
+            if "COUNT(*)" in str(statement):
+                return CountResult()
+            return StoredResult()
 
     engine = FakeEngine()
     engine.connection = CountConnection()
 
     with pytest.raises(RuntimeError, match="exactly one"):
+        load_fabric_rl001.verify_readback(cast(Engine, engine), bundle)
+
+
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [
+        ("template_id", "RL-TAMPERED"),
+        ("effective_at", datetime(2026, 9, 1, 15, 0, tzinfo=UTC)),
+    ],
+)
+def test_verify_readback_rejects_tampered_stored_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    column: str,
+    value: object,
+) -> None:
+    bundle = build_rl001_live_source(
+        "https://app.powerbi.com/groups/demo/reports/report"
+    )
+    monkeypatch.setattr(
+        load_fabric_rl001,
+        "_retrieve",
+        lambda engine: _retrieval_with_rebound_fields(bundle),
+    )
+    stored_row = {
+        **bundle.parameters(),
+        column: value,
+    }
+
+    class StoredResult:
+        def mappings(self):
+            return self
+
+        def one_or_none(self):
+            return stored_row
+
+        def scalar_one(self):
+            return 1
+
+    class StoredConnection:
+        def execute(self, *args, **kwargs):
+            return StoredResult()
+
+    engine = FakeEngine()
+    engine.connection = StoredConnection()
+
+    with pytest.raises(RuntimeError, match="canonical bundle"):
         load_fabric_rl001.verify_readback(cast(Engine, engine), bundle)

@@ -65,6 +65,11 @@ def verify_readback(engine: Engine, bundle: LiveOperationalSourceBundle) -> None
         raise RuntimeError("Fabric readback evidence does not match RL-001")
 
     with engine.connect() as connection:
+        stored_outcome = ensure_rl001_live_source(connection, bundle, apply=False)
+        if stored_outcome != "unchanged":
+            raise RuntimeError(
+                "Fabric stored source does not match the canonical bundle"
+            )
         count = connection.execute(
             text(
                 "SELECT COUNT(*) FROM app.live_operational_sources "
