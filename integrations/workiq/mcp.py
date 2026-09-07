@@ -96,19 +96,42 @@ def _bounded_string(value: Any, maximum: int) -> bool:
     return isinstance(value, str) and bool(value.strip()) and len(value) <= maximum
 
 
+class _BorrowedTransport(httpx.AsyncBaseTransport):
+    """Share only the fixed endpoint's connection pool, never HTTP client state."""
+
+    def __init__(self, owner: httpx.AsyncClient) -> None:
+        # httpx exposes transport injection but no public accessor for an existing
+        # client's pool. Keep this dependency in one place and test pool ownership.
+        self._transport = owner._transport_for_url(httpx.URL(ENDPOINT))
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        return await self._transport.handle_async_request(request)
+
+    async def aclose(self) -> None:
+        """The injected client retains ownership of the underlying transport."""
+
+
 class WorkIQMcpClient:
     def __init__(self, *, http: httpx.AsyncClient) -> None:
         self._http = http
 
     @asynccontextmanager
     async def session(self, *, access_token: str) -> AsyncIterator[WorkIQMcpSession]:
-        session = WorkIQMcpSession(http=self._http, access_token=access_token)
-        try:
-            await session._initialize()
-            yield session
-        finally:
-            session._headers.clear()
-            session._closed = True
+        if self._http.is_closed:
+            raise WorkIQProtocolError("Work IQ connection pool is closed")
+        async with httpx.AsyncClient(
+            transport=_BorrowedTransport(self._http),
+            trust_env=False,
+            follow_redirects=False,
+        ) as http:
+            session = WorkIQMcpSession(http=http, access_token=access_token)
+            try:
+                await session._initialize()
+                yield session
+            finally:
+                session._headers.clear()
+                http.cookies.clear()
+                session._closed = True
 
 
 class WorkIQMcpSession:

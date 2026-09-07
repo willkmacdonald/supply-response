@@ -329,3 +329,79 @@ async def test_cancelled_stream_is_closed_and_session_cannot_be_reused():
         assert closed.is_set()
         with pytest.raises(WorkIQProtocolError):
             await sessions[0].ask("closed")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("concurrent", [False, True])
+@pytest.mark.parametrize("caller_defaults", [False, True])
+async def test_actor_cookies_are_isolated_and_sessions_do_not_own_shared_pool(
+    concurrent, caller_defaults
+):
+    requests = []
+    first_ready, second_ready = asyncio.Event(), asyncio.Event()
+    first_closed = asyncio.Event()
+    pool_closed = False
+
+    async def handler(request):
+        requests.append(request)
+        actor = request.headers["authorization"].removeprefix("Bearer ")
+        body = json.loads(request.content)
+        cookie = request.headers.get("cookie")
+        if body["method"] == "initialize":
+            assert cookie is None, "Initialization inherited another session's cookies"
+            response = reply(request, INIT)
+            response.headers["set-cookie"] = (
+                f"session={actor}; Path=/; Secure; HttpOnly"
+            )
+            return response
+        assert cookie in (None, f"session={actor}")
+        if body["method"] == "notifications/initialized":
+            return httpx.Response(202)
+        assert not pool_closed
+        return reply(request, {"structuredContent": ANSWER})
+
+    class Pool(httpx.MockTransport):
+        async def aclose(self):
+            nonlocal pool_closed
+            pool_closed = True
+            await super().aclose()
+
+    async with httpx.AsyncClient(
+        transport=Pool(handler),
+        auth=("unrelated-user", "unrelated-password"),
+        headers={"Cookie": "unrelated-default=preserve"} if caller_defaults else {},
+        cookies={"unrelated-cookie": "preserve"} if caller_defaults else {},
+    ) as http:
+        shared = client(http)
+
+        async def run(actor):
+            if concurrent and actor == "actor-two":
+                await first_ready.wait()
+            async with shared.session(access_token=actor) as session:
+                if concurrent:
+                    if actor == "actor-one":
+                        first_ready.set()
+                        await second_ready.wait()
+                    else:
+                        second_ready.set()
+                        await first_closed.wait()
+                assert await session.ask("fixture question") == ANSWER
+            if actor == "actor-one":
+                first_closed.set()
+            assert not http.is_closed
+            assert not pool_closed
+
+        if concurrent:
+            async with asyncio.timeout(2):
+                await asyncio.gather(run("actor-one"), run("actor-two"))
+        else:
+            await run("actor-one")
+            await run("actor-two")
+        assert dict(http.cookies) == (
+            {"unrelated-cookie": "preserve"} if caller_defaults else {}
+        )
+        assert http.headers.get("cookie") == (
+            "unrelated-default=preserve" if caller_defaults else None
+        )
+    assert pool_closed
+    assert len(requests) == 6
