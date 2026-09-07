@@ -42,4 +42,20 @@ was corrected to baseline routing behavior instead of changing normal runtime.
 Both original regression
 assertions failed before removal as expected.
 
-Cleanup deployment and final verification are pending.
+Cleanup commit `bc3f11a` deployed successfully through the approved apply/smoke
+workflow. ACR build `ch13` succeeded. Revision `ca-sr-demo--0000013` is the sole
+active revision, Healthy/Running, latest/ready and receiving 100% of traffic.
+The diagnostic revision `ca-sr-demo--0000012` is inactive, Stopped, with zero traffic.
+The cleanup image digest is
+`sha256:109d0f6c58eaeb0e537bd3432b8900fc75164203e09b9ab120c81edf87afc7e4`.
+
+Live checks confirmed the retired path returns GET 404 and POST 405 and is absent
+from OpenAPI. Health passed in live Fabric SQL mode at schema version 12; the
+approved Fabric/Foundry smoke passed without a delegated user operation. The
+managed identity and its exact three existing Azure role assignments are unchanged.
+The named deployment environment was verified. No Git push was performed.
+
+Verification: full Python suite and package build passed; all 51 frontend tests
+and production build passed. Three final retirement regressions, scoped static
+checks and independent cleanup review passed. The existing Starlette deprecation
+warning and expected live-test skips remain unrelated.

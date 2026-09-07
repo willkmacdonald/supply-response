@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — mandatory Work IQ MCP probe cleanup, 2026-09-07 UTC. Cleanup authorized; live analysis unchanged.
+> **Status:** Deployed — Work IQ MCP probe retired and cleanup verified, 2026-09-07 UTC. Live analysis unchanged.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 
@@ -36,8 +36,13 @@ sensitive-file exclusions unchanged; no Aspire services. Independent cleanup
 review found the baseline SPA returns POST 405 for removed routes. The retirement
 test now covers static assets, verifies GET 404 / POST 405 and absent OpenAPI;
 all three focused tests pass. Independent re-review approved with no remaining
-findings and confirmed all four runtime files exactly match c88bf2f. Cleanup
-deployment has not yet started. No normal analysis change.
+findings and confirmed all four runtime files exactly match c88bf2f.
+Cleanup bc3f11a deployed via approved apply/smoke; ACR ch13 succeeded, revision13
+sole active/latest/ready, Healthy/Running at 100% traffic. Probe revision12 is
+inactive, Stopped and at zero traffic. Live retired-route GET404/POST405 and
+OpenAPI absence verified. Health live Fabric SQL/schema12 and Fabric/Foundry
+smoke passed; no delegated operation. Managed identity/exact roles unchanged;
+azd show verified named environment. No normal analysis change or Git push.
 
 ## Validation Proof — temporary app-authenticated MCP probe, 2026-09-07 UTC
 

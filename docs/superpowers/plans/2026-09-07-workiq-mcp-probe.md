@@ -42,5 +42,5 @@ The approved spec is `docs/superpowers/specs/2026-09-07-workiq-mcp-probe-design.
 
 - Spec approved by user; implementation authorized.
 - Task 1 implemented, independently reviewed and verified; temporary code now removed after successful single deployed fetch.
-- Task 2: one-shot fetch completed with all checks true; cleanup verification/deployment in progress.
+- Task 2 complete: one-shot fetch passed all checks; cleanup bc3f11a deployed as revision13, revision12 inactive/stopped, route absent and health/smoke verified. No push. See docs/deployment/workiq-mcp-probe-result.md for final evidence.
 - Cleanup review reproduced baseline SPA behavior: removed API paths return GET 404 and POST 405. Acceptance checks now exercise the packaged static configuration; normal routing remains unchanged.
