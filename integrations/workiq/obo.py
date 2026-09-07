@@ -145,7 +145,9 @@ class WorkIQOboExchange:
             or not token.strip()
             or token_type != "Bearer"
             or not isinstance(scopes, str)
-            or "WorkIQAgent.Ask" not in scopes.split()
+            # Entra may return the resource-qualified form requested above.
+            # Match complete tokens only, never suffixes or other resources.
+            or not {"WorkIQAgent.Ask", WORK_IQ_SCOPE}.intersection(scopes.split())
         ):
             safe_code = _log_rejected_response(result)
             raise WorkIQAuthenticationError(

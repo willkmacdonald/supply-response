@@ -1,8 +1,30 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed and smoke-verified — Work IQ response diagnostics, 2026-09-07 UTC. Alex's next analysis retry is required to identify the token-response rejection.
+> **Status:** Validated — exact Work IQ scope fix, 2026-09-07 UTC. Deployment and Alex's live analysis retry remain pending.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
+
+## Validation Proof — exact Work IQ scope fix, 2026-09-07 UTC
+
+- Live response diagnostics showed a nonempty Bearer token with the exact
+  resource-qualified scope requested by the app, but no unqualified scope.
+  The app's short-name-only check rejected that response. User approved the
+  narrow fix and redeployment; no tenant or credential changes are required.
+- The validator now recognizes either complete, case-sensitive token:
+  `WorkIQAgent.Ask` or `api://workiq.svc.cloud.microsoft/WorkIQAgent.Ask`.
+  Actor provenance, requested scope, token presence and Bearer checks are
+  unchanged. Lookalike scopes and other resource names remain rejected.
+- Two regression tests reproduced the observed failure before the fix. All 82
+  targeted tests then passed, including exact-scope, malformed-scope and invalid
+  token cases. Scoped Ruff/Pyright are clean; independent review found no issues.
+- Python package build, 51 web tests and the 179-module web build passed.
+  Fresh preflight matched the approved environment and operator. Provision
+  preview passed in 19 seconds without new resources; azd package passed.
+  Policy inventory, static exact-resource roles, infrastructure and locked
+  Docker context are unchanged. This is not an Aspire project.
+- Full `uv run pytest -q` passed with expected skips and the existing
+  Starlette/httpx warning. Validation is complete; deployment is pending and
+  no live analysis success is claimed.
 
 ## Validation Proof — Work IQ response diagnostics, 2026-09-07 UTC
 

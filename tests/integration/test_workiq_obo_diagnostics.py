@@ -29,11 +29,11 @@ SECRET = "privatecredential123"
             ("outcome=remote_error", "oauth_error=invalid_grant", "aad_code=65001"),
         ),
         (
-            {"access_token": SECRET, "token_type": "Bearer", "scope": WORK_IQ_SCOPE},
+            {"access_token": SECRET, "token_type": "AppOnly", "scope": WORK_IQ_SCOPE},
             (
                 "outcome=response_rejected",
                 "token_present=True",
-                "bearer_type=True",
+                "bearer_type=False",
                 "scope_unqualified=False",
                 "scope_qualified=True",
             ),
@@ -81,12 +81,16 @@ def test_obo_logs_only_categorical_response_diagnostics(caplog, response, expect
     assert records[0].exc_info is None
 
 
-def test_valid_obo_response_does_not_emit_diagnostic(caplog):
+@pytest.mark.parametrize(
+    "scope",
+    ["WorkIQAgent.Ask", WORK_IQ_SCOPE, f"offline_access {WORK_IQ_SCOPE}"],
+)
+def test_valid_obo_response_does_not_emit_diagnostic(caplog, scope):
     service, actor = _authenticated_alex()
     response = {
         "access_token": SECRET,
         "token_type": "Bearer",
-        "scope": "WorkIQAgent.Ask",
+        "scope": scope,
     }
     with caplog.at_level(logging.WARNING, logger="integrations.workiq.obo"):
         token = WorkIQOboExchange(
@@ -94,3 +98,42 @@ def test_valid_obo_response_does_not_emit_diagnostic(caplog):
         ).exchange(actor)
     assert token.reveal() == SECRET
     assert not [r for r in caplog.records if r.name == "integrations.workiq.obo"]
+
+
+@pytest.mark.parametrize(
+    "scope",
+    [
+        "WorkIQAgent.Ask.Selected",
+        f"{WORK_IQ_SCOPE}.Selected",
+        "api://another-resource/WorkIQAgent.Ask",
+        "https://workiq.svc.cloud.microsoft/WorkIQAgent.Ask",
+        f"prefix{WORK_IQ_SCOPE}",
+        f"{WORK_IQ_SCOPE}/",
+        WORK_IQ_SCOPE.lower(),
+        "api://workiq.svc.cloud.microsoft/.default",
+        "openid offline_access",
+        "",
+        None,
+        [WORK_IQ_SCOPE],
+    ],
+)
+def test_obo_rejects_nonmatching_scope_tokens(scope):
+    service, actor = _authenticated_alex()
+    response = {"access_token": SECRET, "token_type": "Bearer", "scope": scope}
+    with pytest.raises(WorkIQAuthenticationError):
+        WorkIQOboExchange(
+            ConfidentialClientFixture(response), auth_service=service
+        ).exchange(actor)
+
+
+@pytest.mark.parametrize(
+    ("token", "token_type"),
+    [(None, "Bearer"), ("", "Bearer"), ("  ", "Bearer"), (SECRET, "AppOnly")],
+)
+def test_qualified_scope_does_not_bypass_token_validation(token, token_type):
+    service, actor = _authenticated_alex()
+    response = {"access_token": token, "token_type": token_type, "scope": WORK_IQ_SCOPE}
+    with pytest.raises(WorkIQAuthenticationError):
+        WorkIQOboExchange(
+            ConfidentialClientFixture(response), auth_service=service
+        ).exchange(actor)

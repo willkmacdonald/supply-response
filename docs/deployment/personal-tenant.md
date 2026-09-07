@@ -555,8 +555,12 @@ If the failing step is Work IQ token exchange, `workiq_obo_failed` distinguishes
 `response_rejected` (local response validation). It records only allowlisted
 OAuth/AAD codes and booleans for token presence, Bearer type, and the two exact
 expected scope forms. `unknown` means the code was absent or not allowlisted;
-it is not evidence of a particular identity failure. Qualified-scope diagnostics
-do not relax the existing acceptance rule. Never log the raw token response.
+it is not evidence of a particular identity failure. The response validator
+accepts complete scope tokens matching either `WorkIQAgent.Ask` or
+`api://workiq.svc.cloud.microsoft/WorkIQAgent.Ask`; other resources, suffixes,
+`.default`, and malformed scopes do not satisfy this check. Nonempty Bearer
+tokens and the validated delegated Alex actor are still required. Never log the
+raw token response.
 
 If the final revision is unhealthy, leave the previous healthy revision available,
 inspect redacted Container Apps/Application Insights diagnostics, correct the
