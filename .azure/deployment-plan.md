@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — Work IQ A2A task-envelope correction, 2026-09-07 UTC. Approved deployment pending.
+> **Status:** Deployed and smoke-verified — Work IQ A2A task-envelope correction, 2026-09-07 UTC. Alex analysis retry pending.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 
@@ -24,7 +24,7 @@ Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
   Full regression/package rerun and cleanup re-review also passed.
 - All 51 web tests and the 179-module production build passed. Full
   `uv run pytest -q` passed with expected skips and the existing Starlette/httpx
-  warning; `uv build` produced both distributions. Deployment has not started.
+  warning; `uv build` produced both distributions.
 - Fresh operator authentication and named-environment preflight matched the
   existing approved tenant/subscription/East US 2 and shared resources. Provision
   preview passed in 20 seconds with no new resources; azd package passed.
@@ -32,8 +32,14 @@ Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 - Static RBAC review confirmed exact registry AcrPull, vault Secrets User and
   Foundry project access for the same app identity. Infrastructure, locked Docker
   inputs, secrets, roles, databases, source data and scaling are unchanged.
-- Deployment and delegated analysis verification remain pending. A completed
-  task must still satisfy the existing authoritative-evidence checks.
+- Reviewed commit `848e686` deployed successfully. At 15:32:42Z the new immutable
+  revision was latest/ready, Healthy/Running and serving 100% of traffic; the
+  preceding revision had zero traffic. Live Fabric/Foundry readiness passed.
+  `azd show` and direct app reads verified the existing environment and endpoint.
+  The app identity and exact registry/vault/Foundry role scopes are unchanged.
+  Exact revision and image identifiers are in the ignored local environment file.
+- Alex's delegated analysis retry remains pending. A completed task must still
+  satisfy the existing authoritative-evidence checks. No Git push was requested.
 
 ## Validation Proof — Work IQ HTTP-status diagnostic, 2026-09-07 UTC
 
