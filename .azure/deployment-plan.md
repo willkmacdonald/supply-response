@@ -1,8 +1,33 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed and smoke-verified — safe analysis diagnostics update, 2026-09-07 UTC. Alex's same-Case retry remains pending; the analysis source failure is not yet diagnosed.
+> **Status:** Validated — Work IQ response diagnostics, 2026-09-07 UTC. Deployment and an Alex retry remain pending.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
+
+## Validation Proof — Work IQ response diagnostics, 2026-09-07 UTC
+
+- The deployed diagnostics isolated both source retrieval failures to
+  `WorkIQAuthenticationError` in OBO response validation. Alex's authenticated
+  request reached analysis. Read-only checks found the API and Work IQ service
+  principals enabled, exact tenant-wide `WorkIQAgent.Ask` consent present, and
+  API credential metadata unexpired. These checks do not identify the rejected
+  token-response detail or prove the deployed secret's validity.
+- User approved a narrowly scoped follow-up diagnostic and redeployment. The
+  token acceptance rule remains unchanged; logs contain only fixed outcomes,
+  allowlisted OAuth/AAD codes and booleans. Unknown error values are no longer
+  echoed in exception text. No permissions, secrets or source data are changed.
+- Six diagnostic assertions failed before implementation. All 64 targeted tests
+  then passed; scoped Ruff/Pyright are clean. Full `uv run pytest -q` passed with
+  existing skips and the Starlette/httpx warning. Independent read-only review
+  found no actionable issues.
+- `uv build`, 51 web tests and web production build passed. Infrastructure,
+  Docker context and locked dependencies are unchanged from the reviewed prior
+  deployment. Exact-resource static RBAC remains unchanged; no Aspire services.
+- Fresh named-environment preflight and operator authentication passed against
+  the same approved tenant/subscription/East US 2 bindings. Provision preview
+  passed in 19 seconds with no new resources, followed by successful azd package.
+  Policy assignments remain unchanged and no policy blocked the preview.
+- Validation completed; deployment and an Alex retry remain pending.
 
 ## Validation Proof — safe analysis diagnostics, 2026-09-07 UTC
 

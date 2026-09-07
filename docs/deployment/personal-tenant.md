@@ -550,6 +550,14 @@ The public response remains bounded, and a live Case never silently falls back.
 Use the request time and active revision to match diagnostics to a retry; do not
 enable payload logging or copy access tokens to investigate.
 
+If the failing step is Work IQ token exchange, `workiq_obo_failed` distinguishes
+`remote_error` (an error field returned by the identity client) from
+`response_rejected` (local response validation). It records only allowlisted
+OAuth/AAD codes and booleans for token presence, Bearer type, and the two exact
+expected scope forms. `unknown` means the code was absent or not allowlisted;
+it is not evidence of a particular identity failure. Qualified-scope diagnostics
+do not relax the existing acceptance rule. Never log the raw token response.
+
 If the final revision is unhealthy, leave the previous healthy revision available,
 inspect redacted Container Apps/Application Insights diagnostics, correct the
 configuration, and rerun. Do not expose a secret while troubleshooting. If RBAC

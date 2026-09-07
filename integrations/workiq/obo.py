@@ -1,10 +1,76 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Final, NoReturn, Protocol, SupportsIndex
 
 from apps.api.app.auth import AuthenticatedActor, AuthorizationError, AuthService
 
 WORK_IQ_SCOPE: Final = "api://workiq.svc.cloud.microsoft/WorkIQAgent.Ask"
+_logger = logging.getLogger(__name__)
+# Only these known protocol codes may leave the token-response boundary.
+# Unknown values are not echoed, even if they look like harmless identifiers.
+_OAUTH_ERRORS: Final = frozenset(
+    {
+        "invalid_request",
+        "invalid_client",
+        "invalid_grant",
+        "invalid_scope",
+        "unauthorized_client",
+        "unsupported_grant_type",
+        "interaction_required",
+        "consent_required",
+        "access_denied",
+        "temporarily_unavailable",
+        "server_error",
+    }
+)
+_AAD_CODES: Final = frozenset(
+    {
+        500011,
+        500131,
+        50076,
+        50079,
+        53003,
+        65001,
+        65004,
+        650057,
+        70000,
+        70011,
+        700016,
+        7000215,
+        7000222,
+    }
+)
+
+
+def _log_rejected_response(result: dict[str, Any]) -> str:
+    """Log only allowlisted codes and booleans, never raw response values."""
+    error = result.get("error")
+    safe_code = (
+        error if isinstance(error, str) and error in _OAUTH_ERRORS else "unknown"
+    )
+    codes = result.get("error_codes")
+    first_code = codes[0] if isinstance(codes, list) and codes else None
+    aad_code = (
+        first_code
+        if type(first_code) is int and first_code in _AAD_CODES
+        else "unknown"
+    )
+    token = result.get("access_token")
+    scopes = result.get("scope")
+    scope_values = scopes.split() if isinstance(scopes, str) else []
+    _logger.warning(
+        "workiq_obo_failed outcome=%s oauth_error=%s aad_code=%s "
+        "token_present=%s bearer_type=%s scope_unqualified=%s scope_qualified=%s",
+        "remote_error" if isinstance(error, str) and error else "response_rejected",
+        safe_code,
+        aad_code,
+        isinstance(token, str) and bool(token.strip()),
+        result.get("token_type") == "Bearer",
+        "WorkIQAgent.Ask" in scope_values,
+        WORK_IQ_SCOPE in scope_values,
+    )
+    return safe_code
 
 
 class WorkIQAuthenticationError(PermissionError):
@@ -81,12 +147,7 @@ class WorkIQOboExchange:
             or not isinstance(scopes, str)
             or "WorkIQAgent.Ask" not in scopes.split()
         ):
-            error = result.get("error")
-            safe_code = (
-                error[:64]
-                if isinstance(error, str) and error.replace("_", "").isalnum()
-                else "invalid_response"
-            )
+            safe_code = _log_rejected_response(result)
             raise WorkIQAuthenticationError(
                 f"Work IQ delegated token exchange failed ({safe_code})"
             )
