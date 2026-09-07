@@ -146,6 +146,131 @@ def test_shape_bounds_cyclic_deep_and_wide_inputs() -> None:
     assert len(wide_shape["items"]) == 2
 
 
+def test_shape_depth_limit_allows_level_twelve_and_truncates_level_thirteen() -> None:
+    def nested_data(levels: int) -> object:
+        value: object = "private-value"
+        for _ in range(levels):
+            value = {"data": value}
+        return value
+
+    def descend_data(shape: object, levels: int) -> object:
+        current = shape
+        for _ in range(levels):
+            assert isinstance(current, dict)
+            current = current["fields"]["data"]
+        return current
+
+    level_twelve = json.loads(response_shape(nested_data(11)))
+    level_thirteen = json.loads(response_shape(nested_data(12)))
+
+    assert descend_data(level_twelve, 11) == "string"
+    assert descend_data(level_thirteen, 12) == {"type": "truncated"}
+
+
+def test_shape_shared_budget_visits_exactly_128_nodes() -> None:
+    outer_fields = (
+        "result",
+        "task",
+        "artifacts",
+        "parts",
+        "data",
+        "facts",
+        "citation",
+        "citations",
+    )
+    inner_fields = (
+        "result",
+        "task",
+        "artifacts",
+        "parts",
+        "data",
+        "facts",
+        "citation",
+        "citations",
+        "citationMap",
+        "references",
+        "reference",
+        "sources",
+        "source",
+        "sourceId",
+        "sourceType",
+    )
+    payload = {
+        outer_key: {inner_key: "private-value" for inner_key in inner_fields}
+        for outer_key in outer_fields
+    }
+
+    shape = json.loads(response_shape(payload))
+    final_branch = shape["fields"]["citations"]["fields"]
+
+    assert final_branch["sourceId"] == "string"
+    assert final_branch["sourceType"] == {"type": "truncated"}
+
+
+def test_shape_keeps_exactly_two_array_and_unknown_key_examples() -> None:
+    assert response_shape(["private-one", "private-two", "private-three"]) == (
+        '{"type":"array","count":3,"items":["string","string"],"truncated":true}'
+    )
+
+    unknown_shape = json.loads(
+        response_shape(
+            {
+                "private-one": {"text": "private-value-one"},
+                "private-two": {"text": "private-value-two"},
+                "private-three": {"text": "private-value-three"},
+            }
+        )
+    )
+
+    assert unknown_shape == {
+        "type": "object",
+        "count": 3,
+        "unknown": [
+            {"type": "object", "count": 1, "fields": {"text": "string"}},
+            {"type": "object", "count": 1, "fields": {"text": "string"}},
+        ],
+        "truncated": True,
+    }
+    assert "private" not in json.dumps(unknown_shape)
+
+
+def test_shape_over_8192_characters_uses_exact_fixed_fallback() -> None:
+    fields = (
+        "result",
+        "contextId",
+        "isCitedInResponse",
+        "sourceTimestamp",
+        "authorityScope",
+        "citationMap",
+        "references",
+        "artifactId",
+        "description",
+        "effectiveAt",
+        "expiresAt",
+        "targetLink",
+        "sourceType",
+        "sourceId",
+        "mediaType",
+        "metadata",
+        "filename",
+        "citations",
+        "artifacts",
+        "message",
+        "content",
+        "webUrl",
+        "reference",
+        "sources",
+        "excerpt",
+    )
+    payload: object = "private-value"
+    for _ in range(12):
+        payload = {
+            key: payload if key == "result" else "private-value" for key in fields
+        }
+
+    assert response_shape(payload) == '{"type":"truncated"}'
+
+
 def test_shape_uses_shared_node_budget_and_prioritizes_evidence_paths() -> None:
     noisy_fields = (
         "id",
