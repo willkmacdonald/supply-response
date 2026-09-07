@@ -1,8 +1,32 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed and smoke-verified — Work IQ A2A task-envelope correction, 2026-09-07 UTC. Alex analysis retry pending.
+> **Status:** Validated — Work IQ response-shape diagnostic, 2026-09-07 UTC. Review and approved deployment pending.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
+
+## Validation Proof — Work IQ response-shape diagnostic, 2026-09-07 UTC
+
+- User approved a temporary, failure-only structural diagnostic after the live
+  normalizer rejected completed Work IQ tasks. No response contents were captured.
+- Commit `9680fb3` adds allowlisted keys, fixed JSON types, container counts and
+  truncation only. Scalar values and unknown keys never enter the diagnostic.
+  Limits: 128 shared nodes, 12 levels, two examples, 8,192 serialized characters,
+  and one record per source kind per process. Parser and evidence rules unchanged.
+- Targeted verification: 119 Work IQ tests passed; scoped Ruff and Pyright passed.
+  Tests were observed failing before implementation and before the evidence-path
+  priority correction. Independent review is pending at this checkpoint.
+- By 16:28Z, full `uv run pytest -q` passed with expected skips and the existing
+  Starlette/httpx deprecation warning; `uv build` produced both distributions.
+  All 51 web tests and the 179-module production build passed.
+- Fresh `azd auth login --check-status` and named-environment preflight passed.
+  `azd provision --preview --no-prompt --environment supply-response-personal`
+  passed in 20 seconds with no new resources; `azd package` passed. Azure policy
+  assignments were read and no policy blocked preview. No Aspire services.
+- Static review confirmed unchanged exact registry, vault and Foundry roles,
+  locked Docker inputs and infrastructure-only azd configuration. Existing
+  revision 8 remains Healthy at 100% traffic with the same managed identity.
+- Deployment and one authenticated Alex observation remain pending. This is
+  diagnostic visibility, not a mapping correction or proof of analysis success.
 
 ## Validation Proof — Work IQ A2A task-envelope correction, 2026-09-07 UTC
 

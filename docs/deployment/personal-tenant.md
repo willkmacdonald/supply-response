@@ -577,6 +577,19 @@ proof of authoritative evidence: text-only answers remain contextual, and source
 timestamp, tenant citation, and authority checks still apply. Do not enable raw
 response logging to inspect task contents.
 
+During the approved temporary response-mapping investigation,
+`workiq_response_shape` records a fixed source-kind label and a structure-only
+JSON summary when normalization fails. Only approved field names, JSON types,
+container counts and truncation markers are retained. Primitive values, string
+lengths and unknown key names are excluded; text is never parsed as JSON. The
+summary has a 128-node/12-level budget, two array/unknown-key examples per
+container and an 8,192-character ceiling. Only the first failure for each source
+kind is recorded per application process. Match the active revision and retry
+time; absence of another record does not mean a subsequent request succeeded.
+The diagnostic does not weaken evidence acceptance or fix the mapping. Remove
+its hook after capturing the shape and verifying the mapping correction; never
+enable full payload logging as an alternative.
+
 If the final revision is unhealthy, leave the previous healthy revision available,
 inspect redacted Container Apps/Application Insights diagnostics, correct the
 configuration, and rerun. Do not expose a secret while troubleshooting. If RBAC
