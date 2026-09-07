@@ -36,10 +36,11 @@ The approved spec is `docs/superpowers/specs/2026-09-07-workiq-mcp-probe-design.
 - [ ] Set the binding's fixed start/expiry immediately before the final commit/build (expiry minus start exactly 30 minutes). Require readiness before spending the window. Follow azure-deploy checklist and `scripts/deploy_personal_tenant.sh --apply`; no new resource scope.
 - [ ] Open the diagnostic view, verify Alex sign-in, click once, record safe outcome. If sign-in is required ask the user; if the window cannot be used remove the probe rather than extend it silently.
 - [ ] Write a failing cleanup regression asserting temporary module/router/view absence, remove implementation and wiring, run regression and full tests/build, review cleanup, commit locally.
-- [ ] Repeat azure validation/deployment for cleanup. Verify former revision inactive with zero traffic, probe route 404, health good, roles unchanged. Update sanitized result/cleanup record and report success or precise retrieval blocker.
+- [ ] Repeat azure validation/deployment for cleanup. Verify former revision inactive with zero traffic, probe absent from OpenAPI, retired route GET 404 and POST 405 under baseline SPA routing, health good, roles unchanged. Update sanitized result/cleanup record and report success or precise retrieval blocker.
 
 ## Progress
 
 - Spec approved by user; implementation authorized.
-- Task 1 pending.
-- Task 2 pending.
+- Task 1 implemented, independently reviewed and verified; temporary code now removed after successful single deployed fetch.
+- Task 2: one-shot fetch completed with all checks true; cleanup verification/deployment in progress.
+- Cleanup review reproduced baseline SPA behavior: removed API paths return GET 404 and POST 405. Acceptance checks now exercise the packaged static configuration; normal routing remains unchanged.

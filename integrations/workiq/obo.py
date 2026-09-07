@@ -162,7 +162,6 @@ def build_obo_exchange(
     client_secret: str,
     tenant_id: str,
     auth_service: AuthService,
-    http_client: Any | None = None,
 ) -> WorkIQOboExchange:
     """Build a lazy production MSAL seam; construction performs no discovery."""
 
@@ -178,15 +177,11 @@ def build_obo_exchange(
             if self._client is None:
                 import msal
 
-                options = (
-                    {"http_client": http_client} if http_client is not None else {}
-                )
                 self._client = msal.ConfidentialClientApplication(
                     client_id=client_id,
                     client_credential=client_secret,
                     authority=f"https://login.microsoftonline.com/{tenant_id}",
                     instance_discovery=False,
-                    **options,
                 )
             return self._client.acquire_token_on_behalf_of(
                 user_assertion=user_assertion, scopes=scopes

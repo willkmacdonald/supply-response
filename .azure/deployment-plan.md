@@ -1,8 +1,43 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — temporary app-authenticated Work IQ MCP probe, 2026-09-07 UTC. Deployment and mandatory cleanup authorized; live analysis unchanged.
+> **Status:** Validated — mandatory Work IQ MCP probe cleanup, 2026-09-07 UTC. Cleanup authorized; live analysis unchanged.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
+
+## Validation Proof — MCP probe cleanup, 2026-09-07 UTC
+
+The single deployed Alex-authenticated Work IQ MCP fetch succeeded with HTTP 200
+and every safe validation flag true. Same single replica and zero restarts before
+and after; no retry, Graph call, permissions or billing change. See
+`docs/deployment/workiq-mcp-probe-result.md` for the sanitized outcome.
+
+- [x] All validation checks pass for cleanup.
+  - [x] 1. AZD Installation.
+  - [x] 2. Schema Validation.
+  - [x] 3. Environment Setup.
+  - [x] 4. Authentication Check.
+  - [x] 5. Subscription/Location Check.
+  - [x] 6. Aspire Pre-Provisioning Checks (not applicable).
+  - [x] 7. Provision Preview.
+  - [x] 8. Build Verification.
+  - [x] 9. Docker Build Context Validation.
+  - [x] 10. Package Validation.
+  - [x] 11. Azure Policy Validation.
+  - [x] 12. Aspire Post-Provisioning Checks (not applicable).
+
+Nine temporary files removed; four runtime files restored exactly to c88bf2f.
+Retirement regression failed before removal and passes afterward. Full Python
+suite and uv build passed; 51 frontend tests and build passed. Scoped Ruff/Pyright
+and diff check passed. Named-environment preflight, 20-second provision preview
+and azd package passed; no new resources. Azure CLI/azd operator, subscription,
+tenant and region unchanged. Azure policy inventory read; no blocking policy.
+Static Bicep and live exact registry/vault/Foundry roles agree. Docker inputs and
+sensitive-file exclusions unchanged; no Aspire services. Independent cleanup
+review found the baseline SPA returns POST 405 for removed routes. The retirement
+test now covers static assets, verifies GET 404 / POST 405 and absent OpenAPI;
+all three focused tests pass. Independent re-review approved with no remaining
+findings and confirmed all four runtime files exactly match c88bf2f. Cleanup
+deployment has not yet started. No normal analysis change.
 
 ## Validation Proof — temporary app-authenticated MCP probe, 2026-09-07 UTC
 

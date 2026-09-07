@@ -5,7 +5,6 @@ import {ExecutionPanel} from "./components/ExecutionPanel";
 import {ExposurePanel} from "./components/ExposurePanel";
 import {OptionComparison} from "./components/OptionComparison";
 import {OutcomePanel} from "./components/OutcomePanel";
-import {WorkIQProbe} from "./components/WorkIQProbe";
 import {useAuth} from "./auth/AuthProvider";
 import {useCaseWorkspace} from "./hooks/useCaseWorkspace";
 import "./styles.css";
@@ -66,9 +65,6 @@ export default function App() {
       <p>Sign in with the Alex demo account to open the live Case workspace.</p>
       <button type="button" onClick={() => void auth.signIn()}>Sign in as Alex</button>
     </main>;
-  }
-  if (window.location.pathname === "/diagnostics/workiq-fetch") {
-    return <WorkIQProbe />;
   }
   return <CaseWorkspace />;
 }
