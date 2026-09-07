@@ -20,6 +20,7 @@ from data.domain import RuntimeMode
 from integrations.workiq.mcp_probe import ProbeUnavailable, WorkIQMcpProbe
 from integrations.workiq.obo import build_obo_exchange
 from integrations.workiq.probe_binding import PROBE_END_UTC, PROBE_START_UTC
+from integrations.workiq.probe_http import DiagnosticMsalHttp
 
 router = APIRouter(prefix="/api/diagnostics/workiq-fetch", tags=["diagnostics"])
 _probe_creation_lock = Lock()
@@ -62,11 +63,7 @@ async def run_probe(
                 timeout=httpx.Timeout(12.0, connect=3.0, read=8.0, write=3.0, pool=3.0),
                 limits=httpx.Limits(max_connections=1, max_keepalive_connections=1),
             )
-            obo_http = httpx.Client(
-                follow_redirects=False,
-                timeout=httpx.Timeout(8.0, connect=3.0, read=5.0, write=3.0, pool=3.0),
-                limits=httpx.Limits(max_connections=1, max_keepalive_connections=1),
-            )
+            obo_http = DiagnosticMsalHttp()
             probe = WorkIQMcpProbe(
                 http=http,
                 obo=build_obo_exchange(
@@ -78,8 +75,6 @@ async def run_probe(
                 ),
             )
             request.app.state.workiq_mcp_probe = probe
-            request.app.state.workiq_mcp_probe_http = http
-            request.app.state.workiq_mcp_probe_obo_http = obo_http
     try:
         context_token = attach(set_value(_SUPPRESS_INSTRUMENTATION_KEY, True))
         try:
@@ -90,9 +85,4 @@ async def run_probe(
         raise HTTPException(
             status_code=409, detail={"code": "DIAGNOSTIC_UNAVAILABLE"}
         ) from None
-    probe.release_sensitive_clients()
-    await request.app.state.workiq_mcp_probe_http.aclose()
-    request.app.state.workiq_mcp_probe_obo_http.close()
-    request.app.state.workiq_mcp_probe_http = None
-    request.app.state.workiq_mcp_probe_obo_http = None
     return result.safe_dict()

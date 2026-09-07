@@ -200,5 +200,8 @@ def test_explicit_bodyless_post_only_and_spent_attempt(authorized_client):
     assert response.status_code == 200
     assert response.json()["stage"] == "obo_failed"
     assert "must-never-leak" not in response.text
+    assert client.app.state.workiq_mcp_probe._obo is None
+    assert client.app.state.workiq_mcp_probe._http is None
+    assert not hasattr(client.app.state, "workiq_mcp_probe_obo_http")
     assert client.post(ENDPOINT, headers=headers).status_code == 409
     assert provider.calls == 1

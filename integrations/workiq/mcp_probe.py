@@ -27,6 +27,7 @@ from .probe_binding import (
 ENDPOINT: Final = "https://workiq.svc.cloud.microsoft/mcp"
 MAX_RESPONSE_BYTES: Final = 1024 * 1024
 MAX_JSON_DEPTH: Final = 20
+TOTAL_TIMEOUT_SECONDS: Final = 60
 EXPECTED_ENTITY_URL: Final = (
     f"/teams/{TEAM_ID}/channels/{quote(CHANNEL_ID, safe='')}/messages/{MESSAGE_ID}"
 )
@@ -102,17 +103,24 @@ class WorkIQMcpProbe:
             raise ProbeUnavailable("probe actor is unavailable") from error
         self._claim()
         try:
-            async with asyncio.timeout(15):
+            async with asyncio.timeout(TOTAL_TIMEOUT_SECONDS):
                 return await self._run_claimed(actor)
         except TimeoutError:
             return ProbeResult(stage="timed_out", authenticated_alex=True)
+        finally:
+            http = self._http
+            self.release_sensitive_clients()
+            if http is not None:
+                cleanup = asyncio.create_task(http.aclose())
+                await _finish_even_if_cancelled(cleanup)
 
     async def _run_claimed(self, actor: AuthenticatedActor) -> ProbeResult:
         base = ProbeResult(stage="authenticated", authenticated_alex=True)
         try:
             obo = self._obo
             assert obo is not None
-            token = await asyncio.to_thread(obo.exchange, actor)
+            worker = asyncio.create_task(asyncio.to_thread(obo.exchange, actor))
+            token = await _finish_even_if_cancelled(worker)
         except Exception:  # noqa: BLE001 - boundary deliberately redacts every provider error
             return ProbeResult(**{**base.safe_dict(), "stage": "obo_failed"})
         base = ProbeResult(
@@ -142,8 +150,17 @@ class WorkIQMcpProbe:
                 },
                 expected_id=1,
             )
-            if protocol != "2025-03-26" or (
-                session is not None and not _valid_session(session)
+            server = initialized.get("serverInfo")
+            if (
+                protocol != "2025-03-26"
+                or initialized.get("protocolVersion") != protocol
+                or not isinstance(initialized.get("capabilities"), dict)
+                or not isinstance(server, dict)
+                or not all(
+                    isinstance(server.get(key), str) and server[key]
+                    for key in ("name", "version")
+                )
+                or (session is not None and not _valid_session(session))
             ):
                 return ProbeResult(
                     **{
@@ -243,7 +260,7 @@ class WorkIQMcpProbe:
                     raise ValueError("MCP transport failed")
         finally:
             await response.aclose()
-        if response.status_code >= 400:
+        if response.status_code != 200:
             raise _ProbeHttpError(response.status_code)
         envelope = _parse_response(
             response.headers.get("content-type", ""), bytes(body), expected_id
@@ -269,9 +286,16 @@ def _parse_response(
     content_type = content_type_header.split(";", 1)[0]
     if content_type == "text/event-stream":
         text = body.decode("utf-8")
-        values = [
-            line[5:].strip() for line in text.splitlines() if line.startswith("data:")
-        ]
+        values = []
+        data = []
+        for line in text.splitlines():
+            if not line:
+                if data:
+                    values.append("\n".join(data))
+                    data = []
+            elif line.startswith("data:"):
+                field = line[5:]
+                data.append(field.removeprefix(" "))
         decoded = [json.loads(item) for item in values]
         matches = [
             item
@@ -388,10 +412,30 @@ def _validate_entity(entity: dict[str, Any] | None) -> dict[str, bool]:
             parsed
             and parsed.scheme == "https"
             and parsed.hostname == "teams.microsoft.com"
-            and MESSAGE_ID in parsed.path
-            and isinstance(source_url, str)
-            and CHANNEL_ID in unquote(parsed.path)
+            and parsed.netloc in {"teams.microsoft.com", "teams.microsoft.com:443"}
+            and not parsed.fragment
+            and not parsed.params
+            and [unquote(segment) for segment in parsed.path.split("/")]
+            == ["", "l", "message", CHANNEL_ID, MESSAGE_ID]
             and query.get("tenantId") == [TENANT_ID]
             and query.get("groupId") == [TEAM_ID]
+            and query.get("parentMessageId") == [MESSAGE_ID]
         ),
     }
+
+
+async def _finish_even_if_cancelled(task: asyncio.Task[Any]) -> Any:
+    """Keep cleanup/worker ownership until completion, then propagate cancellation."""
+    cancelled = False
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            cancelled = True
+        except Exception:  # noqa: BLE001 - retrieve the worker exception below
+            break
+    if cancelled:
+        if not task.cancelled():
+            task.exception()  # retrieve any worker error without retaining its traceback
+        raise asyncio.CancelledError
+    return task.result()

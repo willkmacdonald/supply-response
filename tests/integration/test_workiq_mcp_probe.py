@@ -132,7 +132,11 @@ async def test_probe_uses_only_fixed_mcp_sequence_and_returns_safe_checks() -> N
                 json={
                     "jsonrpc": "2.0",
                     "id": 1,
-                    "result": {"protocolVersion": "2025-03-26"},
+                    "result": {
+                        "protocolVersion": "2025-03-26",
+                        "capabilities": {},
+                        "serverInfo": {"name": "fixture", "version": "1"},
+                    },
                 },
             )
         if payload.get("method") == "notifications/initialized":
@@ -200,7 +204,7 @@ async def test_failed_attempt_consumes_latch_and_redacts_exception() -> None:
     assert "sensitive" not in json.dumps(first.safe_dict())
     with pytest.raises(ProbeUnavailable):
         await probe.run(actor, service)
-    await probe._http.aclose()
+    assert probe._http is None
 
 
 def test_release_retains_only_spent_latch_not_clients() -> None:
@@ -288,7 +292,11 @@ async def test_http_failure_status_is_preserved_without_retry(
                 json={
                     "jsonrpc": "2.0",
                     "id": 1,
-                    "result": {"protocolVersion": "2025-03-26"},
+                    "result": {
+                        "protocolVersion": "2025-03-26",
+                        "capabilities": {},
+                        "serverInfo": {"name": "fixture", "version": "1"},
+                    },
                 },
             )
         return httpx.Response(202, request=request)
