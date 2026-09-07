@@ -45,6 +45,30 @@ async function post<T>(path: string, body: object, headers: Record<string, strin
   }));
 }
 
+export type WorkIQProbeResult = {
+  stage: string;
+  http_status: number | null;
+  authenticated_alex: boolean;
+  obo_succeeded: boolean;
+  mcp_initialized: boolean;
+  fetch_succeeded: boolean;
+  exact_message_identity: boolean;
+  expected_author: boolean;
+  valid_source_timestamp: boolean;
+  nonempty_body: boolean;
+  expected_channel_identity: boolean;
+  expected_source_link: boolean;
+};
+
+async function invokeWorkIQProbe(): Promise<WorkIQProbeResult> {
+  const token = await accessTokenProvider();
+  const headers = token ? {Authorization: `Bearer ${token}`} : undefined;
+  return json(await fetch(`${API_BASE}/api/diagnostics/workiq-fetch`, {
+    method: "POST",
+    headers,
+  }));
+}
+
 export const api = {
   runtime: (): Promise<RuntimeStatus> => get("/api/runtime"),
   createCase: (purpose: CasePurpose): Promise<CaseInstance> =>
@@ -69,4 +93,5 @@ export const api = {
     get(`/api/decisions/${decisionId}/playback`),
   observations: (decisionId: string): Promise<OutcomeObservation[]> =>
     get(`/api/decisions/${decisionId}/observations`),
+  invokeWorkIQProbe,
 };

@@ -20,6 +20,7 @@ from apps.api.app.routes.decisions import router as decisions_router
 from apps.api.app.routes.execution import router as execution_router
 from apps.api.app.routes.health import router as health_router
 from apps.api.app.routes.test_support import router as test_support_router
+from apps.api.app.routes.workiq_probe import router as workiq_probe_router
 from apps.api.app.runtime import RuntimeProgression
 from apps.api.app.settings import Settings
 from apps.api.app.telemetry import configure_azure_monitor_from_environment
@@ -52,6 +53,12 @@ def create_app(
             yield
         finally:
             await progression.stop()
+            probe_http = getattr(api.state, "workiq_mcp_probe_http", None)
+            if probe_http is not None:
+                await probe_http.aclose()
+            probe_obo_http = getattr(api.state, "workiq_mcp_probe_obo_http", None)
+            if probe_obo_http is not None:
+                probe_obo_http.close()
             await active_services.close()
 
     api = FastAPI(
@@ -65,6 +72,7 @@ def create_app(
     api.include_router(decisions_router)
     api.include_router(execution_router)
     api.include_router(dashboard_router)
+    api.include_router(workiq_probe_router)
     if active_services.settings.automated_test_faults_enabled:
         api.include_router(test_support_router)
 
