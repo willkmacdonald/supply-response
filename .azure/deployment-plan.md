@@ -1,8 +1,35 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed and smoke-verified — temporary memory-only Work IQ inspection, 2026-09-07 UTC. Capture disabled pending Alex readiness.
+> **Status:** Validated — removal of completed temporary Work IQ capture, 2026-09-07 UTC.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
+
+## Validation Proof — capture retirement, 2026-09-07 UTC
+
+- The approved single response pair was inspected; destructive read returned
+  `spent`. Both tasks reported source lookup unavailable for the exact opaque
+  identifiers and supplied no usable facts/citations. No answer bodies were
+  saved to files. A subsequent independent state check was console-rate-limited;
+  no retry was made during its ten-minute backoff window.
+- Removal is part of the original explicit approval. Scope is the temporary
+  module, startup hook, client wrapper, capture-only tests and retired runbook.
+  Existing evidence checks, structural diagnostics, infrastructure, identities,
+  source bindings, billing and database schema are unchanged.
+- The capture-absence regression failed before removal for the expected module
+  presence assertion and passed afterward. Full `uv run pytest -q` and `uv build`
+  passed, with expected skips and the existing Starlette/httpx warning. Scoped
+  Ruff/Pyright passed; all 51 web tests and the 179-module web build passed.
+- Independent read-only review found no issues and verified both runtime files
+  match the pre-capture revision exactly. Capture-only files are deleted and the
+  operator runbook is retired; only paraphrased findings remain.
+- Fresh Will authentication, named-environment preflight, 20-second provision
+  preview and azd package passed. No new resources; same approved subscription,
+  tenant and East US 2. Azure policy inventory read; no policy blocked preview.
+  Static Bicep role review and live exact registry/vault/Foundry role reads agree.
+  Docker inputs remain locked, ignored local data excluded, no Aspire services.
+- Unique API deployment target and revision 10/latest/ready identity confirmed.
+  Initial resource-tag CLI query used an unsupported flag combination; corrected
+  read-only query confirmed exactly one target. No setting change was needed.
 
 ## Validation Proof — memory-only inspection, 2026-09-07 UTC
 
