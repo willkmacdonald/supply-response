@@ -16,6 +16,7 @@ from data.domain.evidence import (
     UncertaintyState,
 )
 
+from .diagnostics import log_response_shape
 from .errors import WorkIQProtocolError, WorkIQResponseLimitError
 from .models import WorkIQRetrieval, WorkIQRetrievalLineage
 
@@ -199,7 +200,7 @@ def _contextual_text_item(
     )
 
 
-def normalize_a2a_evidence(
+def _normalize_a2a_evidence(
     payload: Mapping[str, Any],
     *,
     case_id: str,
@@ -336,3 +337,41 @@ def normalize_a2a_evidence(
             source_ids=tuple(source_ids),
         ),
     )
+
+
+def normalize_a2a_evidence(
+    payload: Mapping[str, Any],
+    *,
+    case_id: str,
+    analysis_id: str,
+    retrieved_at: datetime,
+    expected_source_id: str,
+    expected_authority_scope: AuthorityScope,
+    tenant_sharepoint_host: str,
+) -> WorkIQRetrieval:
+    if expected_authority_scope is AuthorityScope.SUPPLIER_STATEMENT:
+        source_kind = "supplier"
+    elif expected_authority_scope is AuthorityScope.COLLABORATION_STATEMENT:
+        source_kind = "quality"
+    else:
+        source_kind = "other"
+    try:
+        return _normalize_a2a_evidence(
+            payload,
+            case_id=case_id,
+            analysis_id=analysis_id,
+            retrieved_at=retrieved_at,
+            expected_source_id=expected_source_id,
+            expected_authority_scope=expected_authority_scope,
+            tenant_sharepoint_host=tenant_sharepoint_host,
+        )
+    except Exception:
+        _log_response_shape_safely(payload, source_kind)
+        raise
+
+
+def _log_response_shape_safely(payload: object, source_kind: str) -> None:
+    try:
+        log_response_shape(payload, source_kind)
+    except Exception:  # noqa: BLE001 -- diagnostics must not replace the original error.
+        return
