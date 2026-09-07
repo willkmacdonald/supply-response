@@ -12,9 +12,11 @@ Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
   truncation only. Scalar values and unknown keys never enter the diagnostic.
   Limits: 128 shared nodes, 12 levels, two examples, 8,192 serialized characters,
   and one record per source kind per process. Parser and evidence rules unchanged.
-- Targeted verification: 119 Work IQ tests passed; scoped Ruff and Pyright passed.
+- Targeted verification: 123 Work IQ tests passed; scoped Ruff and Pyright passed.
   Tests were observed failing before implementation and before the evidence-path
-  priority correction. Independent review is pending at this checkpoint.
+  priority correction. Task review requested exact safety-boundary regressions;
+  four focused tests now pin the depth, shared nodes, examples and output fallback
+  without changing production code. Re-review is pending at this checkpoint.
 - By 16:28Z, full `uv run pytest -q` passed with expected skips and the existing
   Starlette/httpx deprecation warning; `uv build` produced both distributions.
   All 51 web tests and the 179-module production build passed.
