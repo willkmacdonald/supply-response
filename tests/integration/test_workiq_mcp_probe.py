@@ -40,11 +40,16 @@ def test_probe_post_route_is_wired(tmp_path) -> None:
     assert "/api/diagnostics/workiq-fetch" in document["paths"]
 
 
-def test_probe_binding_is_disabled_until_controller_sets_window() -> None:
+def test_probe_binding_is_disabled_or_has_a_fixed_bounded_utc_window() -> None:
     from integrations.workiq.probe_binding import PROBE_END_UTC, PROBE_START_UTC
 
-    assert PROBE_START_UTC is None
-    assert PROBE_END_UTC is None
+    if PROBE_START_UTC is None:
+        assert PROBE_END_UTC is None
+    else:
+        assert PROBE_END_UTC is not None
+        assert PROBE_START_UTC.tzinfo is UTC
+        assert PROBE_END_UTC.tzinfo is UTC
+        assert 0 < (PROBE_END_UTC - PROBE_START_UTC).total_seconds() <= 1800
 
 
 def test_probe_rejects_caller_supplied_query_and_body(tmp_path) -> None:

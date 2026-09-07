@@ -1,8 +1,45 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed and smoke-verified — temporary Work IQ capture retired, 2026-09-07 UTC. Live source retrieval remains unresolved.
+> **Status:** Validated — temporary app-authenticated Work IQ MCP probe, 2026-09-07 UTC. Deployment and mandatory cleanup authorized; live analysis unchanged.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
+
+## Validation Proof — temporary app-authenticated MCP probe, 2026-09-07 UTC
+
+The approved scope is one Alex-only, fixed-source MCP fetch with the existing
+application OBO credentials, followed by mandatory removal and cleanup deployment.
+No Graph fallback, permissions, billing, schema, or ordinary analysis changes.
+The UTC window remains disabled until implementation review and browser readiness.
+
+- [x] All validation checks pass for the temporary probe.
+  - [x] 1. AZD Installation: version 1.30.0.
+  - [x] 2. Schema Validation: existing azure.yaml accepted by preview/package.
+  - [x] 3. Environment Setup: existing supply-response-personal selected.
+  - [x] 4. Authentication Check: Will verified in Azure CLI and azd.
+  - [x] 5. Subscription/Location Check: Azure Dev, existing approved tenant/RG, East US 2.
+  - [x] 6. Aspire Pre-Provisioning Checks: not an Aspire application.
+  - [x] 7. Provision Preview: succeeded; no new resources, expected existing app metadata/image reconciliation.
+  - [x] 8. Build Verification: full Python suite and uv build passed at 5fe3591; 53 frontend tests/build passed.
+  - [x] 9. Docker Build Context Validation: locked Node/Python inputs, sensitive local files excluded, one Uvicorn worker.
+  - [x] 10. Package Validation: azd package succeeded; ACR build remains deployment-time packaging.
+  - [x] 11. Azure Policy Validation: assignments read; no policy blocked provisioning preview.
+  - [x] 12. Aspire Post-Provisioning Checks: not applicable.
+
+Read-only preflight passed; exact existing managed-identity registry/vault/Foundry
+roles agree with static Bicep. No roles added. Current revision 11 retained.
+Browser sign-in selected Alex's saved account and returned to the app without a
+Case creation or retrieval. Baseline Python suite had four network-restricted
+NuGet failures; all four passed when rerun with network access. Probe tests and
+final build/review evidence will be recorded before changing status to Validated.
+
+Final evidence: independent review approved 5fe3591 after correcting cancellation
+cleanup, bounded/redacted OBO responses, exact Teams links and MCP/SSE validation.
+43 focused tests passed; scoped Ruff/Pyright clean; full final Python suite and
+uv build passed, with expected live-test skips and existing Starlette warning.
+The optional diagnostic HTTP seam does not change normal OBO defaults and will
+be reverted during cleanup. No source content was retrieved during validation.
+Controller fixed activation at 2026-09-07 21:30:00Z through 22:00:00Z (30 minutes),
+with one explicit Alex browser POST after revision/replica verification.
 
 ## Validation Proof — capture retirement, 2026-09-07 UTC
 
