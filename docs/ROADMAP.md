@@ -1,6 +1,6 @@
 # Supply Response Roadmap
 
-**Last updated:** 2026-09-06
+**Last updated:** 2026-09-07 UTC
 **Source of truth:** [Frozen demo contract](superpowers/specs/2026-08-30-supply-response-demo-contract-design.md) and [implementation plan](superpowers/plans/2026-08-30-supply-response-demo-implementation.md)
 
 This roadmap reports the durable, reviewed repository baseline. Uncommitted or actively developed work is not counted as complete.
@@ -15,8 +15,8 @@ This roadmap reports the durable, reviewed repository baseline. Uncommitted or a
 | Web decision console | Complete in fallback mode | Progressive workspace and browser journey pass locally |
 | Fabric SQL | Canonical source loaded and verified live | Schema version 12; canonical RL-001 loader passed planned → inserted → unchanged with exact metadata/payload and production-adapter readback; deployed app created a live Case |
 | Power BI | Published; empty-state live render validated | The semantic model and two-page report are published, OAuth2-bound to Fabric SQL, DAX-queryable, and visually clean with an empty database; populated Decision-ID parity remains a post-application-deployment gate |
-| Entra ID and persona authorization | Tenant-configured; Alex-authenticated gate pending | Browser signed in as the administrator; analysis returned `INVALID_ACCESS_TOKEN`. API token version and public signing-key access are verified; a fresh Alex session is required |
-| Work IQ | Demo Corpus configured; live retrieval pending | Tenant enablement, exact delegated consent, supplier email and Jordan-authored Quality sources, deployment bindings, and the deterministic receipt are verified; approval-gated live cited retrieval remains |
+| Entra ID and persona authorization | Alex sign-in passed; full authorization journey pending | Private-browser Alex request passed authentication and reached analysis; approval/rejection and downstream gates remain |
+| Work IQ | Delegated token exchange blocked | Supplier and Quality retrieval both stop at OBO response validation. Service principals are enabled, exact consent is present and API credential metadata is unexpired; exact response rejection is under investigation |
 | Foundry orchestration | Implemented and agents published; invocation pending | Signal, context, and decision agents are verified as immutable version `1` contracts on `gpt-5.6-luna`; no live invocation or evaluation has run |
 | Complete live Case journey | Live Case creation passed; analysis gated | Correct fixed scenario time displayed; delegated analysis, Decision, five actions, ten observations, and populated Power BI parity remain unverified |
 | Personal-tenant deployment and hardening | Updated application and readiness verified | New immutable revision ready; exact Azure roles and live Fabric/Foundry readiness passed; delegated acceptance checks remain |
@@ -134,7 +134,7 @@ Final completion requires all 20 frozen acceptance criteria to pass. Local imple
 The Entra, Foundry, Fabric SQL, Work IQ Demo Corpus, and Power BI prerequisites
 are configured and recorded in deployment-local storage. The remaining gates are:
 
-1. Establish a fresh Alex browser session; the observed administrator session was rejected at analysis with `INVALID_ACCESS_TOKEN`.
+1. Diagnose and resolve the Work IQ token-response rejection using privacy-safe diagnostics; Alex's sign-in now passes.
 2. Run live analysis, cited Work IQ retrieval, and pinned Foundry invocation.
 3. Record the approved Decision, verify five linked actions and ten simulated observations.
 4. Verify Power BI refresh, filters, and Decision-ID parity for that same Case.

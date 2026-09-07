@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — Work IQ response diagnostics, 2026-09-07 UTC. Deployment and an Alex retry remain pending.
+> **Status:** Deployed and smoke-verified — Work IQ response diagnostics, 2026-09-07 UTC. Alex's next analysis retry is required to identify the token-response rejection.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 
@@ -27,7 +27,14 @@ Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
   the same approved tenant/subscription/East US 2 bindings. Provision preview
   passed in 19 seconds with no new resources, followed by successful azd package.
   Policy assignments remain unchanged and no policy blocked the preview.
-- Validation completed; deployment and an Alex retry remain pending.
+- Reviewed commit `8bdada8` deployed successfully. The new revision is latest,
+  ready, Healthy and Running with 100% traffic; the prior revision has zero
+  traffic. Live Fabric/Foundry readiness passed. The app's system identity and
+  exact registry/vault/Foundry role scopes remain unchanged.
+- `azd show` verified the named environment and resource group; direct Container
+  App reads verified the endpoint/revision and immutable image. Exact identifiers
+  are in the ignored environment record. Alex's next analysis retry is pending;
+  no successful Work IQ exchange or live Analysis is claimed.
 
 ## Validation Proof — safe analysis diagnostics, 2026-09-07 UTC
 
