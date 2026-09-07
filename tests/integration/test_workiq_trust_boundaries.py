@@ -10,8 +10,10 @@ import jwt
 import pytest
 
 from apps.api.app.auth import (
-    AuthService,
     AuthenticatedActor,
+    AuthenticationError,
+    AuthorizationError,
+    AuthService,
     PersonaBinding,
     UserAssertion,
 )
@@ -28,13 +30,12 @@ from integrations.workiq.obo import WorkIQAuthenticationError, WorkIQOboExchange
 from tests.auth.test_token_authorization import (
     ALEX_OID,
     API_CLIENT_ID,
-    FixtureHttp,
     JORDAN_OID,
     NOW,
     PRIVATE_KEY,
     TENANT_ID,
+    FixtureHttp,
 )
-
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "data" / "fixtures" / "workiq"
@@ -153,7 +154,7 @@ def _normalize(
 )
 def test_authority_is_bound_to_requested_source_purpose_and_tenant(mutation) -> None:
     payload = _fixture("supplier-alpha-a2a.json")
-    fact = payload["result"]["artifacts"][0]["parts"][0]["data"]["facts"][0]
+    fact = payload["result"]["task"]["artifacts"][0]["parts"][0]["data"]["facts"][0]
     mutation(fact)
 
     item = _normalize(payload).evidence[0]
@@ -285,7 +286,7 @@ def test_imported_or_caller_supplied_proofs_cannot_fabricate_obo_actor() -> None
 @pytest.mark.parametrize("bad_claims", [{"tid": "wrong"}, {"scp": None}])
 def test_untrusted_assertions_never_reach_confidential_client(bad_claims) -> None:
     client = ConfidentialClientFixture()
-    with pytest.raises(Exception):
+    with pytest.raises((AuthenticationError, AuthorizationError)):
         _actor(**bad_claims)
     assert client.calls == []
 
@@ -365,14 +366,14 @@ def test_live_style_authentication_gate_blocks_untrusted_tokens_before_obo(
     client = ConfidentialClientFixture()
     obo = WorkIQOboExchange(client, auth_service=service)
 
-    with pytest.raises(Exception):
+    with pytest.raises((AuthenticationError, AuthorizationError)):
         obo.exchange(service.authenticate(token))
     assert client.calls == []
 
 
 def test_generated_ids_include_part_and_fact_indexes() -> None:
     payload = _fixture("supplier-alpha-a2a.json")
-    artifact = payload["result"]["artifacts"][0]
+    artifact = payload["result"]["task"]["artifacts"][0]
     first = artifact["parts"][0]["data"]["facts"][0]
     first.pop("factId")
     artifact["parts"].append({"data": {"facts": [dict(first)]}})
@@ -388,9 +389,9 @@ def test_generated_ids_include_part_and_fact_indexes() -> None:
 @pytest.mark.parametrize("duplicate_kind", ["artifact", "fact", "source-conflict"])
 def test_ambiguous_duplicate_response_ids_are_rejected(duplicate_kind: str) -> None:
     payload = _fixture("supplier-alpha-a2a.json")
-    artifact = payload["result"]["artifacts"][0]
+    artifact = payload["result"]["task"]["artifacts"][0]
     if duplicate_kind == "artifact":
-        payload["result"]["artifacts"].append(json.loads(json.dumps(artifact)))
+        payload["result"]["task"]["artifacts"].append(json.loads(json.dumps(artifact)))
     else:
         duplicate = json.loads(json.dumps(artifact["parts"][0]["data"]["facts"][0]))
         if duplicate_kind == "source-conflict":
@@ -404,7 +405,7 @@ def test_ambiguous_duplicate_response_ids_are_rejected(duplicate_kind: str) -> N
 
 def test_final_evidence_ids_cannot_collide_across_text_and_fact_parts() -> None:
     payload = _fixture("supplier-alpha-a2a.json")
-    artifact = payload["result"]["artifacts"][0]
+    artifact = payload["result"]["task"]["artifacts"][0]
     artifact["parts"].append(
         {
             "text": "context",

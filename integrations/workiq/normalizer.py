@@ -48,7 +48,7 @@ def _timestamp(value: Any) -> datetime | None:
     if not isinstance(value, str):
         return None
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value)
     except ValueError:
         return None
     return parsed if parsed.tzinfo is not None else None
@@ -212,11 +212,14 @@ def normalize_a2a_evidence(
     result = payload.get("result")
     if not isinstance(result, Mapping):
         raise WorkIQProtocolError("Work IQ result is missing")
-    status = result.get("status")
+    task = result.get("task")
+    if not isinstance(task, Mapping):
+        raise WorkIQProtocolError("Work IQ task is missing")
+    status = task.get("status")
     if not isinstance(status, Mapping) or status.get("state") != "TASK_STATE_COMPLETED":
         raise WorkIQProtocolError("Work IQ task did not complete")
-    context_id = _bounded_string(result.get("contextId"), "context ID")
-    task_id = _bounded_string(result.get("taskId"), "task ID")
+    context_id = _bounded_string(task.get("contextId"), "context ID")
+    task_id = _bounded_string(task.get("id"), "task ID")
     assert context_id is not None and task_id is not None
     bounded_expected_source_id = _bounded_string(
         expected_source_id, "expected source ID"
@@ -230,7 +233,7 @@ def normalize_a2a_evidence(
         or ":" in tenant_sharepoint_host
     ):
         raise ValueError("tenant SharePoint host is invalid")
-    artifacts = result.get("artifacts")
+    artifacts = task.get("artifacts")
     if not isinstance(artifacts, list) or len(artifacts) > 64:
         raise WorkIQResponseLimitError("Work IQ artifact count is invalid")
     items: list[EvidenceItem] = []

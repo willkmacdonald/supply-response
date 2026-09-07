@@ -1,8 +1,39 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed and smoke-verified — Work IQ HTTP-status diagnostic, 2026-09-07 UTC. Next Alex retry pending.
+> **Status:** Validated — Work IQ A2A task-envelope correction, 2026-09-07 UTC. Approved deployment pending.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
+
+## Validation Proof — Work IQ A2A task-envelope correction, 2026-09-07 UTC
+
+- Following user activation of Work IQ usage billing, the 15:16:29Z Alex retry
+  passed the HTTP/JSON-RPC checks but failed local task-status validation for
+  both sources. The live response body was not captured or logged.
+- Microsoft's A2A 1.0 quickstart puts the completed task at `result.task`, with
+  its identifier at `task.id`. The client and normalizer incorrectly read a
+  flattened result and `taskId`. The user approved correction and deployment.
+- The exact-request regression and both fixture normalization/HTTP-to-evidence
+  regressions failed before the production fix. All 71 targeted tests passed
+  afterward, covering malformed/legacy tasks, limits and trust boundaries.
+  Requests, OBO, public errors, authority rules and contextual text are unchanged.
+- Independent read-only review found no actionable issues. Scoped Pyright passed.
+  The commit hook required clearing pre-existing lint in touched files: native
+  Python 3.12 ISO parsing replaces redundant Z substitution, and two auth tests
+  now assert authentication/authorization exceptions instead of any exception.
+  All 71 targeted tests, scoped Ruff (no exclusions) and Pyright then passed.
+  Full regression/package rerun and cleanup re-review also passed.
+- All 51 web tests and the 179-module production build passed. Full
+  `uv run pytest -q` passed with expected skips and the existing Starlette/httpx
+  warning; `uv build` produced both distributions. Deployment has not started.
+- Fresh operator authentication and named-environment preflight matched the
+  existing approved tenant/subscription/East US 2 and shared resources. Provision
+  preview passed in 20 seconds with no new resources; azd package passed.
+  Policy inventory was read and no policy blocked the preview. No Aspire services.
+- Static RBAC review confirmed exact registry AcrPull, vault Secrets User and
+  Foundry project access for the same app identity. Infrastructure, locked Docker
+  inputs, secrets, roles, databases, source data and scaling are unchanged.
+- Deployment and delegated analysis verification remain pending. A completed
+  task must still satisfy the existing authoritative-evidence checks.
 
 ## Validation Proof — Work IQ HTTP-status diagnostic, 2026-09-07 UTC
 

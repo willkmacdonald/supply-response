@@ -568,6 +568,15 @@ response headers, response bodies, or exception traces. Match this event with th
 source-stage failure at the same request time. The status narrows the next check;
 it does not by itself prove the underlying permission or service cause.
 
+For a successful HTTP response, the A2A 1.0 `SendMessage` parser reads the
+completed task from `result.task`: `id`, `contextId`, `status`, and `artifacts`
+belong to that task, not directly to `result`. This follows the
+[Microsoft Work IQ quickstart](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/a2a/quickstart).
+Missing, malformed, or incomplete tasks remain errors. A completed task is not
+proof of authoritative evidence: text-only answers remain contextual, and source,
+timestamp, tenant citation, and authority checks still apply. Do not enable raw
+response logging to inspect task contents.
+
 If the final revision is unhealthy, leave the previous healthy revision available,
 inspect redacted Container Apps/Application Insights diagnostics, correct the
 configuration, and rerun. Do not expose a secret while troubleshooting. If RBAC

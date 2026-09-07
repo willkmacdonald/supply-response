@@ -63,8 +63,10 @@ async def test_success_does_not_emit_http_failure_diagnostic(
                 "jsonrpc": "2.0",
                 "id": json.loads(request.content)["id"],
                 "result": {
-                    "status": {"state": "TASK_STATE_COMPLETED"},
-                    "artifacts": [],
+                    "task": {
+                        "status": {"state": "TASK_STATE_COMPLETED"},
+                        "artifacts": [],
+                    },
                 },
             },
             request=request,

@@ -2,37 +2,41 @@
   "jsonrpc": "2.0",
   "id": "fixture-beta-request",
   "result": {
-    "contextId": "fixture-context-beta",
-    "taskId": "fixture-task-beta",
-    "status": {"state": "TASK_STATE_COMPLETED"},
-    "artifacts": [
-      {
-        "artifactId": "fixture-artifact-beta",
-        "parts": [
-          {
-            "data": {
-              "facts": [
-                {
-                  "factId": "RL-E-WORKIQ-BETA-1",
-                  "claim": "RL-Supplier Beta qualification is pending; the audit and first article are incomplete; September 15 is the next fictional-scenario review date.",
-                  "sourceTimestamp": "2026-08-30T15:00:00Z",
-                  "effectiveAt": "2026-09-01T09:00:00-05:00",
-                  "expiresAt": "2026-09-15T00:00:00-05:00",
-                  "authorityScope": "collaboration_statement",
-                  "citations": [
-                    {
-                      "sourceType": "tenant",
-                      "sourceId": "fixture-source-beta-quality",
-                      "url": "https://teams.microsoft.com/l/message/fixture-channel/fixture-beta",
-                      "excerpt": "Qualification remains pending. The audit and first article are incomplete. The next fictional-scenario review date is September 15."
-                    }
-                  ]
-                }
-              ]
+    "task": {
+      "contextId": "fixture-context-beta",
+      "id": "fixture-task-beta",
+      "status": {
+        "state": "TASK_STATE_COMPLETED"
+      },
+      "artifacts": [
+        {
+          "artifactId": "fixture-artifact-beta",
+          "parts": [
+            {
+              "data": {
+                "facts": [
+                  {
+                    "factId": "RL-E-WORKIQ-BETA-1",
+                    "claim": "RL-Supplier Beta qualification is pending; the audit and first article are incomplete; September 15 is the next fictional-scenario review date.",
+                    "sourceTimestamp": "2026-08-30T15:00:00Z",
+                    "effectiveAt": "2026-09-01T09:00:00-05:00",
+                    "expiresAt": "2026-09-15T00:00:00-05:00",
+                    "authorityScope": "collaboration_statement",
+                    "citations": [
+                      {
+                        "sourceType": "tenant",
+                        "sourceId": "fixture-source-beta-quality",
+                        "url": "https://teams.microsoft.com/l/message/fixture-channel/fixture-beta",
+                        "excerpt": "Qualification remains pending. The audit and first article are incomplete. The next fictional-scenario review date is September 15."
+                      }
+                    ]
+                  }
+                ]
+              }
             }
-          }
-        ]
-      }
-    ]
+          ]
+        }
+      ]
+    }
   }
 }

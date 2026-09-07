@@ -138,13 +138,16 @@ class WorkIQClient:
         result = document.get("result")
         if not isinstance(result, Mapping):
             raise WorkIQProtocolError("Work IQ result is missing")
-        status = result.get("status")
+        task = result.get("task")
+        if not isinstance(task, Mapping):
+            raise WorkIQProtocolError("Work IQ task is missing")
+        status = task.get("status")
         if (
             not isinstance(status, Mapping)
             or status.get("state") != "TASK_STATE_COMPLETED"
         ):
             raise WorkIQProtocolError("Work IQ task did not complete")
-        _validate_artifact_bounds(result)
+        _validate_artifact_bounds(task)
         return document
 
 

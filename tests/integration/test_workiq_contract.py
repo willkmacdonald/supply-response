@@ -18,9 +18,9 @@ from apps.api.app.auth import AuthService, PersonaBinding
 from data.domain.common import RuntimeMode
 from data.domain.evidence import AuthorityScope, EvidenceKind, EvidenceRequirement
 from integrations.workiq.client import (
+    WorkIQClient,
     WorkIQProtocolError,
     WorkIQResponseLimitError,
-    WorkIQClient,
 )
 from integrations.workiq.normalizer import normalize_a2a_evidence
 from integrations.workiq.obo import (
@@ -32,12 +32,13 @@ from integrations.workiq.prompts import quality_context_prompt, supplier_signal_
 from tests.auth.test_token_authorization import (
     ALEX_OID,
     API_CLIENT_ID,
-    FixtureHttp,
-    NOW as AUTH_NOW,
     PRIVATE_KEY,
     TENANT_ID,
+    FixtureHttp,
 )
-
+from tests.auth.test_token_authorization import (
+    NOW as AUTH_NOW,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "data" / "fixtures" / "workiq"
@@ -152,10 +153,12 @@ def _completed_payload(request_id: str = "request-1") -> dict[str, Any]:
         "jsonrpc": "2.0",
         "id": request_id,
         "result": {
-            "contextId": "context-opaque",
-            "taskId": "task-opaque",
-            "status": {"state": "TASK_STATE_COMPLETED"},
-            "artifacts": [],
+            "task": {
+                "contextId": "context-opaque",
+                "id": "task-opaque",
+                "status": {"state": "TASK_STATE_COMPLETED"},
+                "artifacts": [],
+            },
         },
     }
 
@@ -194,7 +197,7 @@ async def test_client_sends_exact_a2a_v1_request() -> None:
             "timeZone": "America/Chicago",
         }
     }
-    assert payload["result"]["contextId"] == "context-opaque"
+    assert payload["result"]["task"]["contextId"] == "context-opaque"
 
 
 @pytest.mark.anyio
@@ -203,8 +206,16 @@ async def test_client_sends_exact_a2a_v1_request() -> None:
     [
         (lambda body: body.update({"jsonrpc": "1.0"}), WorkIQProtocolError),
         (lambda body: body.update({"id": "wrong"}), WorkIQProtocolError),
+        (lambda body: body.update({"result": None}), WorkIQProtocolError),
+        (lambda body: body["result"].pop("task"), WorkIQProtocolError),
+        (lambda body: body["result"].update({"task": []}), WorkIQProtocolError),
         (
-            lambda body: body["result"]["status"].update(
+            lambda body: body.update({"result": body["result"]["task"]}),
+            WorkIQProtocolError,
+        ),
+        (lambda body: body["result"]["task"].pop("status"), WorkIQProtocolError),
+        (
+            lambda body: body["result"]["task"]["status"].update(
                 {"state": "TASK_STATE_FAILED"}
             ),
             WorkIQProtocolError,
@@ -239,7 +250,7 @@ async def test_client_bounds_response_bytes_json_depth_artifacts_and_parts() -> 
         json.dumps(_completed_payload()).encode(),
     ]
     too_many = _completed_payload()
-    too_many["result"]["artifacts"] = [
+    too_many["result"]["task"]["artifacts"] = [
         {"artifactId": str(index), "parts": []} for index in range(65)
     ]
     bodies[2] = json.dumps(too_many).encode()
@@ -299,6 +310,75 @@ def test_a2a_response_normalizes_to_cited_evidence(fixture_name: str) -> None:
     )
 
 
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "fixture_name",
+    ["supplier-alpha-a2a.json", "supplier-beta-quality-a2a.json"],
+)
+async def test_documented_task_envelope_flows_from_http_to_evidence(
+    fixture_name: str,
+) -> None:
+    document = json.loads((FIXTURES / fixture_name).read_text())
+    supplier = fixture_name.startswith("supplier-alpha")
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        document["id"] = json.loads(request.content)["id"]
+        return httpx.Response(200, json=document, request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        payload = await WorkIQClient(http=http).send_message(
+            "constrained prompt", access_token="redacted"
+        )
+    retrieval = normalize_a2a_evidence(
+        payload,
+        case_id="case",
+        analysis_id="analysis",
+        retrieved_at=NOW,
+        expected_source_id=(
+            "fixture-source-alpha" if supplier else "fixture-source-beta-quality"
+        ),
+        expected_authority_scope=(
+            AuthorityScope.SUPPLIER_STATEMENT
+            if supplier
+            else AuthorityScope.COLLABORATION_STATEMENT
+        ),
+        tenant_sharepoint_host="tenant.sharepoint.com",
+    )
+
+    assert retrieval.lineage.task_id == document["result"]["task"]["id"]
+    assert retrieval.lineage.context_id == document["result"]["task"]["contextId"]
+    assert (
+        retrieval.evidence[0].requirement is EvidenceRequirement.REQUIRED_AUTHORITATIVE
+    )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda body: body.update({"result": body["result"]["task"]}),
+        lambda body: body["result"].update({"task": None}),
+        lambda body: body["result"]["task"].update({"status": None}),
+        lambda body: body["result"]["task"]["status"].update(
+            {"state": "TASK_STATE_WORKING"}
+        ),
+        lambda body: body["result"]["task"].update({"id": None, "taskId": "legacy-id"}),
+    ],
+)
+def test_normalizer_requires_completed_nested_task_with_id(mutation: Any) -> None:
+    payload = _completed_payload()
+    mutation(payload)
+    with pytest.raises(WorkIQProtocolError):
+        normalize_a2a_evidence(
+            payload,
+            case_id="case",
+            analysis_id="analysis",
+            retrieved_at=NOW,
+            expected_source_id="source",
+            expected_authority_scope=AuthorityScope.SUPPLIER_STATEMENT,
+            tenant_sharepoint_host="tenant.sharepoint.com",
+        )
+
+
 @pytest.mark.parametrize(
     "citation",
     [
@@ -317,7 +397,7 @@ def test_normalizer_never_upgrades_missing_or_untrusted_citations(
     citation: dict[str, str] | None,
 ) -> None:
     payload = _completed_payload()
-    payload["result"]["artifacts"] = [
+    payload["result"]["task"]["artifacts"] = [
         {
             "artifactId": "artifact-1",
             "parts": [
@@ -356,7 +436,7 @@ def test_normalizer_never_upgrades_missing_or_untrusted_citations(
 
 def test_normalizer_rejects_oversized_text_and_part_bounds() -> None:
     payload = _completed_payload()
-    payload["result"]["artifacts"] = [
+    payload["result"]["task"]["artifacts"] = [
         {
             "artifactId": "artifact-1",
             "parts": [{"text": "x" * 32_769}],
@@ -376,7 +456,7 @@ def test_normalizer_rejects_oversized_text_and_part_bounds() -> None:
 
 def test_free_text_is_contextual_and_never_authoritative() -> None:
     payload = _completed_payload()
-    payload["result"]["artifacts"] = [
+    payload["result"]["task"]["artifacts"] = [
         {
             "artifactId": "artifact-free-text",
             "parts": [{"text": "A response without a tenant citation."}],
@@ -401,7 +481,7 @@ def test_free_text_is_contextual_and_never_authoritative() -> None:
 
 def test_normalizer_rejects_excessive_part_count() -> None:
     payload = _completed_payload()
-    payload["result"]["artifacts"] = [
+    payload["result"]["task"]["artifacts"] = [
         {
             "artifactId": "artifact-many-parts",
             "parts": [{"text": "context"} for _ in range(33)],
