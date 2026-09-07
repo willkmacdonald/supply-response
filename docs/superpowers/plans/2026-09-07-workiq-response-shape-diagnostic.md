@@ -37,7 +37,7 @@ The controller owns Azure validation, deployment and the one-attempt observation
   it, logs a bounded diagnostic on `Exception`, and re-raises the original error.
   Derive source kind from exact enum identity: supplier, quality, or other.
 
-- [ ] Write tests first using the real normalizer and public diagnostic helpers.
+- [x] Write tests first using the real normalizer and public diagnostic helpers.
   Required examples include secret values/keys, nested reference maps, all JSON
   scalar types, cyclic/deep/wide inputs, JSON-looking text, both real fixture
   normalizations succeeding without logs, malformed data still raising its
@@ -52,9 +52,9 @@ def test_shape_never_copies_scalar_values():
     assert '"string"' in result
 ```
 
-- [ ] Run `.venv/bin/pytest -q tests/integration/test_workiq_response_shape_diagnostics.py`
+- [x] Run `.venv/bin/pytest -q tests/integration/test_workiq_response_shape_diagnostics.py`
   before implementation; record the expected missing-diagnostic failure.
-- [ ] Implement the summarizer by recursively constructing a new JSON tree:
+- [x] Implement the summarizer by recursively constructing a new JSON tree:
   scalar leaves are fixed labels (`string`, `number`, `boolean`, `null`, `other`);
   objects contain `type`, `count`, allowlisted `fields` and at most two `unknown`
   child shapes; arrays contain `type`, `count`, at most two `items` and truncation.
@@ -68,7 +68,7 @@ def test_shape_never_copies_scalar_values():
   `source`, `sourceId`, `sourceType`, `excerpt`, `targetLink`, `webUrl`,
   `isCitedInResponse`, `content`, `type`, `value`, `index`, `title`.
   Unknown keys are never emitted, including within nested metadata.
-- [ ] Hook the public normalizer without changing its decisions:
+- [x] Hook the public normalizer without changing its decisions:
 
 ```python
 try:
@@ -84,17 +84,21 @@ except Exception:
   warning: `workiq_response_shape source=%s shape=%s`. Only sanitized strings may
   enter logging arguments; no `exc_info` or `stack_info`. Diagnostic failures must
   not mask the original normalization error.
-- [ ] Run the new tests and Work IQ contract/trust/HTTP/OBО diagnostic tests. Run
+- [x] Run the new tests and Work IQ contract/trust/HTTP/OBО diagnostic tests. Run
   scoped Ruff and Pyright. Commit only these three files, with TDD evidence and
   self-review in the requested ignored report file.
-- [ ] Independent task and whole-change review must approve before deployment.
+- [x] Independent task and whole-change review must approve before deployment.
 
 ### Controller verification and observation
 
-- [ ] Run full `uv run pytest -q`, `uv build`, and web tests/production build.
-- [ ] Complete fresh azure-validate workflow with actual evidence, then run the
+- [x] Run full `uv run pytest -q`, `uv build`, and web tests/production build.
+- [x] Complete fresh azure-validate workflow with actual evidence, then run the
   existing `scripts/deploy_personal_tenant.sh --apply` and `--smoke` via azure-deploy.
-- [ ] Verify new revision health, 100% traffic, unchanged identity/roles and URL.
+- [x] Verify new revision health, 100% traffic, unchanged identity/roles and URL.
 - [ ] Use one authenticated Alex analysis attempt and read only structural logs.
 - [ ] Record exact observations locally. Do not claim the mapping or analysis
   fixed until a subsequent faithful-contract correction passes live acceptance.
+
+Deployment verified at 2026-09-07 16:40:04 UTC. The computer-use tool reports
+the Mac is locked; user must unlock it or make one analysis attempt as Alex.
+No delegated attempt or live response-shape capture has occurred yet.

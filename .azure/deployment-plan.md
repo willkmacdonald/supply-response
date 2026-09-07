@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — Work IQ response-shape diagnostic, 2026-09-07 UTC. Review and approved deployment pending.
+> **Status:** Deployed and smoke-verified — Work IQ response-shape diagnostic, 2026-09-07 UTC. Alex observation pending.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 
@@ -16,7 +16,8 @@ Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
   Tests were observed failing before implementation and before the evidence-path
   priority correction. Task review requested exact safety-boundary regressions;
   four focused tests now pin the depth, shared nodes, examples and output fallback
-  without changing production code. Re-review is pending at this checkpoint.
+  without changing production code. Task re-review and whole-change review
+  approved with no remaining findings.
 - By 16:28Z, full `uv run pytest -q` passed with expected skips and the existing
   Starlette/httpx deprecation warning; `uv build` produced both distributions.
   All 51 web tests and the 179-module production build passed.
@@ -27,8 +28,17 @@ Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 - Static review confirmed unchanged exact registry, vault and Foundry roles,
   locked Docker inputs and infrastructure-only azd configuration. Existing
   revision 8 remains Healthy at 100% traffic with the same managed identity.
-- Deployment and one authenticated Alex observation remain pending. This is
-  diagnostic visibility, not a mapping correction or proof of analysis success.
+- Reviewed commit `b1a62a0` deployed through the approved apply/smoke workflow.
+  The existing revision passed its health gate after two startup timeouts; the
+  workflow did not bypass the gate. At 16:40:04Z, the new revision was latest/ready,
+  Healthy/Running with 100% traffic; the preceding revision had zero traffic.
+  Fabric/Foundry readiness and direct `/health` passed (live Fabric SQL, schema 12).
+  `azd show` and direct app reads confirmed the existing environment and endpoint.
+  Identity and the exact registry/vault/Foundry role scopes are unchanged.
+  Exact revision/image identifiers are in the ignored local environment record.
+- One authenticated Alex observation remains pending: computer use reports the
+  Mac is locked. No delegated operation was attempted. This is diagnostic
+  visibility, not a mapping correction or proof of analysis success. No Git push.
 
 ## Validation Proof — Work IQ A2A task-envelope correction, 2026-09-07 UTC
 
