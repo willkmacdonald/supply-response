@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — safe analysis diagnostics update, 2026-09-07 UTC. Existing deployment is healthy; diagnostic deployment and Alex's same-Case retry remain pending.
+> **Status:** Deployed and smoke-verified — safe analysis diagnostics update, 2026-09-07 UTC. Alex's same-Case retry remains pending; the analysis source failure is not yet diagnosed.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 
@@ -27,7 +27,15 @@ Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 - Current policy inventory and successful preview show no blocking denial.
   Static roles remain exact registry AcrPull, vault Secrets User, and project
   Foundry User assignments for the same Container App system identity.
-- Validation complete; diagnostic deployment and same-Case retry pending.
+- Deployment of reviewed commit `cac6f3a` completed. The new immutable revision
+  is latest and ready; provision state is Succeeded. Live readiness and direct
+  `/health` passed with Fabric SQL/schema 12. Existing app identity and exact
+  AcrPull, vault Secrets User and Foundry User scopes remain unchanged.
+- `azd show` confirmed the existing environment/resource group (the project
+  intentionally has no azd services); direct Container App inspection verified
+  its endpoint. Exact revision/image identifiers are in the ignored local record.
+- Alex's same-Case retry is pending. Deployment success does not establish the
+  underlying source failure's cause or a successful live analysis.
 
 ## Validation Proof — RL-001 loader update, 2026-09-06
 
