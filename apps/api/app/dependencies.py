@@ -281,6 +281,19 @@ def _validate_workiq_binding_values(values: dict[str, str]) -> None:
         raise RuntimeError("live dependency setting is invalid: workiq_channel_id")
 
 
+def _workiq_binding_receipt_parts(values: dict[str, str]) -> tuple[str, ...]:
+    return (
+        "workiq-binding-v2",
+        values["workiq_corpus_version"],
+        values["workiq_supplier_source_id"],
+        values["workiq_quality_source_id"],
+        values["workiq_supplier_sender"],
+        values["workiq_quality_author_object_id"],
+        values["workiq_team_id"],
+        values["workiq_channel_id"],
+    )
+
+
 def build_live_components(
     settings: Settings,
     *,
@@ -334,6 +347,11 @@ def build_live_components(
     )
     values = {name: _required_live_setting(settings, name) for name in required_names}
     _validate_workiq_binding_values(values)
+    work_iq_receipt_verified = verify_binding_receipt(
+        _workiq_binding_receipt_parts(values), settings.workiq_deployment_receipt
+    )
+    if not work_iq_receipt_verified:
+        raise RuntimeError("live dependency binding receipt is invalid: workiq")
     tenant_id = values["allowed_tenant_id"]
     client_id = values["api_client_id"]
     power_bi_url = validate_live_https_url(
@@ -420,19 +438,7 @@ def build_live_components(
             power_bi_receipt_verified=verify_power_bi_deployment_receipt(
                 power_bi_url, settings.power_bi_deployment_receipt
             ),
-            work_iq_receipt_verified=verify_binding_receipt(
-                (
-                    "workiq-binding-v2",
-                    values["workiq_corpus_version"],
-                    values["workiq_supplier_source_id"],
-                    values["workiq_quality_source_id"],
-                    values["workiq_supplier_sender"],
-                    values["workiq_quality_author_object_id"],
-                    values["workiq_team_id"],
-                    values["workiq_channel_id"],
-                ),
-                settings.workiq_deployment_receipt,
-            ),
+            work_iq_receipt_verified=work_iq_receipt_verified,
             foundry_receipt_verified=verify_binding_receipt(
                 (
                     endpoint,

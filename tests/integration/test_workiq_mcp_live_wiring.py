@@ -109,6 +109,31 @@ def _offline_fabric(monkeypatch, tmp_path):
     return store
 
 
+def _forbid_live_resource_construction(monkeypatch) -> list[str]:
+    started: list[str] = []
+
+    def forbidden(name: str):
+        def fail(*args, **kwargs):
+            started.append(name)
+            raise AssertionError(f"{name} constructed before receipt validation")
+
+        return fail
+
+    for path, name in (
+        ("services.persistence.fabric_sql.build_credential", "fabric credential"),
+        ("apps.api.app.dependencies.fabric_store", "fabric store"),
+        (
+            "integrations.fabric.operational.FabricLiveOperationalDataPort",
+            "fabric source",
+        ),
+        ("integrations.workiq.async_obo.AsyncWorkIQOboExchange", "OBO exchange"),
+        ("integrations.workiq.mcp.WorkIQMcpClient", "MCP client"),
+        ("integrations.workiq.mcp_evidence.WorkIQMcpEvidencePort", "MCP source"),
+    ):
+        monkeypatch.setattr(path, forbidden(name))
+    return started
+
+
 def test_live_composition_uses_mcp_evidence_with_all_trusted_bindings(
     monkeypatch, tmp_path
 ):
@@ -133,24 +158,46 @@ def test_live_composition_uses_mcp_evidence_with_all_trusted_bindings(
         store.engine.dispose()
 
 
-def test_changed_discovery_binding_invalidates_existing_workiq_receipt(
-    monkeypatch, tmp_path
+@pytest.mark.parametrize(
+    "receipt",
+    [
+        None,
+        hashlib.sha256(b"fixture-corpus-v1\nmail-fixture\n1770000000000").hexdigest(),
+        "0" * 64,
+    ],
+    ids=("missing", "legacy-v1", "mismatched-v2"),
+)
+def test_live_composition_rejects_invalid_workiq_receipt_before_resources_begin(
+    monkeypatch, tmp_path, receipt
 ):
-    store = _offline_fabric(monkeypatch, tmp_path)
-    original = _live_settings(tmp_path)
-    changed = original.model_copy(
-        update={"workiq_supplier_sender": "different@alpha.example"}
-    )
-    components = build_live_components(changed, clock=lambda: datetime.now(UTC))
-    try:
-        assert (
-            components["readiness"].check().capability_health["work_iq"] == "unverified"
-        )
-    finally:
-        import asyncio
+    started = _forbid_live_resource_construction(monkeypatch)
 
-        asyncio.run(components["async_resources"][0].aclose())
-        store.engine.dispose()
+    with pytest.raises(
+        RuntimeError,
+        match="^live dependency binding receipt is invalid: workiq$",
+    ):
+        build_live_components(
+            _live_settings(tmp_path, workiq_deployment_receipt=receipt),
+            clock=lambda: datetime.now(UTC),
+        )
+
+    assert started == []
+
+
+def test_fallback_composition_does_not_require_workiq_receipt(monkeypatch, tmp_path):
+    started = _forbid_live_resource_construction(monkeypatch)
+
+    services = build_composition(
+        Settings(
+            runtime_mode=RuntimeMode.FALLBACK,
+            database_url=f"sqlite:///{tmp_path / 'fallback.db'}",
+        ),
+        clock=lambda: NOW,
+    )
+
+    assert services.settings.runtime_mode is RuntimeMode.FALLBACK
+    assert started == []
+    services.store.engine.dispose()
 
 
 @pytest.mark.parametrize(
