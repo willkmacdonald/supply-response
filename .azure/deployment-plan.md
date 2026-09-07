@@ -1,8 +1,33 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed and smoke-verified for the 2026-09-06 RL-001 loader update. Canonical source loading and live Case creation passed; Alex-authenticated analysis and downstream acceptance remain pending.
+> **Status:** Validated — safe analysis diagnostics update, 2026-09-07 UTC. Existing deployment is healthy; diagnostic deployment and Alex's same-Case retry remain pending.
 
-Generated: 2026-08-31; validation evidence updated 2026-09-06
+Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
+
+## Validation Proof — safe analysis diagnostics, 2026-09-07 UTC
+
+- User approved diagnostic logging and redeployment after the Alex browser
+  request reached analysis and returned `LIVE_SOURCE_UNAVAILABLE` (503).
+- Scope: stage and exception code metadata only; no payloads, credentials,
+  exception messages or raw tracebacks. Public errors and live-mode behavior
+  remain unchanged. No infrastructure, identity, source data or role changes.
+- TDD: six missing-diagnostic assertions failed before implementation; all seven
+  diagnostic tests and the 37-test live integration set then passed. Independent
+  read-only code review found no actionable issues.
+- Fresh full `uv run pytest -q` passed with expected skips and the existing
+  Starlette/httpx warning. Scoped Ruff and Pyright passed with zero findings.
+  `uv build`, 51 web tests and the 179-module web production build passed.
+- The existing named azd environment and interactive operator passed preflight
+  after supplying the script's required environment/operator bindings. Exact
+  subscription, tenant, East US 2 and shared-service bindings remain unchanged.
+- `azd provision --preview --no-prompt --environment supply-response-personal`
+  passed in 20 seconds: no new resources, existing app/Insights updates only.
+  `azd package` passed. Docker context retains locked dependencies and excludes
+  private environment records. This is not an Aspire project.
+- Current policy inventory and successful preview show no blocking denial.
+  Static roles remain exact registry AcrPull, vault Secrets User, and project
+  Foundry User assignments for the same Container App system identity.
+- Validation complete; diagnostic deployment and same-Case retry pending.
 
 ## Validation Proof — RL-001 loader update, 2026-09-06
 

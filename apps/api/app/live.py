@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Protocol
@@ -37,6 +39,44 @@ from services.persistence.store import (
     RuntimeModeConflict,
     SqlAlchemyStore,
 )
+
+_logger = logging.getLogger(__name__)
+
+
+def _error_origin(error: BaseException | None) -> str:
+    """Return code coordinates only, never source text, locals or error messages."""
+    if error is None or error.__traceback__ is None:
+        return "none"
+    trace = error.__traceback__
+    while trace.tb_next is not None:
+        trace = trace.tb_next
+    code = trace.tb_frame.f_code
+    return f"{code.co_name}:{trace.tb_lineno}"
+
+
+def _log_analysis_failure(stage: str, error: Exception) -> None:
+    # Do not pass the exception object, exc_info, request, actor, or payload to
+    # logging: driver/SDK errors can contain tokens, SQL values and source text.
+    cause = error.__cause__
+    _logger.warning(
+        "live_analysis_failed stage=%s error_type=%s origin=%s "
+        "cause_type=%s cause_origin=%s",
+        stage,
+        type(error).__name__,
+        _error_origin(error),
+        type(cause).__name__ if cause is not None else "none",
+        _error_origin(cause),
+    )
+
+
+async def _diagnosed_retrieval[Retrieval](
+    stage: str, operation: Awaitable[Retrieval]
+) -> Retrieval:
+    try:
+        return await operation
+    except Exception as error:
+        _log_analysis_failure(stage, error)
+        raise
 
 
 class LiveSourceUnavailable(RuntimeError):
@@ -262,18 +302,23 @@ class LiveAnalysisApplicationService:
     ) -> AnalysisVersion:
         claim_id: str | None = None
         material_version: str | None = None
+        stage = "load_case"
         try:
             case = self._store.get_case(case_id)
             if case.runtime_mode is not RuntimeMode.LIVE:
                 raise RuntimeModeConflict("live analysis cannot access a fallback Case")
+            stage = "load_projection"
             projection = self._store.get_projection(case_id)
             if projection.current_analysis_id is not None:
+                stage = "load_existing_analysis"
                 return self._store.get_analysis(projection.current_analysis_id)
             started_at = self._clock()
+            stage = "load_snapshot"
             material_version = canonical_operational_snapshot(
                 self._store.get_operational_snapshot(case_id)
             )
             claim_id = str(uuid4())
+            stage = "claim_analysis"
             if not self._store.try_claim_analysis(
                 case_id=case_id,
                 material_version=material_version,
@@ -282,28 +327,39 @@ class LiveAnalysisApplicationService:
             ):
                 return await self._wait_for_winner(case_id)
             analysis_id = f"RL-ANALYSIS-{uuid4()}"
+            stage = "retrieve_sources"
             operational, supplier, quality = await asyncio.gather(
-                self._operational_data.retrieve(
-                    case_id=case_id,
-                    purpose=case.purpose,
-                    analysis_id=analysis_id,
-                    retrieved_at=started_at,
+                _diagnosed_retrieval(
+                    "retrieve_fabric",
+                    self._operational_data.retrieve(
+                        case_id=case_id,
+                        purpose=case.purpose,
+                        analysis_id=analysis_id,
+                        retrieved_at=started_at,
+                    ),
                 ),
-                self._work_iq.retrieve_supplier_signal(
-                    actor=actor,
-                    source_id=self._supplier_source_id,
-                    case_id=case_id,
-                    analysis_id=analysis_id,
-                    retrieved_at=started_at,
+                _diagnosed_retrieval(
+                    "retrieve_supplier",
+                    self._work_iq.retrieve_supplier_signal(
+                        actor=actor,
+                        source_id=self._supplier_source_id,
+                        case_id=case_id,
+                        analysis_id=analysis_id,
+                        retrieved_at=started_at,
+                    ),
                 ),
-                self._work_iq.retrieve_quality_context(
-                    actor=actor,
-                    source_id=self._quality_source_id,
-                    case_id=case_id,
-                    analysis_id=analysis_id,
-                    retrieved_at=started_at,
+                _diagnosed_retrieval(
+                    "retrieve_quality",
+                    self._work_iq.retrieve_quality_context(
+                        actor=actor,
+                        source_id=self._quality_source_id,
+                        case_id=case_id,
+                        analysis_id=analysis_id,
+                        retrieved_at=started_at,
+                    ),
                 ),
             )
+            stage = "validate_operational"
             if (
                 operational.case.case_id != case.case_id
                 or operational.case.purpose is not case.purpose
@@ -313,6 +369,7 @@ class LiveAnalysisApplicationService:
                 or not operational.source_snapshot_id.strip()
             ):
                 raise ValueError("live operational snapshot changed or is incomplete")
+            stage = "validate_fabric"
             fabric_evidence = _validate_live_collection(
                 operational.evidence,
                 system=EvidenceSourceSystem.FABRIC,
@@ -327,6 +384,7 @@ class LiveAnalysisApplicationService:
                 started_at=started_at,
                 citation_hosts={"app.powerbi.com"},
             )
+            stage = "validate_supplier"
             supplier_evidence = _validate_live_collection(
                 supplier.evidence,
                 system=EvidenceSourceSystem.WORK_IQ,
@@ -337,6 +395,7 @@ class LiveAnalysisApplicationService:
                 started_at=started_at,
                 citation_hosts=self._citation_hosts - {"app.powerbi.com"},
             )
+            stage = "validate_quality"
             quality_evidence = _validate_live_collection(
                 quality.evidence,
                 system=EvidenceSourceSystem.WORK_IQ,
@@ -348,6 +407,7 @@ class LiveAnalysisApplicationService:
                 citation_hosts=self._citation_hosts - {"app.powerbi.com"},
             )
             evidence = (*fabric_evidence, *supplier_evidence, *quality_evidence)
+            stage = "validate_required_evidence"
             for scope in (
                 AuthorityScope.OPERATIONAL_QUANTITY,
                 AuthorityScope.OPERATIONAL_DATE,
@@ -377,6 +437,7 @@ class LiveAnalysisApplicationService:
                     started_at=started_at,
                     citation_hosts=self._citation_hosts,
                 )
+            stage = "build_analysis"
             evidence = tuple(
                 item.model_copy(
                     update={
@@ -419,6 +480,7 @@ class LiveAnalysisApplicationService:
                 calculation_version="rl001-options-v1",
             )
             try:
+                stage = "orchestrate"
                 result = await self._orchestrator.analyze(
                     AnalyzeCommand(
                         deterministic=command,
@@ -452,6 +514,7 @@ class LiveAnalysisApplicationService:
             analysis = analysis.model_copy(
                 update={"retrieval_lineage": lineage, "explanation": explanation}
             )
+            stage = "complete_analysis"
             return self._store.complete_analysis_claim(
                 analysis=analysis,
                 projected_case=case.model_copy(
@@ -465,7 +528,8 @@ class LiveAnalysisApplicationService:
             raise
         except AnalysisClaimBusy:
             return await self._wait_for_winner(case_id)
-        except Exception:  # noqa: BLE001 - public boundary maps all source failures
+        except Exception as error:  # noqa: BLE001 - public boundary maps all source failures
+            _log_analysis_failure(stage, error)
             try:
                 if claim_id is not None and material_version is not None:
                     self._store.release_analysis_claim(
@@ -473,8 +537,8 @@ class LiveAnalysisApplicationService:
                         material_version=material_version,
                         claim_id=claim_id,
                     )
-            except Exception:  # noqa: BLE001,S110 - lease expires safely
-                pass
+            except Exception as release_error:  # noqa: BLE001 - lease expires safely
+                _log_analysis_failure("release_analysis_claim", release_error)
             raise LiveSourceUnavailable() from None
 
     async def _wait_for_winner(self, case_id: str) -> AnalysisVersion:
@@ -484,7 +548,8 @@ class LiveAnalysisApplicationService:
                 projection = self._store.get_projection(case_id)
                 if projection.current_analysis_id is not None:
                     return self._store.get_analysis(projection.current_analysis_id)
-            except Exception:  # noqa: BLE001 - persistence detail must remain bounded
+            except Exception as error:  # noqa: BLE001 - persistence detail must remain bounded
+                _log_analysis_failure("wait_for_analysis", error)
                 raise LiveSourceUnavailable() from None
             remaining = deadline - self._monotonic()
             if remaining <= 0:

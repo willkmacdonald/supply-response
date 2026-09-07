@@ -539,6 +539,17 @@ or any external business action.
 
 ### Recovery and post-demo cost control
 
+For an analysis response of `LIVE_SOURCE_UNAVAILABLE`, inspect the Container App
+console logs for `live_analysis_failed`. The `stage` distinguishes Fabric,
+supplier and Quality retrieval, evidence validation, orchestration, and
+persistence. `error_type`, `origin` (function and line), and immediate cause
+metadata locate the failing code without recording exception messages, source
+content, tokens, SQL values, or actor details. Concurrent retrieval failures may
+produce both a source-specific event and an aggregate `retrieve_sources` event.
+The public response remains bounded, and a live Case never silently falls back.
+Use the request time and active revision to match diagnostics to a retry; do not
+enable payload logging or copy access tokens to investigate.
+
 If the final revision is unhealthy, leave the previous healthy revision available,
 inspect redacted Container Apps/Application Insights diagnostics, correct the
 configuration, and rerun. Do not expose a secret while troubleshooting. If RBAC
