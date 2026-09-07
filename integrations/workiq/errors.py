@@ -3,7 +3,7 @@ class WorkIQError(RuntimeError):
 
 
 class WorkIQProtocolError(WorkIQError):
-    """Work IQ returned an invalid or incomplete A2A response."""
+    """Work IQ returned an invalid or incomplete protocol response."""
 
 
 class WorkIQResponseLimitError(WorkIQProtocolError):
