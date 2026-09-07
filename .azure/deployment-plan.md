@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — exact Work IQ scope fix, 2026-09-07 UTC. Deployment and Alex's live analysis retry remain pending.
+> **Status:** Deployed and smoke-verified — exact Work IQ scope fix, 2026-09-07 UTC. Alex's live analysis retry remains pending.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 
@@ -23,8 +23,12 @@ Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
   Policy inventory, static exact-resource roles, infrastructure and locked
   Docker context are unchanged. This is not an Aspire project.
 - Full `uv run pytest -q` passed with expected skips and the existing
-  Starlette/httpx warning. Validation is complete; deployment is pending and
-  no live analysis success is claimed.
+  Starlette/httpx warning. Reviewed commit `cbf34ba` deployed successfully; the
+  new revision is latest/ready, Healthy/Running and serves 100% of traffic.
+  Live readiness passed, and exact runtime roles and identity are unchanged.
+  `azd show` and direct Container App reads verified the environment, endpoint,
+  revision and immutable image. Exact identifiers are in the ignored local
+  record. No live analysis success is claimed before Alex's next retry.
 
 ## Validation Proof — Work IQ response diagnostics, 2026-09-07 UTC
 

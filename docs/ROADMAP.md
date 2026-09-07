@@ -16,7 +16,7 @@ This roadmap reports the durable, reviewed repository baseline. Uncommitted or a
 | Fabric SQL | Canonical source loaded and verified live | Schema version 12; canonical RL-001 loader passed planned → inserted → unchanged with exact metadata/payload and production-adapter readback; deployed app created a live Case |
 | Power BI | Published; empty-state live render validated | The semantic model and two-page report are published, OAuth2-bound to Fabric SQL, DAX-queryable, and visually clean with an empty database; populated Decision-ID parity remains a post-application-deployment gate |
 | Entra ID and persona authorization | Alex sign-in passed; full authorization journey pending | Private-browser Alex request passed authentication and reached analysis; approval/rejection and downstream gates remain |
-| Work IQ | Delegated token exchange blocked | Supplier and Quality retrieval both stop at OBO response validation. Service principals are enabled, exact consent is present and API credential metadata is unexpired; exact response rejection is under investigation |
+| Work IQ | Exact-scope fix deployed; live retry pending | Microsoft returned a Bearer token with the requested qualified scope; the local validator rejected it. The reviewed fix accepts either exact short or qualified scope. Successful cited retrieval remains unverified |
 | Foundry orchestration | Implemented and agents published; invocation pending | Signal, context, and decision agents are verified as immutable version `1` contracts on `gpt-5.6-luna`; no live invocation or evaluation has run |
 | Complete live Case journey | Live Case creation passed; analysis gated | Correct fixed scenario time displayed; delegated analysis, Decision, five actions, ten observations, and populated Power BI parity remain unverified |
 | Personal-tenant deployment and hardening | Updated application and readiness verified | New immutable revision ready; exact Azure roles and live Fabric/Foundry readiness passed; delegated acceptance checks remain |
@@ -134,7 +134,7 @@ Final completion requires all 20 frozen acceptance criteria to pass. Local imple
 The Entra, Foundry, Fabric SQL, Work IQ Demo Corpus, and Power BI prerequisites
 are configured and recorded in deployment-local storage. The remaining gates are:
 
-1. Diagnose and resolve the Work IQ token-response rejection using privacy-safe diagnostics; Alex's sign-in now passes.
+1. Verify the deployed Work IQ scope-validation fix through Alex's live analysis retry.
 2. Run live analysis, cited Work IQ retrieval, and pinned Foundry invocation.
 3. Record the approved Decision, verify five linked actions and ten simulated observations.
 4. Verify Power BI refresh, filters, and Decision-ID parity for that same Case.
