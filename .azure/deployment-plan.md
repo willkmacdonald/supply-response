@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — removal of completed temporary Work IQ capture, 2026-09-07 UTC.
+> **Status:** Deployed and smoke-verified — temporary Work IQ capture retired, 2026-09-07 UTC. Live source retrieval remains unresolved.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 
@@ -30,6 +30,17 @@ Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 - Unique API deployment target and revision 10/latest/ready identity confirmed.
   Initial resource-tag CLI query used an unsupported flag combination; corrected
   read-only query confirmed exactly one target. No setting change was needed.
+- Cleanup commit `19cb18a` deployed through the approved apply/smoke workflow.
+  Existing-health gate passed after two timeouts without bypass. Immutable ACR
+  build succeeded; revision 11 is latest/ready, Healthy/Running, sole active
+  revision with 100% traffic. Revision 10 is retired. Live Fabric/Foundry smoke
+  and direct health passed (live Fabric SQL, schema 12); exact roles unchanged.
+- Post-deployment console verification returned `No module named
+  integrations.workiq.memory_capture`, confirming the module is absent from the
+  running image. An initial quoted Python check hit console argument splitting;
+  the simple module check provided the actual proof. No new retrieval occurred.
+  Named environment verified with azd show. No Git push. Source lookup and
+  evidence mapping remain unresolved; this deployment only retires diagnostics.
 
 ## Validation Proof — memory-only inspection, 2026-09-07 UTC
 
