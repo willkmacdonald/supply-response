@@ -1,10 +1,19 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — approved Work IQ discovery/fetch/evidence integration. Azure validation workflow and independent final review passed. Existing revision13 remains deployed; approved deployment and one Alex Analyze are next.
+> **Status:** Deployed — reviewed Work IQ discovery/fetch/evidence integration on healthy revision14. Deployment/readiness passed; the single normal Alex Analyze failed at supplier discovery. Live acceptance remains blocked; no retry was made.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 
 ## Validation Proof — production Work IQ discovery/evidence integration
+
+Deployment result: `aa67991` built as ACR `ch14`, immutable image digest
+`5603a03bd1def6b52f692c252cf3344c63036cf8cc69b4cd222df59bfed4894d`.
+Revision `ca-sr-demo--0000014` is sole active/latest-ready, Healthy/Running with
+100% traffic. Exact identity/three roles and scale0–2 are unchanged. Live smoke
+and health/schema12 passed. One Alex Analyze around23:40Z failed with supplier
+`discovery`; both source paths logged only sanitized failures. No successful
+analysis/citation/Foundry outcome is claimed. No retry or Git push. See
+`docs/deployment/workiq-discovery-integration-result.md` for the precise boundary.
 
 The user approved the written discovery/evidence spec and implementation plan,
 including deployment to the existing app and one normal Alex live analysis.
