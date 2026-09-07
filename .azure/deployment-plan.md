@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — Work IQ HTTP-status diagnostic, 2026-09-07 UTC. User-approved deployment is next.
+> **Status:** Deployed and smoke-verified — Work IQ HTTP-status diagnostic, 2026-09-07 UTC. Next Alex retry pending.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 
@@ -26,8 +26,13 @@ Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 - Static RBAC review confirmed the same app identity receives exact registry
   AcrPull, vault Secrets User and project Foundry access. No infrastructure,
   role, credential, database, source-data or scaling changes are in this patch.
-- Deployment and the next delegated Alex retry are pending. This diagnostic is
-  not a claim that live Work IQ retrieval or full analysis is fixed.
+- Commit `5ba33d9` deployed successfully; verified at 05:37:22Z. The new immutable
+  revision is latest/ready, Healthy/Running and serves 100% of traffic. Live
+  Fabric/Foundry readiness passed; identity and exact Azure roles are unchanged.
+  `azd show` confirmed the existing environment; direct app reads verified the
+  endpoint and image. Exact identifiers are retained in the ignored local record.
+- The next delegated Alex retry is pending. This diagnostic is not a claim that
+  live Work IQ retrieval or full analysis is fixed. No Git push was requested.
 
 ## Validation Proof — exact Work IQ scope fix, 2026-09-07 UTC
 
