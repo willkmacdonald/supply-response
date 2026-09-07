@@ -562,6 +562,12 @@ accepts complete scope tokens matching either `WorkIQAgent.Ask` or
 tokens and the validated delegated Alex actor are still required. Never log the
 raw token response.
 
+If Work IQ rejects the HTTP request after token exchange, `workiq_http_failed`
+records only the numeric `status`. It does not record request headers, prompts,
+response headers, response bodies, or exception traces. Match this event with the
+source-stage failure at the same request time. The status narrows the next check;
+it does not by itself prove the underlying permission or service cause.
+
 If the final revision is unhealthy, leave the previous healthy revision available,
 inspect redacted Container Apps/Application Insights diagnostics, correct the
 configuration, and rerun. Do not expose a secret while troubleshooting. If RBAC

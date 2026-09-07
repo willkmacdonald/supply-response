@@ -1,8 +1,33 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed and smoke-verified — exact Work IQ scope fix, 2026-09-07 UTC. Alex's live analysis retry remains pending.
+> **Status:** Validated — Work IQ HTTP-status diagnostic, 2026-09-07 UTC. User-approved deployment is next.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
+
+## Validation Proof — Work IQ HTTP-status diagnostic, 2026-09-07 UTC
+
+- Alex's retry at 05:23:59Z passed OBO validation and reached the Work IQ HTTP
+  response check. Both source calls failed with `WorkIQProtocolError`; the
+  existing diagnostic did not retain the unsuccessful HTTP status. The user
+  approved recording only that numeric status and deploying the diagnostic.
+- `workiq_http_failed status=<integer>` is emitted before the existing exception.
+  No authentication, request, response-validation, evidence, or public-error
+  behavior changes. No headers, prompts, tokens, bodies or traces are logged.
+- Eight diagnostic assertions failed before implementation. All 91 targeted
+  tests passed afterward, including nine new HTTP tests. Scoped Ruff/Pyright
+  passed; independent read-only review found no actionable issues.
+- At approximately 05:32Z, full `uv run pytest -q` and `uv build` passed with
+  expected skips and the existing Starlette/httpx warning. All 51 web tests and
+  the 179-module production build passed. Locked Docker inputs are unchanged.
+- Fresh azd authentication and named-environment preflight matched the approved
+  tenant, subscription, East US 2 and existing shared resources. Provision
+  preview passed in 19 seconds with no new resources; azd package passed.
+  Policy inventory was read and no policy blocked the preview. No Aspire services.
+- Static RBAC review confirmed the same app identity receives exact registry
+  AcrPull, vault Secrets User and project Foundry access. No infrastructure,
+  role, credential, database, source-data or scaling changes are in this patch.
+- Deployment and the next delegated Alex retry are pending. This diagnostic is
+  not a claim that live Work IQ retrieval or full analysis is fixed.
 
 ## Validation Proof — exact Work IQ scope fix, 2026-09-07 UTC
 

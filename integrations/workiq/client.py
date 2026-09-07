@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Mapping
 from typing import Any, Final
 from uuid import uuid4
@@ -10,11 +11,11 @@ import httpx
 from apps.api.app.auth import AuthenticatedActor
 from data.domain.evidence import AuthorityScope
 
+from .errors import WorkIQProtocolError, WorkIQResponseLimitError
+from .models import WorkIQRetrieval
 from .normalizer import normalize_a2a_evidence
 from .obo import WorkIQOboExchange
-from .models import WorkIQRetrieval
 from .prompts import quality_context_prompt, supplier_signal_prompt
-from .errors import WorkIQProtocolError, WorkIQResponseLimitError
 
 WORK_IQ_A2A_ENDPOINT: Final = "https://workiq.svc.cloud.microsoft/a2a/"
 _MAX_RESPONSE_BYTES: Final = 1_048_576
@@ -23,6 +24,7 @@ _MAX_CONTAINER_ITEMS: Final = 256
 _MAX_ARTIFACTS: Final = 64
 _MAX_PARTS_PER_ARTIFACT: Final = 32
 _MAX_TEXT_CHARS: Final = 32_768
+_logger = logging.getLogger(__name__)
 
 
 def _validate_json_bounds(value: Any, *, depth: int = 0) -> None:
@@ -101,6 +103,9 @@ class WorkIQClient:
                 timeout=30.0,
             ) as response:
                 if response.status_code < 200 or response.status_code >= 300:
+                    _logger.warning(
+                        "workiq_http_failed status=%d", response.status_code
+                    )
                     raise WorkIQProtocolError(
                         f"Work IQ returned HTTP {response.status_code}"
                     )
