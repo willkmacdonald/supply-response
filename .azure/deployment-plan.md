@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — temporary memory-only Work IQ inspection, 2026-09-07 UTC. Deployment approved.
+> **Status:** Deployed and smoke-verified — temporary memory-only Work IQ inspection, 2026-09-07 UTC. Capture disabled pending Alex readiness.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 
@@ -37,7 +37,17 @@ Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 - Final post-review full Python regression and package build passed. The
   azure-validate workflow reached UpdateStatus after all checks and proof.
   One API tag target and a healthy existing shared environment were confirmed.
-- Not yet deployed; no live answers inspected. No Git push authorized.
+- Commit `0ee6fae` deployed through the approved apply/smoke workflow. The
+  existing-health gate passed after two timeouts; no bypass was used. ACR build
+  succeeded and the new revision is Healthy/Running, latest/ready, at 100% traffic.
+  Live Fabric/Foundry smoke and direct health passed (live Fabric SQL, schema 12).
+  Exact registry/vault/Foundry roles and managed identity are unchanged.
+- `azd show` verified the named environment; direct app reads verified the
+  endpoint and immutable image (this project intentionally has no azd services).
+  A state-only console check against the sole new replica returned `disabled`
+  with a successful cluster status. No answer has been captured or inspected.
+  Capture is deliberately unarmed until Alex is ready, to avoid losing the
+  one-shot window to scale-to-zero or expiry. No Git push.
 
 ## Validation Proof — Work IQ response-shape diagnostic, 2026-09-07 UTC
 
