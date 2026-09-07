@@ -23,6 +23,8 @@ from apps.api.app.routes.test_support import router as test_support_router
 from apps.api.app.runtime import RuntimeProgression
 from apps.api.app.settings import Settings
 from apps.api.app.telemetry import configure_azure_monitor_from_environment
+from data.domain.common import RuntimeMode
+from integrations.workiq.memory_capture import start_operator_capture
 from services.execution.planner import plan_actions
 from services.execution.playback import PlaybackClock
 
@@ -48,9 +50,15 @@ def create_app(
         progression = RuntimeProgression(active_services)
         api.state.runtime_progression = progression
         await progression.start()
+        stop_capture = (
+            start_operator_capture()
+            if active_services.settings.runtime_mode is RuntimeMode.LIVE
+            else lambda: None
+        )
         try:
             yield
         finally:
+            stop_capture()
             await progression.stop()
             await active_services.close()
 

@@ -1,8 +1,43 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed and smoke-verified — Work IQ response-shape diagnostic, 2026-09-07 UTC. Alex observation pending.
+> **Status:** Validated — temporary memory-only Work IQ inspection, 2026-09-07 UTC. Deployment approved.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
+
+## Validation Proof — memory-only inspection, 2026-09-07 UTC
+
+- User explicitly approved a temporary diagnostic deployment to inspect one
+  supplier/Quality final-answer and citation pair in memory, excluding headers,
+  tokens and saved response bodies. Removal after inspection is also approved.
+  Existing tenant/subscription/East US 2 resources and main branch are retained.
+- Default-disabled Linux abstract Unix socket, same-UID kernel peer check, one
+  operator arm per process, one case/analysis pair after validated-Alex OBO,
+  strict projection bounds, destructive read, automatic expiry and no public
+  endpoint/log/file output. See `docs/deployment/workiq-memory-capture.md`.
+- Twelve new tests pass, including the real HTTP/OBO-to-normalizer seam retaining
+  the existing malformed-facts failure. Initial feature assertions failed before
+  implementation. Full Python regression and package build passed; 51 web tests
+  and the 179-module web build passed. Targeted 101-test Work IQ set and scoped
+  Ruff/Pyright checks passed.
+- Independent review identified a serialized-output retention bug. The Linux
+  socket probe reproduced it before correction and passed afterward as UID 10001
+  with a read-only filesystem and no network. Reviewer re-review approved.
+- Fresh azd authentication confirms Will as operator. Named-environment preflight
+  passed with current operator ID, approved tenant/subscription, East US 2,
+  existing shared resources, exact Entra registrations, Fabric and Foundry.
+  Two initial local invocations lacked required preflight environment selectors;
+  those checks stopped before cloud mutation and passed with explicit selectors.
+- `azd provision --preview --no-prompt --environment supply-response-personal`
+  passed in 20 seconds; no new resources. `azd package` passed. Policy inventory
+  was read; no policy blocked preview. No Aspire services. Docker inputs remain
+  locked and infrastructure-only azure.yaml is unchanged.
+- Static role review: unchanged exact registry AcrPull, vault Secrets User and
+  project Azure AI User assignments. No new data-plane operation or role needed.
+  Live revision 9 remains provisioned with the same managed identity.
+- Final post-review full Python regression and package build passed. The
+  azure-validate workflow reached UpdateStatus after all checks and proof.
+  One API tag target and a healthy existing shared environment were confirmed.
+- Not yet deployed; no live answers inspected. No Git push authorized.
 
 ## Validation Proof — Work IQ response-shape diagnostic, 2026-09-07 UTC
 

@@ -11,6 +11,7 @@ import httpx
 from apps.api.app.auth import AuthenticatedActor
 from data.domain.evidence import AuthorityScope
 
+from . import memory_capture
 from .errors import WorkIQProtocolError, WorkIQResponseLimitError
 from .models import WorkIQRetrieval
 from .normalizer import normalize_a2a_evidence
@@ -165,6 +166,35 @@ class WorkIQEvidencePort:
         self._obo = obo
         self._tenant_sharepoint_host = tenant_sharepoint_host
 
+    async def _send_captured(
+        self,
+        prompt: str,
+        *,
+        access_token: str,
+        kind: str,
+        case_id: str,
+        analysis_id: str,
+    ) -> dict[str, Any]:
+        # TEMPORARY: reached only after successful validated-Alex OBO exchange.
+        ticket = None
+        try:
+            ticket = memory_capture.capture.reserve(kind, case_id, analysis_id)
+        except Exception:  # noqa: BLE001, S110 - diagnostics must not log contents or affect retrieval
+            pass
+        try:
+            payload = await self._client.send_message(prompt, access_token=access_token)
+        except BaseException:
+            try:
+                memory_capture.capture.failed(ticket)
+            except Exception:  # noqa: BLE001, S110 - preserve original exception without payload logging
+                pass
+            raise
+        try:
+            memory_capture.capture.record(ticket, payload)
+        except Exception:  # noqa: BLE001, S110 - optional capture is never authoritative
+            pass
+        return payload
+
     async def retrieve_supplier_signal(
         self,
         *,
@@ -175,8 +205,12 @@ class WorkIQEvidencePort:
         retrieved_at: Any,
     ) -> WorkIQRetrieval:
         token = self._obo.exchange(actor)
-        payload = await self._client.send_message(
-            supplier_signal_prompt(source_id), access_token=token.reveal()
+        payload = await self._send_captured(
+            supplier_signal_prompt(source_id),
+            access_token=token.reveal(),
+            kind="supplier",
+            case_id=case_id,
+            analysis_id=analysis_id,
         )
         return normalize_a2a_evidence(
             payload,
@@ -198,8 +232,12 @@ class WorkIQEvidencePort:
         retrieved_at: Any,
     ) -> WorkIQRetrieval:
         token = self._obo.exchange(actor)
-        payload = await self._client.send_message(
-            quality_context_prompt(source_id), access_token=token.reveal()
+        payload = await self._send_captured(
+            quality_context_prompt(source_id),
+            access_token=token.reveal(),
+            kind="quality",
+            case_id=case_id,
+            analysis_id=analysis_id,
         )
         return normalize_a2a_evidence(
             payload,
