@@ -5,8 +5,7 @@
 The user approved this design on 2026-09-07: integrate Work IQ discovery,
 message retrieval and validated evidence into the deployed Supply Response demo.
 Existing message IDs remain validation checks only, never discovery inputs or
-retrieval fallbacks. This written spec is awaiting the user's review before
-implementation planning.
+retrieval fallbacks. The user approved this written spec and instructed execution.
 
 Success is the normal **Analyze disruption** flow completing with independently
 discovered, retrieved and validated evidence from both the supplier email and
@@ -226,4 +225,4 @@ new approval boundary.
 Self-review: no placeholders; both source types covered; known IDs restricted to
 validation; retrieval success distinguished from evidence authority; no fallback
 or policy relaxation; transport, security, deployment and live acceptance bounded.
-Status: design approved in conversation; written-spec review pending.
+Status: written spec approved; implementation planning and execution authorized.
