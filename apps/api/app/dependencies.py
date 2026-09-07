@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol, cast
+from uuid import UUID
 
 from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy import select
@@ -264,6 +266,21 @@ def _required_live_setting(settings: Settings, name: str) -> str:
     return value
 
 
+def _validate_workiq_binding_values(values: dict[str, str]) -> None:
+    sender = values["workiq_supplier_sender"]
+    if not re.fullmatch(r"[^@\s]{1,64}@[^@\s]{1,255}", sender):
+        raise RuntimeError("live dependency setting is invalid: workiq_supplier_sender")
+    for name in ("workiq_quality_author_object_id", "workiq_team_id"):
+        try:
+            UUID(values[name])
+        except ValueError:
+            raise RuntimeError(f"live dependency setting is invalid: {name}") from None
+    if not re.fullmatch(
+        r"19:[^\s/?#]{1,2048}@thread\.tacv2", values["workiq_channel_id"]
+    ):
+        raise RuntimeError("live dependency setting is invalid: workiq_channel_id")
+
+
 def build_live_components(
     settings: Settings,
     *,
@@ -285,8 +302,10 @@ def build_live_components(
         verify_power_bi_deployment_receipt,
     )
     from integrations.fabric.operational import FabricLiveOperationalDataPort
-    from integrations.workiq.client import WorkIQClient, WorkIQEvidencePort
-    from integrations.workiq.obo import build_obo_exchange
+    from integrations.workiq.async_obo import AsyncWorkIQOboExchange
+    from integrations.workiq.mcp import WorkIQMcpClient
+    from integrations.workiq.mcp_evidence import WorkIQMcpEvidencePort
+    from integrations.workiq.models import SourceBinding
     from services.analysis.service import analyze_case
     from services.persistence.fabric_sql import build_credential
 
@@ -298,6 +317,10 @@ def build_live_components(
         "tenant_sharepoint_host",
         "workiq_supplier_source_id",
         "workiq_quality_source_id",
+        "workiq_supplier_sender",
+        "workiq_quality_author_object_id",
+        "workiq_team_id",
+        "workiq_channel_id",
         "workiq_corpus_version",
         "foundry_project_endpoint",
         "foundry_signal_agent_name",
@@ -310,6 +333,7 @@ def build_live_components(
         "fabric_citation_base_url",
     )
     values = {name: _required_live_setting(settings, name) for name in required_names}
+    _validate_workiq_binding_values(values)
     tenant_id = values["allowed_tenant_id"]
     client_id = values["api_client_id"]
     power_bi_url = validate_live_https_url(
@@ -333,16 +357,29 @@ def build_live_components(
     credential = build_credential(settings)
     store = fabric_store(settings, credential)
     operational_data = FabricLiveOperationalDataPort(store.engine)
-    http = httpx.AsyncClient()
-    work_iq = WorkIQEvidencePort(
-        client=WorkIQClient(http=http),
-        obo=build_obo_exchange(
+    http = httpx.AsyncClient(
+        transport=httpx.AsyncHTTPTransport(retries=0),
+        trust_env=False,
+        follow_redirects=False,
+    )
+    work_iq = WorkIQMcpEvidencePort(
+        client=WorkIQMcpClient(http=http),
+        obo=AsyncWorkIQOboExchange(
             client_id=client_id,
             client_secret=values["entra_client_secret"],
             tenant_id=tenant_id,
             auth_service=auth_service,
         ),
-        tenant_sharepoint_host=sharepoint_host,
+        binding=SourceBinding(
+            tenant_id=tenant_id,
+            alex_object_id=values["alex_object_id"],
+            supplier_sender=values["workiq_supplier_sender"],
+            quality_author_object_id=values["workiq_quality_author_object_id"],
+            team_id=values["workiq_team_id"],
+            channel_id=values["workiq_channel_id"],
+            supplier_source_id=values["workiq_supplier_source_id"],
+            quality_source_id=values["workiq_quality_source_id"],
+        ),
     )
     endpoint = values["foundry_project_endpoint"]
     bindings = {
@@ -385,9 +422,14 @@ def build_live_components(
             ),
             work_iq_receipt_verified=verify_binding_receipt(
                 (
+                    "workiq-binding-v2",
                     values["workiq_corpus_version"],
                     values["workiq_supplier_source_id"],
                     values["workiq_quality_source_id"],
+                    values["workiq_supplier_sender"],
+                    values["workiq_quality_author_object_id"],
+                    values["workiq_team_id"],
+                    values["workiq_channel_id"],
                 ),
                 settings.workiq_deployment_receipt,
             ),

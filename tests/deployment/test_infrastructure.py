@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -231,6 +232,10 @@ def test_final_revision_declares_every_live_backend_setting():
         "SUPPLY_RESPONSE_FABRIC_SQL_DATABASE",
         "SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SOURCE_ID",
         "SUPPLY_RESPONSE_WORKIQ_QUALITY_SOURCE_ID",
+        "SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SENDER",
+        "SUPPLY_RESPONSE_WORKIQ_QUALITY_AUTHOR_OBJECT_ID",
+        "SUPPLY_RESPONSE_WORKIQ_TEAM_ID",
+        "SUPPLY_RESPONSE_WORKIQ_CHANNEL_ID",
         "SUPPLY_RESPONSE_WORKIQ_CORPUS_VERSION",
         "SUPPLY_RESPONSE_WORKIQ_DEPLOYMENT_RECEIPT",
         "SUPPLY_RESPONSE_TENANT_SHAREPOINT_HOST",
@@ -251,6 +256,106 @@ def test_final_revision_declares_every_live_backend_setting():
     for setting in required:
         assert setting in combined
     assert "az containerapp update" not in _read("scripts/deploy_personal_tenant.sh")
+
+
+def test_deploy_preflight_validates_versioned_workiq_binding_receipt():
+    deploy = _read("scripts/deploy_personal_tenant.sh")
+    preflight = _read("scripts/preflight_personal_tenant.sh")
+    helper = _read("scripts/lib/workiq_binding.sh")
+    receipt_validation = helper.split("workiq_receipt_parts=(", 1)[1].split(
+        "expected_workiq_receipt=", 1
+    )[0]
+    receipt_order = [
+        "workiq-binding-v2",
+        "SUPPLY_RESPONSE_WORKIQ_CORPUS_VERSION",
+        "SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SOURCE_ID",
+        "SUPPLY_RESPONSE_WORKIQ_QUALITY_SOURCE_ID",
+        "SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SENDER",
+        "SUPPLY_RESPONSE_WORKIQ_QUALITY_AUTHOR_OBJECT_ID",
+        "SUPPLY_RESPONSE_WORKIQ_TEAM_ID",
+        "SUPPLY_RESPONSE_WORKIQ_CHANNEL_ID",
+    ]
+
+    positions = [receipt_validation.index(value) for value in receipt_order]
+    assert positions == sorted(positions)
+    assert "Work IQ deployment receipt does not match trusted bindings" in helper
+    assert 'source "${script_dir}/lib/workiq_binding.sh"' in deploy
+    assert 'source "${script_dir}/lib/workiq_binding.sh"' in preflight
+    assert deploy.index("validate_workiq_binding") < deploy.index(
+        '"${script_dir}/preflight_personal_tenant.sh"'
+    )
+    assert preflight.index("validate_workiq_binding") < preflight.index(
+        "safe_capture active_subscription"
+    )
+
+
+def _workiq_binding_environment() -> dict[str, str]:
+    values = {
+        "SUPPLY_RESPONSE_WORKIQ_CORPUS_VERSION": "fixture-corpus-v1",
+        "SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SOURCE_ID": "mail-fixture",
+        "SUPPLY_RESPONSE_WORKIQ_QUALITY_SOURCE_ID": "1770000000000",
+        "SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SENDER": "dispatch@alpha.example",
+        "SUPPLY_RESPONSE_WORKIQ_QUALITY_AUTHOR_OBJECT_ID": (
+            "44444444-4444-4444-8444-444444444444"
+        ),
+        "SUPPLY_RESPONSE_WORKIQ_TEAM_ID": "55555555-5555-4555-8555-555555555555",
+        "SUPPLY_RESPONSE_WORKIQ_CHANNEL_ID": "19:fixture@thread.tacv2",
+    }
+    parts = ("workiq-binding-v2", *values.values())
+    values["SUPPLY_RESPONSE_WORKIQ_DEPLOYMENT_RECEIPT"] = hashlib.sha256(
+        "\n".join(parts).encode()
+    ).hexdigest()
+    return values
+
+
+@pytest.mark.parametrize(
+    ("update", "message"),
+    [
+        ({"SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SENDER": ""}, "Missing required"),
+        ({"SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SENDER": "not-an-email"}, "malformed"),
+        ({"SUPPLY_RESPONSE_WORKIQ_TEAM_ID": "not-a-uuid"}, "malformed"),
+        ({"SUPPLY_RESPONSE_WORKIQ_CHANNEL_ID": "channel-only"}, "malformed"),
+        (
+            {"SUPPLY_RESPONSE_WORKIQ_DEPLOYMENT_RECEIPT": "0" * 64},
+            "does not match trusted bindings",
+        ),
+    ],
+)
+def test_shared_workiq_binding_preflight_fails_closed(update, message):
+    environment = {**os.environ, **_workiq_binding_environment(), **update}
+    completed = subprocess.run(
+        [
+            "bash",
+            "-c",
+            "source scripts/lib/workiq_binding.sh; validate_workiq_binding",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode != 0
+    assert message in completed.stderr
+    assert "dispatch@alpha.example" not in completed.stderr
+
+
+def test_shared_workiq_binding_receipt_accepts_exact_v2_contract():
+    completed = subprocess.run(
+        [
+            "bash",
+            "-c",
+            "source scripts/lib/workiq_binding.sh; validate_workiq_binding",
+        ],
+        cwd=ROOT,
+        env={**os.environ, **_workiq_binding_environment()},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_key_vault_is_protected_and_runtime_secrets_are_not_iac_values():

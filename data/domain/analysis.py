@@ -410,6 +410,8 @@ class AnalysisRetrievalLineage(FrozenModel):
     task_id: str
     artifact_ids: tuple[str, ...]
     source_ids: tuple[str, ...]
+    protocol: Literal["a2a", "mcp"] = "a2a"
+    request_ids: tuple[str, ...] = ()
 
 
 class AnalysisExplanation(FrozenModel):

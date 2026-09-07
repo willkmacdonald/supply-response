@@ -47,6 +47,10 @@ var finalEnvironment = [
   { name: 'SUPPLY_RESPONSE_FABRIC_SQL_DATABASE', value: runtimeSettings.fabricSqlDatabase }
   { name: 'SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SOURCE_ID', value: runtimeSettings.workIqSupplierSourceId }
   { name: 'SUPPLY_RESPONSE_WORKIQ_QUALITY_SOURCE_ID', value: runtimeSettings.workIqQualitySourceId }
+  { name: 'SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SENDER', value: runtimeSettings.workIqSupplierSender }
+  { name: 'SUPPLY_RESPONSE_WORKIQ_QUALITY_AUTHOR_OBJECT_ID', value: runtimeSettings.workIqQualityAuthorObjectId }
+  { name: 'SUPPLY_RESPONSE_WORKIQ_TEAM_ID', value: runtimeSettings.workIqTeamId }
+  { name: 'SUPPLY_RESPONSE_WORKIQ_CHANNEL_ID', value: runtimeSettings.workIqChannelId }
   { name: 'SUPPLY_RESPONSE_WORKIQ_CORPUS_VERSION', value: runtimeSettings.workIqCorpusVersion }
   { name: 'SUPPLY_RESPONSE_WORKIQ_DEPLOYMENT_RECEIPT', value: runtimeSettings.workIqDeploymentReceipt }
   { name: 'SUPPLY_RESPONSE_TENANT_SHAREPOINT_HOST', value: runtimeSettings.tenantSharePointHost }

@@ -73,6 +73,10 @@ SUPPLY_RESPONSE_ENTRA_CLIENT_SECRET
 SUPPLY_RESPONSE_ALEX_OBJECT_ID
 SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SOURCE_ID
 SUPPLY_RESPONSE_WORKIQ_QUALITY_SOURCE_ID
+SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SENDER
+SUPPLY_RESPONSE_WORKIQ_QUALITY_AUTHOR_OBJECT_ID
+SUPPLY_RESPONSE_WORKIQ_TEAM_ID
+SUPPLY_RESPONSE_WORKIQ_CHANNEL_ID
 SUPPLY_RESPONSE_WORKIQ_CORPUS_VERSION
 SUPPLY_RESPONSE_WORKIQ_DEPLOYMENT_RECEIPT
 SUPPLY_RESPONSE_TENANT_SHAREPOINT_HOST
@@ -98,12 +102,32 @@ leased material claim used by multiple API workers; analysis plus projection are
 committed in one transaction and a losing worker returns the canonical winner.
 
 The three deployment receipts are SHA-256 bindings, not secrets. Power BI binds
-the exact canonical report URL. Work IQ binds, newline-separated, corpus version,
-supplier source ID, and Quality source ID. Foundry binds endpoint followed by each
+the exact canonical report URL. Work IQ receipt version 2 hashes these exact UTF-8
+values joined by one newline, with no trailing newline: `workiq-binding-v2`, corpus
+version, supplier source ID, Quality source ID, supplier sender, Quality author
+object ID, Team ID, and channel ID. Foundry binds endpoint followed by each
 signal/context/decision agent name and pinned version. `/api/runtime` reports a
 capability `ready` only when the corresponding binding is exact; configuration
 alone remains `unverified`. Fabric readiness still requires the bounded Task 12
 connectivity and schema-version check.
+
+Recompute the nonsecret Work IQ receipt after any one of those bindings changes:
+
+```bash
+python3 -c 'import hashlib,sys; print(hashlib.sha256("\n".join(sys.argv[1:]).encode("utf-8")).hexdigest())' \
+  workiq-binding-v2 \
+  "$SUPPLY_RESPONSE_WORKIQ_CORPUS_VERSION" \
+  "$SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SOURCE_ID" \
+  "$SUPPLY_RESPONSE_WORKIQ_QUALITY_SOURCE_ID" \
+  "$SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SENDER" \
+  "$SUPPLY_RESPONSE_WORKIQ_QUALITY_AUTHOR_OBJECT_ID" \
+  "$SUPPLY_RESPONSE_WORKIQ_TEAM_ID" \
+  "$SUPPLY_RESPONSE_WORKIQ_CHANNEL_ID"
+```
+
+Set the resulting digest as `SUPPLY_RESPONSE_WORKIQ_DEPLOYMENT_RECEIPT`. The
+deployment script independently recomputes the same digest and stops before
+provisioning if it differs.
 
 `SUPPLY_RESPONSE_POWER_BI_REPORT_URL` and the Fabric citation base must be canonical `https://app.powerbi.com` URLs without credentials, explicit ports, query strings, or fragments. Work IQ citations are accepted only through the Task 15 Microsoft 365 tenant/host policy. Missing or untrusted required live citations remain visible as `Required live citation missing` and disable approval.
 
@@ -539,7 +563,9 @@ or any external business action.
 
 ### Recovery and post-demo cost control
 
-For an analysis response of `LIVE_SOURCE_UNAVAILABLE`, inspect the Container App
+For an analysis response of `LIVE_SOURCE_UNAVAILABLE`, first inspect its optional
+fixed `source_kind` (`supplier` or `quality`) and `stage` (`authentication`,
+`discovery`, `fetch`, `validation`, or `timeout`) fields. Then inspect the Container App
 console logs for `live_analysis_failed`. The `stage` distinguishes Fabric,
 supplier and Quality retrieval, evidence validation, orchestration, and
 persistence. `error_type`, `origin` (function and line), and immediate cause
@@ -562,33 +588,14 @@ accepts complete scope tokens matching either `WorkIQAgent.Ask` or
 tokens and the validated delegated Alex actor are still required. Never log the
 raw token response.
 
-If Work IQ rejects the HTTP request after token exchange, `workiq_http_failed`
-records only the numeric `status`. It does not record request headers, prompts,
-response headers, response bodies, or exception traces. Match this event with the
-source-stage failure at the same request time. The status narrows the next check;
-it does not by itself prove the underlying permission or service cause.
-
-For a successful HTTP response, the A2A 1.0 `SendMessage` parser reads the
-completed task from `result.task`: `id`, `contextId`, `status`, and `artifacts`
-belong to that task, not directly to `result`. This follows the
-[Microsoft Work IQ quickstart](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/a2a/quickstart).
-Missing, malformed, or incomplete tasks remain errors. A completed task is not
-proof of authoritative evidence: text-only answers remain contextual, and source,
-timestamp, tenant citation, and authority checks still apply. Do not enable raw
-response logging to inspect task contents.
-
-During the approved temporary response-mapping investigation,
-`workiq_response_shape` records a fixed source-kind label and a structure-only
-JSON summary when normalization fails. Only approved field names, JSON types,
-container counts and truncation markers are retained. Primitive values, string
-lengths and unknown key names are excluded; text is never parsed as JSON. The
-summary has a 128-node/12-level budget, two array/unknown-key examples per
-container and an 8,192-character ceiling. Only the first failure for each source
-kind is recorded per application process. Match the active revision and retry
-time; absence of another record does not mean a subsequent request succeeded.
-The diagnostic does not weaken evidence acceptance or fix the mapping. Remove
-its hook after capturing the shape and verifying the mapping correction; never
-enable full payload logging as an alternative.
+The production path opens an isolated Work IQ MCP session for each source. `ask`
+receives only the fictional topic and human-readable location; configured IDs,
+known URLs, expected quantities/dates, and copied source text are not discovery
+inputs. `fetch` is called only with a complete supported individual-message path
+returned by discovery. A successful answer or HTTP response is not evidence:
+the fetched entity must match the configured source, sender/author and
+mailbox/Team/channel binding before its inert normalized body becomes a source
+statement. Do not enable raw response, prompt, token, or message-body logging.
 
 If the final revision is unhealthy, leave the previous healthy revision available,
 inspect redacted Container Apps/Application Insights diagnostics, correct the

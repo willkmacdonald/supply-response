@@ -16,7 +16,7 @@ This roadmap reports the durable, reviewed repository baseline. Uncommitted or a
 | Fabric SQL | Canonical source loaded and verified live | Schema version 12; canonical RL-001 loader passed planned → inserted → unchanged with exact metadata/payload and production-adapter readback; deployed app created a live Case |
 | Power BI | Published; empty-state live render validated | The semantic model and two-page report are published, OAuth2-bound to Fabric SQL, DAX-queryable, and visually clean with an empty database; populated Decision-ID parity remains a post-application-deployment gate |
 | Entra ID and persona authorization | Alex sign-in passed; full authorization journey pending | Private-browser Alex request passed authentication and reached analysis; approval/rejection and downstream gates remain |
-| Work IQ | Exact-scope fix deployed; live retry pending | Microsoft returned a Bearer token with the requested qualified scope; the local validator rejected it. The reviewed fix accepts either exact short or qualified scope. Successful cited retrieval remains unverified |
+| Work IQ | Reviewed local MCP integration; deployment and live acceptance pending | `ask` discovers each supplier/Quality message and `fetch` retrieves it; only validated fetched text becomes evidence. Existing source IDs and the new sender/author/Team/channel bindings validate discoveries. No normal deployed MCP Analyze run has passed yet |
 | Foundry orchestration | Implemented and agents published; invocation pending | Signal, context, and decision agents are verified as immutable version `1` contracts on `gpt-5.6-luna`; no live invocation or evaluation has run |
 | Complete live Case journey | Live Case creation passed; analysis gated | Correct fixed scenario time displayed; delegated analysis, Decision, five actions, ten observations, and populated Power BI parity remain unverified |
 | Personal-tenant deployment and hardening | Updated application and readiness verified | New immutable revision ready; exact Azure roles and live Fabric/Foundry readiness passed; delegated acceptance checks remain |
@@ -99,14 +99,14 @@ Completed implementation and tenant setup:
    - `RL-PERSONA-ALEX` — Alex Morgan, Material Planner and Response Approver
    - `RL-PERSONA-JORDAN` — Jordan Lee, Quality Approver
    - `RL-PERSONA-TAYLOR` — Taylor Brooks, Finance Approver
-2. Implemented cited supplier and Quality retrieval through Work IQ, including delegated OBO, bounded A2A parsing, source binding, and citation validation. The Work IQ service principal and exact delegated consent are configured in the tenant.
+2. Implemented cited supplier and Quality retrieval through Work IQ MCP, including bounded delegated OBO, topic-only `ask` discovery, discovered-path `fetch`, strict source binding, actual-message evidence, and citation validation. Graph-backed resources remain behind Work IQ; the application has no direct Graph fallback. The Work IQ service principal and exact delegated consent are configured in the tenant.
 3. Implemented Foundry Agent Service and Microsoft Agent Framework orchestration while deterministic services retain decision authority. The three committed prompt-agent contracts are published and verified as immutable version `1` agents using `gpt-5.6-luna`.
 4. Implemented the complete live Detect → Analyze → Decide → Execute → Observe composition with fail-closed readiness and Decision-linked lineage.
-5. Created the fictional Work IQ Demo Corpus, verified the supplier email in Alex's mailbox and the Jordan-authored Quality post in Teams, recorded their deployment-specific source bindings, and verified the deterministic binding receipt.
+5. Created the fictional Work IQ Demo Corpus, verified the supplier email in Alex's mailbox and the Jordan-authored Quality post in Teams, and recorded their deployment-specific source and identity/location bindings. The versioned receipt contract is reviewed locally; its deployment value must be regenerated before rollout.
 
 Still required:
 
-- Run the approval-gated Work IQ retrieval and verify both citations resolve to the accepted supplier and Quality sources.
+- Deploy the reviewed MCP composition, then run normal Analyze as Alex and verify that both sources are independently discovered, fetched, validated, and cited.
 - Invoke and evaluate the published Foundry agents through a separately approved live gate.
 - Complete populated Power BI parity after an approved live Decision.
 - Run deployed Entra authentication, Work IQ citation navigation, and the complete live browser journey.
@@ -134,8 +134,8 @@ Final completion requires all 20 frozen acceptance criteria to pass. Local imple
 The Entra, Foundry, Fabric SQL, Work IQ Demo Corpus, and Power BI prerequisites
 are configured and recorded in deployment-local storage. The remaining gates are:
 
-1. Verify the deployed Work IQ scope-validation fix through Alex's live analysis retry.
-2. Run live analysis, cited Work IQ retrieval, and pinned Foundry invocation.
+1. Deploy the reviewed Work IQ MCP composition with the versioned binding receipt.
+2. Run normal Alex live analysis, verify both cited Work IQ sources, and observe the pinned Foundry invocation.
 3. Record the approved Decision, verify five linked actions and ten simulated observations.
 4. Verify Power BI refresh, filters, and Decision-ID parity for that same Case.
 
@@ -163,7 +163,7 @@ third-party Starlette deprecation warning; these are not reported as clean gates
 | 12 | Fabric SQL adapter and analytics views | Complete; live Fabric SQL setup, schema, idempotency, and health checks passed |
 | 13 | Two-page Power BI project | Published; OAuth2 binding, DAX smoke query, and empty-state live render passed; populated parity pending |
 | 14 | Single-tenant Entra authentication and persona roles | Complete locally; tenant configuration verified; deployed auth gate pending |
-| 15 | Cited Microsoft 365 evidence through Work IQ | Complete locally; tenant consent, Demo Corpus sources, bindings, and receipt verified; live retrieval pending |
+| 15 | Cited Microsoft 365 evidence through Work IQ | Reviewed locally with MCP discovery/fetch/validation; tenant prerequisites exist, but deployment receipt promotion and normal live acceptance are pending |
 | 16 | Foundry-managed Agent Framework orchestration | Complete locally; three Luna agents published and verified; invocation/evaluation pending |
 | 17 | Complete live Case journey | Live Case creation passed; Alex-authenticated analysis and downstream browser gates pending |
 | 18 | Personal-tenant provisioning and deployment | Updated Azure revision, exact roles, and live readiness verified; delegated acceptance pending |

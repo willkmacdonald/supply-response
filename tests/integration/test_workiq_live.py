@@ -1,3 +1,5 @@
+"""Approval-gated legacy A2A adapter check; not production MCP acceptance."""
+
 from __future__ import annotations
 
 import os
@@ -8,7 +10,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-
 
 LIVE_SETTINGS = (
     "SUPPLY_RESPONSE_WORKIQ_LIVE",

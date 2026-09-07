@@ -32,7 +32,8 @@ from data.domain.evidence import (
     RetrievalHealth,
 )
 from data.synthetic.rl001 import OperationalSnapshot
-from integrations.workiq.models import WorkIQRetrieval
+from integrations.workiq.mcp_evidence import FailureStage, WorkIQSourceError
+from integrations.workiq.models import SourceKind, WorkIQRetrieval
 from services.analysis.service import AnalyzeCaseCommand, canonical_operational_snapshot
 from services.persistence.store import (
     AnalysisClaimBusy,
@@ -83,7 +84,16 @@ class LiveSourceUnavailable(RuntimeError):
     code = "LIVE_SOURCE_UNAVAILABLE"
     new_fallback_case_allowed = True
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        source_kind: SourceKind | None = None,
+        stage: FailureStage | None = None,
+    ) -> None:
+        if (source_kind is None) != (stage is None):
+            raise ValueError("source failure category and stage must be paired")
+        self.source_kind = source_kind
+        self.stage = stage
         super().__init__("A required live source is unavailable.")
 
 
@@ -459,6 +469,8 @@ class LiveAnalysisApplicationService:
                     task_id=supplier.lineage.task_id,
                     artifact_ids=supplier.lineage.artifact_ids,
                     source_ids=supplier.lineage.source_ids,
+                    protocol=supplier.lineage.protocol,
+                    request_ids=supplier.lineage.request_ids,
                 ),
                 AnalysisRetrievalLineage(
                     source_kind="quality",
@@ -466,6 +478,8 @@ class LiveAnalysisApplicationService:
                     task_id=quality.lineage.task_id,
                     artifact_ids=quality.lineage.artifact_ids,
                     source_ids=quality.lineage.source_ids,
+                    protocol=quality.lineage.protocol,
+                    request_ids=quality.lineage.request_ids,
                 ),
             )
             command = AnalyzeCaseCommand(
@@ -490,6 +504,8 @@ class LiveAnalysisApplicationService:
                                 task_id=item.task_id,
                                 artifact_ids=item.artifact_ids,
                                 source_ids=item.source_ids,
+                                protocol=item.protocol,
+                                request_ids=item.request_ids,
                             )
                             for item in lineage
                         ),
@@ -539,7 +555,13 @@ class LiveAnalysisApplicationService:
                     )
             except Exception as release_error:  # noqa: BLE001 - lease expires safely
                 _log_analysis_failure("release_analysis_claim", release_error)
-            raise LiveSourceUnavailable() from None
+            source_failure = error if isinstance(error, WorkIQSourceError) else None
+            raise LiveSourceUnavailable(
+                source_kind=(
+                    source_failure.source_kind if source_failure is not None else None
+                ),
+                stage=source_failure.stage if source_failure is not None else None,
+            ) from None
 
     async def _wait_for_winner(self, case_id: str) -> AnalysisVersion:
         deadline = self._monotonic() + self._analysis_wait_budget_seconds

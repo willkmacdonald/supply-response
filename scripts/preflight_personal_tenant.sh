@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${script_dir}/lib/safe_command.sh"
+source "${script_dir}/lib/workiq_binding.sh"
 safe_init_diagnostics
 
 EXPECTED_SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID:?Set AZURE_SUBSCRIPTION_ID to the separately confirmed target}"
@@ -44,6 +45,7 @@ assert_equal() {
 require_command az
 require_command azd
 require_command python3
+validate_workiq_binding
 
 if ! valid_container_app_name "$EXPECTED_CONTAINER_APP_NAME"; then
   printf 'SUPPLY_RESPONSE_CONTAINER_APP_NAME must be 2-32 lowercase letters, numbers, or hyphens, starting with a letter, ending alphanumeric, and containing no consecutive hyphens.\n' >&2

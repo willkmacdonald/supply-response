@@ -25,6 +25,10 @@ param fabricSqlServer string
 param fabricSqlDatabase string
 param workIqSupplierSourceId string
 param workIqQualitySourceId string
+param workIqSupplierSender string
+param workIqQualityAuthorObjectId string
+param workIqTeamId string
+param workIqChannelId string
 param workIqCorpusVersion string
 param workIqDeploymentReceipt string
 param tenantSharePointHost string
@@ -102,6 +106,10 @@ module app 'modules/container-apps.bicep' = {
       fabricSqlDatabase: fabricSqlDatabase
       workIqSupplierSourceId: workIqSupplierSourceId
       workIqQualitySourceId: workIqQualitySourceId
+      workIqSupplierSender: workIqSupplierSender
+      workIqQualityAuthorObjectId: workIqQualityAuthorObjectId
+      workIqTeamId: workIqTeamId
+      workIqChannelId: workIqChannelId
       workIqCorpusVersion: workIqCorpusVersion
       workIqDeploymentReceipt: workIqDeploymentReceipt
       tenantSharePointHost: tenantSharePointHost

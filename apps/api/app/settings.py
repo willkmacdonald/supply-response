@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     alex_object_id: str | None = None
     workiq_supplier_source_id: str | None = None
     workiq_quality_source_id: str | None = None
+    workiq_supplier_sender: str | None = None
+    workiq_quality_author_object_id: str | None = None
+    workiq_team_id: str | None = None
+    workiq_channel_id: str | None = None
     workiq_corpus_version: str | None = None
     workiq_deployment_receipt: str | None = None
     tenant_sharepoint_host: str | None = None

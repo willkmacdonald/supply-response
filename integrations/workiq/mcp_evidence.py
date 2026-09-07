@@ -25,8 +25,8 @@ FailureStage = Literal["discovery", "fetch", "validation", "authentication", "ti
 
 class WorkIQSourceError(WorkIQError):
     def __init__(self, source_kind: SourceKind, stage: FailureStage) -> None:
-        self.source_kind = source_kind
-        self.stage = stage
+        self.source_kind: SourceKind = source_kind
+        self.stage: FailureStage = stage
         super().__init__(f"Work IQ {source_kind} source unavailable ({stage})")
 
 

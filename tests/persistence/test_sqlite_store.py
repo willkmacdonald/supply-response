@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from apps.api.app.settings import Settings
 from data.domain import CaseInstance, CasePurpose, CaseStatus, RuntimeMode
+from data.domain.analysis import AnalysisRetrievalLineage
 from data.domain.decisions import CorpusScope, StandingAuthorization
 from data.synthetic.rl001 import (
     SCENARIO_EFFECTIVE_TIME,
@@ -392,6 +393,49 @@ def test_analysis_versions_are_insert_only(tmp_path):
 
     with pytest.raises(ImmutableRecordConflict):
         store.save_analysis(analysis)
+
+
+def test_stored_a2a_lineage_without_protocol_fields_remains_readable(tmp_path):
+    store = sqlite_store(f"sqlite:///{tmp_path / 'legacy-a2a-lineage.db'}")
+    case, snapshot = fallback_rl001_case("RL-CASE-LEGACY-LINEAGE")
+    analysis = fallback_rl001_analysis(
+        case,
+        snapshot,
+        "RL-ANALYSIS-LEGACY-LINEAGE",
+    ).model_copy(
+        update={
+            "retrieval_lineage": (
+                AnalysisRetrievalLineage(
+                    source_kind="supplier",
+                    context_id="legacy-context",
+                    task_id="legacy-task",
+                    artifact_ids=("legacy-artifact",),
+                    source_ids=("legacy-source",),
+                ),
+            )
+        }
+    )
+    store.create_case(case, snapshot)
+    store.save_analysis(analysis)
+    with store.engine.begin() as connection:
+        payload = json.loads(
+            connection.scalar(
+                select(analysis_versions.c.payload_json).where(
+                    analysis_versions.c.analysis_id == analysis.analysis_id
+                )
+            )
+        )
+        payload["retrieval_lineage"][0].pop("protocol")
+        payload["retrieval_lineage"][0].pop("request_ids")
+        connection.execute(
+            update(analysis_versions)
+            .where(analysis_versions.c.analysis_id == analysis.analysis_id)
+            .values(payload_json=json.dumps(payload))
+        )
+
+    lineage = store.get_analysis(analysis.analysis_id).retrieval_lineage[0]
+    assert lineage.protocol == "a2a"
+    assert lineage.request_ids == ()
 
 
 def test_analysis_rejects_nested_runtime_provenance_change(tmp_path):

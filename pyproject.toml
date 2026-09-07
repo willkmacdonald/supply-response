@@ -49,7 +49,7 @@ pythonpath = ["."]
 markers = [
   "fabric_live: requires an explicitly configured live Fabric SQL Database",
   "power_bi_live: requires explicit API and Power BI live settings",
-  "workiq_live: requires a fresh Alex delegated assertion and complete Work IQ tenant settings",
+  "workiq_live: legacy A2A adapter check only; not production MCP acceptance",
   "foundry_live: requires explicit pinned Foundry agent settings and separate approval",
 ]
 

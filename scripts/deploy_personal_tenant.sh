@@ -6,6 +6,7 @@ repo_root="$(cd "${script_dir}/.." && pwd)"
 source "${script_dir}/lib/safe_command.sh"
 source "${script_dir}/lib/key_vault_operator_access.sh"
 source "${script_dir}/lib/deployment_health.sh"
+source "${script_dir}/lib/workiq_binding.sh"
 safe_init_diagnostics
 
 EXPECTED_SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID:?Set AZURE_SUBSCRIPTION_ID to the separately confirmed target}"
@@ -38,6 +39,7 @@ case "${1:-}" in
 esac
 (( $# <= 1 )) || { printf 'Usage: %s [--apply|--smoke]\n' "$0" >&2; exit 2; }
 
+validate_workiq_binding
 "${script_dir}/preflight_personal_tenant.sh"
 
 resource_group="$EXPECTED_RESOURCE_GROUP"
@@ -116,6 +118,8 @@ required_runtime_settings=(
   SUPPLY_RESPONSE_API_CLIENT_ID SUPPLY_RESPONSE_ALEX_OBJECT_ID
   SUPPLY_RESPONSE_FABRIC_SQL_SERVER SUPPLY_RESPONSE_FABRIC_SQL_DATABASE
   SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SOURCE_ID SUPPLY_RESPONSE_WORKIQ_QUALITY_SOURCE_ID
+  SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SENDER SUPPLY_RESPONSE_WORKIQ_QUALITY_AUTHOR_OBJECT_ID
+  SUPPLY_RESPONSE_WORKIQ_TEAM_ID SUPPLY_RESPONSE_WORKIQ_CHANNEL_ID
   SUPPLY_RESPONSE_WORKIQ_CORPUS_VERSION SUPPLY_RESPONSE_WORKIQ_DEPLOYMENT_RECEIPT
   SUPPLY_RESPONSE_TENANT_SHAREPOINT_HOST SUPPLY_RESPONSE_FOUNDRY_PROJECT_ENDPOINT
   SUPPLY_RESPONSE_FOUNDRY_SIGNAL_AGENT_NAME SUPPLY_RESPONSE_FOUNDRY_SIGNAL_AGENT_VERSION

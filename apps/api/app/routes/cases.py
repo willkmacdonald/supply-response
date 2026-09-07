@@ -156,12 +156,15 @@ async def create_analysis(
             detail={"code": "CASE_NOT_FOUND", "case_id": case_id},
         ) from None
     except LiveSourceUnavailable as error:
+        detail = {
+            "code": error.code,
+            "new_fallback_case_allowed": error.new_fallback_case_allowed,
+        }
+        if error.source_kind is not None and error.stage is not None:
+            detail.update(source_kind=error.source_kind, stage=error.stage)
         raise HTTPException(
             status_code=503,
-            detail={
-                "code": error.code,
-                "new_fallback_case_allowed": error.new_fallback_case_allowed,
-            },
+            detail=detail,
         ) from None
     return analysis_response(analysis)
 
