@@ -1,8 +1,71 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed — Work IQ MCP probe retired and cleanup verified, 2026-09-07 UTC. Live analysis unchanged.
+> **Status:** Validated — approved Work IQ discovery/fetch/evidence integration. Azure validation workflow and independent final review passed. Existing revision13 remains deployed; approved deployment and one Alex Analyze are next.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
+
+## Validation Proof — production Work IQ discovery/evidence integration
+
+The user approved the written discovery/evidence spec and implementation plan,
+including deployment to the existing app and one normal Alex live analysis.
+No new resources, roles, permissions, billing or source edits; no Git push.
+All three implementation tasks are independently reviewed. Final whole-change
+review of 91c1681..1f6afc3 approved deployment with no Critical/Important findings.
+
+- [x] All validation checks pass for the current integration.
+  - [x] 1. AZD Installation.
+  - [x] 2. Schema Validation.
+  - [x] 3. Environment Setup.
+  - [x] 4. Authentication Check.
+  - [x] 5. Subscription/Location Check.
+  - [x] 6. Aspire Pre-Provisioning Checks (not applicable).
+  - [x] 7. Provision Preview.
+  - [x] 8. Build Verification.
+  - [x] 9. Docker Build Context Validation.
+  - [x] 10. Package Validation.
+  - [x] 11. Azure Policy Validation.
+  - [x] 12. Aspire Post-Provisioning Checks (not applicable).
+  - [x] Static least-privilege role-assignment verification.
+
+At 22:51 UTC on 2026-09-07, `azd version` confirmed 1.30.0, `azd auth login
+--check-status` confirmed Will, and `azd env list --output json` confirmed the
+existing default `supply-response-personal` environment. `az account show`
+matched the approved Azure Dev subscription/tenant and interactive User identity.
+The CLI advertises an available update; no toolchain change is needed or applied.
+Read-only policy inventory still contains the recorded Microsoft security
+benchmark/Defender assignments; final current-template preview remains pending.
+Baseline Azure inspection confirms revision `ca-sr-demo--0000013` remains the
+only active/latest-ready revision, Healthy (currently scaled to zero), 100%
+traffic; scale remains 0–2 and the exact managed identity is unchanged. Retained
+rollback image digest: `109d0f6c58eaeb0e537bd3432b8900fc75164203e09b9ab120c81edf87afc7e4`.
+Read-only app role inventory confirms exactly three existing assignments:
+`AcrPull` at the shared registry, `Key Vault Secrets User` at the project vault,
+and `Foundry User` at the existing project. No broader runtime role is present.
+Docker context inspection confirms locked Node/Python inputs, nonroot runtime,
+required public Entra build arguments and exclusion of local environment,
+scratch, test, credential and browser-state files. No Dockerfile change.
+Controller release verification at e773dac: full `uv run pytest -q` exited 0,
+with expected live-test skips and the existing Starlette/httpx warning; `uv build`
+passed. `npm --prefix apps/web test` passed all 51 tests in five files and
+`npm --prefix apps/web run build` passed the 179-module production build.
+The four nonsecret bindings were verified against the existing corpus/directory
+metadata; the ignored environment now has the exact v2 receipt from the reviewed
+shared recipe. `bash scripts/preflight_personal_tenant.sh` passed. Named-environment
+`azd provision --preview --no-prompt --environment supply-response-personal`
+passed in 20 seconds: no new resources, only existing Container App settings/image
+and Application Insights metadata reconciliation. `azd package --no-prompt
+--environment supply-response-personal` passed; azure.yaml was accepted. No
+policy blocked preview. Static registry/vault/Foundry modules were re-read and
+match the three exact live role assignments. No Aspire services apply.
+Final receipt enforcement fix `1f6afc3` rejects invalid receipts before any live
+resource construction. Its independent re-review passed; the controller reran
+83 covering wiring/live/deployment tests and `uv build`, both passed. Task-scoped
+Ruff/Pyright and offline Bicep/shell checks passed. Whole-change review then
+approved deployment without additional findings. The pre-existing Starlette
+warning is unchanged; no claim of globally clean unrelated static debt is made.
+Current validation completed on 2026-09-07 at approximately 23:35 UTC. Normal
+Alex Analyze and its live discovery/evidence/citation outcome remain unverified.
+Prior deployment evidence below is historical, not a substitute for this gate.
 
 ## Validation Proof — MCP probe cleanup, 2026-09-07 UTC
 
