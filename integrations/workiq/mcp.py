@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -19,6 +20,27 @@ ENDPOINT: Final = "https://workiq.svc.cloud.microsoft/mcp"
 PROTOCOL_VERSION: Final = "2025-03-26"
 MAX_RESPONSE_BYTES: Final = 1024 * 1024
 MAX_JSON_DEPTH: Final = 20
+_logger = logging.getLogger(__name__)
+
+
+def _field_state(result: dict[str, Any], key: str, maximum: int) -> str:
+    """Return a fixed diagnostic label, never a field value or arbitrary key."""
+    if key not in result:
+        return "missing"
+    value = result[key]
+    if value is None:
+        return "null"
+    if type(value) is str:
+        if not value.strip():
+            return "empty"
+        return "oversize" if len(value) > maximum else "valid"
+    return {
+        bool: "boolean",
+        int: "number",
+        float: "number",
+        list: "array",
+        dict: "object",
+    }.get(type(value), "other")
 
 
 def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -283,6 +305,13 @@ class WorkIQMcpSession:
         if not _bounded_string(
             result.get("response"), MAX_RESPONSE_BYTES
         ) or not _bounded_string(result.get("conversationId"), 256):
+            _logger.warning(
+                "workiq_ask_shape response=%s conversation_id=%s answer=%s error=%s",
+                _field_state(result, "response", MAX_RESPONSE_BYTES),
+                _field_state(result, "conversationId", 256),
+                _field_state(result, "answer", MAX_RESPONSE_BYTES),
+                _field_state(result, "error", MAX_RESPONSE_BYTES),
+            )
             raise WorkIQProtocolError("Work IQ discovery response is invalid")
         return result
 

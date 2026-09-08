@@ -1,8 +1,48 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed — revision15 diagnostic update is healthy. The single approved Alex Analyze failed at `ask` answer-shape validation for both sources, before locator parsing. No new permissions, billing, source edits, resources, or raw-response capture.
+> **Status:** Validated — approved answer-field diagnostic follow-up. Existing revision15 remains healthy pending deployment. No permissions, billing, source, prompt, acceptance or retry changes.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
+
+## Validation Proof — ask answer-field diagnostics
+
+- [x] All validation checks pass.
+  - [x] 1. AZD Installation.
+  - [x] 2. Schema Validation.
+  - [x] 3. Environment Setup.
+  - [x] 4. Authentication Check.
+  - [x] 5. Subscription/Location Check.
+  - [x] 6. Aspire Pre-Provisioning Checks (not applicable).
+  - [x] 7. Provision Preview.
+  - [x] 8. Build Verification.
+  - [x] 9. Docker Build Context Validation.
+  - [x] 10. Package Validation.
+  - [x] 11. Azure Policy Validation.
+  - [x] 12. Aspire Post-Provisioning Checks (not applicable).
+  - [x] Static role verification.
+
+User approved checking which answer field differs without message-body capture.
+Success: fixed status labels for literal response/conversationId/answer/error
+fields, then one normal existing-Case Alex Analyze and a supported conclusion.
+No raw values, unknown keys, lengths, credentials, permission changes, Graph,
+new resources, automatic analysis retry, Git push or speculative parser fix.
+
+Offline RED:16 real MCP-wrapper cases failed because statuses were absent.
+GREEN:95 focused transport/evidence/live-wiring/shape tests pass; scoped Ruff and
+Pyright pass. Full `uv run pytest -q` and `uv build` passed; expected live skips
+and existing Starlette/httpx warning only. All51 frontend tests and179-module
+build passed. Independent review found no actionable issues and independently
+passed50 shape/transport tests. At approximately02:23 UTC on September8,
+AZD1.30.0/auth/default-environment and Azure account checks confirmed the existing
+Will User, Azure Dev subscription/tenant and named environment. Read-only preflight,
+named provision preview and package passed. Preview has no new resources, only
+existing Container App and Insights metadata reconciliation. Policy inventory is
+unchanged. Dockerfile/ignore/locked inputs and static role modules were checked.
+Live baseline revision15, identity, scale0–2 and exact three scoped roles match.
+The current Microsoft Learn reference documents response/conversationId, whereas
+the Microsoft iq-series lab describes answer/conversationId in structured content.
+These are hypotheses, not proof of the actual live fields. This diagnostic keeps
+the rejection contract unchanged and records field states only on that rejection.
 
 ## Validation Proof — discovery-substep diagnostics
 
