@@ -1,9 +1,6 @@
 import {CaseHeader} from "./components/CaseHeader";
-import {DecisionPanel} from "./components/DecisionPanel";
-import {EvidencePanel} from "./components/EvidencePanel";
 import {ExecutionPanel} from "./components/ExecutionPanel";
-import {ExposurePanel} from "./components/ExposurePanel";
-import {OptionComparison} from "./components/OptionComparison";
+import {InvestigationFlow} from "./components/InvestigationFlow";
 import {OutcomePanel} from "./components/OutcomePanel";
 import {useAuth} from "./auth/AuthProvider";
 import {useCaseWorkspace} from "./hooks/useCaseWorkspace";
@@ -33,14 +30,7 @@ function CaseWorkspace() {
       onCreate={workspace.create}
       onAnalyze={workspace.analyze}
     />
-    <EvidencePanel analysis={workspace.analysis} tenantSharePointHost={workspace.runtime?.deployment_contract?.tenant_sharepoint_host} />
-    <ExposurePanel analysis={workspace.analysis} />
-    <OptionComparison
-      analysis={workspace.analysis}
-      selectedOption={workspace.selectedOption}
-      onSelect={workspace.selectOption}
-    />
-    <DecisionPanel state={workspace} onApprove={workspace.approve} onReject={workspace.reject} />
+    <InvestigationFlow state={workspace} />
     <ExecutionPanel
       decision={workspace.decision}
       actions={workspace.actions}

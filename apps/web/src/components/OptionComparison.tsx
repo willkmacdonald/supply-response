@@ -1,50 +1,21 @@
 import type {AnalysisVersion, ResponseOption} from "../types";
+import type {PlannerSnapshot} from "./plannerSnapshot";
 import {optionDisplayName} from "./optionLabels";
-
-interface OptionComparisonProps {
-  analysis: AnalysisVersion | null;
-  selectedOption: ResponseOption | null;
-  onSelect: (option: ResponseOption) => void;
-}
-
-export function OptionComparison({analysis, selectedOption, onSelect}: OptionComparisonProps) {
+import {blocker} from "./plannerFormatting";
+import {PredictionSummary} from "./PredictionSummary";
+export function OptionComparison({analysis, selectedOption, onSelect, snapshot = null}: {analysis: AnalysisVersion | null; selectedOption: ResponseOption | null; onSelect: (option: ResponseOption) => void; snapshot?: PlannerSnapshot | null}) {
   if (!analysis) return null;
-  return <section className="panel" aria-labelledby="options-heading">
-    <p className="step">03 · Options</p>
-    <h2 id="options-heading">Response option comparison</h2>
-    <div className="option-grid">
-      {analysis.response_options.map((option) => {
-        const displayName = optionDisplayName(option);
-        return <article aria-label={displayName} className={`option-card ${!option.executable ? "blocked" : ""}`} key={option.option_id}>
-        <div className="card-labels">
-          {option.option_id === analysis.ranking.recommended_option_id && <span className="badge accent">Recommended</span>}
-          {!option.executable && <span className="badge danger">Blocked</span>}
-        </div>
-        <h3>{displayName}</h3>
-        {option.predicted ? <dl className="compact-list">
-          <div><dt>Uncovered demand</dt><dd>{option.predicted.uncovered_part_demand.toLocaleString()}</dd></div>
-          <div><dt>Response cost</dt><dd>${Number(option.predicted.response_cost).toLocaleString()}</dd></div>
-          <div><dt>Execution risk</dt><dd>{option.execution_risk}</dd></div>
-        </dl> : <p>Predicted outcome unavailable while blocked.</p>}
-        {option.blocking_codes.length > 0 && <ul className="blocking-codes">
-          {option.blocking_codes.map((code) => <li key={code}>{code}</li>)}
-        </ul>}
-        <button
-          type="button"
-          disabled={!option.executable}
-          aria-pressed={selectedOption?.option_id === option.option_id}
-          onClick={() => onSelect(option)}
-        >Select {displayName}</button>
-      </article>;
-      })}
-    </div>
-    <div className="trace">
-      <h3>Elimination trace</h3>
-      {analysis.ranking.stages.length === 0 ? <p>No options were eliminated by ranking stages.</p> : <ol>
-        {analysis.ranking.stages.map((stage, index) => <li key={`${stage.comparator}-${index}`}>
-          <strong>{stage.comparator.replaceAll("_", " ")}</strong>: threshold {stage.threshold}; eliminated {stage.eliminated_option_ids.join(", ") || "none"}
-        </li>)}
-      </ol>}
-    </div>
-  </section>;
+  const options = [...analysis.response_options].sort((a, b) => Number(b.option_kind === "no_mitigation") - Number(a.option_kind === "no_mitigation"));
+  return <section className="panel investigation-card" aria-labelledby="options-heading"><h3 id="options-heading">Compare the options.</h3>
+    {!options.some(option => option.option_kind === "no_mitigation") && <p>Do-nothing baseline unavailable in this saved analysis</p>}
+    <div className="planner-options">{options.map(option => { const name = optionDisplayName(option); const baseline = option.option_kind === "no_mitigation"; return <article aria-label={name} className={`option-card ${!option.executable ? "blocked" : ""}`} key={option.option_id}>
+      <h4>{name}</h4>{option.option_id === analysis.ranking.recommended_option_id && <span className="badge accent">Recommended for review</span>}
+      <p>{baseline ? "Comparison only" : option.executable ? "Meets the planning requirements" : "Does not meet the planning requirements"}</p>
+      {option.blocking_codes.length > 0 && <ul>{option.blocking_codes.map(code => <li key={code}>{blocker(code)}</li>)}</ul>}
+      <PredictionSummary predicted={option.predicted} snapshot={snapshot} basis={baseline ? "baseline" : "response"} compact />
+      <details><summary>Full option metrics, assumptions, and calculation details</summary><PredictionSummary predicted={option.predicted} snapshot={snapshot} basis={baseline ? "baseline" : "response"} /><ul>{option.assumptions.map((text, index) => <li key={index}>{text}</li>)}</ul><p>Execution risk score: {option.execution_risk}</p><p>Source records: {option.source_data_lineage.join(", ") || "Unavailable"}</p></details>
+      <button type="button" disabled={!option.executable} aria-pressed={selectedOption?.option_id === option.option_id} onClick={() => onSelect(option)}>Select {name}</button>
+    </article>;})}</div>
+    <details className="trace"><summary>How the saved analysis ranked the options</summary>{analysis.ranking.stages.length === 0 ? <p>No options were eliminated by ranking stages.</p> : <ol>{analysis.ranking.stages.map((stage, index) => <li key={`${stage.comparator}-${index}`}>{stage.comparator.replaceAll("_", " ")}: threshold {stage.threshold}; eliminated {stage.eliminated_option_ids.join(", ") || "none"}</li>)}</ol>}</details>
+    <footer className="saved-analysis-footer">Saved analysis comparison; selection is not approval or execution.</footer></section>;
 }

@@ -1,6 +1,7 @@
 import {useState} from "react";
 import type {CaseWorkspaceState} from "../hooks/useCaseWorkspace";
 import {optionDisplayName} from "./optionLabels";
+import {blocker, role, decisionContext} from "./plannerFormatting";
 
 interface DecisionPanelProps {
   state: CaseWorkspaceState;
@@ -17,9 +18,9 @@ export function DecisionPanel({state, onApprove, onReject}: DecisionPanelProps) 
     ...state.analysis.evidence_validation.blocking_codes,
   ];
   const disabled = state.decisionBlocked || Boolean(state.decision) || state.operation === "deciding";
-  return <section className="panel" aria-labelledby="decision-heading">
-    <p className="step">04 · Decision</p>
-    <h2 id="decision-heading">{state.decision ? "Decision receipt" : "Decision"}</h2>
+  return <section className="panel investigation-card" aria-labelledby="decision-heading">
+    <h3 id="decision-heading">Review and approve.</h3>
+    <p>{decisionContext(state.caseInstance, state.analysis.analysis_id, Boolean(state.decision))}</p>
     {state.decision ? <div className="receipt" data-testid="decision-receipt">
       <p className="receipt-id">Decision {state.decision.decision_id}</p>
       <p>{state.decision.kind === "approved" ? "Approved" : "Rejected"}</p>
@@ -31,9 +32,13 @@ export function DecisionPanel({state, onApprove, onReject}: DecisionPanelProps) 
     </div> : <>
       {stale && <p className="warning">Required evidence is stale</p>}
       {blockingCodes.length > 0 && <ul className="blocking-codes">
-        {blockingCodes.map((code) => <li key={code}>{code}</li>)}
+        {blockingCodes.map((code, index) => <li key={`${code}-${index}`}>{blocker(code)}</li>)}
       </ul>}
-      <p>Selected option: <strong>{state.selectedOption?.option_id ?? "None"}</strong></p>
+      <p>Selected option: {state.selectedOption ? optionDisplayName(state.selectedOption) : "None"}</p>
+      {state.selectedOption && <ul aria-label="Required approval roles">{state.selectedOption.prerequisite_roles.map(required => {
+        const satisfied = state.analysis!.approval_satisfactions.some(item => item.analysis_id === state.analysis!.analysis_id && item.option_id === state.selectedOption!.option_id && item.role === required && item.satisfied);
+        return <li key={required}>{role(required)}: {satisfied ? "Recorded authorization satisfied" : "No satisfied authorization recorded"}</li>;
+      })}</ul>}
       <div className="decision-controls">
         <button type="button" disabled={disabled || !state.selectedOption} onClick={onApprove}>
           Approve {state.selectedOption ? optionDisplayName(state.selectedOption).toLowerCase() : "selected response"}
@@ -50,5 +55,6 @@ export function DecisionPanel({state, onApprove, onReject}: DecisionPanelProps) 
         </button>
       </div>
     </>}
+    <footer className="saved-analysis-footer">Approval remains an explicit user action. Any execution shown afterward is separately labeled.</footer>
   </section>;
 }

@@ -469,9 +469,9 @@ describe("progressive Case workspace", () => {
     expect(await screen.findByText("Simulated outcomes")).toBeVisible();
     expect(await screen.findAllByTestId("outcome-observation")).toHaveLength(10);
     expect(screen.queryByText("Actual outcomes")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", {name: "Evidence items"})).toBeVisible();
-    expect(screen.getByRole("heading", {name: "Exposure and lineage"})).toBeVisible();
-    expect(screen.getByRole("heading", {name: "Decision receipt"})).toBeVisible();
+    expect(screen.getByRole("heading", {name: "1. Understand the disruption"})).toBeVisible();
+    expect(screen.getByRole("heading", {name: "Recommended response—and why."})).toBeVisible();
+    expect(screen.getByRole("heading", {name: "Review and approve."})).toBeVisible();
   });
 
   it("announces that evidence checks are pending while analysis is in progress", async () => {
@@ -487,14 +487,14 @@ describe("progressive Case workspace", () => {
     expect(await screen.findByText("Combined response")).toBeVisible();
   });
 
-  it("keeps blocked Beta visible and nonselectable with its exact code", async () => {
+  it("keeps the alternate supplier blocker visible and nonselectable", async () => {
     mockFallbackCaseLifecycle();
     render(<App />);
     await screen.findByText("Fallback mode");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     const beta = await screen.findByRole("article", {name: "Use the alternate supplier"});
-    expect(within(beta).getByText("QUALITY_QUALIFICATION_PENDING")).toBeVisible();
+    expect(within(beta).getByText("Cannot use Supplier Beta yet: supplier qualification is incomplete")).toBeVisible();
     expect(within(beta).getByRole("button", {name: "Select Use the alternate supplier"})).toBeDisabled();
   });
 
@@ -511,7 +511,7 @@ describe("progressive Case workspace", () => {
     await screen.findByText("Fallback mode");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
-    expect(await screen.findByText("REQUIRED_EVIDENCE_STALE")).toBeVisible();
+    expect(await screen.findByText("Planning requirement unresolved (REQUIRED_EVIDENCE_STALE)")).toBeVisible();
     expect(screen.getByRole("button", {name: "Approve combined response"})).toBeDisabled();
     expect(screen.getByRole("button", {name: "Reject recommendation"})).toBeDisabled();
   });
@@ -583,7 +583,7 @@ describe("progressive Case workspace", () => {
     await userEvent.type(screen.getByLabelText("Rejection reason"), "Wait for refreshed supplier evidence.");
     await userEvent.click(screen.getByRole("button", {name: "Reject recommendation"}));
     expect(await screen.findByText("Rejected")).toBeVisible();
-    expect(screen.getByRole("heading", {name: "Evidence items"})).toBeVisible();
+    expect(screen.getByRole("heading", {name: "1. Understand the disruption"})).toBeVisible();
     expect(screen.queryAllByTestId("execution-action")).toHaveLength(0);
   });
 
