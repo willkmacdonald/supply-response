@@ -41,6 +41,7 @@ export function evidenceStatus(item: StatusItem, context: StatusContext): Eviden
     item.retrieval_health !== "healthy" ? "Source retrieval failed" :
     !inWindow ? "Retrieval time unavailable or outside this analysis" :
     !check ? "Validation result unavailable" :
+    check.retrieval_health !== "healthy" ? "Evidence validation retrieval failed" :
     check.uncertainty_state === "conflicted" ? "Conflicting evidence needs review" :
     check.freshness !== "current" ? "Evidence freshness check failed" :
     check.business_validity !== "valid" ? "Evidence is not valid for this scenario date" :

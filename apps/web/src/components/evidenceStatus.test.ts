@@ -53,6 +53,7 @@ describe("evidence status", () => {
     {...validation, freshness: "stale" as const},
     {...validation, business_validity: "expired" as const},
     {...validation, uncertainty_state: "conflicted" as const},
+    {...validation, retrieval_health: "unhealthy" as const},
     {...validation, blocking_codes: ["EVIDENCE_TIMESTAMP_STALE"]},
   ])("exposes failed checks independently from retrieval", (changed) => {
     const result = evidenceStatus(item, {...context, results: [changed]});
