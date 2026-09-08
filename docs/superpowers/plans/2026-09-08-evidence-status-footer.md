@@ -35,7 +35,7 @@
 - Consumes `EvidenceItem`, `AnalysisVersion`, and `EvidenceItemValidation` from `../types`.
 - Produces `evidenceStatus(item, context): EvidenceStatus`, with explicit footer text and a separate warning.
 
-- [ ] Add the following failing tests to `evidenceStatus.test.ts`:
+- [x] Add the following failing tests to `evidenceStatus.test.ts`:
 
 ```ts
 import {describe, expect, it} from "vitest";
@@ -106,8 +106,8 @@ describe("evidence status", () => {
 });
 ```
 
-- [ ] Run `npm --prefix apps/web test -- src/components/evidenceStatus.test.ts`; expect an import failure because the presenter does not exist yet.
-- [ ] Create `evidenceStatus.ts` with this implementation:
+- [x] Run `npm --prefix apps/web test -- src/components/evidenceStatus.test.ts`; expect an import failure because the presenter does not exist yet.
+- [x] Create `evidenceStatus.ts` with this implementation:
 
 ```ts
 import type {AnalysisVersion, EvidenceItem, EvidenceItemValidation} from "../types";
@@ -169,9 +169,14 @@ export function evidenceStatus(item: StatusItem, context: StatusContext): Eviden
 }
 ```
 
-- [ ] Extend the tests before final implementation verification: synthetic evidence with wrong binding, stale validation, unhealthy retrieval and missing/duplicate results must still warn; a valid fallback server source must not be labeled Synthetic fixture; valid contextual results with `authoritative: false` must say **Supporting context — not authoritative evidence** without a failure warning. Required-authoritative evidence with `authoritative: false` must not pass. These corrections preserve the approved distinction between provenance and validity, and between supporting context and authoritative facts.
-- [ ] Run the same test command; expect all cases to pass.
-- [ ] Run `git diff --check`, then commit only the two presenter files with message `feat: describe evidence retrieval and validation conservatively`.
+- [x] Extend the tests before final implementation verification: synthetic evidence with wrong binding, stale validation, unhealthy retrieval and missing/duplicate results must still warn; a valid fallback server source must not be labeled Synthetic fixture; valid contextual results with `authoritative: false` must say **Supporting context — not authoritative evidence** without a failure warning. Required-authoritative evidence with `authoritative: false` must not pass. These corrections preserve the approved distinction between provenance and validity, and between supporting context and authoritative facts.
+- [x] Run the same test command; expect all cases to pass.
+- [x] Run `git diff --check`, then commit only the two presenter files with message `feat: describe evidence retrieval and validation conservatively`.
+
+Task 1 verification: commits `676b6c0` and `bac0a40`; independent review approved.
+Final focused suite: 23 tests. Full frontend suite: 81 tests. Build passed.
+Review additionally required a warning for unhealthy retrieval in the validation
+result itself, implemented test-first in `bac0a40`.
 
 ## Task 2: Bottom footer and prominent warnings
 
@@ -214,7 +219,10 @@ export function EvidenceFooter({status}: {status: EvidenceStatus}) {
   return <footer className="evidence-footer" aria-label="Source and evidence status">
     <span className="badge">{status.platform}</span>
     <p>{status.retrieval}{status.recordedAt && <> · <time dateTime={status.recordedAt}>
-      {new Date(status.recordedAt).toISOString().replace("T", " ").replace(/Z$/, " UTC")}
+      {new Intl.DateTimeFormat("en-US", {
+        year: "numeric", month: "short", day: "numeric", hour: "numeric",
+        minute: "2-digit", timeZone: "UTC", timeZoneName: "short",
+      }).format(new Date(status.recordedAt))}
     </time></>}</p>
     <p>{status.validation}</p>
   </footer>;
@@ -241,7 +249,7 @@ const status = evidenceStatus(item, {
 <details>
   <summary>Source details</summary>
   <dl className="compact-list">
-    <div><dt>Source record ID</dt><dd>{item.source_id ?? item.evidence_id}</dd></div>
+    <div><dt>Source record ID</dt><dd>{item.source_id?.trim() || "Unavailable"}</dd></div>
     <div><dt>Evidence ID</dt><dd>{item.evidence_id}</dd></div>
     <div><dt>Technical authority scopes</dt><dd>{item.authority_scope.join(", ")}</dd></div>
     <div><dt>Internal evidence classification</dt><dd>{item.uncertainty_state}</dd></div>
@@ -276,6 +284,12 @@ const status = evidenceStatus(item, {
 - [ ] Run `git diff --check`; commit only Task 2 files and relevant fixture updates with message `feat: move evidence provenance into readable card footers`.
 
 ## Stage completion and next boundary
+
+Task 2 completed in `4986eb7`; all steps above implemented and independently
+reviewed for specification compliance and code quality. Controller post-commit
+checks passed: 86 frontend tests, production build, and local mocked browser
+verification at 1280px and 390px (footer placement, warning prominence, stable
+timestamp, no overflow or browser errors). The live deployment is unchanged.
 
 Passing this plan delivers only the evidence-status foundation. It does not
 implement the three-row investigation layout, typed shipment/transfer/qualification
