@@ -114,6 +114,12 @@ h3 { margin: 0.75rem 0 0.45rem; }
 .saved-analysis-footer { margin-top: auto; border-top: 1px solid #dde4dd; padding-top: 0.9rem; font-size: 0.8rem; color: #52645e; }
 .planner-options { display: grid; gap: 0.8rem; }
 .planner-options .option-card { padding: 0.75rem; }
+[aria-labelledby="decision-row"] .investigation-cards { align-items: start; }
+[aria-labelledby="decision-row"] [aria-labelledby="options-heading"] .planner-options { gap: 0.6rem; }
+[aria-labelledby="decision-row"] [aria-labelledby="options-heading"] .option-card { gap: 0.35rem; }
+[aria-labelledby="decision-row"] [aria-labelledby="options-heading"] .option-card p,
+[aria-labelledby="decision-row"] [aria-labelledby="options-heading"] .option-card dl { margin-block: 0.35rem; }
+[aria-labelledby="decision-row"] [aria-labelledby="options-heading"] .option-card .compact-list { gap: 0.35rem; }
 .investigation-flow summary { cursor: pointer; font-weight: 600; }
 .investigation-flow summary:focus-visible { outline: 3px solid #e69c37; outline-offset: 3px; }
 .investigation-cards details { margin: 0.4rem 0; }
