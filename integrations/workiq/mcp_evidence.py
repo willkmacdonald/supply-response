@@ -1,6 +1,8 @@
 """One bounded discovery/fetch/validation lifetime per delegated source retrieval."""
 
 import asyncio
+import logging
+import re
 from datetime import datetime
 from typing import Final, Literal
 
@@ -8,7 +10,7 @@ from apps.api.app.auth import AuthenticatedActor
 
 from .async_obo import AsyncWorkIQOboExchange
 from .discovery import discover_locations, question_for
-from .errors import WorkIQError
+from .errors import WorkIQError, WorkIQProtocolError, WorkIQResponseLimitError
 from .mcp import WorkIQMcpClient
 from .message_evidence import evidence_from_message
 from .models import (
@@ -21,6 +23,37 @@ from .models import (
 
 SOURCE_TIMEOUT_SECONDS: Final = 120
 FailureStage = Literal["discovery", "fetch", "validation", "authentication", "timeout"]
+_logger = logging.getLogger(__name__)
+
+
+def _safe_failure_reason(error: Exception) -> tuple[str, int]:
+    """Map local protocol errors to constants; never format an exception for logs."""
+    if type(error) is WorkIQResponseLimitError:
+        return "response_limit", 0
+    if type(error) is not WorkIQProtocolError or len(error.args) != 1:
+        return "unknown", 0
+    message = error.args[0]
+    if type(message) is not str:
+        return "unknown", 0
+    status = re.fullmatch(r"Work IQ HTTP ([1-5][0-9]{2})", message)
+    if status is not None:
+        return "http_error", int(status[1])
+    reasons = {
+        "Work IQ initialization is invalid": "initialization_shape",
+        "Work IQ RPC response is invalid": "rpc_shape",
+        "Work IQ tool failed": "tool_error",
+        "Work IQ tool response is invalid": "tool_shape",
+        "Work IQ discovery response is invalid": "discovery_shape",
+        "Work IQ response contains malformed JSON": "json_invalid",
+        "Work IQ response has unsupported content type": "content_type",
+        "Work IQ request unavailable": "request_unavailable",
+        "Work IQ session header is invalid": "session_header",
+        "Work IQ session header changed": "session_header",
+        "Work IQ protocol header is invalid": "protocol_header",
+        "Work IQ notification response is not empty": "notification_body",
+        "Work IQ entity retrieval failed": "entity_response",
+    }
+    return reasons.get(message, "unknown"), 0
 
 
 class WorkIQSourceError(WorkIQError):
@@ -103,6 +136,9 @@ class WorkIQMcpEvidencePort:
         if source_id != expected_id:
             raise WorkIQSourceError(source_kind, "validation")
         stage: FailureStage = "authentication"
+        step = "authentication"
+        reason, http_status = "unknown", 0
+        parsed_count = scoped_count = matched_count = -1
         token = None
         session = None
         answer = None
@@ -111,26 +147,43 @@ class WorkIQMcpEvidencePort:
             async with asyncio.timeout(SOURCE_TIMEOUT_SECONDS):
                 token = await self._obo.exchange(actor)
                 stage = "discovery"
+                step = "initialize"
                 async with self._client.session(access_token=token.reveal()) as session:
                     token = None
+                    step = "ask"
                     answer = await session.ask(
                         question_for(DiscoveryTopic(source_kind))
                     )
+                    step = "parse_locations"
                     locations = discover_locations(answer, source_kind=source_kind)
+                    parsed_count = min(len(locations), 5)
                     conversation_id = answer["conversationId"]
                     answer = None
+                    if not locations:
+                        reason = "no_locations"
+                        raise WorkIQSourceError(source_kind, "discovery")
                     # Scope checks happen independently of configured source IDs.
+                    step = "scope_binding"
                     scoped = tuple(loc for loc in locations if loc.within(binding))
+                    scoped_count = min(len(scoped), 5)
+                    if not scoped:
+                        reason = "scope_mismatch"
+                        raise WorkIQSourceError(source_kind, "discovery")
+                    step = "message_binding"
                     candidates = tuple(
                         loc for loc in scoped if loc.message_id == expected_id
                     )
+                    matched_count = min(len(candidates), 5)
                     if not candidates:
+                        reason = "message_mismatch"
                         raise WorkIQSourceError(source_kind, "discovery")
                     evidence = []
                     for location in candidates:
                         stage = "fetch"
+                        step = "fetch"
                         payload = await session.fetch(location.fetch_path)
                         stage = "validation"
+                        step = "validate_entity"
                         evidence.append(
                             evidence_from_message(
                                 payload["results"][0]["data"],
@@ -157,12 +210,26 @@ class WorkIQMcpEvidencePort:
                     )
         except TimeoutError:
             stage = "timeout"
-        except Exception:  # noqa: BLE001, S110 - sanitized outside handler, never log payloads
-            pass
+            reason = "timeout"
+        except Exception as error:  # noqa: BLE001 - allowlisted diagnostics only
+            if reason == "unknown":
+                reason, http_status = _safe_failure_reason(error)
         finally:
             token = None
             session = None
             answer = None
             payload = None
         # Do not chain discarded raw payloads or credential-bearing failures.
+        _logger.warning(
+            "workiq_source_diagnostic source=%s stage=%s step=%s reason=%s "
+            "http_status=%d parsed=%d scoped=%d matched=%d",
+            source_kind,
+            stage,
+            step,
+            reason,
+            http_status,
+            parsed_count,
+            scoped_count,
+            matched_count,
+        )
         raise WorkIQSourceError(source_kind, stage)

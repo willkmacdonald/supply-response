@@ -252,7 +252,7 @@ async def test_cross_user_and_mismatched_source_inputs_rejected_before_network(
 @pytest.mark.parametrize("stage", ["ask", "fetch"])
 @pytest.mark.parametrize("cancel", [False, True])
 async def test_aggregate_deadline_and_cancellation_close_active_work(
-    monkeypatch, stage, cancel
+    monkeypatch, stage, cancel, caplog
 ):
     from integrations.workiq import mcp_evidence
 
@@ -272,6 +272,12 @@ async def test_aggregate_deadline_and_cancellation_close_active_work(
         assert caught.value.stage == "timeout"
     assert server.cancelled.is_set()
     assert len(server.calls("ask")) == 1
+    if cancel:
+        assert diagnostic_messages(caplog) == []
+    else:
+        messages = diagnostic_messages(caplog)
+        assert len(messages) == 1
+        assert f"stage=timeout step={stage} reason=timeout" in messages[0]
 
 
 @pytest.mark.anyio
@@ -292,3 +298,90 @@ async def test_ambiguous_matching_entities_are_rejected(monkeypatch):
         await retrieve(monkeypatch, server)
     assert caught.value.stage == "validation"
     assert len(server.calls("fetch")) == 2
+
+
+def diagnostic_messages(caplog):
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "integrations.workiq.mcp_evidence"
+    ]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "failure,step,reason,counts,status",
+    [
+        ("initialize", "initialize", "http_error", (-1, -1, -1), 403),
+        ("ask", "ask", "tool_error", (-1, -1, -1), 0),
+        ("ask_shape", "ask", "discovery_shape", (-1, -1, -1), 0),
+        ("no_locations", "parse_locations", "no_locations", (0, -1, -1), 0),
+        ("wrong_scope", "scope_binding", "scope_mismatch", (1, 0, -1), 0),
+        ("wrong_id", "message_binding", "message_mismatch", (1, 1, 0), 0),
+        ("unknown", "ask", "unknown", (-1, -1, -1), 0),
+    ],
+)
+async def test_failure_diagnostic_distinguishes_discovery_substeps_without_payloads(
+    monkeypatch, caplog, failure, step, reason, counts, status
+):
+    from integrations.workiq.errors import WorkIQProtocolError
+    from integrations.workiq.mcp_evidence import WorkIQSourceError
+
+    class DiagnosticServer(Server):
+        async def __call__(self, request):
+            body = json.loads(request.content)
+            if failure == "initialize" and body["method"] == "initialize":
+                return httpx.Response(403, text="private-response-body")
+            if body.get("params", {}).get("name") == "ask":
+                if failure == "ask":
+                    return reply(request, {"isError": True, "content": "private-body"})
+                if failure == "ask_shape":
+                    return reply(
+                        request, {"structuredContent": {"secret": "private-body"}}
+                    )
+                if failure == "unknown":
+                    raise WorkIQProtocolError("private-token private-body@example.com")
+            return await super().__call__(request)
+
+    answer = {
+        "no_locations": "private-body with no locator",
+        "wrong_scope": "/users/other/messages/mail-fixture",
+        "wrong_id": "/me/messages/other-private-id",
+    }.get(failure)
+    server = DiagnosticServer(answer=answer)
+    with pytest.raises(WorkIQSourceError) as caught:
+        await retrieve(monkeypatch, server)
+    assert caught.value.stage == "discovery"
+    assert server.calls("fetch") == []
+    parsed, scoped, matched = counts
+    assert diagnostic_messages(caplog) == [
+        (
+            f"workiq_source_diagnostic source=supplier stage=discovery step={step} "
+            f"reason={reason} http_status={status} parsed={parsed} scoped={scoped} matched={matched}"
+        )
+    ]
+    assert all(record.exc_info is None for record in caplog.records)
+    for secret in ("private-", "mail-fixture", BINDING.alex_object_id, "Bearer"):
+        assert secret not in caplog.text
+
+
+@pytest.mark.anyio
+async def test_success_has_no_failure_diagnostic(monkeypatch, caplog):
+    result = await retrieve(monkeypatch, Server())
+    assert len(result.evidence) == 1
+    assert diagnostic_messages(caplog) == []
+
+
+@pytest.mark.anyio
+async def test_quality_failure_diagnostic_is_source_specific(monkeypatch, caplog):
+    from integrations.workiq.mcp_evidence import WorkIQSourceError
+
+    with pytest.raises(WorkIQSourceError):
+        await retrieve(monkeypatch, Server(kind="quality", answer="private-body"))
+    assert diagnostic_messages(caplog) == [
+        (
+            "workiq_source_diagnostic source=quality stage=discovery "
+            "step=parse_locations reason=no_locations http_status=0 "
+            "parsed=0 scoped=-1 matched=-1"
+        )
+    ]
