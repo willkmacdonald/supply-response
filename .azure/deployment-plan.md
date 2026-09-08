@@ -1,8 +1,54 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed — reviewed Work IQ discovery/fetch/evidence integration on healthy revision14. Deployment/readiness passed; the single normal Alex Analyze failed at supplier discovery. Live acceptance remains blocked; no retry was made.
+> **Status:** Validated — approved discovery-substep diagnostics and one further Alex Analyze. Existing revision14 remains deployed pending execution. No new permissions, billing, source edits, resources, or raw-response capture.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
+
+## Validation Proof — discovery-substep diagnostics
+
+User approved failure-only safe substep statuses and one further normal Alex
+Analyze. Implementation `0d5cb0a`: no endpoint, prompt, retry, validation, public
+error or permissions change. Only fixed reason names, substeps, bounded numeric
+HTTP status and locator counts are logged. No source text, IDs or credentials.
+
+- [x] All validation checks pass.
+  - [x] 1. AZD Installation.
+  - [x] 2. Schema Validation.
+  - [x] 3. Environment Setup.
+  - [x] 4. Authentication Check.
+  - [x] 5. Subscription/Location Check.
+  - [x] 6. Aspire Pre-Provisioning Checks (not applicable).
+  - [x] 7. Provision Preview.
+  - [x] 8. Build Verification.
+  - [x] 9. Docker Build Context Validation.
+  - [x] 10. Package Validation.
+  - [x] 11. Azure Policy Validation.
+  - [x] 12. Aspire Post-Provisioning Checks (not applicable).
+  - [x] Static least-privilege role verification.
+
+RED: seven simulated upstream failures produced no diagnostic records. GREEN:
+52 focused evidence/live-wiring/diagnostic tests passed, including sanitization,
+success, both sources and cancellation/timeout behavior. Scoped Ruff/Pyright and
+uv package build passed. Independent review found no findings. Web regression
+passed all 51 tests; the production build passed (179 modules).
+The full Python run caught ten diagnostic capture failures: importing fabric-cicd
+sets the root logger to ERROR. A test-only warning-capture fixture now isolates
+these assertions, matching the other diagnostic tests. Fabric compatibility plus
+all 29 evidence tests pass together; Ruff/Pyright pass. The fixture was separately
+reviewed with no findings. Full `uv run pytest -q` rerun exited 0, with expected
+live-test skips and the existing Starlette/httpx warning only; no production
+behavior was changed to address test isolation.
+
+2026-09-08 02:04 UTC: current Azure account is the approved Will User in Azure
+Dev and the recorded tenant. AZD 1.30.0/auth/default environment checks passed.
+Policy inventory remains the existing security benchmark/Defender assignments.
+Named-environment preflight, `azd provision --preview --no-prompt --environment
+supply-response-personal` and `azd package --no-prompt --environment
+supply-response-personal` passed: no new resources; existing Container App and
+Application Insights metadata reconciliation only. Existing Dockerfile/ignore,
+locked inputs and registry/vault/Foundry role modules are unchanged. Live baseline
+is revision14, same identity and exactly the existing three scoped roles.
+No live source invocation or cloud deployment yet this turn.
 
 ## Validation Proof — production Work IQ discovery/evidence integration
 

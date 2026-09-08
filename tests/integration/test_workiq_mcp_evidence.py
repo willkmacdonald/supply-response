@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from copy import deepcopy
 from dataclasses import replace
 
@@ -23,6 +24,14 @@ from tests.integration.test_workiq_message_evidence import (
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+def capture_evidence_warnings(caplog):
+    # fabric-cicd changes the root level to ERROR in earlier full-suite tests.
+    # Scope capture explicitly, as the other diagnostic test modules do.
+    with caplog.at_level(logging.WARNING, logger="integrations.workiq.mcp_evidence"):
+        yield
 
 
 @pytest.fixture(autouse=True)

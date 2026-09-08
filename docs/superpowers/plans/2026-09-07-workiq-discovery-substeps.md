@@ -5,16 +5,16 @@ The user approved narrowly scoped statuses and one further Alex Analyze on
 
 ## Plan and success criteria
 
-- [ ] Add offline RED tests in `tests/integration/test_workiq_mcp_evidence.py`
+- [x] Add offline RED tests in `tests/integration/test_workiq_mcp_evidence.py`
   exercising real OBO/MCP composition with fake HTTP: initialization rejection,
   ask rejection, zero parsed locators, wrong scope, wrong message binding,
   successful retrieval, timeout/cancellation, and secret-bearing unknown errors.
-- [ ] Add failure-only diagnostics in `integrations/workiq/mcp_evidence.py`.
+- [x] Add failure-only diagnostics in `integrations/workiq/mcp_evidence.py`.
   Record fixed substep/reason names, bounded HTTP status and bounded candidate
   counts only. Never output bodies, links, source/actor/conversation/request IDs,
   exception strings, headers, tokens or response objects. Keep existing public
   errors, prompts, fetches, policy and limits unchanged.
-- [ ] Pass focused/full regression, scoped static checks and package build;
+- [x] Pass focused/full regression, scoped static checks and package build;
   independently review the bounded diff and commit locally without pushing.
 - [ ] Follow Azure validation/deployment workflow for the existing app only.
   Confirm readiness, revision, identity and roles; invoke normal Analyze once
