@@ -5,7 +5,7 @@ import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Never
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 from pydantic import ValidationError
@@ -63,6 +63,10 @@ _SENSITIVE_PATTERNS = (
     ),
 )
 _REDACTED = "[REDACTED]"
+_TEAMS_TENANT_ROUTE = re.compile(
+    r"(?:^|(?<=&))tenantId=[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}"
+    r"-[0-9a-fA-F]{12}(?=&|$)"
+)
 
 
 def _normalized_sensitive_text(value: str) -> str:
@@ -104,11 +108,43 @@ def _scrub(value: Any) -> Any:
 
 
 def _safe_partial(analysis: AnalysisVersion) -> PartialDeterministicResult:
-    safe = AnalysisVersion.model_validate(_scrub(analysis.model_dump()))
+    payload = _scrub(analysis.model_dump())
+    for original, sanitized in zip(analysis.evidence_items, payload["evidence_items"]):
+        for field in ("citation_url", "navigable_citation_url"):
+            sanitized[field] = _safe_citation(original, getattr(original, field))
+    safe = AnalysisVersion.model_validate(payload)
     return PartialDeterministicResult(
         analysis_version=safe,
         evidence_items=safe.evidence_items,
     )
+
+
+def _safe_citation(item: EvidenceItem, value: str | None) -> str | None:
+    if value is None:
+        return None
+    # These fields have already passed the live source/citation checks. A Teams
+    # tenantId GUID is navigation metadata, not model input or a credential.
+    # Exempt only that literal routing parameter from the sensitivity scan;
+    # scan every other part unchanged and never rewrite the returned citation.
+    if (
+        item.citation_classification == "work_iq"
+        and item.citation_trusted_host == "teams.microsoft.com"
+    ):
+        try:
+            parsed = urlsplit(value)
+            if (
+                parsed.scheme == "https"
+                and parsed.netloc == "teams.microsoft.com"
+                and parsed.path.startswith("/l/message/")
+                and not parsed.fragment
+            ):
+                query = _TEAMS_TENANT_ROUTE.sub("tenant-route=present", parsed.query)
+                scan_value = urlunsplit(parsed._replace(query=query))
+                if not _contains_sensitive(scan_value):
+                    return value
+        except ValueError:
+            pass
+    return _redact_text(value)
 
 
 def _require_model_value(value: str, pattern: re.Pattern[str], *, field: str) -> None:

@@ -17,7 +17,12 @@ from agents.orchestrator.contracts import (
     PartialDeterministicResult,
 )
 from agents.orchestrator.local import LocalAgentSet
-from agents.orchestrator.workflow import Orchestrator, _evidence_payload, _scrub
+from agents.orchestrator.workflow import (
+    Orchestrator,
+    _evidence_payload,
+    _safe_partial,
+    _scrub,
+)
 from data.domain import CasePurpose, RuntimeMode
 from data.domain.decisions import CorpusScope, StandingAuthorization
 from data.domain.evidence import AuthorityScope
@@ -25,6 +30,12 @@ from data.synthetic.rl001 import build_rl001_evidence, instantiate_rl001
 from services.analysis.service import AnalyzeCaseCommand, analyze_case
 
 NOW = datetime(2026, 8, 30, 15, tzinfo=UTC)
+TEAMS_CITATION = (
+    "https://teams.microsoft.com/l/message/19%3Ademo%40thread.tacv2/1788577543694"
+    "?groupId=11111111-2222-3333-4444-555555555555"
+    "&tenantId=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    "&createdTime=1788577543694&parentMessageId=1788577543694"
+)
 
 
 def command() -> AnalyzeCommand:
@@ -399,6 +410,111 @@ def test_recursive_scrubber_redacts_strings_in_keys_and_nested_collections() -> 
     serialized = repr(scrubbed)
     assert all(secret not in serialized for secret in secrets)
     assert scrubbed["ordinary"] == value["ordinary"]
+
+
+@pytest.mark.anyio
+async def test_explanation_failure_preserves_teams_message_citations() -> None:
+    citation = TEAMS_CITATION
+    original = command()
+    evidence = list(original.deterministic.evidence_items)
+    evidence[-1] = evidence[-1].model_copy(
+        update={
+            "citation_url": citation,
+            "navigable_citation_url": citation,
+            "citation_classification": "work_iq",
+            "citation_trusted_host": "teams.microsoft.com",
+        }
+    )
+    value = original.model_copy(
+        update={
+            "deterministic": original.deterministic.model_copy(
+                update={"evidence_items": tuple(evidence)}
+            )
+        }
+    )
+    factory, made = agents(context=RuntimeError("Explanation service unavailable"))
+
+    with pytest.raises(AgentExplanationUnavailable) as caught:
+        await Orchestrator(factory, analyze_case).analyze(value)
+
+    saved = next(
+        item
+        for item in caught.value.partial_result.analysis_version.evidence_items
+        if item.evidence_id == evidence[-1].evidence_id
+    )
+    assert saved.citation_url == citation
+    assert saved.navigable_citation_url == citation
+    # Citations are navigation metadata, never part of an agent prompt.
+    assert citation not in repr(cast(FakeAgent, made[0].context).payloads)
+
+
+@pytest.mark.parametrize(
+    "citation",
+    [
+        TEAMS_CITATION + "&access_token=credential-value",
+        TEAMS_CITATION + "&%74oken=credential-value",
+        TEAMS_CITATION + "&%2574oken=credential-value",
+        TEAMS_CITATION + "&extra=password%3Dcredential-value",
+        TEAMS_CITATION + "&extra=oid%3Dprivate-identity",
+        TEAMS_CITATION + "#token=credential-value",
+        TEAMS_CITATION.replace(
+            "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "credential-value"
+        ),
+        TEAMS_CITATION.replace(
+            "teams.microsoft.com", "teams.microsoft.com.evil.invalid"
+        ),
+        TEAMS_CITATION.replace(
+            "teams.microsoft.com", "user:password@teams.microsoft.com"
+        ),
+        TEAMS_CITATION.replace("https:", "http:"),
+        TEAMS_CITATION.replace("/l/message/", "/other/"),
+    ],
+)
+def test_partial_analysis_still_redacts_unsafe_citations(citation: str) -> None:
+    analysis = analyze_case(command().deterministic)
+    item = analysis.evidence_items[-1].model_copy(
+        update={
+            "citation_url": citation,
+            "navigable_citation_url": citation,
+            "citation_classification": "work_iq",
+            "citation_trusted_host": "teams.microsoft.com",
+        }
+    )
+    contaminated = analysis.model_copy(update={"evidence_items": (item,)})
+
+    saved = _safe_partial(contaminated).analysis_version.evidence_items[0]
+
+    assert saved.citation_url == "[REDACTED]"
+    assert saved.navigable_citation_url == "[REDACTED]"
+
+
+@pytest.mark.parametrize(
+    "classification,host",
+    [
+        (None, None),
+        ("untrusted", "teams.microsoft.com"),
+        ("fabric", "teams.microsoft.com"),
+        ("work_iq", "other.invalid"),
+    ],
+)
+def test_teams_routing_exception_requires_server_classified_citation_fields(
+    classification: str | None,
+    host: str | None,
+) -> None:
+    analysis = analyze_case(command().deterministic)
+    item = analysis.evidence_items[-1].model_copy(
+        update={
+            "citation_url": TEAMS_CITATION,
+            "navigable_citation_url": TEAMS_CITATION,
+            "citation_classification": classification,
+            "citation_trusted_host": host,
+        }
+    )
+    saved = _safe_partial(analysis.model_copy(update={"evidence_items": (item,)}))
+    assert saved.evidence_items[0].citation_url == "[REDACTED]"
+    assert saved.evidence_items[0].navigable_citation_url == "[REDACTED]"
+    # Generic text, including a URL in a claim or excerpt, gets no exception.
+    assert _scrub({"claim": TEAMS_CITATION}) == {"claim": "[REDACTED]"}
 
 
 def test_final_prompt_dto_rejects_non_allowlisted_evidence_identifiers() -> None:

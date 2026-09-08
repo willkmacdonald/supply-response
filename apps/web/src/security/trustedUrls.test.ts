@@ -6,6 +6,7 @@ describe("server-classified citation trust", () => {
   it.each([
     "https://tenant.sharepoint.com/sites/quality/item",
     "https://teams.microsoft.com/l/entity/supplier",
+    "https://teams.microsoft.com/l/message/19%3Ademo%40thread.tacv2/1788577543694?groupId=11111111-2222-3333-4444-555555555555&tenantId=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee&createdTime=1788577543694&parentMessageId=1788577543694",
   ])("accepts an exact classified tenant URL: %s", (url) => {
     expect(trustedServerCitation(url, "work_iq", tenant)).toBe(url);
   });

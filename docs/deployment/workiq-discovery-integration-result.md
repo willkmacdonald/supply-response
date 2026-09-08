@@ -22,14 +22,38 @@ reads and accepted source evidence, not merely standalone CLI success.
 
 Remaining issue: the UI reports `Required live citation missing`. Supplier mail
 has an Open citation link; the Jordan Teams evidence has no link. Approve and
-Reject remain disabled. The selected-source backend validator required a valid
-matching citation, but the exact loss/rejection point in presentation is not yet
-established. Local inspection confirms citation classification/navigation fields
-are assigned in the live service and checked again by the frontend. Do not claim
-the full live journey is complete, bypass this gate, or regenerate analysis to
-hide the issue. No Decision, execution, source edit, second Analyze or Git push
-occurred. A subsequent read-only browser diagnostic stalled and returned no
-captured API responses; it did not establish the citation's failure cause.
+Reject remain disabled. A subsequent read-only browser diagnostic stalled and
+returned no captured API responses. A later bounded Fabric query of citation
+fields (not message bodies or credentials) established that both Teams URL fields
+were persisted as literal `[REDACTED]`; the email fields retained their URLs.
+
+### Citation redaction correction — local, not deployed
+
+The orchestrator's optional-explanation failure path scrubs the preserved
+deterministic analysis. Its identity-text rule matched the Teams link's
+`tenantId=GUID` routing parameter and replaced the whole URL. Removing only that
+parameter in an offline probe made the redaction disappear; changing the encoded
+channel path did not. The frontend was correctly rejecting the resulting value.
+
+A failing-first regression reproduced this through `Orchestrator.analyze()`.
+The correction exempts only a literal GUID-valued Teams tenant routing parameter
+in server-classified citation fields, while scanning the remaining URL through
+all existing sensitivity rules. Generic text/model prompt redaction, source
+validation, and the frontend citation gate are unchanged. Negative coverage
+includes encoded credentials, malformed routing values, trust/host/path/scheme
+mismatches and generic text. Independent review found no actionable issues.
+
+Verification: full backend regression passed with14 expected live-service skips
+and the existing Starlette/httpx warning;52 frontend tests and the production
+build passed. The normal authenticated API/store integration test additionally
+checks both exact source citations in the response and persisted readback with
+agents available and deliberately unavailable. Scoped Ruff and Pyright passed.
+
+Revision18 remains deployed; the correction is local and requires the separately
+authorized deployment workflow. Existing immutable analyses are not rewritten:
+their erased citation cannot recover on refresh. After deployment, verify a fresh
+analysis displays both source links. No Decision, execution, source edit, second
+live Analyze or Git push occurred during this diagnosis/fix.
 
 Independent review corrected malformed/duplicate collection handling and restored
 safety coverage. Final full Python regression, Python package, scoped Ruff/Pyright

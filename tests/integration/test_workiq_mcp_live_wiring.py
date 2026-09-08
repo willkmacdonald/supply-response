@@ -413,9 +413,16 @@ def _mcp_live_app(monkeypatch, tmp_path, *, fail_kind: str | None = None):
     return create_app(services=services), actor, server, entra, store
 
 
+@pytest.mark.parametrize("explanation_unavailable", [False, True])
 def test_signed_alex_normal_live_analyze_discovers_and_fetches_both_sources(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, explanation_unavailable
 ):
+    if explanation_unavailable:
+
+        def unavailable_agents():
+            raise RuntimeError("Explanation service unavailable")
+
+        monkeypatch.setattr(LocalAgentSet, "deterministic", unavailable_agents)
     app, actor, server, entra, store = _mcp_live_app(monkeypatch, tmp_path)
     headers = {"Authorization": f"Bearer {actor.downstream_user_assertion.reveal()}"}
     with TestClient(app) as client:
@@ -439,11 +446,25 @@ def test_signed_alex_normal_live_analyze_discovers_and_fetches_both_sources(
         "Beta evaluation covers lot Z-47 only. Further review remains open.",
     }
     assert all(item["citation_classification"] == "work_iq" for item in workiq)
+    expected_citations = {
+        BINDING.quality_source_id: QUALITY["webUrl"],
+        BINDING.supplier_source_id: MAIL["webLink"],
+    }
+    for item in workiq:
+        expected = expected_citations[item["source_id"]]
+        assert item["citation_url"] == item["navigable_citation_url"] == expected
     assert {item["authority_scope"][0] for item in workiq} == {
         "supplier_statement",
         "collaboration_statement",
     }
     analysis = store.get_analysis(response.json()["analysis_id"])
+    assert analysis.explanation.status == (
+        "unavailable" if explanation_unavailable else "available"
+    )
+    for item in analysis.evidence_items:
+        if item.source_system == "work_iq":
+            expected = expected_citations[item.source_id]
+            assert item.citation_url == item.navigable_citation_url == expected
     assert {item.protocol for item in analysis.retrieval_lineage} == {"mcp"}
     assert all(
         not item.task_id and not item.artifact_ids
