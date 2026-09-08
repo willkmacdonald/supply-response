@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Mapping
 from copy import deepcopy
 
 import pytest
@@ -13,13 +14,13 @@ MAIL_QUERY = (
 
 
 class Session:
-    def __init__(self, pages):
+    def __init__(self, pages: Mapping[str, object]) -> None:
         self.pages = pages
-        self.paths = []
+        self.paths: list[str] = []
 
-    async def fetch(self, path):
-        self.paths.append(path)
-        page = self.pages[path]
+    async def fetch(self, entity_url: str) -> dict[str, object]:
+        self.paths.append(entity_url)
+        page = self.pages[entity_url]
         if isinstance(page, BaseException):
             raise page
         return {"results": [{"statusCode": 200, "data": deepcopy(page)}]}
@@ -143,6 +144,30 @@ async def test_source_ids_validate_only_and_never_disambiguate_or_build_paths():
 
 
 @pytest.mark.anyio
+async def test_mail_rejects_duplicate_identity_before_candidate_filtering():
+    from integrations.workiq.structured_discovery import (
+        StructuredDiscoveryError,
+        discover_structured,
+    )
+
+    rows = [
+        {
+            "id": BINDING.supplier_source_id,
+            "subject": subject,
+            "from": {"emailAddress": {"address": BINDING.supplier_sender}},
+            "receivedDateTime": "2026-09-06T14:45:00Z",
+        }
+        for subject in ("RL-Supplier Alpha message", "Unrelated")
+    ]
+    with pytest.raises(StructuredDiscoveryError):
+        await discover_structured(
+            Session({MAIL_QUERY: collection(rows)}),
+            source_kind="supplier",
+            binding=BINDING,
+        )
+
+
+@pytest.mark.anyio
 async def test_quality_resolves_exact_scope_then_selects_unique_jordan_beta_post():
     from integrations.workiq.structured_discovery import discover_structured
 
@@ -178,18 +203,6 @@ async def test_quality_resolves_exact_scope_then_selects_unique_jordan_beta_post
             ),
         }
     )
-    binding = (
-        SourceBinding(
-            **{
-                **BINDING.__dict__,
-                "team_id": "team-returned",
-                "channel_id": "19:returned@thread.tacv2",
-            }
-        )
-        if hasattr(BINDING, "__dict__")
-        else BINDING
-    )
-    # slots dataclass: build the independently configured scope explicitly.
     binding = SourceBinding(
         BINDING.tenant_id,
         BINDING.alex_object_id,
@@ -229,6 +242,39 @@ async def test_quality_validates_scope_before_reading_children(scope):
     with pytest.raises(StructuredDiscoveryError):
         await discover_structured(session, source_kind="quality", binding=BINDING)
     assert len(session.paths) == (1 if scope == "team" else 2)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("kind", ["team", "channel"])
+async def test_quality_rejects_malformed_nonmatching_scope_identity(kind):
+    from integrations.workiq.structured_discovery import (
+        StructuredDiscoveryError,
+        discover_structured,
+    )
+
+    pages: dict[str, object] = {
+        "/me/joinedTeams": collection(
+            [
+                {"id": BINDING.team_id, "displayName": "Supply Response Demo"},
+                *(
+                    [{"id": "../hostile", "displayName": "Other"}]
+                    if kind == "team"
+                    else []
+                ),
+            ]
+        )
+    }
+    if kind == "channel":
+        pages[f"/teams/{BINDING.team_id}/channels"] = collection(
+            [
+                {"id": BINDING.channel_id, "displayName": "General"},
+                {"id": "../hostile", "displayName": "Other"},
+            ]
+        )
+    session = Session(pages)
+    with pytest.raises(StructuredDiscoveryError):
+        await discover_structured(session, source_kind="quality", binding=BINDING)
+    assert len(session.paths) == (1 if kind == "team" else 2)
 
 
 @pytest.mark.anyio
@@ -281,8 +327,8 @@ async def test_quality_ignores_well_formed_deleted_tombstone_before_jordan_post(
                     {
                         "id": "deleted-post",
                         "deletedDateTime": "2026-09-01T10:00:00Z",
-                        "from": None,
-                        "body": None,
+                        "from": {"user": {"id": "will"}},
+                        "body": {"contentType": "text", "content": ""},
                     },
                     {
                         "id": BINDING.quality_source_id,
@@ -302,13 +348,53 @@ async def test_quality_ignores_well_formed_deleted_tombstone_before_jordan_post(
 
 
 @pytest.mark.anyio
+async def test_quality_rejects_duplicate_post_identity_before_candidate_filtering():
+    from integrations.workiq.structured_discovery import (
+        StructuredDiscoveryError,
+        discover_structured,
+    )
+
+    posts = f"/teams/{BINDING.team_id}/channels/19%3Achannel-fixture%40thread.tacv2/messages?$top=10"
+    pages: dict[str, object] = {
+        "/me/joinedTeams": collection(
+            [{"id": BINDING.team_id, "displayName": "Supply Response Demo"}]
+        ),
+        f"/teams/{BINDING.team_id}/channels": collection(
+            [{"id": BINDING.channel_id, "displayName": "General"}]
+        ),
+        posts: collection(
+            [
+                {
+                    "id": BINDING.quality_source_id,
+                    "from": {"user": {"id": BINDING.quality_author_object_id}},
+                    "body": {
+                        "contentType": "text",
+                        "content": "RL-Supplier Beta qualification is pending.",
+                    },
+                },
+                {
+                    "id": BINDING.quality_source_id,
+                    "from": {"user": {"id": "other"}},
+                    "body": {"contentType": "text", "content": "Other"},
+                },
+            ]
+        ),
+    }
+    with pytest.raises(StructuredDiscoveryError):
+        await discover_structured(
+            Session(pages), source_kind="quality", binding=BINDING
+        )
+
+
+@pytest.mark.anyio
 async def test_cancellation_is_not_converted_to_discovery_failure():
     from integrations.workiq.structured_discovery import discover_structured
 
     class Blocking(Session):
-        async def fetch(self, path):
-            self.paths.append(path)
+        async def fetch(self, entity_url: str) -> dict[str, object]:
+            self.paths.append(entity_url)
             await asyncio.Event().wait()
+            raise AssertionError("unreachable")
 
     task = asyncio.create_task(
         discover_structured(Blocking({}), source_kind="supplier", binding=BINDING)

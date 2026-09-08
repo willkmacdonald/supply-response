@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 from copy import deepcopy
+from dataclasses import replace
 
 import httpx
 import pytest
@@ -21,7 +22,8 @@ def anyio_backend():
 class Server:
     def __init__(self, kind="supplier", *, fail_entity=False):
         self.kind, self.fail_entity, self.requests = kind, fail_entity, []
-        self.block_path = None
+        self.entity = deepcopy(QUALITY if kind == "quality" else MAIL)
+        self.block_path: str | None = None
         self.entered, self.cancelled = asyncio.Event(), asyncio.Event()
 
     def _collection(self, path):
@@ -73,11 +75,7 @@ class Server:
             finally:
                 self.cancelled.set()
         entity_path = "/messages/" in path and "?$top=" not in path
-        data = (
-            deepcopy(QUALITY if self.kind == "quality" else MAIL)
-            if entity_path
-            else self._collection(path)
-        )
+        data = deepcopy(self.entity) if entity_path else self._collection(path)
         result = {
             "results": [
                 {
@@ -96,14 +94,16 @@ class Server:
         ]
 
 
-async def retrieve(monkeypatch, server, *, source_id=None):
+async def retrieve(
+    monkeypatch, server, *, source_id=None, actor_override=None, binding=BINDING
+):
     from integrations.workiq.mcp_evidence import WorkIQMcpEvidencePort
 
     service, actor = _authenticated_alex()
     monkeypatch.setattr(httpx, "AsyncHTTPTransport", Entra().transport)
     async with httpx.AsyncClient(transport=httpx.MockTransport(server)) as http:
         port = WorkIQMcpEvidencePort(
-            client=WorkIQMcpClient(http=http), obo=exchange(service), binding=BINDING
+            client=WorkIQMcpClient(http=http), obo=exchange(service), binding=binding
         )
         method = (
             port.retrieve_supplier_signal
@@ -111,7 +111,7 @@ async def retrieve(monkeypatch, server, *, source_id=None):
             else port.retrieve_quality_context
         )
         return await method(
-            actor=actor,
+            actor=actor if actor_override is None else actor_override,
             source_id=source_id
             or (
                 BINDING.supplier_source_id
@@ -151,6 +151,30 @@ async def test_source_input_rejected_before_auth_or_network(monkeypatch):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("bad", ["tenant", "object", "unvalidated"])
+async def test_invalid_actor_rejected_before_obo_or_network(monkeypatch, bad):
+    from integrations.workiq.mcp_evidence import WorkIQSourceError
+
+    _service, actor = _authenticated_alex()
+    invalid = object() if bad == "unvalidated" else actor
+    server = Server()
+    binding = replace(
+        BINDING,
+        **(
+            {"tenant_id": "wrong"}
+            if bad == "tenant"
+            else {"alex_object_id": "wrong"}
+            if bad == "object"
+            else {}
+        ),
+    )
+    with pytest.raises(WorkIQSourceError) as caught:
+        await retrieve(monkeypatch, server, actor_override=invalid, binding=binding)
+    assert caught.value.stage == "authentication"
+    assert server.requests == []
+
+
+@pytest.mark.anyio
 async def test_individual_fetch_failure_is_sanitized(monkeypatch, caplog):
     from integrations.workiq.mcp_evidence import WorkIQSourceError
 
@@ -165,13 +189,44 @@ async def test_individual_fetch_failure_is_sanitized(monkeypatch, caplog):
 
 
 @pytest.mark.anyio
+async def test_validation_failure_clears_payload_and_never_logs_upstream_data(
+    monkeypatch, caplog
+):
+    from integrations.workiq.mcp_evidence import WorkIQSourceError
+
+    server = Server()
+    server.entity["sender"] = {
+        "emailAddress": {"address": "private-attacker@example.com"}
+    }
+    with (
+        caplog.at_level(logging.WARNING, logger="integrations.workiq.mcp_evidence"),
+        pytest.raises(WorkIQSourceError) as caught,
+    ):
+        await retrieve(monkeypatch, server)
+    assert caught.value.stage == "validation" and caught.value.__context__ is None
+    assert "private-attacker" not in caplog.text
+    trace = caught.value.__traceback__
+    while trace is not None:
+        if trace.tb_frame.f_code.co_name == "_retrieve":
+            assert trace.tb_frame.f_locals.get("payload") is None
+            assert trace.tb_frame.f_locals.get("token") is None
+            assert trace.tb_frame.f_locals.get("session") is None
+        trace = trace.tb_next
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("cancel", [False, True])
-async def test_aggregate_deadline_and_cancellation(monkeypatch, cancel):
+@pytest.mark.parametrize("blocked", ["discovery", "entity"])
+async def test_aggregate_deadline_and_cancellation(monkeypatch, cancel, blocked):
     from integrations.workiq import mcp_evidence
     from integrations.workiq.structured_discovery import MAIL_QUERY
 
     server = Server()
-    server.block_path = MAIL_QUERY
+    server.block_path = (
+        MAIL_QUERY
+        if blocked == "discovery"
+        else f"/me/messages/{BINDING.supplier_source_id}"
+    )
     monkeypatch.setattr(mcp_evidence, "SOURCE_TIMEOUT_SECONDS", 0.1)
     task = asyncio.create_task(retrieve(monkeypatch, server))
     await asyncio.wait_for(server.entered.wait(), 1)

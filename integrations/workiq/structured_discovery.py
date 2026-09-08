@@ -74,6 +74,26 @@ def _identity(value: object, path: str, source_kind: SourceKind) -> MessageLocat
     return location
 
 
+def _validate_unique_identities(
+    rows: list[Mapping[str, object]],
+    *,
+    path: str,
+    source_kind: SourceKind,
+    reason: str,
+) -> None:
+    identities: set[str] = set()
+    for row in rows:
+        identity = row.get("id")
+        try:
+            _identity(identity, path, source_kind)
+        except StructuredDiscoveryError:
+            raise StructuredDiscoveryError(reason) from None
+        assert isinstance(identity, str)
+        if identity in identities:
+            raise StructuredDiscoveryError(reason)
+        identities.add(identity)
+
+
 def _mail_candidate(row: Mapping[str, object], binding: SourceBinding) -> bool:
     identity = row.get("id")
     subject = row.get("subject")
@@ -114,6 +134,12 @@ async def discover_structured(
         rows = _collection(
             await session.fetch(MAIL_QUERY), maximum=5, reason="mail_collection"
         )
+        _validate_unique_identities(
+            rows,
+            path="/me/messages/{identity}",
+            source_kind="supplier",
+            reason="mail_collection",
+        )
         mail_matches = [row for row in rows if _mail_candidate(row, binding)]
         if len(mail_matches) != 1:
             raise StructuredDiscoveryError("mail_candidate")
@@ -124,6 +150,12 @@ async def discover_structured(
 
     teams = _collection(
         await session.fetch(TEAMS_QUERY), maximum=25, reason="team_collection"
+    )
+    _validate_unique_identities(
+        teams,
+        path="/teams/{identity}/channels/x/messages/x",
+        source_kind="quality",
+        reason="team_collection",
     )
     named_teams = [
         identity
@@ -143,6 +175,12 @@ async def discover_structured(
     channel_path = f"/teams/{quote(team_id, safe='')}/channels"
     channels = _collection(
         await session.fetch(channel_path), maximum=25, reason="channel_collection"
+    )
+    _validate_unique_identities(
+        channels,
+        path=f"/teams/{quote(team_id, safe='')}/channels/{{identity}}/messages/x",
+        source_kind="quality",
+        reason="channel_collection",
     )
     named_channels = [
         identity
@@ -169,18 +207,38 @@ async def discover_structured(
         maximum=10,
         reason="post_collection",
     )
+    _validate_unique_identities(
+        posts,
+        path=f"{base}/messages/{{identity}}",
+        source_kind="quality",
+        reason="post_collection",
+    )
     post_matches: list[MessageLocation] = []
     for post in posts:
         location = _identity(post.get("id"), f"{base}/messages/{{identity}}", "quality")
         author, body = post.get("from"), post.get("body")
         deleted = post.get("deletedDateTime")
         if deleted is not None:
-            if not isinstance(deleted, str) or author is not None or body is not None:
+            if not isinstance(deleted, str):
                 raise StructuredDiscoveryError("post_collection")
             try:
-                datetime.fromisoformat(deleted)
+                deleted_at = datetime.fromisoformat(deleted)
             except ValueError:
                 raise StructuredDiscoveryError("post_collection") from None
+            if deleted_at.utcoffset() is None:
+                raise StructuredDiscoveryError("post_collection")
+            if author is not None and (
+                not isinstance(author, dict)
+                or not isinstance(author.get("user"), dict)
+                or not isinstance(author["user"].get("id"), str)
+            ):
+                raise StructuredDiscoveryError("post_collection")
+            if body is not None and (
+                not isinstance(body, dict)
+                or body.get("contentType") not in ("text", "html")
+                or not isinstance(body.get("content"), str)
+            ):
+                raise StructuredDiscoveryError("post_collection")
             continue
         if not isinstance(author, dict) or not isinstance(body, dict):
             raise StructuredDiscoveryError("post_collection")
