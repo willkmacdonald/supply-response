@@ -1,6 +1,6 @@
 # Evidence Status Footer Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. The user selected delegated implementation with Codex's review between tasks, not user approval between tasks. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Preserve visible evidence-processing transparency with bottom-of-card platform labels, truthful timestamps and validation summaries, and prominent warnings.
 
