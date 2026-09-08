@@ -33,13 +33,16 @@ Read-only inspection of the deployed report, data model, and repository found:
 
 ## Chosen approach and alternatives
 
-Use an in-app, read-only supporting-record view and a separate case-specific
-Power BI dashboard. This gives the claim a direct, stable explanation without
-requiring the reader to navigate a reporting tool to inspect one shipment.
+Use an in-app, read-only supporting-record view, card-specific Power BI detail
+views, and a separate case overview. The user has explicitly expanded the design
+to include meaningful, visually polished Power BI destinations that are strongly
+correlated with the originating card. Evidence-detail pages are no longer deferred.
 
-An alternative is an evidence-detail page inside Power BI. That introduces an
-additional evidence projection, navigation, and independent permission dependency
-for a record already present in the analysis response. Defer it.
+Inline details alone are useful for quick inspection but do not satisfy this
+cross-application experience. A case-filtered overview alone also falls short:
+it still makes the user search for the shipment or qualification they clicked.
+Use focused detail pages within the existing report, reusing page layouts for
+records of the same type rather than creating a separate report per card.
 
 Simply relabeling the generic report link is insufficient: it would explain the
 destination but still would not substantiate the evidence claim.
@@ -124,6 +127,61 @@ source failures, missing evidence, or approval blockers.
   freshness is inferred from a stored healthy-retrieval badge.
 - Existing supplier-email and Quality Teams-post actions remain unchanged.
 - Fabric cards no longer present the generic report as `Open citation`.
+- Keep inline **View shipment record** / **View transfer record** / **View
+  qualification record** actions distinct from external **Explore shipment in
+  Power BI** / **Explore transfer in Power BI** / **Explore qualification in
+  Power BI** actions. External actions land on the matching detail view below.
+
+### Card-to-report destination contract
+
+Every Fabric/Power BI action must answer the originating card's question on the
+first screen, without searching, selecting another case, or interpreting an
+unrelated case count. Do not link to Fabric home, a workspace listing, or the
+general case overview as a substitute for a supporting record.
+
+| Originating card | Focused Power BI destination | Useful additional detail |
+| --- | --- | --- |
+| What can Alpha still supply? | **Alpha partial shipment**, repeating the card's question and matching quantity, date, and cost. | Scheduled receipt details, original requirement versus partial supply, and explicitly unconfirmed remainder; distinguish supplier statements from shipment-record fields. |
+| Can another plant help? | **Dallas to Chicago transfer**, showing the same quantity, arrival date, and cost. | Dispatch/arrival timeline and available stock after holds and protected allocations, where supported by the snapshot. |
+| Can another supplier help? | **Beta supplier qualification**, showing the same pending status. | Audit and first-article requirements, outstanding blockers, and the review date clearly distinguished from an approval or delivery date. |
+| What do we have available? | **Available stock**, scoped to the selected plant and part. | On-hand stock minus holds and protected allocations, with the resulting usable quantity. |
+| What does that put at risk? | **Affected customer orders**, scoped to the same analysis and explicitly labeled baseline or response option. | Order-line quantities, due dates, service exposure, and supporting revenue totals. |
+| Compare the options / Recommended response—and why | **Response options**, preserving the selected analysis and option when applicable. | Side-by-side cost, service impact, parts still needed, and planning blockers; identify recommendation separately from approval. |
+
+Not every card needs a Power BI link. The supplier-delay card's primary source
+remains the original supplier email; the Quality Teams post remains directly
+accessible. The case-header **Open case dashboard** is the deliberate entry to
+the broader overview, not an evidence citation.
+
+Detail links identify an allowlisted page and carry the case, immutable analysis
+version, and relevant source-record or option identity. The report must enforce
+those selections in its measures and show a clear missing/ambiguous-record state
+if the exact combination cannot be resolved. Never silently substitute the latest
+analysis, a similarly named record, or aggregate records across cases. Properly
+encode and validate navigation values; these filters are not access controls.
+
+Project the exact saved snapshot behind the card into the reporting model, not
+an unlabeled current database value. Label **Snapshot used for this analysis**
+and show analysis time and fictional provenance. If report data has not caught
+up, say **This analysis is not available in the report yet** when that condition
+can be established, and retain the working inline record view. Do not show stale
+numbers as if they matched the card. A Power BI view of a saved Fabric record is
+a presentation of that evidence, not independent corroboration.
+
+### Detail-view visual standard
+
+The first screen repeats the card's business question, names the supplier/plant/
+part, and makes its key quantity, date, status, and cost immediately recognizable.
+Use the demo's green/teal/amber palette, readable labels, consistent number/date
+formats, generous spacing, and a clear hierarchy. Use a small timeline for dates,
+a stock breakdown for availability, or a requirements checklist for qualification
+only when it clarifies the facts. Avoid decorative charts and giant ID tables.
+
+Below the answer, show supporting records and what they mean for the response.
+Keep unknowns and blockers visible, and technical identifiers in Source details.
+Provide clearly named navigation to the case overview and, only when exact-case
+restoration is supported, back to the demo. Obtain visual review of representative
+populated and empty-state pages before treating the report redesign as complete.
 
 ### Data and validation
 
@@ -170,7 +228,9 @@ not imply that it proves the individual record.
   state and a single-case selector, rather than picking by random identifier.
 - A nonexistent case, conflicting selection, or multiple cases produces a clear
   selection/no-data state, not totals masquerading as one case.
-- Both report pages share the case selection. Decision/action measures use the
+- The overview and Actions and Outcomes pages share the case selection. Detail
+  pages additionally preserve the explicit analysis and record/option selection.
+  Decision/action measures use the
   current decision belonging to that case, not another case or a historical
   decision selected accidentally through a relationship.
 - URL filters are navigation, not security; existing access controls remain.
@@ -193,9 +253,9 @@ return-to-demo action, not an approval control. Within that flow, retain:
    Qualification-blocked options must not look executable.
 4. **Decision:** awaiting approval, rejected, or the current approved decision and
    its chosen option. A recommendation is never labeled an approval.
-5. **Evidence/navigation:** return to the application for the source-backed
-   evidence and approval workflow; keep the supporting records there for this
-   phase. If a return link cannot restore the exact case safely, omit it rather
+5. **Evidence/navigation:** link to focused supporting-record views and return
+   to the application for original messages and the approval workflow.
+   If a return link cannot restore the exact case safely, omit it rather
    than open an empty case-creation screen.
 
 Use a restrained visual treatment consistent with the demo (dark green, teal,
@@ -213,6 +273,9 @@ Extend the SQL analytics projections and semantic model only for the fields this
 report requires. Source details from existing persisted case, operational
 snapshot, analysis, decision, action, and observation records. Project response
 options at case/analysis/option grain; do not duplicate totals through joins.
+Project supporting records at case/analysis/source-record grain, keeping their
+typed fields and provenance tied to the immutable saved analysis. Include only
+the record families needed by the card-to-report mappings above.
 
 Expose current analysis ID/time and current decision lineage explicitly. Keep
 current recommendations separate from metrics for the option actually approved,
@@ -248,10 +311,17 @@ time separately where useful.
    case selection, no/multiple selections, no recommendation, legitimate zero
    metrics, different recommended/approved options, and newer analysis versus
    governing-decision lineage.
+   Verify exact card-to-detail identity and values, repeated source IDs across
+   case instances, historical analysis links after a newer analysis, report
+   refresh lag, and absent/ambiguous record selections. No cross-case totals or
+   latest-analysis substitution may appear in a record detail view.
 3. Power BI artifact/schema/TMDL checks and frontend type/build checks pass.
 4. Read-only live checks compare a selected existing analyzed case against its
    persisted analysis and the report query. Recheck the same case in Alex's UI,
    including navigation from its app header and source-record inspection.
+   For each external card action, compare the visible destination title, record,
+   quantities, dates, and status against the originating card and saved analysis.
+   Review page layout and readable empty states, not just query correctness.
 5. No tests that create cases, approve decisions, or invoke playback are run
    against this environment without separate specific authorization.
 6. Deployment planning must include SQL migration order, preservation of existing
@@ -262,10 +332,11 @@ time separately where useful.
 ## Delivery sequence
 
 First implement and verify the evidence-record view and safe link construction.
-Next update analytics projections, case-aware measures, and report presentation.
-Release the link and report changes together only after selected-case filtering
-is verified; a new URL filter against the old filter-ignoring measures is not a
-working intermediate release.
+Next update analytics/evidence projections, case-aware measures, focused detail
+pages, and overview presentation. Release external card links and report changes
+together only after exact case/analysis/record filtering and visual review are
+verified; a new URL filter against old filter-ignoring measures is not a working
+intermediate release.
 
 ## Design review
 
