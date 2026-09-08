@@ -2,7 +2,28 @@
 
 Updated 2026-09-08 UTC. This records deployment separately from live acceptance.
 
-## Current result — both Work IQ sources validated live; Teams citation UI blocked
+## Current result — revision19 displays both citations and enables approval
+
+Release `c010d5d`, ACR build `ch19`, activated revision `ca-sr-demo--0000019`
+with immutable digest `29a68454fc082c7299da977d5007b5a2b7972f048c1e337cd6b3439c0b47ede5`.
+The sole active/latest-ready revision is Healthy/Running with 100% traffic.
+Identity, exact three scoped Azure roles and scale 0–2 are unchanged; post-deploy
+Fabric/Foundry readiness passed.
+
+At approximately 13:25 UTC, one fresh Alex analysis in Case
+`RL-CASE-be7746d5-42eb-4930-b8cc-501328853318` completed through the normal browser.
+The UI displayed five Open citation links: three Power BI, one Teams and one
+Outlook. Both Microsoft 365 targets match the expected source URLs. The missing
+citation warning is gone and **Approve combined response** is enabled. The
+calculated response cost is $24,750, with 2,300 uncovered units.
+
+This verifies displayed citation targets and the approval gate, not navigation
+into Teams/Outlook: no source links were opened. No Decision was approved, no
+actions executed, and no source messages edited. Exactly one new Case and one
+Analyze were used; no Git push. The verified Case is left open for review.
+Optional Foundry explanation success and downstream acceptance are not claimed.
+
+## Previous result — revision18 validated sources but erased the Teams citation
 
 Release `5fea43f`, ACR build `ch18`, activated revision `ca-sr-demo--0000018`
 with immutable digest `f05099e8170e50bca8e1774c45be91b58752ea8d0bac9605a1f82c33ac1ad760`.
@@ -20,14 +41,14 @@ both marked `work_iq healthy`. It displayed the combined response recommendation
 for pending qualification. This establishes application discovery, individual
 reads and accepted source evidence, not merely standalone CLI success.
 
-Remaining issue: the UI reports `Required live citation missing`. Supplier mail
+At that point, the UI reported `Required live citation missing`. Supplier mail
 has an Open citation link; the Jordan Teams evidence has no link. Approve and
 Reject remain disabled. A subsequent read-only browser diagnostic stalled and
 returned no captured API responses. A later bounded Fabric query of citation
 fields (not message bodies or credentials) established that both Teams URL fields
 were persisted as literal `[REDACTED]`; the email fields retained their URLs.
 
-### Citation redaction correction — local, not deployed
+### Citation redaction correction — deployed and verified on revision19
 
 The orchestrator's optional-explanation failure path scrubs the preserved
 deterministic analysis. Its identity-text rule matched the Teams link's
@@ -49,11 +70,10 @@ build passed. The normal authenticated API/store integration test additionally
 checks both exact source citations in the response and persisted readback with
 agents available and deliberately unavailable. Scoped Ruff and Pyright passed.
 
-Revision18 remains deployed; the correction is local and requires the separately
-authorized deployment workflow. Existing immutable analyses are not rewritten:
-their erased citation cannot recover on refresh. After deployment, verify a fresh
-analysis displays both source links. No Decision, execution, source edit, second
-live Analyze or Git push occurred during this diagnosis/fix.
+The separately approved deployment and fresh analysis passed as recorded above.
+Existing immutable analyses were not rewritten: their erased citation cannot
+recover on refresh. The new Case verifies the correction without altering those
+historical records.
 
 Independent review corrected malformed/duplicate collection handling and restored
 safety coverage. Final full Python regression, Python package, scoped Ruff/Pyright
@@ -75,7 +95,7 @@ check, unique sender/topic discovery, exact approved corpus comparison and the
 existing evidence validator. Only the supplier source ID and derived receipt
 changed in the ignored environment; rollback values remain in ignored notes.
 The verified binding was subsequently deployed with revision18. The live source
-acceptance result and separate UI citation blocker are recorded above.
+acceptance result and subsequent revision19 citation correction are recorded above.
 
 ## Previous investigation — content readable; supplier binding mismatch isolated
 
@@ -93,7 +113,7 @@ successful analysis. The website is unchanged. See the
 and [Microsoft contract research](../research/2026-09-08-workiq-discovery-contract.md)
 for the exact checks and the design decision needed before integration.
 
-## Current local correction — Outlook links parse; evidence gate still blocked
+## Previous local correction — Outlook links parsed; evidence gate was blocked
 
 The user approved the targeted format correction and retrieval/evidence checks
 before another deployment. No new revision was deployed; revision17 below remains

@@ -1,6 +1,66 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated and deployed — revision18 passed readiness and normal Alex source discovery/read/validation. Teams citation UI remains blocked; no approval or execution performed.
+> **Status:** Validated and deployed — revision19 healthy; post-deploy readiness and fresh Alex citation-display acceptance passed.
+
+## Validation Proof — Teams citation preservation (2026-09-08)
+
+User explicitly approved deployment to the existing demo and one fresh Alex
+analysis to verify both source citations. No Decision approval/execution, source
+edits, identity/role/billing changes, new resources, or Git push. Preserve the
+existing Azure Dev / East US2 named environment and immutable saved analyses.
+The reviewed patch only preserves GUID-valued Teams tenant routing parameters
+in server-classified citation fields on optional-explanation failure.
+
+- [x] All validation checks pass.
+  - [x] 1. AZD Installation.
+  - [x] 2. Schema Validation.
+  - [x] 3. Environment Setup.
+  - [x] 4. Authentication Check.
+  - [x] 5. Subscription/Location Check.
+  - [x] 6. Aspire Pre-Provisioning Checks (not applicable).
+  - [x] 7. Provision Preview.
+  - [x] 8. Build Verification.
+  - [x] 9. Docker Build Context Validation.
+  - [x] 10. Package Validation.
+  - [x] 11. Azure Policy Validation.
+  - [x] 12. Aspire Post-Provisioning Checks (not applicable).
+  - [x] Static role verification.
+
+Previous-turn regression reproduced literal `[REDACTED]` in both citation fields.
+Review approved the correction; fresh release checks and live verification follow.
+
+At13:17 UTC, fresh full `.venv/bin/pytest -q -ra` passed with14 expected live
+skips and the existing Starlette/httpx warning. `npm test -- --run` passed52 tests;
+`npm run build`, `uv build`, scoped Ruff and Pyright passed. AZD1.30.0 authentication
+is Will; default named environment, Azure Dev tenant/subscription and East US2
+match. `scripts/preflight_personal_tenant.sh` passed read-only exact bindings.
+`azd provision --environment supply-response-personal --preview --no-prompt`
+accepted azure.yaml/Bicep and proposed no new resources; existing Container App
+and Insights metadata reconciliation only. Named `azd package` passed.
+Dockerfile, ignore rules and both locked dependency inputs checked. No Aspire,
+schema migration or grant change applies. Policy inventory reviewed with no
+preview denial. Static role definitions match the exact three scoped live roles
+(ACR pull, vault secrets read, Foundry User); identity/scale0–2 unchanged.
+Tag lookup corrected to a supported resource-group query and confirmed one API
+target. Shared environment Succeeded. Revision18 digest retained above as rollback.
+
+Release commit c010d5d, ACR build ch19 Succeeded, immutable digest
+29a68454fc082c7299da977d5007b5a2b7972f048c1e337cd6b3439c0b47ede5
+activated revision19. Existing-health gate passed after two transient timeouts,
+without bypass or placeholder replacement.
+
+Post-deploy `--smoke` passed live Fabric/Foundry readiness. `azd show` confirms
+the named environment; ingress confirms the same HTTPS demo. Revision19 is sole
+active/latest-ready Healthy/Running with100% traffic, unchanged identity, exact
+three scoped roles and scale0–2. One new showcase Case was created through the
+normal signed-in browser and one Analyze clicked. At approximately 13:25 UTC,
+Case `RL-CASE-be7746d5-42eb-4930-b8cc-501328853318` completed analysis with five
+Open citation links (three Power BI, one Teams, one Outlook). Both Microsoft 365
+link targets match the expected source URLs. The missing-citation warning is gone
+and Approve combined response is enabled; $24,750 and 2,300 uncovered units are
+displayed. No source links were opened, Decision approved, or actions executed.
+The verified Case remains open in the browser. No second Analyze or Git push.
+
 
 ## Validation Proof — structured discovery (2026-09-08)
 
