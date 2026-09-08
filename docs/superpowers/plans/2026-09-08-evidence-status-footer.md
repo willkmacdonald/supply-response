@@ -184,7 +184,7 @@ result itself, implemented test-first in `bac0a40`.
 - Consumes `EvidenceStatus` from Task 1.
 - Produces `<EvidenceFooter status={status} />`; parent places `status.warning` beside the affected claim.
 
-- [ ] Create `EvidenceFooter.test.tsx`:
+- [x] Create `EvidenceFooter.test.tsx`:
 
 ```tsx
 // @vitest-environment jsdom
@@ -210,8 +210,8 @@ it("shows recorded UTC time without claiming ongoing monitoring", () => {
 });
 ```
 
-- [ ] Run `npm --prefix apps/web test -- src/components/EvidenceFooter.test.tsx`; expect missing-module failure.
-- [ ] Create `EvidenceFooter.tsx`:
+- [x] Run `npm --prefix apps/web test -- src/components/EvidenceFooter.test.tsx`; expect missing-module failure.
+- [x] Create `EvidenceFooter.tsx`:
 
 ```tsx
 import type {EvidenceStatus} from "./evidenceStatus";
@@ -229,7 +229,7 @@ export function EvidenceFooter({status}: {status: EvidenceStatus}) {
 }
 ```
 
-- [ ] In `EvidencePanel.tsx`, import `EvidenceFooter` and `evidenceStatus`. Inside the existing evidence `map`, immediately before `return`, add:
+- [x] In `EvidencePanel.tsx`, import `EvidenceFooter` and `evidenceStatus`. Inside the existing evidence `map`, immediately before `return`, add:
 
 ```tsx
 const status = evidenceStatus(item, {
@@ -237,13 +237,13 @@ const status = evidenceStatus(item, {
 });
 ```
 
-- [ ] Remove the existing top `<div className="card-labels">` containing source-system and retrieval-health badges. Immediately after `<h3>{item.claim}</h3>`, insert:
+- [x] Remove the existing top `<div className="card-labels">` containing source-system and retrieval-health badges. Immediately after `<h3>{item.claim}</h3>`, insert:
 
 ```tsx
 {status.warning && <p className="warning" role="alert">{status.warning}</p>}
 ```
 
-- [ ] Replace the existing technical `<dl>` with an expandable section. Preserve raw historical values only inside this section; do not reinterpret them as probabilities:
+- [x] Replace the existing technical `<dl>` with an expandable section. Preserve raw historical values only inside this section; do not reinterpret them as probabilities:
 
 ```tsx
 <details>
@@ -258,8 +258,8 @@ const status = evidenceStatus(item, {
 </details>
 ```
 
-- [ ] Insert `<EvidenceFooter status={status} />` after the existing citation link and immediately before `</article>`. Do not change `citationLabel`, trusted URL validation, or the required-citation warning in this stage.
-- [ ] Append this CSS to `styles.css`:
+- [x] Insert `<EvidenceFooter status={status} />` after the existing citation link and immediately before `</article>`. Do not change `citationLabel`, trusted URL validation, or the required-citation warning in this stage.
+- [x] Append this CSS to `styles.css`:
 
 ```css
 .evidence-card { display: flex; flex-direction: column; gap: 0.5rem; }
@@ -270,7 +270,7 @@ const status = evidenceStatus(item, {
 .evidence-footer p { margin: 0.35rem 0 0; font-size: 0.8rem; color: #52645e; overflow-wrap: anywhere; }
 ```
 
-- [ ] In `App.tsx`, insert this immediately after the existing initialization/creation status block:
+- [x] In `App.tsx`, insert this immediately after the existing initialization/creation status block:
 
 ```tsx
 {workspace.operation === "analyzing" && (
@@ -278,10 +278,10 @@ const status = evidenceStatus(item, {
 )}
 ```
 
-- [ ] Run `npm --prefix apps/web test` and `npm --prefix apps/web run build`. Existing `LiveSafety.test.tsx` uses incomplete analysis casts; update those fixtures with explicit analysis IDs, matching evidence IDs/case/runtime, timestamps and a matching validation result where the test expects no warning. Do not disable new warnings or remove assertions to satisfy incomplete fixtures. Tests about unsafe URLs must continue rejecting the same targets.
-- [ ] Extend `EvidenceFooter.test.tsx` with a render of the integrated `EvidencePanel` using a complete matching fixture; assert `article.lastElementChild` is the footer and that the citation precedes it. Rerender with an old retrieval ID and assert the mismatch warning is before the footer; rerender the same completed analysis and assert the timestamp has not changed. This integration fixture must include all the analysis fields consumed by the presenter, not `as never` partial objects.
-- [ ] Verify with local fixture rendering at 1280px and 390px that the footer is readable, at the bottom, and warnings remain adjacent to the claim. No real service calls are necessary. Use the webapp-testing skill for local browser verification.
-- [ ] Run `git diff --check`; commit only Task 2 files and relevant fixture updates with message `feat: move evidence provenance into readable card footers`.
+- [x] Run `npm --prefix apps/web test` and `npm --prefix apps/web run build`. Existing `LiveSafety.test.tsx` uses incomplete analysis casts; update those fixtures with explicit analysis IDs, matching evidence IDs/case/runtime, timestamps and a matching validation result where the test expects no warning. Do not disable new warnings or remove assertions to satisfy incomplete fixtures. Tests about unsafe URLs must continue rejecting the same targets.
+- [x] Extend `EvidenceFooter.test.tsx` with a render of the integrated `EvidencePanel` using a complete matching fixture; assert `article.lastElementChild` is the footer and that the citation precedes it. Rerender with an old retrieval ID and assert the mismatch warning is before the footer; rerender the same completed analysis and assert the timestamp has not changed. This integration fixture must include all the analysis fields consumed by the presenter, not `as never` partial objects.
+- [x] Verify with local fixture rendering at 1280px and 390px that the footer is readable, at the bottom, and warnings remain adjacent to the claim. No real service calls are necessary. Use the webapp-testing skill for local browser verification.
+- [x] Run `git diff --check`; commit only Task 2 files and relevant fixture updates with message `feat: move evidence provenance into readable card footers`.
 
 ## Stage completion and next boundary
 
