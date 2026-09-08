@@ -214,7 +214,7 @@ export function EvidenceFooter({status}: {status: EvidenceStatus}) {
   return <footer className="evidence-footer" aria-label="Source and evidence status">
     <span className="badge">{status.platform}</span>
     <p>{status.retrieval}{status.recordedAt && <> · <time dateTime={status.recordedAt}>
-      {new Date(status.recordedAt).toISOString().replace("T", " ").replace(".000Z", " UTC")}
+      {new Date(status.recordedAt).toISOString().replace("T", " ").replace(/Z$/, " UTC")}
     </time></>}</p>
     <p>{status.validation}</p>
   </footer>;
