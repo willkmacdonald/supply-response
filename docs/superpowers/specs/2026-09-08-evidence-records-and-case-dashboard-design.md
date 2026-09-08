@@ -1,7 +1,7 @@
 # Evidence records and a case-focused Power BI dashboard
 
 Date: 2026-09-08
-Status: Design direction approved in conversation; written specification awaiting review.
+Status: Written specification approved by the user; implementation planning in progress.
 
 ## User outcome
 
@@ -58,7 +58,7 @@ the row label above its cards and stack those cards in the same order.
 | Visible left-hand label | First card | Second card | Third card |
 | --- | --- | --- | --- |
 | **1. Understand the disruption** | **What changed?** Supplier delay, missed quantity, original delivery date. | **What do we have available?** Stock at the affected plant after holds and protected allocations. | **What does that put at risk?** Affected production and customer orders, due dates, and revenue. |
-| **2. Investigate responses** | **What can Alpha still supply?** Partial offer, arrival date, cost, and what remains unconfirmed. | **Can another plant help?** Dallas transfer quantity, arrival date, and cost. | **Can another supplier help?** Beta qualification status and the requirements still outstanding. |
+| **2. Investigate responses** | **What can Supplier Alpha still supply?** Partial offer, arrival date, cost, and what remains unconfirmed. | **Can another plant help?** Dallas plant transfer quantity, arrival date, and cost. | **Can we use the alternate supplier?** Supplier Beta qualification status and the requirements still outstanding. |
 | **3. Make the decision** | **Compare the options.** Alternatives alongside doing nothing. | **Recommended response—and why.** Benefits, cost, and parts still needed. | **Review and approve.** Current decision state and outstanding requirements; approval remains an explicit user action. |
 
 This is an organization of existing case information, not nine new evidence
@@ -79,17 +79,41 @@ dates, costs, or requirements that explain it. Avoid repeating the same claim
 as both heading and body. Use normal supply-chain language throughout cards,
 status labels, source actions, empty states, and the case dashboard.
 
+### Unambiguous names and roles
+
+Never require a planner to infer whether a name is a supplier, person, or plant.
+Use **RL-Supplier Beta — Alternate supplier** on first reference in each
+standalone card or report detail view, then **Supplier Beta** in its supporting
+copy. Beta is the fictional alternate supplier whose qualification is pending,
+not the person posting the update. Label **Jordan Lee — Quality Manager** when
+attributing the Quality Teams post.
+
+Apply the same convention to **RL-Supplier Alpha — Current supplier** (then
+**Supplier Alpha**) and **Dallas plant** / **Chicago plant**. A useful card
+heading is **Can we use the alternate supplier?**, followed by **Supplier Beta
+is not yet qualified** and the outstanding requirements. Avoid bare **Beta**,
+**Alpha**, or **Dallas** in user-facing headings and status summaries when the
+entity's role is not otherwise explicit.
+
+These are display clarifications, not source-data renames. Preserve original
+message text, source identifiers, citations, and immutable analysis records.
+Derive names and roles from the supported scenario/entity mapping; never invent
+a realistic company name that no longer matches the cited email or record.
+Use the same naming consistently in the demo, Power BI views, and walkthrough.
+
+### Status and terminology wording
+
 | Current wording or pattern | User-facing treatment |
 | --- | --- |
-| `fabric`, `work_iq` as prominent badges | Name the source: **Shipment record**, **Inventory record**, **Supplier email**, or **Quality Teams post**, as appropriate. Retain platform provenance in **Source details**. |
-| `healthy` | Do not present technical retrieval health as supply status. If useful, show **Source retrieved** with the actual retrieval time in Source details; otherwise omit the badge. |
-| `certain` | State exactly what is supported and what is unknown, such as **Delivery date for the remaining 5,000 units is not confirmed**. Do not replace this with a blanket **Confirmed** badge. |
+| `fabric`, `work_iq` as prominent badges | Lead with the business question and answer. Keep human-readable platform badges in a compact footer at the bottom of the card, not above the heading. Name the source **Shipment record**, **Inventory record**, **Supplier email**, or **Quality Teams post**; put identifiers and implementation details in **Source details**. |
+| `healthy` | Keep visible retrieval transparency, labeled **Retrieved for this analysis** with the actual retrieval time when available. Do not present retrieval health as supply status or continuous connection health. |
+| `certain` | Show the specific checks actually completed, such as **Message identity and source link validated**, separately from business uncertainty such as **Delivery date for the remaining 5,000 units is not confirmed**. Do not invent checks or use a blanket **Confirmed** badge. |
 | `operational_quantity`, `operational_date`, `collaboration_statement` | Show the business fields and attribute statements to their source. Keep technical authority scopes in Source details. |
 | `Evidence ID` as a headline field | Put the identifier under **Source details**, labeled **Source record ID**. |
 | `Open citation` | Use **Open supplier email**, **Open Quality Teams post**, **View shipment record**, **View transfer record**, or **View qualification record**, matching the destination. |
 | Uncovered constrained-part demand | **Parts still needed**, with the component name and units; do not imply these are finished-product units. |
 | Projected OTIF loss | **Customer order lines expected to miss the on-time, in-full target**, with the percentage and count/denominator where available. Do not silently change an order-line metric into an order count or a late-only metric. |
-| Feasible / infeasible | Explain **Meets the planning requirements** or the specific blocker, such as **Cannot use Beta yet: supplier approval is incomplete**. Meeting planning requirements does not mean approved or executed. |
+| Feasible / infeasible | Explain **Meets the planning requirements** or the specific blocker, such as **Cannot use Supplier Beta yet: supplier qualification is incomplete**. Meeting planning requirements does not mean approved or executed. |
 
 Use **In this scenario, as of** for the fictional scenario timestamp and label
 the actual analysis/retrieval timestamps separately. Explain **Revenue at risk**
@@ -99,8 +123,9 @@ where that matches the persisted metric definition. Label predictions as
 
 Example partial-offer wording for the canonical fixture:
 
-> **What can Alpha still supply?**
-> Alpha offers 3,000 units by air for September 6 at $7.50 per unit.
+> **What can Supplier Alpha still supply?**
+> **RL-Supplier Alpha — Current supplier**
+> Supplier Alpha offers 3,000 units by air for September 6 at $7.50 per unit.
 > Delivery for the remaining 5,000 units is not confirmed.
 > **Open supplier email** · **View shipment record**
 
@@ -110,6 +135,58 @@ Preserve distinctions between an offer, a scheduled receipt, a qualification
 review date, and an approved action. Display the fictional-demo notice clearly;
 moving technical details out of the headline must not hide synthetic provenance,
 source failures, missing evidence, or approval blockers.
+
+### Visible proof of live activity
+
+Plain language must not remove the transparency that makes this demonstrably a
+working application rather than a static HTML mockup. Keep a compact, visible
+evidence-status line on cards and an activity trail for the analysis. Users should
+be able to see which real services were used, what the application is doing, what
+finished successfully, and what failed, without expanding technical details.
+
+Place platform badges (for example, **Work IQ** and **Microsoft Fabric**, only
+where those integrations were actually used) and the compact retrieval/validation
+summary in a visually subordinate footer at the bottom of each card. The reading
+order is business question, answer and supporting facts, clearly named source
+actions, then the platform/activity footer. Do not put platform branding above
+the card heading or use it as the card's primary identity. Keep the footer visible
+and readable on desktop and mobile; the separate analysis activity trail can
+still show run-wide progress. Use actual product names, not an inferred **Fabric
+IQ** label for a Microsoft Fabric integration. Business blockers and critical
+source failures remain near the affected claim rather than buried in the footer.
+
+Separate **business status** from **evidence-processing status**. For example,
+**Supplier Beta is not yet qualified** can appear alongside **Teams post retrieved for
+this analysis at [actual time] · Message identity and source link validated**.
+The latter is proof of the checks performed, not a guarantee of the statement's
+truth, supplier performance, qualification approval, or a numerical confidence
+score. Do not derive specific validation claims solely from the existing
+`certain` enum or source retrieval claims solely from a configured live-mode flag.
+
+Show discovery, message/record retrieval, and validation stages only as supported
+by actual run events/results. Identify the component responsible for each stage
+accurately; a Graph retrieval must not be described as Work IQ discovery. If a
+stage is not observable while running, show **Analysis in progress** and report
+its verified completed steps afterward. Never use timed animations or fabricated
+progress events to imply work that is not being observed. Any added status
+plumbing is scoped to these stages and must not expose tokens, sensitive raw
+payloads, or internal exception details.
+
+Completed cards say **Retrieved for this analysis**, not **Checking now** or an
+unqualified **Live** indicator suggesting ongoing monitoring. Preserve the actual
+retrieval timestamp, with a clear timezone; do not reset it on page refresh. Show
+timestamps as unavailable when absent. Distinguish a saved analysis or replay
+from a new retrieval and a cached result from a fresh service call when known.
+Missing evidence, failures, and uncertainty remain visible even when other
+sources succeeded.
+
+Keep **live service access** and **fictional scenario content** distinct. This
+demo can genuinely discover and retrieve deliberately synthetic messages and
+records stored in Microsoft 365/Fabric. State both facts visibly where supported;
+do not imply the underlying supplier disruption is real. Fallback fixtures must
+remain labeled as such and must never display an invented live-retrieval trail.
+The traditional-versus-AI walkthrough should explain this distinction and show
+the same honest provenance in report snapshots and the application.
 
 ### What the user sees
 
@@ -141,9 +218,9 @@ general case overview as a substitute for a supporting record.
 
 | Originating card | Focused Power BI destination | Useful additional detail |
 | --- | --- | --- |
-| What can Alpha still supply? | **Alpha partial shipment**, repeating the card's question and matching quantity, date, and cost. | Scheduled receipt details, original requirement versus partial supply, and explicitly unconfirmed remainder; distinguish supplier statements from shipment-record fields. |
-| Can another plant help? | **Dallas to Chicago transfer**, showing the same quantity, arrival date, and cost. | Dispatch/arrival timeline and available stock after holds and protected allocations, where supported by the snapshot. |
-| Can another supplier help? | **Beta supplier qualification**, showing the same pending status. | Audit and first-article requirements, outstanding blockers, and the review date clearly distinguished from an approval or delivery date. |
+| What can Supplier Alpha still supply? | **Supplier Alpha partial shipment**, repeating the card's question and matching quantity, date, and cost. | Scheduled receipt details, original requirement versus partial supply, and explicitly unconfirmed remainder; distinguish supplier statements from shipment-record fields. |
+| Can another plant help? | **Dallas plant to Chicago plant transfer**, showing the same quantity, arrival date, and cost. | Dispatch/arrival timeline and available stock after holds and protected allocations, where supported by the snapshot. |
+| Can we use the alternate supplier? | **Supplier Beta qualification**, showing the same pending status. | Audit and first-article requirements, outstanding blockers, and the review date clearly distinguished from an approval or delivery date. |
 | What do we have available? | **Available stock**, scoped to the selected plant and part. | On-hand stock minus holds and protected allocations, with the resulting usable quantity. |
 | What does that put at risk? | **Affected customer orders**, scoped to the same analysis and explicitly labeled baseline or response option. | Order-line quantities, due dates, service exposure, and supporting revenue totals. |
 | Compare the options / Recommended response—and why | **Response options**, preserving the selected analysis and option when applicable. | Side-by-side cost, service impact, parts still needed, and planning blockers; identify recommendation separately from approval. |
@@ -359,9 +436,19 @@ Any future timed comparison must distinguish cached/replayed from fresh runs.
    material, zero/false values, date formatting, accessible expansion, fallback
    provenance, unchanged Work IQ links, and safe case-filter construction.
    Also verify the approved row labels and reading order on desktop/mobile,
-   business-first headings, specific source actions, technical fields confined
-   to details, and explicit unknowns and approval blockers. Copy must preserve
+   business-first headings, specific source actions, visible source/retrieval/
+   validation summaries with technical identifiers confined to details, and
+   explicit unknowns and approval blockers. Copy must preserve
    metric units, denominators, source attribution, and prediction versus outcome.
+   Verify that standalone cards and report views identify suppliers, plants, and
+   people by role, without altering original quoted evidence or source identities.
+   Verify that platform badges and compact retrieval/validation summaries appear
+   in the bottom card footer, after the business content and source actions, on
+   both desktop and mobile, while critical warnings remain prominent.
+   Verify activity states against actual events/results, partial failures,
+   unavailable timestamps, saved/replayed analyses, fallback fixtures, and page
+   refresh without timestamp resets. Neither `healthy`, `certain`, nor a live-mode
+   configuration alone may produce unsupported validation or live-activity claims.
 2. Projection/model tests cover an unanalyzed case beside analyzed cases, explicit
    case selection, no/multiple selections, no recommendation, legitimate zero
    metrics, different recommended/approved options, and newer analysis versus
