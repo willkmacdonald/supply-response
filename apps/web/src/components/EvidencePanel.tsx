@@ -1,5 +1,7 @@
 import type {AnalysisVersion, EvidenceItem} from "../types";
 import {trustedServerCitation} from "../security/trustedUrls";
+import {EvidenceFooter} from "./EvidenceFooter";
+import {evidenceStatus} from "./evidenceStatus";
 
 function citationLabel(item: EvidenceItem, citation: string): string {
   if (item.source_system === "work_iq") {
@@ -35,19 +37,25 @@ export function EvidencePanel({analysis, tenantSharePointHost}: {analysis: Analy
         const citation = analysis.runtime_mode === "live"
           ? trustedServerCitation(item.navigable_citation_url, item.citation_classification, tenantSharePointHost)
           : item.citation_url;
+        const status = evidenceStatus(item, {
+          ...analysis, results: analysis.evidence_validation?.item_results ?? [],
+        });
         return <article className="evidence-card" key={item.evidence_id}>
-        <div className="card-labels">
-          <span className="badge">{item.synthetic ? "Synthetic fixture" : item.source_system}</span>
-          <span className="badge">{item.retrieval_health}</span>
-        </div>
         <h3>{item.claim}</h3>
+        {status.warning && <p className="warning" role="alert">{status.warning}</p>}
         {item.excerpt && <p>{item.excerpt}</p>}
-        <dl className="compact-list">
-          <div><dt>Evidence ID</dt><dd>{item.evidence_id}</dd></div>
-          <div><dt>Authority</dt><dd>{item.authority_scope.join(", ")}</dd></div>
-          <div><dt>Uncertainty</dt><dd>{item.uncertainty_state}</dd></div>
-        </dl>
+        <details>
+          <summary>Source details</summary>
+          <dl className="compact-list">
+            <div><dt>Source record ID</dt><dd>{item.source_id?.trim() || "Unavailable"}</dd></div>
+            <div><dt>Evidence ID</dt><dd>{item.evidence_id}</dd></div>
+            <div><dt>Technical authority scopes</dt><dd>{item.authority_scope.join(", ")}</dd></div>
+            <div><dt>Internal evidence classification</dt><dd>{item.uncertainty_state}</dd></div>
+          </dl>
+          <p>The internal classification is not a probability or a guarantee of supplier performance.</p>
+        </details>
         {citation && <a href={citation} target="_blank" rel="noopener noreferrer">{citationLabel(item, citation)}</a>}
+        <EvidenceFooter status={status} />
       </article>})}
     </div>
   </section>;

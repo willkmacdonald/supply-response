@@ -337,7 +337,7 @@ function response(body: unknown, status = 200) {
 }
 
 function mockFallbackCaseLifecycle(overrides: {
-  analysis?: unknown;
+  analysis?: unknown | Promise<Response>;
   decision?: unknown;
   retryDecision?: unknown;
   actions?: unknown;
@@ -356,6 +356,7 @@ function mockFallbackCaseLifecycle(overrides: {
     }
     if (path === "/api/cases" && method === "POST") return response(caseInstance, 201);
     if (path === "/api/cases/RL-CASE-1/analysis" && method === "POST") {
+      if (overrides.analysis instanceof Promise) return overrides.analysis;
       return response(overrides.analysis ?? analysis, 201);
     }
     if (path === "/api/cases/RL-CASE-1/decisions" && method === "POST") {
@@ -471,6 +472,19 @@ describe("progressive Case workspace", () => {
     expect(screen.getByRole("heading", {name: "Evidence items"})).toBeVisible();
     expect(screen.getByRole("heading", {name: "Exposure and lineage"})).toBeVisible();
     expect(screen.getByRole("heading", {name: "Decision receipt"})).toBeVisible();
+  });
+
+  it("announces that evidence checks are pending while analysis is in progress", async () => {
+    let resolveAnalysis!: (value: Response) => void;
+    const delayedAnalysis = new Promise<Response>((resolve) => { resolveAnalysis = resolve; });
+    mockFallbackCaseLifecycle({analysis: delayedAnalysis});
+    render(<App />);
+    await screen.findByText("Fallback mode");
+    await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
+    await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
+    expect(await screen.findByRole("status")).toHaveTextContent("Analysis in progress. Source retrieval and evidence checks will be shown when the analysis completes.");
+    await act(async () => resolveAnalysis(await response(analysis, 201)));
+    expect(await screen.findByText("Combined response")).toBeVisible();
   });
 
   it("keeps blocked Beta visible and nonselectable with its exact code", async () => {

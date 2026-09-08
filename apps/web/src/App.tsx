@@ -20,6 +20,9 @@ function CaseWorkspace() {
         {workspace.operation === "creating" ? "Creating Case workspace…" : "Initializing Case workspace…"}
       </p>
     )}
+    {workspace.operation === "analyzing" && (
+      <p role="status" aria-live="polite">Analysis in progress. Source retrieval and evidence checks will be shown when the analysis completes.</p>
+    )}
     {workspace.error && <p className="error" role="alert">{workspace.error}</p>}
     <CaseHeader
       runtime={workspace.runtime}
