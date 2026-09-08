@@ -50,7 +50,7 @@ Do not modify `types.ts`, `EvidencePanel.tsx`, `evidenceStatus.ts`, citation hel
 
 **Interfaces:** Consumes existing `CaseInstance`, `AnalysisVersion`, `AnalysisMaterial`, `EvidenceItem`, `AnalysisEvidenceMaterial`, and `RuntimeMode` from `../types`. Produces `resolveSupportingRecord(input: SupportingRecordInput, evidenceId: string): SupportingRecordResult`, `SupportingRecord`, and `ExactRecordContext`. All exported result fields are readonly; the parsed record and result are frozen copies, never references into API material.
 
-- [ ] **Step 1: Add the complete fixture and failing resolver tests below.**
+- [x] **Step 1: Add the complete fixture and failing resolver tests below.**
 
 `apps/web/src/components/supportingRecord.fixture.ts`:
 
@@ -238,8 +238,8 @@ describe("exact saved supporting records", () => {
 });
 ```
 
-- [ ] **Step 2: Run the red test.** From `apps/web`, run `npx vitest run src/components/supportingRecord.test.ts`. Expected: FAIL because `./supportingRecord` does not exist.
-- [ ] **Step 3: Create the complete resolver implementation.**
+- [x] **Step 2: Run the red test.** From `apps/web`, run `npx vitest run src/components/supportingRecord.test.ts`. Expected: FAIL because `./supportingRecord` does not exist.
+- [x] **Step 3: Create the complete resolver implementation.**
 
 `apps/web/src/components/supportingRecord.ts`:
 
@@ -368,8 +368,8 @@ export function resolveSupportingRecord(input: SupportingRecordInput, evidenceId
 }
 ```
 
-- [ ] **Step 4: Run `npx vitest run src/components/supportingRecord.test.ts` and `npm run build` from `apps/web`.** Expected: resolver tests and strict TypeScript compilation pass. Fix failures within these new files before proceeding.
-- [ ] **Step 5: Review the diff, then commit only the three Task 1 files if the parent authorizes committing in the shared worktree.** The current planning assignment expressly prohibits commits; the parent controls Git while other agents work. Suggested eventual commit message: `feat: resolve exact saved supporting records`.
+- [x] **Step 4: Run `npx vitest run src/components/supportingRecord.test.ts` and `npm run build` from `apps/web`.** Expected: resolver tests and strict TypeScript compilation pass. Fix failures within these new files before proceeding.
+- [x] **Step 5: Review the diff, then commit only the three Task 1 files if the parent authorizes committing in the shared worktree.** The current planning assignment expressly prohibits commits; the parent controls Git while other agents work. Suggested eventual commit message: `feat: resolve exact saved supporting records`.
 
 ## Task 2: Provide accessible inline details without coupling to the current panel
 
@@ -377,7 +377,7 @@ export function resolveSupportingRecord(input: SupportingRecordInput, evidenceId
 
 **Interfaces:** Consumes `SupportingRecordResult` from Task 1. Produces `SupportingRecordDetails({result}: {result: SupportingRecordResult})`. Native `<details>/<summary>` provides keyboard expansion without IDs derived from arbitrary source identifiers. No network, effects, router, callbacks, URLs, or application mutation. The unavailable message stays visible even before expansion.
 
-- [ ] **Step 1: Add the complete failing component tests.**
+- [x] **Step 1: Add the complete failing component tests.**
 
 ```tsx
 // @vitest-environment jsdom
@@ -447,8 +447,8 @@ describe("supporting record disclosure", () => {
 });
 ```
 
-- [ ] **Step 2: Run `npx vitest run src/components/SupportingRecordDetails.test.tsx` from `apps/web`.** Expected: FAIL because the component does not exist.
-- [ ] **Step 3: Create the complete component below.**
+- [x] **Step 2: Run `npx vitest run src/components/SupportingRecordDetails.test.tsx` from `apps/web`.** Expected: FAIL because the component does not exist.
+- [x] **Step 3: Create the complete component below.**
 
 ```tsx
 import type {ReactNode} from "react";
@@ -516,11 +516,20 @@ export function SupportingRecordDetails({result}: {result: SupportingRecordResul
 
 This component uses natural document flow and wraps long values; no fixed widths or new design system. The current card's platform/activity footer remains its own responsibility. Fixture provenance is visible in the record body and cannot be mistaken for a fresh service call. Original email/Teams quotations and source links remain untouched because this increment does not render or modify them. The component derives no extra supplier statement from a scheduled receipt.
 
-- [ ] **Step 4: Run `npx vitest run src/components/SupportingRecordDetails.test.tsx` and `npm run build` from `apps/web`.** Expected: four component tests and TypeScript/build pass. Keyboard disclosure verification uses the platform's native summary behavior; if the installed jsdom cannot simulate Enter activation, preserve a real keyboard browser check and test click toggling in jsdom with `await user.click(summary)` instead of adding redundant custom keyboard handlers.
-- [ ] **Step 5: Run bounded final regression verification from `apps/web`: `npm test`, `TZ=America/Los_Angeles npx vitest run src/components/SupportingRecordDetails.test.tsx`, and `npm run build`.** Expected: all existing/new unit tests pass, September 6 stays September 6 in the alternate timezone, build passes. From the worktree root run `git diff --check`. Do not broaden to deployment, credentials, live retrieval, approval, or execution workflows.
-- [ ] **Step 6: Review only the two Task 2 files, then let the parent commit when shared-worktree work is settled.** Suggested eventual commit message: `feat: add inline supporting record disclosure`.
+- [x] **Step 4: Run `npx vitest run src/components/SupportingRecordDetails.test.tsx` and `npm run build` from `apps/web`.** Expected: four component tests and TypeScript/build pass. Keyboard disclosure verification uses the platform's native summary behavior; if the installed jsdom cannot simulate Enter activation, preserve a real keyboard browser check and test click toggling in jsdom with `await user.click(summary)` instead of adding redundant custom keyboard handlers.
+- [x] **Step 5: Run bounded final regression verification from `apps/web`: `npm test`, `TZ=America/Los_Angeles npx vitest run src/components/SupportingRecordDetails.test.tsx`, and `npm run build`.** Expected: all existing/new unit tests pass, September 6 stays September 6 in the alternate timezone, build passes. From the worktree root run `git diff --check`. Do not broaden to deployment, credentials, live retrieval, approval, or execution workflows.
+- [x] **Step 6: Review only the two Task 2 files, then let the parent commit when shared-worktree work is settled.** Suggested eventual commit message: `feat: add inline supporting record disclosure`.
 
 ## Review gates and subsequent integration
+
+Completed foundation: Task 1 `ebd7d8c` and Task 2 `74e2038` independently passed
+specification and quality review. Reported regression: 132 frontend tests,
+alternate-timezone component checks, production build, and whitespace checks.
+Controller real-browser checks passed at 1280px and 390px for shipment, transfer,
+qualification, null timestamps, zero costs, fixtures, and malformed snapshots;
+native Enter expansion/collapse, no navigation, no overflow, and no browser
+errors verified. Screenshots remain local test artifacts, not live-data evidence.
+The standalone details are not yet wired into the investigation layout.
 
 Success for this bounded increment is a typed resolver with negative identity/type tests, a compiled standalone disclosure with accessible keyboard behavior and no fetch/navigation, unchanged existing citation safety tests, and no edits outside the five implementation/test files. It intentionally does not change what the current evidence panel renders. The subsequent layout integration must wire this component to the selected case and displayed analysis, remove the generic Fabric citation action from that rendered path, preserve supplier-email and Quality Teams-post actions, and arrange the three investigation rows. Those are separate reviewable changes; this plan does not assume the concurrent footer's uncommitted interface.
 
