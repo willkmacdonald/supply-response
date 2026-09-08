@@ -1,4 +1,5 @@
 import type {AnalysisVersion, EvidenceItem, EvidenceItemValidation} from "../types";
+import {validInstant} from "./snapshotValidation";
 
 export type StatusItem = Pick<EvidenceItem,
   "evidence_id" | "case_id" | "source_system" | "runtime_mode" | "synthetic" |
@@ -15,7 +16,7 @@ export interface EvidenceStatus {
 }
 
 function instant(value: string | null): number {
-  return value && /(Z|[+-]\d{2}:\d{2})$/.test(value) ? Date.parse(value) : NaN;
+  return validInstant(value) ? Date.parse(value) : NaN;
 }
 
 export function evidenceStatus(item: StatusItem, context: StatusContext): EvidenceStatus {

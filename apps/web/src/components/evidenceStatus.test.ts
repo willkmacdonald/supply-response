@@ -112,4 +112,29 @@ describe("evidence status", () => {
     expect(result.validation).toBe("Not accepted as authoritative evidence");
     expect(result.warning).not.toBeNull();
   });
+  it.each([
+    "retrieved_at",
+    "analysis_started_at",
+    "retrieval_window_ends_at",
+    "created_at",
+  ] as const)("rejects impossible calendar dates in %s", (field) => {
+    const impossibleTimestamp = "2026-02-30T15:00:00Z";
+    const marchSecondContext: StatusContext = {
+      ...context,
+      analysis_started_at: "2026-03-02T14:59:00Z",
+      retrieval_window_ends_at: "2026-03-02T15:01:00Z",
+      created_at: "2026-03-02T15:00:01Z",
+    };
+    const changedItem = {...item, retrieved_at: "2026-03-02T15:00:00Z"};
+    const changedContext = field === "retrieved_at"
+      ? marchSecondContext
+      : {...marchSecondContext, [field]: impossibleTimestamp};
+    const result = evidenceStatus(
+      field === "retrieved_at" ? {...changedItem, retrieved_at: impossibleTimestamp} : changedItem,
+      changedContext,
+    );
+    expect(result.retrieval).not.toBe("Retrieved for this analysis");
+    expect(result.validation).not.toBe("Evidence policy checks passed");
+    expect(result.warning).not.toBeNull();
+  });
 });
