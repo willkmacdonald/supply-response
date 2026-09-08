@@ -1,5 +1,20 @@
-import type {AnalysisVersion} from "../types";
+import type {AnalysisVersion, EvidenceItem} from "../types";
 import {trustedServerCitation} from "../security/trustedUrls";
+
+function citationLabel(item: EvidenceItem, citation: string): string {
+  if (item.source_system === "work_iq") {
+    try {
+      const host = new URL(citation).hostname;
+      if (["outlook.office.com", "outlook.office365.com"].includes(host) && item.authority_scope.includes("supplier_statement")) {
+        return "Open supplier email";
+      }
+      if (host === "teams.microsoft.com" && item.authority_scope.includes("collaboration_statement")) {
+        return "Open Quality Teams post";
+      }
+    } catch { /* Non-URL fallback citations retain their generic label. */ }
+  }
+  return "Open citation";
+}
 
 export function EvidencePanel({analysis, tenantSharePointHost}: {analysis: AnalysisVersion | null; tenantSharePointHost?: string | null}) {
   if (!analysis) return null;
@@ -32,7 +47,7 @@ export function EvidencePanel({analysis, tenantSharePointHost}: {analysis: Analy
           <div><dt>Authority</dt><dd>{item.authority_scope.join(", ")}</dd></div>
           <div><dt>Uncertainty</dt><dd>{item.uncertainty_state}</dd></div>
         </dl>
-        {citation && <a href={citation} target="_blank" rel="noopener noreferrer">Open citation</a>}
+        {citation && <a href={citation} target="_blank" rel="noopener noreferrer">{citationLabel(item, citation)}</a>}
       </article>})}
     </div>
   </section>;

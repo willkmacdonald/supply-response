@@ -48,7 +48,7 @@ describe("live journey safety", () => {
     };
     render(<EvidencePanel analysis={analysis as never} tenantSharePointHost="tenant.sharepoint.com" />);
     expect(screen.getByText("Required live citation missing")).toBeInTheDocument();
-    expect(screen.queryByRole("link", {name: "Open citation"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("does not let evidence nominate a different tenant trust policy", () => {
@@ -72,7 +72,40 @@ describe("live journey safety", () => {
     };
     render(<EvidencePanel analysis={analysis as never} tenantSharePointHost="tenant.sharepoint.com" />);
     expect(screen.getByText("Required live citation missing")).toBeInTheDocument();
-    expect(screen.queryByRole("link", {name: "Open citation"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["work_iq", "supplier_statement", "https://outlook.office365.com/owa/?ItemID=demo", "Open supplier email"],
+    ["work_iq", "supplier_statement", "https://outlook.office.com/mail/deeplink/read/demo", "Open supplier email"],
+    ["work_iq", "collaboration_statement", "https://teams.microsoft.com/l/message/channel/message?tenantId=demo", "Open Quality Teams post"],
+    ["fabric", "qualification_state", "https://app.powerbi.com/groups/demo/reports/report", "Open citation"],
+    ["work_iq", "supplier_statement", "https://tenant.sharepoint.com/sites/demo/item", "Open citation"],
+    ["work_iq", "supplier_statement", "https://teams.microsoft.com/l/message/channel/message", "Open citation"],
+  ])("labels %s %s citations at %s as %s without changing the target", (source, authority, url, label) => {
+    const analysis = {
+      runtime_mode: "live",
+      evidence_items: [{
+        evidence_id: "RL-E-LABEL",
+        requirement: "required_authoritative",
+        citation_url: url,
+        navigable_citation_url: url,
+        citation_classification: source,
+        synthetic: false,
+        source_system: source,
+        retrieval_health: "healthy",
+        claim: "Source evidence",
+        excerpt: "Source excerpt",
+        authority_scope: [authority],
+        uncertainty_state: "certain",
+      }],
+    };
+    render(<EvidencePanel analysis={analysis as never} tenantSharePointHost="tenant.sharepoint.com" />);
+    const link = screen.getByRole("link", {name: label});
+    expect(link).toHaveAttribute("href", url);
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("renders durable playback failure as terminal rather than pending", () => {

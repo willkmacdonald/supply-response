@@ -1,6 +1,42 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated and deployed — revision19 healthy; post-deploy readiness and fresh Alex citation-display acceptance passed.
+> **Status:** Validated — descriptive citation-label update ready for approved deployment; revision19 remains deployed.
+
+## Validation Proof — descriptive citation labels (2026-09-08)
+
+User approved deploying the two clearer link labels to the existing demo.
+Scope: UI wording and regression coverage only; URLs, trust policy, evidence,
+approvals, identity, roles, scaling and infrastructure are unchanged. No new
+Case, Analyze, Decision, execution, source edits or Git push are authorized here.
+The user's Outlook and Teams screenshots independently confirm both original
+source links open the intended demo messages.
+
+- [x] All validation checks pass.
+  - [x] 1. AZD Installation.
+  - [x] 2. Schema Validation.
+  - [x] 3. Environment Setup.
+  - [x] 4. Authentication Check.
+  - [x] 5. Subscription/Location Check.
+  - [x] 6. Aspire Pre-Provisioning Checks (not applicable).
+  - [x] 7. Provision Preview.
+  - [x] 8. Build Verification.
+  - [x] 9. Docker Build Context Validation.
+  - [x] 10. Package Validation.
+  - [x] 11. Azure Policy Validation.
+  - [x] 12. Aspire Post-Provisioning Checks (not applicable).
+  - [x] Static role verification.
+
+At 14:51 UTC, fresh 58 frontend tests and production TypeScript/Vite build passed.
+`uv build` passed after permitting access to the existing local cache;
+`git diff --check` passed. AZD 1.30.0 authenticated as Will, default named
+environment `supply-response-personal`, confirmed Azure Dev tenant/subscription
+and East US 2. Exact read-only preflight passed. Named `azd provision --preview
+--no-prompt` accepted azure.yaml/Bicep with no new resources, only existing app
+and Insights reconciliation; named `azd package` passed. Dockerfile/ignore rules
+and both lockfiles verified. No Aspire, schema migration or grant applies.
+Policy assignment inventory reviewed; no preview denial. Static roles and live
+pre-deploy assignments match exact-resource AcrPull, Key Vault Secrets User and
+Foundry User. One API-tagged app; existing shared environment Succeeded.
 
 ## Validation Proof — Teams citation preservation (2026-09-08)
 
