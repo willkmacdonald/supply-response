@@ -316,7 +316,7 @@ export function customerLineBasis(snapshot: PlannerSnapshot | null, protectedIds
 
 ## Task 2: Display persisted predictions with explicit metric basis and units
 
-**Files:** Create `plannerFormatting.ts`, `PredictionSummary.tsx`, `PredictionSummary.test.tsx`; modify `optionLabels.ts`.
+**Files:** Create `plannerFormatting.ts`, `PredictionSummary.tsx`, `PredictionSummary.test.tsx`; modify `optionLabels.ts` and only the two Beta display-name queries in `App.test.tsx`.
 
 **Interfaces:** `PredictionSummary({predicted, snapshot, basis, compact = false}: {predicted: PredictedOutcome | null; snapshot: PlannerSnapshot | null; basis: "baseline" | "response"; compact?: boolean})`; shared pure formatters shown below. Compact display retains parts, service, and response cost; full exposure/assumptions are available in native option details. No allocation, ranking, response-cost recomputation, or synthetic outcome creation.
 
@@ -489,12 +489,14 @@ export function optionDisplayName(option: ResponseOption): string {
 }
 ```
 
+Before running the full suite, update the existing Beta test's article name from `Source from Supplier Beta` to `Use the alternate supplier`, and its button name from `Select Source from Supplier Beta` to `Select Use the alternate supplier`. Preserve the exact blocking-code assertion and disabled behavior. Task 4 changes the blocker copy when its presentation is wired; moving these two planned selectors into Task 2 keeps this task independently green.
+
 - [ ] **Step 4: Run `cd apps/web && npx vitest run src/components/PredictionSummary.test.tsx && npm run build`.** Expected: tests/build pass; `TZ=America/Los_Angeles npx vitest run src/components/PredictionSummary.test.tsx` also passes. Existing approval button labels for Combined response stay unchanged.
 - [ ] **Step 5: Parent reviews this deliverable for `feat: explain saved prediction basis and planner units`.**
 
 ## Task 3: Reuse safe sources and build the first six investigation cards
 
-**Files:** Modify `EvidencePanel.tsx`, `LiveSafety.test.tsx`; create `EvidenceSource.tsx`, `InvestigationEvidence.tsx`, `InvestigationEvidence.test.tsx`.
+**Files:** Modify `EvidencePanel.tsx`, `LiveSafety.test.tsx`, and the warning-adjacency assertion in `EvidenceFooter.test.tsx`; create `EvidenceSource.tsx`, `InvestigationEvidence.tsx`, `InvestigationEvidence.test.tsx`.
 
 **Interfaces:** Existing `EvidencePanel` props remain compatible. `EvidenceSource.tsx` exports `EvidenceSource({item, analysis, tenantSharePointHost, label})`, `EvidenceFooters({items, analysis})`, `RequiredCitationWarning({analysis, tenantSharePointHost})`, and `statusFor(item: EvidenceItem, analysis: AnalysisVersion): EvidenceStatus`. Export `InvestigationEvidence({caseInstance, analysis, tenantSharePointHost, row}: {caseInstance: CaseInstance; analysis: AnalysisVersion; tenantSharePointHost?: string | null; row: "disruption" | "responses"})`; returns exactly three sibling cards for the selected row. Source role selection is separate from operational-record identity resolution.
 
@@ -876,7 +878,9 @@ import {evidenceStatus} from "./evidenceStatus";
       })}
 ```
 
-- [ ] **Step 4: Run `cd apps/web && npx vitest run src/components/InvestigationEvidence.test.tsx src/components/LiveSafety.test.tsx src/components/EvidenceFooter.test.tsx src/components/evidenceStatus.test.ts && npm run build`.** Expected: new and preserved safety tests pass. The standalone compatibility wrapper retains its direct footer child, so the existing strict order assertions remain unchanged.
+The reusable source component adds a wrapper around its visible source role, warning, excerpt and link. In `EvidenceFooter.test.tsx`, replace only `expect(screen.getByRole("heading", {name: evidence.claim}).nextElementSibling).toBe(warning)` with `expect(screen.getByRole("heading", {name: evidence.claim}).nextElementSibling).toContainElement(warning)` and add `expect(warning).toBeVisible()`. This retains the warning immediately beside the claim, outside collapsed details, without making DOM wrapping a safety requirement. Keep all direct-footer, link-order, warning-text and timestamp assertions unchanged.
+
+- [ ] **Step 4: Run `cd apps/web && npx vitest run src/components/InvestigationEvidence.test.tsx src/components/LiveSafety.test.tsx src/components/EvidenceFooter.test.tsx src/components/evidenceStatus.test.ts && npm run build`.** Expected: new and preserved safety tests pass. The standalone compatibility wrapper retains its direct footer child; only the nested warning assertion changes as specified.
 - [ ] **Step 5: Parent reviews the source linkage and warnings before an eventual `feat: organize disruption and response evidence cards` commit.**
 
 ## Task 4: Compose the third row and preserve explicit decisions
@@ -1181,7 +1185,7 @@ screen.getByRole("heading", {name: "Decision receipt"})
 screen.getByRole("heading", {name: "Review and approve."})
 ```
 
-Replace the exact three Beta assertions in `it("keeps blocked Beta visible and nonselectable with its exact code", ...)` with the following; rename that test to `keeps the alternate supplier blocker visible and nonselectable`. The displayed blocker now explains the same saved code:
+Update the Beta assertions in `it("keeps blocked Beta visible and nonselectable with its exact code", ...)` to the following; rename that test to `keeps the alternate supplier blocker visible and nonselectable`. Task 2 already updated the two display-name queries; this step changes only the blocker copy to explain the same saved code:
 
 ```tsx
     const beta = await screen.findByRole("article", {name: "Use the alternate supplier"});
