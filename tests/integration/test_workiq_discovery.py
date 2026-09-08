@@ -46,7 +46,7 @@ def test_parse_complete_locations_and_deduplicate_at_five():
         ),
         (
             "https://outlook.office365.com/owa/?ItemID=mail%2BA%3D&exvsurl=1&viewmodel=ReadMessageItem",
-            "/me/messages/mail%2BA%3D",
+            "/me/messages/mail_A%3D",
         ),
         ("/users/alex/messages/mail%2BA%3D", "/users/alex/messages/mail%2BA%3D"),
         (
@@ -116,3 +116,104 @@ def test_old_lineage_remains_readable_without_mcp_fields():
 
     lineage = WorkIQRetrievalLineage("context", "task", ("artifact",), ("source",))
     assert lineage.protocol == "a2a" and lineage.request_ids == ()
+
+
+@pytest.mark.parametrize(
+    "metadata", ["", "&EntityRepresentationId=11111111-2222-4333-8444-555555555555"]
+)
+def test_discover_owa_citation_converts_ews_id_without_losing_identity(metadata):
+    from integrations.workiq.discovery import discover_locations
+
+    url = (
+        "https://outlook.office365.com/owa/?ItemID=abc%2Fdef%2Bghi%3D&exvsurl=1&viewmodel=ReadMessageItem"
+        + metadata
+    )
+    found = discover_locations(
+        {"answer": f"Found [supplier]({url})"}, source_kind="supplier"
+    )
+    assert len(found) == 1
+    assert found[0].message_id == "abc-def_ghi="
+    assert found[0].fetch_path == "/me/messages/abc-def_ghi%3D"
+
+
+def test_owa_citation_metadata_is_not_message_identity_and_deduplicates():
+    from integrations.workiq.discovery import discover_locations
+
+    base = "https://outlook.office365.com/owa/?ItemID=abc%2Fdef%3D&exvsurl=1&viewmodel=ReadMessageItem"
+    found = discover_locations(
+        {
+            "references": [
+                base,
+                base + "&EntityRepresentationId=11111111-2222-4333-8444-555555555555",
+                "/me/messages/abc-def%3D",
+            ]
+        },
+        source_kind="supplier",
+    )
+    assert len(found) == 1
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "&EntityRepresentationId=",
+        "&EntityRepresentationId=not-a-uuid",
+        "&EntityRepresentationId=https%3A%2F%2Fevil.example",
+        "&EntityRepresentationId=11111111-2222-4333-8444-555555555555&EntityRepresentationId=11111111-2222-4333-8444-555555555555",
+        "&redirect=https%3A%2F%2Fevil.example",
+        "#other",
+    ],
+)
+def test_owa_citation_rejects_unrecognized_or_ambiguous_metadata(suffix):
+    from integrations.workiq.locations import parse_location
+
+    assert (
+        parse_location(
+            "https://outlook.office365.com/owa/?ItemID=abc%2Fdef%3D&exvsurl=1&viewmodel=ReadMessageItem"
+            + suffix
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "item_id",
+    [
+        "..%2Fsecret",
+        "%252Fsecret",
+        "abc%3Fquery",
+        "abc%2F..",
+        "abc%2Fdef-ghi",
+        "abc%2Fdef%00",
+        "abc%5Cdef",
+    ],
+)
+def test_owa_conversion_does_not_allow_traversal_or_mixed_id_formats(item_id):
+    from integrations.workiq.locations import parse_location
+
+    assert (
+        parse_location(
+            "https://outlook.office365.com/owa/?ItemID="
+            + item_id
+            + "&viewmodel=ReadMessageItem"
+        )
+        is None
+    )
+
+
+def test_quality_discovery_explicitly_requests_channel_not_chat_locations():
+    from integrations.workiq.discovery import question_for
+    from integrations.workiq.models import DiscoveryTopic
+
+    question = question_for(DiscoveryTopic("quality"))
+    assert "groupId" in question and "tenantId" in question
+    assert "personal or group chat" in question
+
+
+def test_chat_citation_is_not_reinterpreted_as_a_channel_message():
+    from integrations.workiq.discovery import discover_locations
+
+    url = "https://teams.microsoft.com/l/message/19%3Achat%40thread.v2/1770000000000?context=%7B%22contextType%22%3A%22chat%22%7D"
+    assert (
+        discover_locations({"answer": f"[Jordan]({url})"}, source_kind="quality") == ()
+    )

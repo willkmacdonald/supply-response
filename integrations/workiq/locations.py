@@ -58,6 +58,16 @@ def _identity(value: str) -> str:
     return value
 
 
+def _owa_message_id(value: str) -> str:
+    # OWA ItemID is EWS-formatted. Outlook's convertToRestId maps / -> - and
+    # + -> _ (not the generic base64url mapping). Do not apply to REST paths.
+    if "/" in value or "+" in value:
+        if not re.fullmatch(r"[A-Za-z0-9+/]{1,2048}={0,2}", value):
+            raise ValueError("Unsupported OWA identity")
+        value = value.replace("/", "-").replace("+", "_")
+    return _identity(value)
+
+
 def parse_location(value: object) -> MessageLocation | None:
     if (
         not isinstance(value, str)
@@ -116,12 +126,19 @@ def parse_location(value: object) -> MessageLocation | None:
                 return MessageLocation("supplier", parts[3], mailbox="me")
             if (
                 parts == ["owa"]
-                and query.keys() <= {"ItemID", "exvsurl", "viewmodel"}
+                and query.keys()
+                <= {"ItemID", "exvsurl", "viewmodel", "EntityRepresentationId"}
                 and query.get("viewmodel") == "ReadMessageItem"
                 and query.get("exvsurl", "1") == "1"
             ):
+                citation_id = query.get("EntityRepresentationId")
+                if citation_id is not None and not re.fullmatch(
+                    r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}",
+                    citation_id,
+                ):
+                    return None
                 return MessageLocation(
-                    "supplier", _identity(query["ItemID"]), mailbox="me"
+                    "supplier", _owa_message_id(query["ItemID"]), mailbox="me"
                 )
         if (
             parsed.hostname == "teams.microsoft.com"

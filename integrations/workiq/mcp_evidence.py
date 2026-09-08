@@ -9,17 +9,16 @@ from typing import Final, Literal
 from apps.api.app.auth import AuthenticatedActor
 
 from .async_obo import AsyncWorkIQOboExchange
-from .discovery import discover_locations, question_for
 from .errors import WorkIQError, WorkIQProtocolError, WorkIQResponseLimitError
 from .mcp import WorkIQMcpClient
 from .message_evidence import evidence_from_message
 from .models import (
-    DiscoveryTopic,
     SourceBinding,
     SourceKind,
     WorkIQRetrieval,
     WorkIQRetrievalLineage,
 )
+from .structured_discovery import StructuredDiscoveryError, discover_structured
 
 SOURCE_TIMEOUT_SECONDS: Final = 120
 FailureStage = Literal["discovery", "fetch", "validation", "authentication", "timeout"]
@@ -141,7 +140,6 @@ class WorkIQMcpEvidencePort:
         parsed_count = scoped_count = matched_count = -1
         token = None
         session = None
-        answer = None
         payload = None
         try:
             async with asyncio.timeout(SOURCE_TIMEOUT_SECONDS):
@@ -150,33 +148,20 @@ class WorkIQMcpEvidencePort:
                 step = "initialize"
                 async with self._client.session(access_token=token.reveal()) as session:
                     token = None
-                    step = "ask"
-                    answer = await session.ask(
-                        question_for(DiscoveryTopic(source_kind))
+                    step = "structured_discovery"
+                    locations = await discover_structured(
+                        session, source_kind=source_kind, binding=binding
                     )
-                    step = "parse_locations"
-                    locations = discover_locations(answer, source_kind=source_kind)
                     parsed_count = min(len(locations), 5)
-                    conversation_id = answer["conversationId"]
-                    answer = None
                     if not locations:
                         reason = "no_locations"
                         raise WorkIQSourceError(source_kind, "discovery")
-                    # Scope checks happen independently of configured source IDs.
-                    step = "scope_binding"
-                    scoped = tuple(loc for loc in locations if loc.within(binding))
-                    scoped_count = min(len(scoped), 5)
-                    if not scoped:
-                        reason = "scope_mismatch"
-                        raise WorkIQSourceError(source_kind, "discovery")
-                    step = "message_binding"
-                    candidates = tuple(
-                        loc for loc in scoped if loc.message_id == expected_id
-                    )
-                    matched_count = min(len(candidates), 5)
-                    if not candidates:
+                    if locations[0].message_id != expected_id:
                         reason = "message_mismatch"
                         raise WorkIQSourceError(source_kind, "discovery")
+                    candidates = locations
+                    scoped_count = matched_count = len(candidates)
+                    matched_count = min(len(candidates), 5)
                     evidence = []
                     for location in candidates:
                         stage = "fetch"
@@ -200,7 +185,7 @@ class WorkIQMcpEvidencePort:
                     return WorkIQRetrieval(
                         evidence=tuple(evidence),
                         lineage=WorkIQRetrievalLineage(
-                            context_id=conversation_id,
+                            context_id="",
                             task_id="",
                             artifact_ids=(),
                             source_ids=(evidence[0].source_id,),
@@ -211,13 +196,15 @@ class WorkIQMcpEvidencePort:
         except TimeoutError:
             stage = "timeout"
             reason = "timeout"
+        except StructuredDiscoveryError as error:
+            stage = "discovery"
+            reason = error.reason
         except Exception as error:  # noqa: BLE001 - allowlisted diagnostics only
             if reason == "unknown":
                 reason, http_status = _safe_failure_reason(error)
         finally:
             token = None
             session = None
-            answer = None
             payload = None
         # Do not chain discarded raw payloads or credential-bearing failures.
         _logger.warning(

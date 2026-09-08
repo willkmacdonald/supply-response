@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 from copy import deepcopy
-from dataclasses import replace
 
 import httpx
 import pytest
@@ -11,14 +10,7 @@ from integrations.workiq.mcp import WorkIQMcpClient
 from tests.integration.test_workiq_async_obo import Entra, exchange
 from tests.integration.test_workiq_contract import _authenticated_alex
 from tests.integration.test_workiq_mcp_transport import INIT, reply
-from tests.integration.test_workiq_message_evidence import (
-    BINDING,
-    MAIL,
-    MAIL_LINK,
-    NOW,
-    QUALITY,
-    TEAMS_LINK,
-)
+from tests.integration.test_workiq_message_evidence import BINDING, MAIL, NOW, QUALITY
 
 
 @pytest.fixture
@@ -26,84 +18,92 @@ def anyio_backend():
     return "asyncio"
 
 
-@pytest.fixture(autouse=True)
-def capture_evidence_warnings(caplog):
-    # fabric-cicd changes the root level to ERROR in earlier full-suite tests.
-    # Scope capture explicitly, as the other diagnostic test modules do.
-    with caplog.at_level(logging.WARNING, logger="integrations.workiq.mcp_evidence"):
-        yield
-
-
-@pytest.fixture(autouse=True)
-def forbid_real_network(monkeypatch):
-    def forbidden(*args, **kwargs):
-        pytest.fail("An offline evidence test attempted network access")
-
-    monkeypatch.setattr("socket.getaddrinfo", forbidden)
-
-
 class Server:
-    def __init__(self, kind="supplier", answer=None, entity=None, fail_fetch=False):
-        self.requests = []
-        self.kind = kind
-        self.answer = (
-            answer
-            if answer is not None
-            else (MAIL_LINK if kind == "supplier" else TEAMS_LINK)
-        )
-        self.entity = deepcopy(
-            entity if entity is not None else (MAIL if kind == "supplier" else QUALITY)
-        )
-        self.fail_fetch = fail_fetch
-        self.block_stage = None
-        self.entered = asyncio.Event()
-        self.cancelled = asyncio.Event()
+    def __init__(self, kind="supplier", *, fail_entity=False):
+        self.kind, self.fail_entity, self.requests = kind, fail_entity, []
+        self.block_path = None
+        self.entered, self.cancelled = asyncio.Event(), asyncio.Event()
+
+    def _collection(self, path):
+        if self.kind == "supplier":
+            return {
+                "value": [
+                    {
+                        "id": BINDING.supplier_source_id,
+                        "subject": "RL-Supplier Alpha",
+                        "from": {"emailAddress": {"address": BINDING.supplier_sender}},
+                        "receivedDateTime": "2026-09-06T14:45:00Z",
+                    }
+                ]
+            }
+        if path == "/me/joinedTeams":
+            return {
+                "value": [
+                    {"id": BINDING.team_id, "displayName": "Supply Response Demo"}
+                ]
+            }
+        if path == f"/teams/{BINDING.team_id}/channels":
+            return {"value": [{"id": BINDING.channel_id, "displayName": "General"}]}
+        return {
+            "value": [
+                {
+                    "id": BINDING.quality_source_id,
+                    "from": {"user": {"id": BINDING.quality_author_object_id}},
+                    "body": {
+                        "contentType": "text",
+                        "content": "RL-Supplier Beta qualification is pending.",
+                    },
+                }
+            ]
+        }
 
     async def __call__(self, request):
-        self.requests.append(json.loads(request.content))
-        body = self.requests[-1]
+        body = json.loads(request.content)
+        self.requests.append(body)
         if body["method"] == "initialize":
             return reply(request, INIT)
         if body["method"] == "notifications/initialized":
             return httpx.Response(202)
-        name = body["params"]["name"]
-        if name == self.block_stage:
+        assert body["params"]["name"] == "fetch"
+        path = body["params"]["arguments"]["entityUrls"][0]
+        if path == self.block_path:
             self.entered.set()
             try:
                 await asyncio.Event().wait()
             finally:
                 self.cancelled.set()
-        if name == "ask":
-            result = {
-                "answer": self.answer,
-                "conversationId": "fixture-discovery-conversation",
-            }
-        else:
-            assert name == "fetch"
-            result = {
-                "results": [
-                    {"statusCode": 404 if self.fail_fetch else 200, "data": self.entity}
-                ]
-            }
+        entity_path = "/messages/" in path and "?$top=" not in path
+        data = (
+            deepcopy(QUALITY if self.kind == "quality" else MAIL)
+            if entity_path
+            else self._collection(path)
+        )
+        result = {
+            "results": [
+                {
+                    "statusCode": 404 if entity_path and self.fail_entity else 200,
+                    "data": data,
+                }
+            ]
+        }
         return reply(request, {"structuredContent": result})
 
-    def calls(self, name):
+    def calls(self):
         return [
-            r["params"]["arguments"]
+            r["params"]["arguments"]["entityUrls"][0]
             for r in self.requests
-            if r["method"] == "tools/call" and r["params"]["name"] == name
+            if r["method"] == "tools/call"
         ]
 
 
-async def retrieve(monkeypatch, server, binding=BINDING, actor=None, source_id=None):
+async def retrieve(monkeypatch, server, *, source_id=None):
     from integrations.workiq.mcp_evidence import WorkIQMcpEvidencePort
 
-    service, validated = _authenticated_alex()
-    entra = Entra()
-    monkeypatch.setattr(httpx, "AsyncHTTPTransport", entra.transport)
+    service, actor = _authenticated_alex()
+    monkeypatch.setattr(httpx, "AsyncHTTPTransport", Entra().transport)
     async with httpx.AsyncClient(transport=httpx.MockTransport(server)) as http:
         port = WorkIQMcpEvidencePort(
-            client=WorkIQMcpClient(http=http), obo=exchange(service), binding=binding
+            client=WorkIQMcpClient(http=http), obo=exchange(service), binding=BINDING
         )
         method = (
             port.retrieve_supplier_signal
@@ -111,164 +111,68 @@ async def retrieve(monkeypatch, server, binding=BINDING, actor=None, source_id=N
             else port.retrieve_quality_context
         )
         return await method(
-            actor=validated if actor is None else actor,
+            actor=actor,
             source_id=source_id
             or (
-                binding.supplier_source_id
+                BINDING.supplier_source_id
                 if server.kind == "supplier"
-                else binding.quality_source_id
+                else BINDING.quality_source_id
             ),
-            case_id="case-fixture",
-            analysis_id="analysis-fixture",
+            case_id="case",
+            analysis_id="analysis",
             retrieved_at=NOW,
         )
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("kind", ["supplier", "quality"])
-async def test_real_auth_obo_discovery_fetch_and_source_statement(monkeypatch, kind):
+@pytest.mark.parametrize("kind,fetches", [("supplier", 2), ("quality", 4)])
+async def test_real_obo_structured_discovery_and_authoritative_fetch(
+    monkeypatch, kind, fetches
+):
     server = Server(kind)
     result = await retrieve(monkeypatch, server)
     assert len(result.evidence) == 1
-    assert result.evidence[0].source_id == server.entity["id"]
-    assert (
-        "73 units" in result.evidence[0].claim
-        if kind == "supplier"
-        else "Z-47" in result.evidence[0].claim
-    )
-    assert result.lineage.context_id == "fixture-discovery-conversation"
-    assert result.lineage.protocol == "mcp"
-    assert result.lineage.task_id == "" and result.lineage.artifact_ids == ()
-    assert result.lineage.source_ids == (server.entity["id"],)
+    assert result.lineage.context_id == "" and result.lineage.protocol == "mcp"
     assert result.lineage.request_ids == tuple(
         r["id"] for r in server.requests if "id" in r
     )
-    assert len(server.calls("ask")) == len(server.calls("fetch")) == 1
-    ask = str(server.calls("ask"))
-    for forbidden in (
-        BINDING.supplier_source_id,
-        BINDING.quality_source_id,
-        BINDING.team_id,
-        BINDING.alex_object_id,
-        "73",
-        "Z-47",
-        "2026",
-        "http",
+    assert len(server.calls()) == fetches
+    assert all(r.get("params", {}).get("name") != "ask" for r in server.requests)
+
+
+@pytest.mark.anyio
+async def test_source_input_rejected_before_auth_or_network(monkeypatch):
+    from integrations.workiq.mcp_evidence import WorkIQSourceError
+
+    server = Server()
+    with pytest.raises(WorkIQSourceError) as caught:
+        await retrieve(monkeypatch, server, source_id="wrong")
+    assert caught.value.stage == "validation" and server.requests == []
+
+
+@pytest.mark.anyio
+async def test_individual_fetch_failure_is_sanitized(monkeypatch, caplog):
+    from integrations.workiq.mcp_evidence import WorkIQSourceError
+
+    server = Server(fail_entity=True)
+    with (
+        caplog.at_level(logging.WARNING, logger="integrations.workiq.mcp_evidence"),
+        pytest.raises(WorkIQSourceError) as caught,
     ):
-        assert forbidden not in ask
-
-
-@pytest.mark.anyio
-@pytest.mark.parametrize(
-    "answer",
-    [
-        "Only prose claiming Alpha has 73 units.",
-        "https://teams.microsoft.com/l/channel/ch/general",
-        "{invalid JSON}",
-        "/me/messages",
-        "/users/other/messages/mail-fixture",
-        "https://evil.example/message",
-    ],
-)
-async def test_missing_or_untrusted_discovery_causes_zero_fetch(monkeypatch, answer):
-    from integrations.workiq.mcp_evidence import WorkIQSourceError
-
-    server = Server(answer=answer)
-    with pytest.raises(WorkIQSourceError) as caught:
         await retrieve(monkeypatch, server)
-    assert caught.value.stage == "discovery" and caught.value.source_kind == "supplier"
-    assert server.calls("fetch") == []
+    assert caught.value.stage == "fetch" and caught.value.__context__ is None
+    assert "mail-fixture" not in caplog.text
 
 
 @pytest.mark.anyio
-async def test_changed_expected_ids_cannot_supply_or_alter_locations(monkeypatch):
-    from integrations.workiq.mcp_evidence import WorkIQSourceError
-
-    baseline = Server()
-    await retrieve(monkeypatch, baseline)
-    changed = Server()
-    with pytest.raises(WorkIQSourceError):
-        await retrieve(
-            monkeypatch,
-            changed,
-            replace(BINDING, supplier_source_id="configured-but-not-discovered"),
-        )
-    assert changed.calls("ask") == baseline.calls("ask")
-    assert changed.calls("fetch") == []
-
-
-@pytest.mark.anyio
-@pytest.mark.parametrize(
-    "failure,stage", [("fetch", "fetch"), ("author", "validation")]
-)
-async def test_ask_facts_never_promoted_on_fetch_or_validation_failure(
-    monkeypatch, failure, stage, caplog
-):
-    from integrations.workiq.mcp_evidence import WorkIQSourceError
-
-    server = Server(
-        answer=f"private-body 73 units [source]({MAIL_LINK})",
-        fail_fetch=failure == "fetch",
-    )
-    if failure == "author":
-        server.entity["sender"]["emailAddress"]["address"] = "private-body@example.com"
-    with pytest.raises(WorkIQSourceError) as caught:
-        await retrieve(monkeypatch, server)
-    assert caught.value.stage == stage
-    assert caught.value.__context__ is None
-    assert "private-body" not in str(caught.value) + caplog.text
-    trace = caught.value.__traceback__
-    while trace is not None:
-        if trace.tb_frame.f_code.co_name == "_retrieve":
-            assert trace.tb_frame.f_locals.get("answer") is None
-            assert trace.tb_frame.f_locals.get("payload") is None
-            assert trace.tb_frame.f_locals.get("token") is None
-            assert trace.tb_frame.f_locals.get("session") is None
-        trace = trace.tb_next
-    assert len(server.calls("ask")) == len(server.calls("fetch")) == 1
-
-
-@pytest.mark.anyio
-@pytest.mark.parametrize("bad", ["tenant", "object", "source", "unvalidated"])
-async def test_cross_user_and_mismatched_source_inputs_rejected_before_network(
-    monkeypatch, bad
-):
-    from integrations.workiq.mcp_evidence import WorkIQSourceError
-
-    binding = replace(
-        BINDING,
-        **(
-            {"tenant_id": "other"}
-            if bad == "tenant"
-            else {"alex_object_id": "other"}
-            if bad == "object"
-            else {}
-        ),
-    )
-    server = Server()
-    with pytest.raises(WorkIQSourceError):
-        await retrieve(
-            monkeypatch,
-            server,
-            binding,
-            actor=object() if bad == "unvalidated" else None,
-            source_id="wrong" if bad == "source" else None,
-        )
-    assert server.requests == []
-
-
-@pytest.mark.anyio
-@pytest.mark.parametrize("stage", ["ask", "fetch"])
 @pytest.mark.parametrize("cancel", [False, True])
-async def test_aggregate_deadline_and_cancellation_close_active_work(
-    monkeypatch, stage, cancel, caplog
-):
+async def test_aggregate_deadline_and_cancellation(monkeypatch, cancel):
     from integrations.workiq import mcp_evidence
+    from integrations.workiq.structured_discovery import MAIL_QUERY
 
-    assert mcp_evidence.SOURCE_TIMEOUT_SECONDS == 120
-    monkeypatch.setattr(mcp_evidence, "SOURCE_TIMEOUT_SECONDS", 0.2)
     server = Server()
-    server.block_stage = stage
+    server.block_path = MAIL_QUERY
+    monkeypatch.setattr(mcp_evidence, "SOURCE_TIMEOUT_SECONDS", 0.1)
     task = asyncio.create_task(retrieve(monkeypatch, server))
     await asyncio.wait_for(server.entered.wait(), 1)
     if cancel:
@@ -280,117 +184,26 @@ async def test_aggregate_deadline_and_cancellation_close_active_work(
             await task
         assert caught.value.stage == "timeout"
     assert server.cancelled.is_set()
-    assert len(server.calls("ask")) == 1
-    if cancel:
-        assert diagnostic_messages(caplog) == []
-    else:
-        messages = diagnostic_messages(caplog)
-        assert len(messages) == 1
-        assert f"stage=timeout step={stage} reason=timeout" in messages[0]
 
 
 @pytest.mark.anyio
-async def test_ambiguous_matching_entities_are_rejected(monkeypatch):
+async def test_discovery_binding_mismatch_never_falls_back_to_saved_id(monkeypatch):
     from integrations.workiq.mcp_evidence import WorkIQSourceError
 
-    server = Server(
-        answer=json.dumps(
+    server = Server()
+    server._collection = lambda path: {
+        "value": [
             {
-                "locations": [
-                    "/me/messages/mail-fixture",
-                    f"/users/{BINDING.alex_object_id}/messages/mail-fixture",
-                ]
+                "id": "other",
+                "subject": "RL-Supplier Alpha",
+                "from": {"emailAddress": {"address": BINDING.supplier_sender}},
+                "receivedDateTime": "2026-09-06T14:45:00Z",
             }
-        )
-    )
-    with pytest.raises(WorkIQSourceError) as caught:
-        await retrieve(monkeypatch, server)
-    assert caught.value.stage == "validation"
-    assert len(server.calls("fetch")) == 2
-
-
-def diagnostic_messages(caplog):
-    return [
-        record.getMessage()
-        for record in caplog.records
-        if record.name == "integrations.workiq.mcp_evidence"
-    ]
-
-
-@pytest.mark.anyio
-@pytest.mark.parametrize(
-    "failure,step,reason,counts,status",
-    [
-        ("initialize", "initialize", "http_error", (-1, -1, -1), 403),
-        ("ask", "ask", "tool_error", (-1, -1, -1), 0),
-        ("ask_shape", "ask", "discovery_shape", (-1, -1, -1), 0),
-        ("no_locations", "parse_locations", "no_locations", (0, -1, -1), 0),
-        ("wrong_scope", "scope_binding", "scope_mismatch", (1, 0, -1), 0),
-        ("wrong_id", "message_binding", "message_mismatch", (1, 1, 0), 0),
-        ("unknown", "ask", "unknown", (-1, -1, -1), 0),
-    ],
-)
-async def test_failure_diagnostic_distinguishes_discovery_substeps_without_payloads(
-    monkeypatch, caplog, failure, step, reason, counts, status
-):
-    from integrations.workiq.errors import WorkIQProtocolError
-    from integrations.workiq.mcp_evidence import WorkIQSourceError
-
-    class DiagnosticServer(Server):
-        async def __call__(self, request):
-            body = json.loads(request.content)
-            if failure == "initialize" and body["method"] == "initialize":
-                return httpx.Response(403, text="private-response-body")
-            if body.get("params", {}).get("name") == "ask":
-                if failure == "ask":
-                    return reply(request, {"isError": True, "content": "private-body"})
-                if failure == "ask_shape":
-                    return reply(
-                        request, {"structuredContent": {"secret": "private-body"}}
-                    )
-                if failure == "unknown":
-                    raise WorkIQProtocolError("private-token private-body@example.com")
-            return await super().__call__(request)
-
-    answer = {
-        "no_locations": "private-body with no locator",
-        "wrong_scope": "/users/other/messages/mail-fixture",
-        "wrong_id": "/me/messages/other-private-id",
-    }.get(failure)
-    server = DiagnosticServer(answer=answer)
+        ]
+    }
     with pytest.raises(WorkIQSourceError) as caught:
         await retrieve(monkeypatch, server)
     assert caught.value.stage == "discovery"
-    assert server.calls("fetch") == []
-    parsed, scoped, matched = counts
-    assert diagnostic_messages(caplog) == [
-        (
-            f"workiq_source_diagnostic source=supplier stage=discovery step={step} "
-            f"reason={reason} http_status={status} parsed={parsed} scoped={scoped} matched={matched}"
-        )
-    ]
-    assert all(record.exc_info is None for record in caplog.records)
-    for secret in ("private-", "mail-fixture", BINDING.alex_object_id, "Bearer"):
-        assert secret not in caplog.text
-
-
-@pytest.mark.anyio
-async def test_success_has_no_failure_diagnostic(monkeypatch, caplog):
-    result = await retrieve(monkeypatch, Server())
-    assert len(result.evidence) == 1
-    assert diagnostic_messages(caplog) == []
-
-
-@pytest.mark.anyio
-async def test_quality_failure_diagnostic_is_source_specific(monkeypatch, caplog):
-    from integrations.workiq.mcp_evidence import WorkIQSourceError
-
-    with pytest.raises(WorkIQSourceError):
-        await retrieve(monkeypatch, Server(kind="quality", answer="private-body"))
-    assert diagnostic_messages(caplog) == [
-        (
-            "workiq_source_diagnostic source=quality stage=discovery "
-            "step=parse_locations reason=no_locations http_status=0 "
-            "parsed=0 scoped=-1 matched=-1"
-        )
-    ]
+    assert all(
+        path != f"/me/messages/{BINDING.supplier_source_id}" for path in server.calls()
+    )

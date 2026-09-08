@@ -22,7 +22,12 @@ def question_for(topic: DiscoveryTopic) -> str:
         return (
             "Find Jordan's fictional RL-001 Beta qualification post in the "
             "Supply Response Demo team, General channel. "
-            "Return complete individual message locations or source links for retrieval."
+            "Return complete individual channel-message locations for retrieval: "
+            "a Teams message link containing groupId and tenantId, or a JSON array "
+            "of complete /teams/{teamId}/channels/{channelId}/messages/{messageId} "
+            "resource paths from the discovered sources. "
+            "Do not return personal or group chat links, channel-only links, or "
+            "search pages. Do not invent missing identifiers."
         )
     raise ValueError("Unsupported discovery topic")
 

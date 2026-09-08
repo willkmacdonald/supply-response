@@ -33,9 +33,7 @@ from tests.integration.test_workiq_mcp_transport import INIT, reply
 from tests.integration.test_workiq_message_evidence import (
     BINDING,
     MAIL,
-    MAIL_LINK,
     QUALITY,
-    TEAMS_LINK,
 )
 
 NOW = datetime(2026, 8, 31, 18, tzinfo=UTC)
@@ -274,7 +272,7 @@ def test_new_mcp_and_old_a2a_lineage_are_both_accepted():
 
     new_domain = AnalysisRetrievalLineage(
         source_kind="quality",
-        context_id="conversation",
+        context_id="",
         task_id="",
         artifact_ids=(),
         source_ids=("message",),
@@ -285,8 +283,14 @@ def test_new_mcp_and_old_a2a_lineage_are_both_accepted():
         new_domain.model_dump(exclude={"source_kind"})
     )
     assert new_agent.protocol == "mcp"
+    assert new_agent.context_id == ""
     assert new_agent.task_id == "" and new_agent.artifact_ids == ()
     assert new_agent.request_ids == ("initialize", "ask", "fetch")
+
+    with pytest.raises(ValueError, match="A2A retrieval lineage requires context"):
+        RetrievalLineage(
+            context_id="", task_id="task", artifact_ids=(), source_ids=("source",)
+        )
 
 
 class _McpServer:
@@ -306,32 +310,55 @@ class _McpServer:
         if body["method"] == "notifications/initialized":
             return httpx.Response(202)
         arguments = body["params"]["arguments"]
-        if body["params"]["name"] == "ask":
-            quality = "Jordan" in arguments["question"]
-            result = {
-                "answer": TEAMS_LINK if quality else MAIL_LINK,
-                "conversationId": (
-                    "quality-conversation" if quality else "supplier-conversation"
-                ),
+        assert body["params"]["name"] == "fetch"
+        path = arguments["entityUrls"][0]
+        is_entity = "/messages/" in path and "?$top=" not in path
+        quality = path.startswith("/teams/") or path == "/me/joinedTeams"
+        kind = "quality" if quality else "supplier"
+        if is_entity:
+            data = self.quality if quality else self.mail
+        elif path == "/me/joinedTeams":
+            data = {
+                "value": [
+                    {"id": BINDING.team_id, "displayName": "Supply Response Demo"}
+                ]
             }
-        else:
-            path = arguments["entityUrls"][0]
-            quality = path.startswith("/teams/")
-            kind = "quality" if quality else "supplier"
-            result = {
-                "results": [
+        elif path == f"/teams/{BINDING.team_id}/channels":
+            data = {"value": [{"id": BINDING.channel_id, "displayName": "General"}]}
+        elif "?$top=10" in path:
+            data = {
+                "value": [
                     {
-                        "statusCode": 404 if kind == self.fail_kind else 200,
-                        "data": (
-                            {"diagnostic": "private-upstream-body"}
-                            if kind == self.fail_kind
-                            else self.quality
-                            if quality
-                            else self.mail
-                        ),
+                        "id": BINDING.quality_source_id,
+                        "from": {"user": {"id": BINDING.quality_author_object_id}},
+                        "body": {
+                            "contentType": "text",
+                            "content": "RL-Supplier Beta qualification is pending.",
+                        },
                     }
                 ]
             }
+        else:
+            data = {
+                "value": [
+                    {
+                        "id": BINDING.supplier_source_id,
+                        "subject": "RL-Supplier Alpha",
+                        "from": {"emailAddress": {"address": BINDING.supplier_sender}},
+                        "receivedDateTime": "2026-08-31T12:00:00Z",
+                    }
+                ]
+            }
+        result = {
+            "results": [
+                {
+                    "statusCode": 404 if is_entity and kind == self.fail_kind else 200,
+                    "data": {"diagnostic": "private-upstream-body"}
+                    if is_entity and kind == self.fail_kind
+                    else data,
+                }
+            ]
+        }
         return reply(request, {"structuredContent": result})
 
     def tool_calls(self, name: str) -> list[dict[str, Any]]:
@@ -422,9 +449,11 @@ def test_signed_alex_normal_live_analyze_discovers_and_fetches_both_sources(
         not item.task_id and not item.artifact_ids
         for item in analysis.retrieval_lineage
     )
-    assert all(len(item.request_ids) == 3 for item in analysis.retrieval_lineage)
-    asks = server.tool_calls("ask")
-    assert len(asks) == 2 and len(server.tool_calls("fetch")) == 2
+    assert all(item.context_id == "" for item in analysis.retrieval_lineage)
+    assert {len(item.request_ids) for item in analysis.retrieval_lineage} == {3, 5}
+    assert server.tool_calls("ask") == []
+    fetches = server.tool_calls("fetch")
+    assert len(fetches) == 6
     for forbidden_value in (
         BINDING.supplier_source_id,
         BINDING.quality_source_id,
@@ -433,7 +462,7 @@ def test_signed_alex_normal_live_analyze_discovers_and_fetches_both_sources(
         "73",
         "Z-47",
     ):
-        assert forbidden_value not in str(asks)
+        assert forbidden_value not in str(fetches[:1])
     assert all(
         request.url.host == "login.microsoftonline.com" for request in entra.requests
     )

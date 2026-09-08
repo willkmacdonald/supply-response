@@ -14,7 +14,7 @@ class AgentContract(BaseModel):
 
 
 class RetrievalLineage(AgentContract):
-    context_id: str = Field(min_length=1, max_length=256)
+    context_id: str = Field(max_length=256)
     task_id: str = Field(max_length=256)
     artifact_ids: tuple[str, ...] = Field(max_length=64)
     source_ids: tuple[str, ...] = Field(max_length=64)
@@ -23,6 +23,8 @@ class RetrievalLineage(AgentContract):
 
     @model_validator(mode="after")
     def validate_protocol_lineage(self) -> RetrievalLineage:
+        if self.protocol == "a2a" and not self.context_id:
+            raise ValueError("A2A retrieval lineage requires context")
         if self.protocol == "a2a" and not self.task_id:
             raise ValueError("A2A retrieval lineage requires a task ID")
         if self.protocol == "mcp" and (self.task_id or self.artifact_ids):
