@@ -2,7 +2,44 @@
 
 Updated 2026-09-08 UTC. This records deployment separately from live acceptance.
 
-## Current diagnostic result — confirmed answer-field mismatch, revision16
+## Current result — field handling fixed; no recognized locations, revision17
+
+The user approved the correction, deployment and one normal Alex Analyze.
+Commit `5566822` accepts either bounded `answer` or documented `response`,
+normalizing to the existing internal field. Explicit invalid aliases and
+conflicting values fail closed. Metadata, conversation checks, topic-only prompts,
+discovered-only fetch and evidence validation remain intact.
+
+The observed-field fixtures reproduced22 failures before the fix. Afterward,
+112 focused tests, full Python regression/package,51 frontend tests/build and
+scoped Ruff/Pyright passed. Independent review found no actionable issues and
+independently passed112 tests. No new resources or permissions in preview.
+Successful ACR build `ch17` deployed revision `ca-sr-demo--0000017`, digest
+`f9bb03126cb284537dee9353b0c9d699938df0315d57572df8869d8ffe2d0d0a`.
+It is sole active/latest-ready, Healthy/Running with100% traffic; exact identity,
+three Azure roles and scale0–2 are unchanged. Post-deploy readiness passed.
+
+At approximately02:54 UTC on September8, one normal Alex Analyze used the same
+existing Case without refresh. The UI still reports supplier/discovery503.
+Allowlisted diagnostics for that attempt:
+
+```text
+source=supplier stage=discovery step=parse_locations reason=no_locations http_status=0 parsed=0 scoped=-1 matched=-1
+source=quality stage=discovery step=parse_locations reason=no_locations http_status=0 parsed=0 scoped=-1 matched=-1
+```
+
+The field correction is verified live: both ask results passed field validation
+and reached locator parsing. Neither yielded a location recognized by our parser.
+Scope/message-binding checks and fetch were not reached. This does not establish
+whether Work IQ returned no links or returned an unsupported link format; the
+answer text was not inspected. No message retrieval, validated evidence pair or
+downstream acceptance is claimed. No second attempt, body capture or Git push.
+
+Next boundary: distinguish absent message links from unsupported locator formats
+using a separately approved bounded inspection. Do not fetch configured IDs,
+relax source validation or repeatedly retry the same analysis.
+
+## Previous diagnostic result — confirmed answer-field mismatch, revision16
 
 The approved field-status-only diagnostic implementation `664b67f` is deployed
 as ACR build `ch16`, revision `ca-sr-demo--0000016`, immutable digest
@@ -34,7 +71,7 @@ message bodies were logged. This does not prove the answers contain usable
 locations or that the requested messages were found. No evidence or downstream
 live acceptance is claimed.
 
-Next proposed gate: approve a tested adapter correction for the confirmed answer
+The then-proposed gate, completed by revision17 above: approve a tested adapter correction for the confirmed answer
 field, preserving strict bounds, source validation and discovered-only fetch;
 then deploy and perform one normal Alex Analyze. No parser fix, second Analyze,
 new permissions, billing, source edits, Graph fallback or Git push occurred in

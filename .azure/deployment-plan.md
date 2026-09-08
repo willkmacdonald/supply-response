@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — answer-field correction, deployment to the existing app and one Alex Analyze authorized. Revision16 remains healthy pending deployment. No permissions, billing, source, prompt or evidence-policy changes.
+> **Status:** Deployed — revision17 is healthy. The answer-field fix passed the single Alex live test at the field boundary; both sources then failed locator parsing with no recognized locations. Live evidence acceptance remains pending. No permissions, billing, source, prompt or evidence-policy changes.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 
@@ -44,6 +44,19 @@ static registry/vault/Foundry assignments match exact live three-role inventory.
 Baseline revision16, sole API target, existing shared environment/East US2,
 identity and scale0–2 verified. Retain revision16 digest for rollback. No Aspire,
 new schema or grant applies. Normal live acceptance remains unverified.
+
+Deployment commit `5566822`, successful ACR build `ch17`, immutable digest
+`f9bb03126cb284537dee9353b0c9d699938df0315d57572df8869d8ffe2d0d0a`
+activated `ca-sr-demo--0000017`. Existing-health gate passed after transient
+timeouts without bypass. Post-deploy smoke, exact three-role/identity/scale checks,
+sole active/latest-ready Healthy/Running revision and100% traffic passed.
+`azd show` confirms the named environment; ingress confirms the same HTTPS URL.
+At approximately02:54 UTC on September8, one normal Alex Analyze on the existing
+Case returned supplier/discovery503. Both safe source records are
+step=parse_locations, reason=no_locations, parsed=0, scoped=-1, matched=-1,
+http_status=0. Thus ask field validation now passes, but no supported location is
+extracted. No fetch or accepted evidence occurred. Missing links versus unsupported
+link format remains unresolved. No body capture, second attempt or Git push.
 
 ## Validation Proof — ask answer-field diagnostics
 
