@@ -493,9 +493,9 @@ describe("progressive Case workspace", () => {
     await screen.findByText("Fallback mode");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
-    const beta = await screen.findByRole("article", {name: "Source from Supplier Beta"});
+    const beta = await screen.findByRole("article", {name: "Use the alternate supplier"});
     expect(within(beta).getByText("QUALITY_QUALIFICATION_PENDING")).toBeVisible();
-    expect(within(beta).getByRole("button", {name: "Select Source from Supplier Beta"})).toBeDisabled();
+    expect(within(beta).getByRole("button", {name: "Select Use the alternate supplier"})).toBeDisabled();
   });
 
   it("disables decision controls for stale or evidence-blocked analysis", async () => {
