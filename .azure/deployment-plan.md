@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — structured Work IQ discovery and verified supplier-binding reconciliation. Release checks passed; revision17 remains deployed until the approved release executes.
+> **Status:** Validated and deployed — revision18 passed readiness and normal Alex source discovery/read/validation. Teams citation UI remains blocked; no approval or execution performed.
 
 ## Validation Proof — structured discovery (2026-09-08)
 
@@ -49,6 +49,17 @@ warning. `uv build` passed; scoped Pyright including all changed tests returned
 hooks ran Ruff clean. No runtime changes since0466aac. Existing revision17 digest
 and old supplier binding/receipt are retained as rollback inputs in ignored notes.
 Normal application MCP/OBO acceptance remains a post-deployment gate.
+
+Post-deploy result: release5fea43f, ACRch18, immutable digest
+f05099e8170e50bca8e1774c45be91b58752ea8d0bac9605a1f82c33ac1ad760,
+revision18 sole active/latest-ready Healthy/Running. Identity/exact three scoped
+roles/scale0–2 unchanged. Smoke/readiness and supplier binding/receipt match pass.
+`azd show` and ingress confirm the existing environment/HTTPS URL. One normal
+Alex Analyze at approximately06:11 UTC displayed both Work IQ source bodies as
+healthy, three Fabric evidence items and calculated options. Teams Open citation
+link is absent; frontend citation gate disables approval/rejection. Source
+discovery/read/validation is now verified in-app, but citation navigation and the
+full Decision/execution journey are not. No second Analyze or Git push.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 

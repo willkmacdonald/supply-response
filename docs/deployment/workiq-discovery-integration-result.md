@@ -2,7 +2,41 @@
 
 Updated 2026-09-08 UTC. This records deployment separately from live acceptance.
 
-## Current integration — structured Work IQ discovery (validation in progress)
+## Current result — both Work IQ sources validated live; Teams citation UI blocked
+
+Release `5fea43f`, ACR build `ch18`, activated revision `ca-sr-demo--0000018`
+with immutable digest `f05099e8170e50bca8e1774c45be91b58752ea8d0bac9605a1f82c33ac1ad760`.
+The sole active/latest-ready revision is Healthy/Running; identity, exact three
+scoped Azure roles and scale0–2 are unchanged. Post-deploy Fabric/Foundry readiness
+passed. The supplier binding and receipt match the verified local configuration.
+`azd show` confirms the same environment; Container App ingress confirms the
+[existing HTTPS demo](https://ca-sr-demo.orangehill-337f5d48.eastus2.azurecontainerapps.io/).
+
+At approximately06:11 UTC, one normal Analyze in Alex's existing Case completed
+through the deployed application MCP/OBO path. The UI displayed five evidence
+items: three Fabric items plus the full approved supplier and Jordan statements,
+both marked `work_iq healthy`. It displayed the combined response recommendation,
+2,300 uncovered units and $24,750 response cost; Supplier Beta remained blocked
+for pending qualification. This establishes application discovery, individual
+reads and accepted source evidence, not merely standalone CLI success.
+
+Remaining issue: the UI reports `Required live citation missing`. Supplier mail
+has an Open citation link; the Jordan Teams evidence has no link. Approve and
+Reject remain disabled. The selected-source backend validator required a valid
+matching citation, but the exact loss/rejection point in presentation is not yet
+established. Local inspection confirms citation classification/navigation fields
+are assigned in the live service and checked again by the frontend. Do not claim
+the full live journey is complete, bypass this gate, or regenerate analysis to
+hide the issue. No Decision, execution, source edit, second Analyze or Git push
+occurred. A subsequent read-only browser diagnostic stalled and returned no
+captured API responses; it did not establish the citation's failure cause.
+
+Independent review corrected malformed/duplicate collection handling and restored
+safety coverage. Final full Python regression, Python package, scoped Ruff/Pyright
+including tests, frontend51 tests/build and focused regressions passed. Review
+approved with no remaining findings; expected14 live-test skips remain.
+
+## Implementation and binding reconciliation
 
 The approved implementation replaces answer-link extraction in the live MCP path
 with bounded Work IQ entity queries: supplier-topic mail search, and named team /
@@ -16,8 +50,8 @@ The supplier binding was reconciled locally after a fresh explicit Alex identity
 check, unique sender/topic discovery, exact approved corpus comparison and the
 existing evidence validator. Only the supplier source ID and derived receipt
 changed in the ignored environment; rollback values remain in ignored notes.
-No cloud binding or revision has changed yet. Application acceptance remains
-pending; standalone CLI success is not a substitute for the deployed OBO flow.
+The verified binding was subsequently deployed with revision18. The live source
+acceptance result and separate UI citation blocker are recorded above.
 
 ## Previous investigation — content readable; supplier binding mismatch isolated
 
