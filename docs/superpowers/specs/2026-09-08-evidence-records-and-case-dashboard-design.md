@@ -46,6 +46,68 @@ destination but still would not substantiate the evidence claim.
 
 ## Part 1: supporting records in the demo
 
+### Investigation flow and visible row labels
+
+Preserve the three-row layout approved in conversation, including the labels on
+the left. Read each row left to right, then move down. On narrow screens, place
+the row label above its cards and stack those cards in the same order.
+
+| Visible left-hand label | First card | Second card | Third card |
+| --- | --- | --- | --- |
+| **1. Understand the disruption** | **What changed?** Supplier delay, missed quantity, original delivery date. | **What do we have available?** Stock at the affected plant after holds and protected allocations. | **What does that put at risk?** Affected production and customer orders, due dates, and revenue. |
+| **2. Investigate responses** | **What can Alpha still supply?** Partial offer, arrival date, cost, and what remains unconfirmed. | **Can another plant help?** Dallas transfer quantity, arrival date, and cost. | **Can another supplier help?** Beta qualification status and the requirements still outstanding. |
+| **3. Make the decision** | **Compare the options.** Alternatives alongside doing nothing. | **Recommended response—and why.** Benefits, cost, and parts still needed. | **Review and approve.** Current decision state and outstanding requirements; approval remains an explicit user action. |
+
+This is an organization of existing case information, not nine new evidence
+items. The supplier delay and partial-offer cards can cite the same supplier
+email. Place the corresponding shipment record with the partial-offer card, the
+transfer record with the plant-transfer card, and the qualification record and
+Quality Teams post with the alternate-supplier card. Keep each source's role
+clear rather than merging statements into an unsupported claim of agreement.
+
+The first card at the top left is always the supplier delay, not a platform
+record. Missing information leaves a clearly explained gap in its logical
+position; it does not silently reorder the investigation or invent a fact.
+
+### Planner-friendly language
+
+Lead with a business question, a short answer, and the specific quantities,
+dates, costs, or requirements that explain it. Avoid repeating the same claim
+as both heading and body. Use normal supply-chain language throughout cards,
+status labels, source actions, empty states, and the case dashboard.
+
+| Current wording or pattern | User-facing treatment |
+| --- | --- |
+| `fabric`, `work_iq` as prominent badges | Name the source: **Shipment record**, **Inventory record**, **Supplier email**, or **Quality Teams post**, as appropriate. Retain platform provenance in **Source details**. |
+| `healthy` | Do not present technical retrieval health as supply status. If useful, show **Source retrieved** with the actual retrieval time in Source details; otherwise omit the badge. |
+| `certain` | State exactly what is supported and what is unknown, such as **Delivery date for the remaining 5,000 units is not confirmed**. Do not replace this with a blanket **Confirmed** badge. |
+| `operational_quantity`, `operational_date`, `collaboration_statement` | Show the business fields and attribute statements to their source. Keep technical authority scopes in Source details. |
+| `Evidence ID` as a headline field | Put the identifier under **Source details**, labeled **Source record ID**. |
+| `Open citation` | Use **Open supplier email**, **Open Quality Teams post**, **View shipment record**, **View transfer record**, or **View qualification record**, matching the destination. |
+| Uncovered constrained-part demand | **Parts still needed**, with the component name and units; do not imply these are finished-product units. |
+| Projected OTIF loss | **Customer order lines expected to miss the on-time, in-full target**, with the percentage and count/denominator where available. Do not silently change an order-line metric into an order count or a late-only metric. |
+| Feasible / infeasible | Explain **Meets the planning requirements** or the specific blocker, such as **Cannot use Beta yet: supplier approval is incomplete**. Meeting planning requirements does not mean approved or executed. |
+
+Use **In this scenario, as of** for the fictional scenario timestamp and label
+the actual analysis/retrieval timestamps separately. Explain **Revenue at risk**
+as the value of customer order lines expected to miss the service target, only
+where that matches the persisted metric definition. Label predictions as
+**Expected if we take this option**, not achieved results.
+
+Example partial-offer wording for the canonical fixture:
+
+> **What can Alpha still supply?**
+> Alpha offers 3,000 units by air for September 6 at $7.50 per unit.
+> Delivery for the remaining 5,000 units is not confirmed.
+> **Open supplier email** · **View shipment record**
+
+Examples are copy guidance, not hardcoded runtime facts. Derive every quantity,
+date, status, and attribution from validated evidence and persisted analysis.
+Preserve distinctions between an offer, a scheduled receipt, a qualification
+review date, and an approved action. Display the fictional-demo notice clearly;
+moving technical details out of the headline must not hide synthetic provenance,
+source failures, missing evidence, or approval blockers.
+
 ### What the user sees
 
 - Alpha card: a concise, data-derived quantity/date summary and **View shipment
@@ -117,7 +179,9 @@ Microsoft reference: https://learn.microsoft.com/en-us/power-bi/collaborate-shar
 
 ### Report content
 
-The command center becomes a one-case business summary with this reading order:
+The command center becomes a one-case business summary following the same three
+labeled investigation rows above. Its final card shows decision status and a
+return-to-demo action, not an approval control. Within that flow, retain:
 
 1. **Disruption:** supplier, constrained part, affected plant, missed quantity and
    original delivery date, plus visible fictional/live-source provenance.
@@ -156,14 +220,14 @@ including when a later analysis exists or the approved option differs from the
 recommendation. Use authoritative persisted predictions; do not reimplement the
 ranking or prediction engine in DAX.
 
-Name the existing date **Scenario effective time**. Do not calculate elapsed time
+Present the existing scenario-effective date as **In this scenario, as of**. Do not calculate elapsed time
 from wall-clock `NOW()` against the fixed fictional scenario date. Show analysis
 time separately where useful.
 
 ### Empty and error states
 
 - No analysis: **Not analyzed yet**.
-- Analysis with no recommendation: **No feasible recommendation** when that is
+- Analysis with no recommendation: **No option meets the planning requirements** when that is
   supported by the analysis; missing/corrupt metrics instead say **Unavailable**.
 - No decision: **Awaiting approval** only for the corresponding case state;
   otherwise describe its actual recorded state.
@@ -176,6 +240,10 @@ time separately where useful.
 1. Frontend tests cover all three records, exact ID matching, malformed/missing
    material, zero/false values, date formatting, accessible expansion, fallback
    provenance, unchanged Work IQ links, and safe case-filter construction.
+   Also verify the approved row labels and reading order on desktop/mobile,
+   business-first headings, specific source actions, technical fields confined
+   to details, and explicit unknowns and approval blockers. Copy must preserve
+   metric units, denominators, source attribution, and prediction versus outcome.
 2. Projection/model tests cover an unanalyzed case beside analyzed cases, explicit
    case selection, no/multiple selections, no recommendation, legitimate zero
    metrics, different recommended/approved options, and newer analysis versus
