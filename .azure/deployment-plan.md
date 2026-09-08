@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — descriptive citation-label update ready for approved deployment; revision19 remains deployed.
+> **Status:** Validated and deployed — revision20 healthy; both descriptive citation labels verified in the public app bundle.
 
 ## Validation Proof — descriptive citation labels (2026-09-08)
 
@@ -37,6 +37,22 @@ and both lockfiles verified. No Aspire, schema migration or grant applies.
 Policy assignment inventory reviewed; no preview denial. Static roles and live
 pre-deploy assignments match exact-resource AcrPull, Key Vault Secrets User and
 Foundry User. One API-tagged app; existing shared environment Succeeded.
+
+Release `51d6147`, ACR build `ch1a` (Succeeded at 14:55:24 UTC), activated
+`ca-sr-demo--0000020` with immutable digest
+`a08730d8a23fa2d9349e65423d7153679cfbf1098cfc0fd12f71843ec25ca0c4`.
+The first apply stopped before mutation because sandbox permissions prevented
+the required local commit; after an approved local commit, the guarded retry
+completed. Existing-health checks retried transient timeouts without bypass.
+Revision20 is sole active/latest-ready Healthy/Running, provisioning Succeeded,
+100% traffic, unchanged identity and scale 0–2; the exact three scoped roles
+remain unchanged. `azd show` confirms the same named environment; ingress confirms
+the existing demo URL. Public HTML and `/assets/index-D0eOUMQz.js` returned HTTP
+200; both new labels were found in the published bundle. No browser refresh or
+case mutation was needed. The broader post-deploy `--smoke` request was rejected
+by automatic approval review as beyond the established label-only scope and was
+not retried; verification used permitted deployment metadata and public static
+assets instead. No new delegated analysis or source-service acceptance is claimed.
 
 ## Validation Proof — Teams citation preservation (2026-09-08)
 

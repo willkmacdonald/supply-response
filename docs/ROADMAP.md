@@ -16,7 +16,7 @@ This roadmap reports the durable, reviewed repository baseline. Uncommitted or a
 | Fabric SQL | Canonical source loaded and verified live | Schema version 12; canonical RL-001 loader passed planned → inserted → unchanged with exact metadata/payload and production-adapter readback; deployed app created a live Case |
 | Power BI | Published; empty-state live render validated | The semantic model and two-page report are published, OAuth2-bound to Fabric SQL, DAX-queryable, and visually clean with an empty database; populated Decision-ID parity remains a post-application-deployment gate |
 | Entra ID and persona authorization | Alex sign-in passed; full authorization journey pending | Private-browser Alex request passed authentication and reached analysis; approval/rejection and downstream gates remain |
-| Work IQ | Structured discovery/read/validation and citation display passed live | Revision19 fresh Alex analysis displays both Microsoft 365 citation links with expected targets; the missing-citation warning is gone and approval is enabled. Opening the links in Teams/Outlook remains unverified. See the [result](deployment/workiq-discovery-integration-result.md) |
+| Work IQ | Structured discovery/read/validation and citation navigation verified | Revision19 fresh Alex analysis displayed both source links and enabled approval; the user confirmed both links open the intended Outlook/Teams messages. Revision20 publishes clearer link labels. See the [result](deployment/workiq-discovery-integration-result.md) |
 | Foundry orchestration | Implemented and agents published; invocation pending | Signal, context, and decision agents are verified as immutable version `1` contracts on `gpt-5.6-luna`; no live invocation or evaluation has run |
 | Complete live Case journey | Case creation and live analysis passed; approval enabled | Fresh revision19 Case recommends the combined response at $24,750 with 2,300 uncovered units and both source links. No Decision approved or actions executed. Decision, five actions, ten observations, and populated Power BI parity remain unverified |
 | Personal-tenant deployment and hardening | Updated application and readiness verified | New immutable revision ready; exact Azure roles and live Fabric/Foundry readiness passed; delegated acceptance checks remain |
@@ -106,16 +106,16 @@ Completed implementation and tenant setup:
 
 Still required:
 
-- Open the displayed Teams and Outlook citation links as Alex and verify they navigate to the intended messages. Discovery, individual reads, validation, and displayed citation targets passed in the normal application; source IDs remain validation-only, never fallback fetch inputs.
+- Retain the verified discovery, individual-read, validation, and citation-navigation behavior in subsequent releases; source IDs remain validation-only, never fallback fetch inputs.
 - Invoke and evaluate the published Foundry agents through a separately approved live gate.
 - Complete populated Power BI parity after an approved live Decision.
-- Run deployed Entra authentication, Work IQ citation navigation, and the complete live browser journey.
+- Complete the remaining persona, Decision and downstream live browser checks. Alex analysis and user-confirmed Work IQ citation navigation have passed.
 
 Exit conditions include authenticated Alex approval/rejection, independently satisfied Quality and Finance prerequisites, navigable citations, and Decision-linked downstream work.
 
 ### 6. Deployment and release hardening — Azure application deployed; acceptance pending
 
-Tasks 18–19 deploy the runtime to the personal tenant and prove the final contract. Revision19 is ready, exact Azure roles and live readiness are verified, and live Fabric-backed Case creation and Alex-authenticated analysis pass. Source-link navigation and the downstream acceptance journey remain.
+Tasks 18–19 deploy the runtime to the personal tenant and prove the final contract. Revision20 is healthy with clearer citation labels and unchanged Azure roles. Live Fabric-backed Case creation and Alex-authenticated analysis passed on revision19, followed by user-confirmed source-link navigation. The downstream acceptance journey remains.
 
 - Provision the Azure application resources and configure deployment-specific bindings
 - Deploy the API and web console, then connect them to the verified Fabric, Work IQ, Foundry, Entra, and Power BI prerequisites
@@ -134,10 +134,9 @@ Final completion requires all 20 frozen acceptance criteria to pass. Local imple
 The Entra, Foundry, Fabric SQL, Work IQ Demo Corpus, and Power BI prerequisites
 are configured and recorded in deployment-local storage. The remaining gates are:
 
-1. Verify Teams/Outlook navigation from the two source links displayed by the fresh revision19 Alex analysis. Structured discovery/read/validation and the citation-display gate have passed.
-2. Verify the pinned Foundry invocation/explanation separately; preserved deterministic analysis is not proof of optional explanation success.
-3. Record the approved Decision, verify five linked actions and ten simulated observations.
-4. Verify Power BI refresh, filters, and Decision-ID parity for that same Case.
+1. Verify the pinned Foundry invocation/explanation separately; preserved deterministic analysis is not proof of optional explanation success.
+2. Record the approved Decision, verify five linked actions and ten simulated observations.
+3. Verify Power BI refresh, filters, and Decision-ID parity for that same Case.
 
 The reviewed loader update passed full Python regression, 51 web tests, package
 and web builds, and scoped lint/type checks. Existing repository-wide static-check
@@ -163,10 +162,10 @@ third-party Starlette deprecation warning; these are not reported as clean gates
 | 12 | Fabric SQL adapter and analytics views | Complete; live Fabric SQL setup, schema, idempotency, and health checks passed |
 | 13 | Two-page Power BI project | Published; OAuth2 binding, DAX smoke query, and empty-state live render passed; populated parity pending |
 | 14 | Single-tenant Entra authentication and persona roles | Tenant configuration and normal Alex-authenticated analysis verified; other persona/approval gates remain |
-| 15 | Cited Microsoft 365 evidence through Work IQ | Revision19 fresh Alex analysis verifies discovery, reads, validation, both displayed source links and enabled approval; source-link navigation pending |
+| 15 | Cited Microsoft 365 evidence through Work IQ | Discovery, reads, validation, both displayed source links and enabled approval verified; user confirmed navigation to both messages |
 | 16 | Foundry-managed Agent Framework orchestration | Complete locally; three Luna agents published and verified; invocation/evaluation pending |
 | 17 | Complete live Case journey | Live Case creation and Alex-authenticated analysis passed; Decision/execution/observation and Power BI parity pending |
-| 18 | Personal-tenant provisioning and deployment | Revision19, exact roles, live readiness, and fresh delegated analysis verified |
+| 18 | Personal-tenant provisioning and deployment | Revision20 healthy with clearer labels and unchanged roles; live readiness and delegated analysis accepted on revision19 |
 | 19 | Privacy, parity, failure, timing, and rehearsal gates | Planned |
 
 ## Backlog outside active acceptance

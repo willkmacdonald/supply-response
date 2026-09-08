@@ -2,7 +2,26 @@
 
 Updated 2026-09-08 UTC. This records deployment separately from live acceptance.
 
-## Current result — revision19 displays both citations and enables approval
+## Citation navigation and descriptive-label update
+
+After the revision19 analysis check, the user opened both links and supplied
+screenshots confirming the supplier email in Outlook and Jordan's intended
+Quality post in Teams. Source-link navigation is now user-verified, not merely
+inferred from displayed URLs.
+
+The approved wording-only release `51d6147` replaces the two Work IQ link labels
+with **Open supplier email** and **Open Quality Teams post**. Link targets,
+new-tab behavior, trust validation, evidence and approvals remain unchanged.
+Fifty-eight frontend tests and the production build passed, including exact
+href checks and unsafe-link suppression independent of the labels. ACR build
+`ch1a` succeeded and activated healthy revision `ca-sr-demo--0000020`, digest
+`a08730d8a23fa2d9349e65423d7153679cfbf1098cfc0fd12f71843ec25ca0c4`.
+The same endpoint serves both new labels in `/assets/index-D0eOUMQz.js` (HTTP
+200 for HTML and asset). Identity, exact scoped roles and scale are unchanged.
+This label-only check did not rerun source retrieval or refresh the user's Case.
+No new Case, Analyze, Decision, execution or source edits are part of this release.
+
+## Live analysis acceptance — revision19 displays both citations and enables approval
 
 Release `c010d5d`, ACR build `ch19`, activated revision `ca-sr-demo--0000019`
 with immutable digest `29a68454fc082c7299da977d5007b5a2b7972f048c1e337cd6b3439c0b47ede5`.
