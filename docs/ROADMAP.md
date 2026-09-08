@@ -16,7 +16,7 @@ This roadmap reports the durable, reviewed repository baseline. Uncommitted or a
 | Fabric SQL | Canonical source loaded and verified live | Schema version 12; canonical RL-001 loader passed planned → inserted → unchanged with exact metadata/payload and production-adapter readback; deployed app created a live Case |
 | Power BI | Published; empty-state live render validated | The semantic model and two-page report are published, OAuth2-bound to Fabric SQL, DAX-queryable, and visually clean with an empty database; populated Decision-ID parity remains a post-application-deployment gate |
 | Entra ID and persona authorization | Alex sign-in passed; full authorization journey pending | Private-browser Alex request passed authentication and reached analysis; approval/rejection and downstream gates remain |
-| Work IQ | MCP integration deployed; live acceptance blocked at answer-shape validation | Revision15 is healthy. The approved diagnostic Alex Analyze reached `ask` for both sources, but the adapter rejected the answer structure before locator parsing. No normal deployed MCP Analyze has passed. See the [result](deployment/workiq-discovery-integration-result.md) |
+| Work IQ | MCP integration deployed; confirmed answer-field mismatch awaits correction | Revision16 is healthy. Both source results have a valid `answer` and conversation ID but no `response`; the adapter requires `response` and rejects them before locator parsing. No normal deployed MCP Analyze has passed. See the [result](deployment/workiq-discovery-integration-result.md) |
 | Foundry orchestration | Implemented and agents published; invocation pending | Signal, context, and decision agents are verified as immutable version `1` contracts on `gpt-5.6-luna`; no live invocation or evaluation has run |
 | Complete live Case journey | Live Case creation passed; analysis gated | Correct fixed scenario time displayed; delegated analysis, Decision, five actions, ten observations, and populated Power BI parity remain unverified |
 | Personal-tenant deployment and hardening | Updated application and readiness verified | New immutable revision ready; exact Azure roles and live Fabric/Foundry readiness passed; delegated acceptance checks remain |
@@ -106,7 +106,7 @@ Completed implementation and tenant setup:
 
 Still required:
 
-- Resolve the observed `ask` answer-contract mismatch without raw-body capture; additional live diagnosis requires approval. Then verify that normal Alex Analyze independently discovers, fetches, validates, and cites both sources.
+- Correct the confirmed `ask` answer-field mismatch (`answer` returned, `response` required) with tests after approval. Then verify that one approved normal Alex Analyze independently discovers, fetches, validates, and cites both sources.
 - Invoke and evaluate the published Foundry agents through a separately approved live gate.
 - Complete populated Power BI parity after an approved live Decision.
 - Run deployed Entra authentication, Work IQ citation navigation, and the complete live browser journey.
@@ -134,7 +134,7 @@ Final completion requires all 20 frozen acceptance criteria to pass. Local imple
 The Entra, Foundry, Fabric SQL, Work IQ Demo Corpus, and Power BI prerequisites
 are configured and recorded in deployment-local storage. The remaining gates are:
 
-1. Determine which `ask` answer field/type/bound fails the adapter contract for both sources, then correct it with tests; a further live diagnostic run requires approval.
+1. Approve and test the confirmed adapter correction: both source results use `answer`, not the required `response`. Preserve strict validation and discovered-only fetch; deployment and one live retest are the next proposed gate.
 2. Run normal Alex live analysis, verify both cited Work IQ sources, and observe the pinned Foundry invocation.
 3. Record the approved Decision, verify five linked actions and ten simulated observations.
 4. Verify Power BI refresh, filters, and Decision-ID parity for that same Case.
@@ -163,7 +163,7 @@ third-party Starlette deprecation warning; these are not reported as clean gates
 | 12 | Fabric SQL adapter and analytics views | Complete; live Fabric SQL setup, schema, idempotency, and health checks passed |
 | 13 | Two-page Power BI project | Published; OAuth2 binding, DAX smoke query, and empty-state live render passed; populated parity pending |
 | 14 | Single-tenant Entra authentication and persona roles | Complete locally; tenant configuration verified; deployed auth gate pending |
-| 15 | Cited Microsoft 365 evidence through Work IQ | Reviewed MCP integration, v2 receipt and safe diagnostics deployed on revision15; normal live acceptance is blocked before locator parsing by `ask` answer-shape validation |
+| 15 | Cited Microsoft 365 evidence through Work IQ | Reviewed MCP integration, v2 receipt and safe diagnostics deployed on revision16; confirmed `answer`/`response` mismatch blocks locator parsing; correction and normal live acceptance pending |
 | 16 | Foundry-managed Agent Framework orchestration | Complete locally; three Luna agents published and verified; invocation/evaluation pending |
 | 17 | Complete live Case journey | Live Case creation passed; Alex-authenticated analysis and downstream browser gates pending |
 | 18 | Personal-tenant provisioning and deployment | Updated Azure revision, exact roles, and live readiness verified; delegated acceptance pending |

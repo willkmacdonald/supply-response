@@ -2,7 +2,45 @@
 
 Updated 2026-09-08 UTC. This records deployment separately from live acceptance.
 
-## Diagnostic follow-up — answer structure rejected before locator parsing
+## Current diagnostic result — confirmed answer-field mismatch, revision16
+
+The approved field-status-only diagnostic implementation `664b67f` is deployed
+as ACR build `ch16`, revision `ca-sr-demo--0000016`, immutable digest
+`042a556dcf974e5fb8d045709d068ea92556c4c8263b0eba7fd03069652aa2a9`.
+Revision16 is sole active/latest-ready, Healthy/Running with100% traffic.
+Post-deploy readiness, endpoint/environment and exact three-role checks passed;
+identity and scale0–2 are unchanged. Full Python regression/package,95 focused
+tests,51 web tests/build, scoped static checks and independent review passed.
+
+One normal Alex Analyze used the existing Case, without refreshing or creating
+another Case. The result was confirmed at approximately02:33 UTC on September8:
+the same supplier/discovery503. Both supplier and Quality logged:
+
+```text
+workiq_ask_shape response=missing conversation_id=valid answer=valid error=missing
+```
+
+Both corresponding source records retain step=ask, reason=discovery_shape,
+http_status=0 and parsed/scoped/matched=-1. Here valid means a nonempty string
+within the configured bound, not validated evidence or useful answer content.
+
+This confirms the immediate adapter defect: the decoded Work IQ result uses
+`answer`, whereas our adapter requires `response`. Its rejection prevents locator
+parsing and message retrieval. Microsoft's [tool reference](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/mcp/tool-reference)
+describes `response`/`conversationId`, but its [iq-series lab](https://github.com/microsoft/iq-series/blob/main/Work-IQ/3-Work-IQ-Tooling-with-MCP-and-Copilot-CLI/cookbook/work-iq-lab03.md)
+describes structured content with `answer`/`conversationId`, consistent with the
+observed field states. No raw values, arbitrary keys, identifiers, credentials or
+message bodies were logged. This does not prove the answers contain usable
+locations or that the requested messages were found. No evidence or downstream
+live acceptance is claimed.
+
+Next proposed gate: approve a tested adapter correction for the confirmed answer
+field, preserving strict bounds, source validation and discovered-only fetch;
+then deploy and perform one normal Alex Analyze. No parser fix, second Analyze,
+new permissions, billing, source edits, Graph fallback or Git push occurred in
+this diagnostic follow-up.
+
+## Previous diagnostic follow-up — revision15
 
 The user separately approved failure-only substep diagnostics and one further
 normal Alex Analyze, without raw-response capture or permission changes.
@@ -37,7 +75,7 @@ evidence and downstream live acceptance remain unverified. No raw responses,
 message bodies, tokens or new source identifiers were captured. No retry,
 direct Graph fallback, permissions, billing, source edits or policy changes.
 
-Next proposed gate: inspect only allowlisted answer-field presence/type/bounds
+The then-proposed gate, completed by revision16 above: inspect only allowlisted answer-field presence/type/bounds
 or a verified upstream contract to determine why the shape check rejects it;
 then fix and test the adapter contract. Any additional live diagnostic invocation
 needs approval. Do not weaken evidence validation or hard-code discovery IDs.

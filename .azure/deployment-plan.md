@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — approved answer-field diagnostic follow-up. Existing revision15 remains healthy pending deployment. No permissions, billing, source, prompt, acceptance or retry changes.
+> **Status:** Deployed — revision16 is healthy. The single approved diagnostic Analyze confirmed `answer`/`response` field mismatch for both sources. Parser correction and live acceptance remain pending; no permissions, billing, source, prompt, acceptance or retry changes.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 
@@ -43,6 +43,17 @@ The current Microsoft Learn reference documents response/conversationId, whereas
 the Microsoft iq-series lab describes answer/conversationId in structured content.
 These are hypotheses, not proof of the actual live fields. This diagnostic keeps
 the rejection contract unchanged and records field states only on that rejection.
+
+Deployment `664b67f`, ACR build `ch16`, immutable digest
+`042a556dcf974e5fb8d045709d068ea92556c4c8263b0eba7fd03069652aa2a9`
+is sole active/latest-ready revision `ca-sr-demo--0000016`, Healthy/Running with
+100% traffic. Post-deploy smoke, environment/endpoint checks and exact three-role
+verification passed; identity and scale0–2 are unchanged. At approximately02:33
+UTC on September8, the result of the one normal existing-Case Alex Analyze was
+confirmed: supplier/discovery503. Both source results have response=missing,
+conversation_id=valid, answer=valid, error=missing. The adapter requires response
+and rejects the result before locator parsing. No source body was captured or
+evidence accepted. No retry, parser fix or Git push. See the deployment result.
 
 ## Validation Proof — discovery-substep diagnostics
 
