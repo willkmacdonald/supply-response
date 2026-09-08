@@ -1,4 +1,6 @@
 import type {AnalysisEvidenceMaterial, AnalysisMaterial, AnalysisVersion, CaseInstance, EvidenceItem, RuntimeMode} from "../types";
+import {object, text, positive, validDate as date, validInstant as timestamp, validMoney as money,
+  nullableDate, nullableFlag, parseSnapshotEnvelope} from "./snapshotValidation";
 
 type IdentityKeys = "evidence_id" | "case_id" | "kind" | "source_system" | "source_id" | "runtime_mode" | "synthetic" | "source_timestamp";
 type SavedEvidence = Pick<EvidenceItem, IdentityKeys | "retrieved_at" | "retrieved_for_analysis_id">;
@@ -28,18 +30,6 @@ export type SupportingRecordResult = Readonly<{status: "unavailable"; message: "
     retrievedAt: string | null; provenance: "Saved Microsoft Fabric record" | "Demo fixture — not a live retrieval"}>;
 
 const unavailable = Object.freeze({status: "unavailable", message: "Supporting record unavailable"} as const);
-const object = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
-const text = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
-const date = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)
-  && Number.isFinite(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v;
-const timestamp = (v: unknown): v is string => typeof v === "string"
-  && /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.test(v)
-  && date(v.slice(0, 10)) && Number.isFinite(Date.parse(v));
-const sameTime = (a: unknown, b: unknown) => timestamp(a) && timestamp(b) && Date.parse(a) === Date.parse(b);
-const nullableDate = (v: unknown): v is string | null => v === null || date(v);
-const nullableFlag = (v: unknown): v is boolean | null => v === null || typeof v === "boolean";
-const positive = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v > 0;
-const money = (v: unknown): v is string => typeof v === "string" && /^\d+\.\d{2}$/.test(v);
 
 function parseRecord(kind: SupportingRecord["kind"], v: unknown): SupportingRecord | null {
   if (!object(v) || !text(v.part_id)) return null;
@@ -67,18 +57,12 @@ function parseRecord(kind: SupportingRecord["kind"], v: unknown): SupportingReco
 
 export function resolveSupportingRecord(input: SupportingRecordInput, evidenceId: string): SupportingRecordResult {
   try {
-    const {caseInstance: c, analysis: a} = input;
+    const {analysis: a} = input;
     const m = a.material;
-    const s: unknown = JSON.parse(m.operational_snapshot_json);
-    if (!object(s) || !text(a.analysis_id) || !text(a.case_id) || !text(evidenceId)
-        || c.template_id !== "RL-001" || m.template_id !== c.template_id || m.corpus !== "demo_corpus"
-        || ![c.case_id, m.case_id, s.case_id].every(id => id === a.case_id)
-        || (a.runtime_mode !== "live" && a.runtime_mode !== "fallback")
-        || ![c.runtime_mode, m.runtime_mode, s.runtime_mode].every(mode => mode === a.runtime_mode)
-        || ![c.scenario_effective_time, m.scenario_effective_time, s.scenario_effective_time].every(at => sameTime(at, a.scenario_effective_time))
-        || s.scenario_timezone !== "America/Chicago" || !timestamp(s.analysis_horizon_start) || !date(s.analysis_horizon_end)
-        || !Array.isArray(s.inventory_positions) || !Array.isArray(s.production_orders) || !Array.isArray(s.customer_orders)
-        || !object(s.disruption) || !timestamp(a.created_at)) return unavailable;
+    const s = parseSnapshotEnvelope(input);
+    if (!s || !text(evidenceId)
+      || !Array.isArray(s.inventory_positions) || !Array.isArray(s.production_orders)
+      || !Array.isArray(s.customer_orders) || !object(s.disruption)) return unavailable;
     const items = a.evidence_items.filter(e => e.evidence_id === evidenceId);
     const materialItems = m.evidence.filter(e => e.evidence_id === evidenceId);
     if (items.length !== 1 || materialItems.length !== 1) return unavailable;
