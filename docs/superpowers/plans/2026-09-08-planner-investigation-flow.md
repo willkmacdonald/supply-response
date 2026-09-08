@@ -75,7 +75,7 @@ No edits to `types.ts`, `useCaseWorkspace.ts`, `api.ts`, the trusted-URL functio
 
 **Interfaces:** Consumes `SupportingRecordInput`. Produces shared `parseSnapshotEnvelope(input: SnapshotEnvelopeInput): Record<string, unknown> | null` and strict predicates, plus `readPlannerSnapshot(input): PlannerSnapshot | null`, with independently nullable disruption/inventory/production/customer sections; `customerLineBasis(snapshot, protectedIds): {total: number; missed: number} | null`. Unknown and malformed sections fail closed locally, so a malformed customer array does not remove a valid disruption. The supporting-record resolver retains its existing requirement for all three arrays and an object disruption before resolving a branch. The shared envelope does not enforce those caller-specific rules.
 
-- [ ] **Step 1: Create these failing tests.**
+- [x] **Step 1: Create these failing tests.**
 
 ```ts
 import {describe, expect, it} from "vitest";
@@ -166,8 +166,8 @@ describe("planner snapshot", () => {
 });
 ```
 
-- [ ] **Step 2: Run `cd apps/web && npx vitest run src/components/plannerSnapshot.test.ts`.** Expected: missing-module failure.
-- [ ] **Step 3: Create `snapshotValidation.ts` with these shared strict predicates and envelope parser.** Its input type imports only API types, avoiding a runtime/type dependency cycle between the two readers. The parser catches malformed JSON and verifies saved identity; it deliberately leaves business sections unknown for each caller to validate.
+- [x] **Step 2: Run `cd apps/web && npx vitest run src/components/plannerSnapshot.test.ts`.** Expected: missing-module failure.
+- [x] **Step 3: Create `snapshotValidation.ts` with these shared strict predicates and envelope parser.** Its input type imports only API types, avoiding a runtime/type dependency cycle between the two readers. The parser catches malformed JSON and verifies saved identity; it deliberately leaves business sections unknown for each caller to validate.
 
 ```ts
 import type {AnalysisMaterial, AnalysisVersion, CaseInstance} from "../types";
@@ -206,7 +206,7 @@ export function parseSnapshotEnvelope({caseInstance: c, analysis: a}: SnapshotEn
 }
 ```
 
-- [ ] **Step 4: Replace only internal validation in `supportingRecord.ts`.** Add the following import:
+- [x] **Step 4: Replace only internal validation in `supportingRecord.ts`.** Add the following import:
 
 ```ts
 import {object, text, positive, validDate as date, validInstant as timestamp, validMoney as money,
@@ -226,7 +226,7 @@ Remove its consecutive local definitions from `const object = ...` through `cons
 
 All remaining resolver code stays unchanged, including its outer try/catch, exact evidence membership/material checks, timestamps, fixture/live provenance, family resolution, and frozen copies. Run `cd apps/web && npx vitest run src/components/supportingRecord.test.ts` now. Expected: all 42 existing tests pass without changing those tests.
 
-- [ ] **Step 5: Create the complete reader below.** Bounded typed parsers narrow every field before constructing explicit objects; no generic schema-to-type assertion is used. The only generic helper parses arrays using the caller's actual typed parser and identity accessor.
+- [x] **Step 5: Create the complete reader below.** Bounded typed parsers narrow every field before constructing explicit objects; no generic schema-to-type assertion is used. The only generic helper parses arrays using the caller's actual typed parser and identity accessor.
 
 ```ts
 import type {SupportingRecordInput} from "./supportingRecord";
@@ -311,8 +311,8 @@ export function customerLineBasis(snapshot: PlannerSnapshot | null, protectedIds
 }
 ```
 
-- [ ] **Step 6: Run `cd apps/web && npx vitest run src/components/plannerSnapshot.test.ts src/components/supportingRecord.test.ts src/components/SupportingRecordDetails.test.tsx && npm run build`.** Expected: all new tests, the existing 42 resolver tests, detail tests, and strict compilation pass without changing resolver expectations. `apps/web/tsconfig.json` already targets ES2022 and supports `BigInt`; no target change or floating-point substitute is needed.
-- [ ] **Step 7: Review the four-file diff and give it to the parent for the eventual `feat: share snapshot validation and validate planner fields` commit.**
+- [x] **Step 6: Run `cd apps/web && npx vitest run src/components/plannerSnapshot.test.ts src/components/supportingRecord.test.ts src/components/SupportingRecordDetails.test.tsx && npm run build`.** Expected: all new tests, the existing 42 resolver tests, detail tests, and strict compilation pass without changing resolver expectations. `apps/web/tsconfig.json` already targets ES2022 and supports `BigInt`; no target change or floating-point substitute is needed.
+- [x] **Step 7: Review the four-file diff and give it to the parent for the eventual `feat: share snapshot validation and validate planner fields` commit.**
 
 ## Task 2: Display persisted predictions with explicit metric basis and units
 
@@ -320,7 +320,7 @@ export function customerLineBasis(snapshot: PlannerSnapshot | null, protectedIds
 
 **Interfaces:** `PredictionSummary({predicted, snapshot, basis, compact = false}: {predicted: PredictedOutcome | null; snapshot: PlannerSnapshot | null; basis: "baseline" | "response"; compact?: boolean})`; shared pure formatters shown below. Compact display retains parts, service, and response cost; full exposure/assumptions are available in native option details. No allocation, ranking, response-cost recomputation, or synthetic outcome creation.
 
-- [ ] **Step 1: Add the complete tests below.**
+- [x] **Step 1: Add the complete tests below.**
 
 ```tsx
 // @vitest-environment jsdom
@@ -372,8 +372,8 @@ it("keeps the comparison summary compact with parts, service and response cost",
 });
 ```
 
-- [ ] **Step 2: Run `cd apps/web && npx vitest run src/components/PredictionSummary.test.tsx`.** Expected: missing-module failure.
-- [ ] **Step 3: Create the formatting module.**
+- [x] **Step 2: Run `cd apps/web && npx vitest run src/components/PredictionSummary.test.tsx`.** Expected: missing-module failure.
+- [x] **Step 3: Create the formatting module.**
 
 ```ts
 import type {CaseInstance, RankingStage} from "../types";
@@ -491,8 +491,8 @@ export function optionDisplayName(option: ResponseOption): string {
 
 Before running the full suite, update the existing Beta test's article name from `Source from Supplier Beta` to `Use the alternate supplier`, and its button name from `Select Source from Supplier Beta` to `Select Use the alternate supplier`. Preserve the exact blocking-code assertion and disabled behavior. Task 4 changes the blocker copy when its presentation is wired; moving these two planned selectors into Task 2 keeps this task independently green.
 
-- [ ] **Step 4: Run `cd apps/web && npx vitest run src/components/PredictionSummary.test.tsx && npm run build`.** Expected: tests/build pass; `TZ=America/Los_Angeles npx vitest run src/components/PredictionSummary.test.tsx` also passes. Existing approval button labels for Combined response stay unchanged.
-- [ ] **Step 5: Parent reviews this deliverable for `feat: explain saved prediction basis and planner units`.**
+- [x] **Step 4: Run `cd apps/web && npx vitest run src/components/PredictionSummary.test.tsx && npm run build`.** Expected: tests/build pass; `TZ=America/Los_Angeles npx vitest run src/components/PredictionSummary.test.tsx` also passes. Existing approval button labels for Combined response stay unchanged.
+- [x] **Step 5: Parent reviews this deliverable for `feat: explain saved prediction basis and planner units`.**
 
 ## Task 3: Reuse safe sources and build the first six investigation cards
 
@@ -500,7 +500,7 @@ Before running the full suite, update the existing Beta test's article name from
 
 **Interfaces:** Existing `EvidencePanel` props remain compatible. `EvidenceSource.tsx` exports `EvidenceSource({item, analysis, tenantSharePointHost, label})`, `EvidenceFooters({items, analysis})`, `RequiredCitationWarning({analysis, tenantSharePointHost})`, and `statusFor(item: EvidenceItem, analysis: AnalysisVersion): EvidenceStatus`. Export `InvestigationEvidence({caseInstance, analysis, tenantSharePointHost, row}: {caseInstance: CaseInstance; analysis: AnalysisVersion; tenantSharePointHost?: string | null; row: "disruption" | "responses"})`; returns exactly three sibling cards for the selected row. Source role selection is separate from operational-record identity resolution.
 
-- [ ] **Step 1: Add this integration test file.** It uses the existing narrow record fixture, then supplies the other required API fields explicitly.
+- [x] **Step 1: Add this integration test file.** It uses the existing narrow record fixture, then supplies the other required API fields explicitly.
 
 ```tsx
 // @vitest-environment jsdom
@@ -638,8 +638,8 @@ it("does not attribute an out-of-scenario authority-scoped source to Supplier Al
 });
 ```
 
-- [ ] **Step 2: Run `cd apps/web && npx vitest run src/components/InvestigationEvidence.test.tsx`.** Expected: missing-module failure.
-- [ ] **Step 3: Create `EvidenceSource.tsx` with the reusable extraction below.** The live required-citation warning still examines all required items, including Fabric items; hiding a generic UI action does not remove the validation warning or change the hook's safety gate. Fallback arbitrary URLs are no longer emitted. No valid live email/Teams target changes. Original excerpts use a native disclosure while source role, warning, and source link remain visible.
+- [x] **Step 2: Run `cd apps/web && npx vitest run src/components/InvestigationEvidence.test.tsx`.** Expected: missing-module failure.
+- [x] **Step 3: Create `EvidenceSource.tsx` with the reusable extraction below.** The live required-citation warning still examines all required items, including Fabric items; hiding a generic UI action does not remove the validation warning or change the hook's safety gate. Fallback arbitrary URLs are no longer emitted. No valid live email/Teams target changes. Original excerpts use a native disclosure while source role, warning, and source link remain visible.
 
 ```tsx
 import type {AnalysisVersion, EvidenceItem} from "../types";
@@ -880,8 +880,8 @@ import {evidenceStatus} from "./evidenceStatus";
 
 The reusable source component adds a wrapper around its visible source role, warning, excerpt and link. In `EvidenceFooter.test.tsx`, replace only `expect(screen.getByRole("heading", {name: evidence.claim}).nextElementSibling).toBe(warning)` with `expect(screen.getByRole("heading", {name: evidence.claim}).nextElementSibling).toContainElement(warning)` and add `expect(warning).toBeVisible()`. This retains the warning immediately beside the claim, outside collapsed details, without making DOM wrapping a safety requirement. Keep all direct-footer, link-order, warning-text and timestamp assertions unchanged.
 
-- [ ] **Step 4: Run `cd apps/web && npx vitest run src/components/InvestigationEvidence.test.tsx src/components/LiveSafety.test.tsx src/components/EvidenceFooter.test.tsx src/components/evidenceStatus.test.ts && npm run build`.** Expected: new and preserved safety tests pass. The standalone compatibility wrapper retains its direct footer child; only the nested warning assertion changes as specified.
-- [ ] **Step 5: Parent reviews the source linkage and warnings before an eventual `feat: organize disruption and response evidence cards` commit.**
+- [x] **Step 4: Run `cd apps/web && npx vitest run src/components/InvestigationEvidence.test.tsx src/components/LiveSafety.test.tsx src/components/EvidenceFooter.test.tsx src/components/evidenceStatus.test.ts && npm run build`.** Expected: new and preserved safety tests pass. The standalone compatibility wrapper retains its direct footer child; only the nested warning assertion changes as specified.
+- [x] **Step 5: Parent reviews the source linkage and warnings before an eventual `feat: organize disruption and response evidence cards` commit.**
 
 ## Task 4: Compose the third row and preserve explicit decisions
 
@@ -889,7 +889,7 @@ The reusable source component adds a wrapper around its visible source role, war
 
 **Interfaces:** `InvestigationFlow({state}: {state: CaseWorkspaceState})`; `OptionComparison` gains optional `snapshot?: PlannerSnapshot | null`; `ExposurePanel` gains optional `snapshot?: PlannerSnapshot | null`. Existing callers with only analysis still compile. State callbacks pass straight through; no effect or fetch is added.
 
-- [ ] **Step 1: Add this focused composition test.** The test intentionally uses empty malformed material to verify fixed empty-state positions without creating a second giant API fixture.
+- [x] **Step 1: Add this focused composition test.** The test intentionally uses empty malformed material to verify fixed empty-state positions without creating a second giant API fixture.
 
 ```tsx
 // @vitest-environment jsdom
@@ -954,8 +954,8 @@ it("reports historical and closed case state without inventing an awaiting decis
 });
 ```
 
-- [ ] **Step 2: Run `cd apps/web && npx vitest run src/components/InvestigationFlow.test.tsx`.** Expected: missing-module failure.
-- [ ] **Step 3: Replace `OptionComparison.tsx` with this compact card.** Selection button state and callbacks stay exactly executable-driven, baseline remains non-executable, ranking stays server-owned.
+- [x] **Step 2: Run `cd apps/web && npx vitest run src/components/InvestigationFlow.test.tsx`.** Expected: missing-module failure.
+- [x] **Step 3: Replace `OptionComparison.tsx` with this compact card.** Selection button state and callbacks stay exactly executable-driven, baseline remains non-executable, ranking stays server-owned.
 
 ```tsx
 import type {AnalysisVersion, ResponseOption} from "../types";
@@ -1201,16 +1201,24 @@ In the `disables decision controls for stale or evidence-blocked analysis` test,
     expect(await screen.findByText("Planning requirement unresolved (REQUIRED_EVIDENCE_STALE)")).toBeVisible();
 ```
 
-- [ ] **Step 4: Run `cd apps/web && npx vitest run src/components/InvestigationFlow.test.tsx src/App.test.tsx && npm run build`.** Expected: new semantic-order/control tests and existing lifecycle tests pass. If an existing text assertion changes because of a specified display name, replace only that selector with the exact mapped business label; never delete the associated behavioral assertion.
-- [ ] **Step 5: Parent reviews the final composition for the eventual `feat: present the approved three-row planner investigation` commit.**
+- [x] **Step 4: Run `cd apps/web && npx vitest run src/components/InvestigationFlow.test.tsx src/App.test.tsx && npm run build`.** Expected: new semantic-order/control tests and existing lifecycle tests pass. If an existing text assertion changes because of a specified display name, replace only that selector with the exact mapped business label; never delete the associated behavioral assertion.
+- [x] **Step 5: Parent reviews the final composition for the eventual `feat: present the approved three-row planner investigation` commit.**
 
 ## Task 5: Close coverage gaps and visually verify the integrated flow
+
+Execution note: Tasks 1–4 passed independent specification and code-quality
+review. Parent visual inspection then identified stretched empty decision cards.
+The reviewed follow-up `40b48c7` overrides the decision row only to natural card
+heights and tightens comparison spacing; evidence rows retain equal heights.
+It also resolves the Task 3 formatting-only review comment. Source text, values,
+reading order, and controls remain unchanged. Browser acceptance covers the
+resulting layout, rather than the initial stretched decision-row styling above.
 
 **Files:** Modify only the four new test files if new evidence from review requires a correction. Existing test and build commands below are mandatory. This is a final acceptance gate, not permission to deploy or run live lifecycle scripts.
 
 **Interfaces:** All contracts from Tasks 1–4. No production code interface additions in this gate.
 
-- [ ] **Step 1: Add these negative field cases inside `describe("planner snapshot", ...)` in `plannerSnapshot.test.ts`.**
+- [x] **Step 1: Add these negative field cases inside `describe("planner snapshot", ...)` in `plannerSnapshot.test.ts`.**
 
 ```ts
   it.each([
@@ -1226,7 +1234,7 @@ In the `disables decision controls for stale or evidence-blocked analysis` test,
   });
 ```
 
-- [ ] **Step 2: Add the following test to `PredictionSummary.test.tsx` to verify exact count/denominator and mismatch behavior.**
+- [x] **Step 2: Add the following test to `PredictionSummary.test.tsx` to verify exact count/denominator and mismatch behavior.**
 
 ```tsx
 it("renders customer-line semantics only when the exact saved one-to-one lineage and percentage agree", () => {
@@ -1244,11 +1252,35 @@ it("renders customer-line semantics only when the exact saved one-to-one lineage
 });
 ```
 
-- [ ] **Step 3: Run `cd apps/web && npm test && npm run build`.** Expected: full frontend suite and strict production build pass. Run `TZ=America/Los_Angeles npx vitest run src/components/PredictionSummary.test.tsx src/components/SupportingRecordDetails.test.tsx` from `apps/web` and `git diff --check` from the worktree root. Expected: no shifted dates, no test failures, no whitespace errors. Do not run `tests/fabric/test_power_bi_live.py` or any live API lifecycle script.
-- [ ] **Step 4: Visually inspect the locally mocked application at 1440px and 390px widths.** Use the existing frontend mocked-test harness or locally intercepted API responses, without making real case, analysis, decision, or playback requests. Inspect one populated live-demo fixture, one explicit fallback fixture, and one malformed snapshot. The required observations are: row labels occupy the left at desktop; exactly three cards appear per row in order; mobile label then cards stack in the same DOM order; original supplier and Quality quotations remain unmodified; all amounts and dates wrap; footers sit at each card bottom; keyboard focus reaches source links/disclosures and explicit decision controls; opening every available record changes only disclosure state; zero inventory and false qualification flags remain visible; missing timestamps say unavailable; no evidence card navigates to Power BI. Capture populated and empty screenshots for parent visual review. Do not call this complete until that review is recorded.
-- [ ] **Step 5: Parent reviews the bounded diff and recorded verification before committing acceptance corrections.** The plan is not release authorization. Deployment, reporting, case-dashboard URL changes, and cross-application navigation remain stages 3–6 of the delivery sequence.
+- [x] **Step 3: Run `cd apps/web && npm test && npm run build`.** Expected: full frontend suite and strict production build pass. Run `TZ=America/Los_Angeles npx vitest run src/components/PredictionSummary.test.tsx src/components/SupportingRecordDetails.test.tsx` from `apps/web` and `git diff --check` from the worktree root. Expected: no shifted dates, no test failures, no whitespace errors. Do not run `tests/fabric/test_power_bi_live.py` or any live API lifecycle script.
+- [x] **Step 4: Visually inspect the locally mocked application at 1440px and 390px widths.** Use the existing frontend mocked-test harness or locally intercepted API responses, without making real case, analysis, decision, or playback requests. Inspect one populated live-demo fixture, one explicit fallback fixture, and one malformed snapshot. The required observations are: row labels occupy the left at desktop; exactly three cards appear per row in order; mobile label then cards stack in the same DOM order; original supplier and Quality quotations remain unmodified; all amounts and dates wrap; footers sit at each card bottom; keyboard focus reaches source links/disclosures and explicit decision controls; opening every available record changes only disclosure state; zero inventory and false qualification flags remain visible; missing timestamps say unavailable; no evidence card navigates to Power BI. Capture populated and empty screenshots for parent visual review. Do not call this complete until that review is recorded.
+- [x] **Step 5: Parent reviews the bounded diff and recorded verification before committing acceptance corrections.** The plan is not release authorization. Deployment, reporting, case-dashboard URL changes, and cross-application navigation remain stages 3–6 of the delivery sequence.
 
 ## Self-review and handoff notes
+
+### Execution verification — September 8, 2026
+
+Tasks 1–5 and the visual-polish follow-up passed independent specification and
+code-quality review. Parent verification at `12425dd`: 165 frontend tests and
+strict production build passed; the implementer also passed 10 focused tests in
+America/Los_Angeles. No API, hook, persistence, trusted-URL policy, or approval
+logic changed. The Task 3 code-formatting comment was resolved in `40b48c7`.
+
+Local mocked browser acceptance passed at 1440px and 390px for populated live-mode
+test data, explicit fallback, malformed snapshot, zero stock/cost, and missing
+source timestamps. Checks covered all nine headings and row/column geometry,
+footer order, disabled decision gates, original source quotes, keyboard expansion
+and collapse, exact record fields, no disclosure fetch/navigation, no Fabric
+evidence links, and no browser errors or horizontal overflow. Parent visually
+inspected desktop rows 1–3, mobile rows 1–2, and malformed desktop output.
+The harness used local fixtures only, clearly labeled, and blocked external
+requests. It did not create or analyze shared cases or approve/run any actions.
+
+This completes the frontend investigation implementation, not the full redesign
+or a release. Saved-analysis SQL, focused Power BI pages/navigation, the traditional
+walkthrough, and coordinated deployment remain the delivery map's stages 3–6.
+The SQL plan requires an actual compatible SQL Server execution environment;
+none has been provisioned for this stage.
 
 Coverage: Task 1 covers remaining snapshot types, malformed members, empty arrays, zero, exact linkage, history, and no mutation. Task 2 covers units, currency, date safety, baseline versus recommendation, and no duplicate analytic engine. Task 3 covers the first six business positions, original source quotations and roles, exact supporting records, inline disclosure, source failures, safe unchanged live message destinations, and the removal of generic Fabric actions. Task 4 covers the exact three row labels/nine card headings, recommendation and roles, unchanged selection/approval/rejection/execution flow, and responsive reading order. Task 5 closes count/denominator and malformed-field regression coverage and requires real visual review before claiming completion.
 
