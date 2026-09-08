@@ -122,7 +122,8 @@ it("places the citation before the footer and keeps warnings beside the claim", 
   rerender(<EvidencePanel analysis={{...analysis, evidence_items: [{...evidence, retrieved_for_analysis_id: "OLD-ANALYSIS"}]}} tenantSharePointHost="tenant.sharepoint.com" />);
   const warning = screen.getByRole("alert", {name: ""});
   expect(warning).toHaveTextContent("Source does not match this analysis");
-  expect(screen.getByRole("heading", {name: evidence.claim}).nextElementSibling).toBe(warning);
+  expect(screen.getByRole("heading", {name: evidence.claim}).nextElementSibling).toContainElement(warning);
+  expect(warning).toBeVisible();
   const mismatchFooter = screen.getByRole("contentinfo", {name: "Source and evidence status"});
   expect(warning.compareDocumentPosition(mismatchFooter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 

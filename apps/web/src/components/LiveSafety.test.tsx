@@ -69,13 +69,20 @@ const citationCases: Array<[
   ["work_iq", "supplier_statement", "https://outlook.office365.com/owa/?ItemID=demo", "Open supplier email"],
   ["work_iq", "supplier_statement", "https://outlook.office.com/mail/deeplink/read/demo", "Open supplier email"],
   ["work_iq", "collaboration_statement", "https://teams.microsoft.com/l/message/channel/message?tenantId=demo", "Open Quality Teams post"],
-  ["fabric", "qualification_state", "https://app.powerbi.com/groups/demo/reports/report", "Open citation"],
   ["work_iq", "supplier_statement", "https://tenant.sharepoint.com/sites/demo/item", "Open citation"],
   ["work_iq", "supplier_statement", "https://teams.microsoft.com/l/message/channel/message", "Open citation"],
 ];
 
 describe("live journey safety", () => {
   afterEach(cleanup);
+  it("does not present a generic Fabric report as a record citation", () => {
+    const analysis = liveAnalysis({source_system: "fabric", authority_scope: ["qualification_state"],
+      citation_url: "https://app.powerbi.com/groups/demo/reports/report",
+      navigable_citation_url: "https://app.powerbi.com/groups/demo/reports/report", citation_classification: "fabric"});
+    render(<EvidencePanel analysis={analysis} />);
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.queryByText("Required live citation missing")).not.toBeInTheDocument();
+  });
   it("shows a safe Power BI action only for an available live report", () => {
     const runtime = {
       runtime_mode: "live" as const,
