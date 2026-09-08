@@ -1,8 +1,49 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed — revision16 is healthy. The single approved diagnostic Analyze confirmed `answer`/`response` field mismatch for both sources. Parser correction and live acceptance remain pending; no permissions, billing, source, prompt, acceptance or retry changes.
+> **Status:** Validated — answer-field correction, deployment to the existing app and one Alex Analyze authorized. Revision16 remains healthy pending deployment. No permissions, billing, source, prompt or evidence-policy changes.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
+
+## Validation Proof — confirmed answer-field correction
+
+Scope: normalize the observed `answer` and documented `response` aliases at the
+MCP boundary, preserving metadata and requiring bounded nonempty strings and a
+valid conversation ID. If both aliases occur they must match exactly; invalid
+explicit values cannot fall back. Discovery, fetch, identity/source validation,
+prompts, requests and fixed-state diagnostics are unchanged. No new resources,
+permissions, billing, source edits, automatic retry or Git push.
+
+- [x] All validation checks pass.
+  - [x] 1. AZD Installation.
+  - [x] 2. Schema Validation.
+  - [x] 3. Environment Setup.
+  - [x] 4. Authentication Check.
+  - [x] 5. Subscription/Location Check.
+  - [x] 6. Aspire Pre-Provisioning Checks (not applicable).
+  - [x] 7. Provision Preview.
+  - [x] 8. Build Verification.
+  - [x] 9. Docker Build Context Validation.
+  - [x] 10. Package Validation.
+  - [x] 11. Azure Policy Validation.
+  - [x] 12. Aspire Post-Provisioning Checks (not applicable).
+  - [x] Static role verification.
+
+RED reproduced22 failures with the observed answer-field fixtures, including
+the authenticated normal Analyze and both source paths. GREEN:112 focused
+transport/shape/evidence/live-wiring tests pass; scoped Ruff/Pyright pass.
+Full `uv run pytest -q` and `uv build` passed, with expected live skips and the
+existing Starlette/httpx warning. Initial sandbox cache access was denied before
+execution; approved cache access allowed the complete run. All51 web tests and
+179-module build passed. Independent review found no actionable issues and
+independently passed112 focused tests. At02:47 UTC on September8, fresh AZD1.30.0,
+Will authentication, default named environment and Azure Dev tenant/subscription
+checks passed. Read-only preflight, named provision preview (20seconds, no new
+resources) and azd package passed; current azure.yaml accepted. Policy inventory
+unchanged with no preview denial. Dockerfile/ignore and locked inputs checked;
+static registry/vault/Foundry assignments match exact live three-role inventory.
+Baseline revision16, sole API target, existing shared environment/East US2,
+identity and scale0–2 verified. Retain revision16 digest for rollback. No Aspire,
+new schema or grant applies. Normal live acceptance remains unverified.
 
 ## Validation Proof — ask answer-field diagnostics
 

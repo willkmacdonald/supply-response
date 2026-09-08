@@ -302,9 +302,19 @@ class WorkIQMcpSession:
         if not _bounded_string(question, 16000):
             raise WorkIQProtocolError("Work IQ question is invalid")
         result = await self._tool("ask", {"question": question})
-        if not _bounded_string(
-            result.get("response"), MAX_RESPONSE_BYTES
-        ) or not _bounded_string(result.get("conversationId"), 256):
+        # Work IQ structured results use answer; the tool reference also documents
+        # response. Normalize only these aliases, rejecting malformed/conflicting
+        # values rather than falling back from an explicitly invalid field.
+        answer_keys = [key for key in ("response", "answer") if key in result]
+        if (
+            not answer_keys
+            or any(
+                not _bounded_string(result[key], MAX_RESPONSE_BYTES)
+                for key in answer_keys
+            )
+            or (len(answer_keys) == 2 and result["response"] != result["answer"])
+            or not _bounded_string(result.get("conversationId"), 256)
+        ):
             _logger.warning(
                 "workiq_ask_shape response=%s conversation_id=%s answer=%s error=%s",
                 _field_state(result, "response", MAX_RESPONSE_BYTES),
@@ -313,7 +323,10 @@ class WorkIQMcpSession:
                 _field_state(result, "error", MAX_RESPONSE_BYTES),
             )
             raise WorkIQProtocolError("Work IQ discovery response is invalid")
-        return result
+        return {
+            **{key: value for key, value in result.items() if key != "answer"},
+            "response": result[answer_keys[0]],
+        }
 
     async def fetch(self, entity_url: str) -> dict[str, Any]:
         if not _bounded_string(entity_url, 8192):

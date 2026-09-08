@@ -75,7 +75,7 @@ class Server:
                 self.cancelled.set()
         if name == "ask":
             result = {
-                "response": self.answer,
+                "answer": self.answer,
                 "conversationId": "fixture-discovery-conversation",
             }
         else:

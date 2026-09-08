@@ -22,8 +22,8 @@ def anyio_backend():
     "payload,expected",
     [
         (
-            {"answer": "private-body", "conversationId": "private-id"},
-            "response=missing conversation_id=valid answer=valid error=missing",
+            {"answer": "", "conversationId": "private-id"},
+            "response=missing conversation_id=valid answer=empty error=missing",
         ),
         (
             {"response": None, "conversationId": None, "error": "private-error"},
@@ -104,3 +104,81 @@ async def test_valid_ask_has_no_shape_log(caplog):
             ) as session:
                 assert await session.ask("private-question") == ANSWER
     assert not [r for r in caplog.records if r.name == "integrations.workiq.mcp"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("wrapper", ["structured", "text"])
+@pytest.mark.parametrize("field", ["answer", "response", "both"])
+async def test_supported_answer_fields_normalize_without_logging(
+    wrapper, field, caplog
+):
+    payload = {"conversationId": "private-id"}
+    for key in ("answer", "response") if field == "both" else (field,):
+        payload[key] = "private-body"
+
+    async def server(request):
+        body = json.loads(request.content)
+        if body["method"] == "initialize":
+            return reply(request, INIT)
+        if body["method"] == "notifications/initialized":
+            return httpx.Response(202)
+        return reply(
+            request,
+            {"structuredContent": payload}
+            if wrapper == "structured"
+            else {"content": [{"type": "text", "text": json.dumps(payload)}]},
+        )
+
+    with caplog.at_level(logging.WARNING, logger="integrations.workiq.mcp"):
+        async with httpx.AsyncClient(transport=httpx.MockTransport(server)) as http:
+            async with WorkIQMcpClient(http=http).session(
+                access_token="private-token"
+            ) as session:
+                result = await session.ask("private-question")
+    assert result == {"response": "private-body", "conversationId": "private-id"}
+    assert not [r for r in caplog.records if r.name == "integrations.workiq.mcp"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"answer": "private-body", "response": "different-private-body"},
+        {"answer": "private-body", "response": None},
+        {"answer": "private-body", "response": ""},
+        {"answer": None, "response": "private-body"},
+        {"answer": "", "response": "private-body"},
+        {"answer": {"private-key": "private-body"}},
+        {"answer": False},
+        {"answer": ["private-body"]},
+        {"answer": 42},
+        {"answer": "private-body", "conversationId": "x" * 257},
+        {"answer": "private-body", "conversationId": None},
+    ],
+)
+async def test_invalid_or_conflicting_aliases_never_fall_back(fields, caplog):
+    payload = {"conversationId": "private-id", **fields}
+    requests = []
+
+    async def server(request):
+        body = json.loads(request.content)
+        requests.append(body)
+        if body["method"] == "initialize":
+            return reply(request, INIT)
+        if body["method"] == "notifications/initialized":
+            return httpx.Response(202)
+        return reply(request, {"structuredContent": payload})
+
+    with caplog.at_level(logging.WARNING, logger="integrations.workiq.mcp"):
+        async with httpx.AsyncClient(transport=httpx.MockTransport(server)) as http:
+            async with WorkIQMcpClient(http=http).session(
+                access_token="private-token"
+            ) as session:
+                with pytest.raises(
+                    WorkIQProtocolError, match="discovery response is invalid"
+                ):
+                    await session.ask("private-question")
+    assert len(requests) == 3
+    records = [r for r in caplog.records if r.name == "integrations.workiq.mcp"]
+    assert len(records) == 1
+    assert "private-" not in repr([r.__dict__ for r in records])

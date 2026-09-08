@@ -309,7 +309,7 @@ class _McpServer:
         if body["params"]["name"] == "ask":
             quality = "Jordan" in arguments["question"]
             result = {
-                "response": TEAMS_LINK if quality else MAIL_LINK,
+                "answer": TEAMS_LINK if quality else MAIL_LINK,
                 "conversationId": (
                     "quality-conversation" if quality else "supplier-conversation"
                 ),
