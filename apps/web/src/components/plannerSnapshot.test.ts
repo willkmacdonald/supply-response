@@ -65,6 +65,17 @@ describe("planner snapshot", () => {
     editSnapshot(input, s => { s.disruption.partial_quantity = "0"; });
     expect(readPlannerSnapshot(input)?.disruption).toBeNull();
   });
+  it.each([
+    ["inventory_positions", "on_hand", -1, "inventory"],
+    ["inventory_positions", "quality_hold", false, "inventory"],
+    ["production_orders", "quantity", 0, "production"],
+    ["production_orders", "component_demand", "4", "production"],
+    ["customer_orders", "unit_revenue", "5", "customers"],
+    ["customer_orders", "production_order_id", false, "customers"],
+  ] as const)("rejects malformed %s.%s", (member, key, value, result) => {
+    const input = fixture(); editSnapshot(input, s => { s[member][0][key] = value; });
+    expect(readPlannerSnapshot(input)?.[result]).toBeNull();
+  });
   it("distinguishes empty arrays, zero stock, and negative net availability inputs", () => {
     const input = fixture();
     editSnapshot(input, s => { s.inventory_positions[0].on_hand = 0; });

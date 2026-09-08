@@ -45,3 +45,16 @@ it("keeps the comparison summary compact with parts, service and response cost",
   expect(screen.getByText("Response cost")).toBeVisible();
   expect(screen.queryByText("Revenue at risk")).not.toBeInTheDocument();
 });
+it("renders customer-line semantics only when the exact saved one-to-one lineage and percentage agree", () => {
+  const snapshot = {disruption: null, inventory: [],
+    production: [{production_order_id: "mo", product_id: "p", plant_id: "plant", quantity: 2,
+      due_date: "2026-09-06", component_demand: 4, customer_order_id: "co", customer_revenue: "10.00"}],
+    customers: [{customer_order_line_id: "co", production_order_id: "mo", customer_id: "customer", product_id: "p",
+      plant_id: "plant", quantity: 2, due_date: "2026-09-06", unit_revenue: "5.00"}]};
+  const {rerender} = render(<PredictionSummary predicted={{...predicted, otif_loss_percentage: 100}} snapshot={snapshot} basis="response" />);
+  expect(screen.getByText("100% (1 of 1 lines)")).toBeVisible();
+  expect(screen.getByText("Customer order lines expected to miss the on-time, in-full target")).toBeVisible();
+  rerender(<PredictionSummary predicted={{...predicted, otif_loss_percentage: 50}} snapshot={snapshot} basis="response" />);
+  expect(screen.getByText("Production orders expected to miss the on-time, in-full target")).toBeVisible();
+  expect(screen.queryByText(/of 1 lines/)).not.toBeInTheDocument();
+});
