@@ -1282,6 +1282,14 @@ walkthrough, and coordinated deployment remain the delivery map's stages 3–6.
 The SQL plan requires an actual compatible SQL Server execution environment;
 none has been provisioned for this stage.
 
+Final broad frontend review found one non-blocking timestamp consistency issue:
+the footer's permissive date parser could normalize an impossible calendar date.
+`20d7940` reuses the existing strict timestamp validator; four new regressions
+failed before the fix and passed afterward. Re-review confirmed no remaining
+findings. Parent final verification: **169 frontend tests passed**. The reviewed
+frontend stage is ready for later integration; no merge, push, or deployment was
+performed, and the outstanding reporting/runtime gate is unchanged.
+
 Coverage: Task 1 covers remaining snapshot types, malformed members, empty arrays, zero, exact linkage, history, and no mutation. Task 2 covers units, currency, date safety, baseline versus recommendation, and no duplicate analytic engine. Task 3 covers the first six business positions, original source quotations and roles, exact supporting records, inline disclosure, source failures, safe unchanged live message destinations, and the removal of generic Fabric actions. Task 4 covers the exact three row labels/nine card headings, recommendation and roles, unchanged selection/approval/rejection/execution flow, and responsive reading order. Task 5 closes count/denominator and malformed-field regression coverage and requires real visual review before claiming completion.
 
 Known scope/interface observations: there is no currency denomination, typed email fact payload, separate inventory retrieval event, or generally valid customer-line denominator in the existing API. The plan displays these limitations explicitly and does not expand API scope. Strict value and envelope validation is shared in `snapshotValidation.ts`. The supporting-record resolver retains its existing outer array/disruption requirements, then validates its selected record branch; the planner reader independently validates only its newly consumed sections. Thus an invalid business field within an array does not suppress a valid supporting transfer, while a non-array section continues to reject supporting-record resolution exactly as before. The supplied source-role mapping applies only to the approved RL-001 demo context; fixed response slots additionally require canonical supplier/plant/part mapping. Generic report removal changes the old Fabric-only citation expectation deliberately; tenant trust and missing-live-citation safety remain unchanged.
