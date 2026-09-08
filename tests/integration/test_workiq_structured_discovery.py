@@ -278,6 +278,39 @@ async def test_quality_rejects_malformed_nonmatching_scope_identity(kind):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("kind", ["team", "channel"])
+async def test_quality_rejects_duplicate_scope_identity_before_name_filtering(kind):
+    from integrations.workiq.structured_discovery import (
+        StructuredDiscoveryError,
+        discover_structured,
+    )
+
+    pages: dict[str, object] = {
+        "/me/joinedTeams": collection(
+            [
+                {"id": BINDING.team_id, "displayName": "Supply Response Demo"},
+                *(
+                    [{"id": BINDING.team_id, "displayName": "Other"}]
+                    if kind == "team"
+                    else []
+                ),
+            ]
+        )
+    }
+    if kind == "channel":
+        pages[f"/teams/{BINDING.team_id}/channels"] = collection(
+            [
+                {"id": BINDING.channel_id, "displayName": "General"},
+                {"id": BINDING.channel_id, "displayName": "Other"},
+            ]
+        )
+    session = Session(pages)
+    with pytest.raises(StructuredDiscoveryError):
+        await discover_structured(session, source_kind="quality", binding=BINDING)
+    assert len(session.paths) == (1 if kind == "team" else 2)
+
+
+@pytest.mark.anyio
 async def test_quality_rejects_author_or_beta_topic_mismatch_without_saved_id_fallback():
     from integrations.workiq.structured_discovery import (
         StructuredDiscoveryError,

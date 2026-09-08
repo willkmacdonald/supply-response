@@ -2,7 +2,90 @@
 
 Updated 2026-09-08 UTC. This records deployment separately from live acceptance.
 
-## Current result — field handling fixed; no recognized locations, revision17
+## Current integration — structured Work IQ discovery (validation in progress)
+
+The approved implementation replaces answer-link extraction in the live MCP path
+with bounded Work IQ entity queries: supplier-topic mail search, and named team /
+channel resolution followed by a bounded post collection. It then fetches each
+independently discovered message individually and applies the existing evidence
+checks. This is structured Work IQ querying, not semantic `ask` discovery or a
+direct Graph client. Structured retrieval records MCP request IDs without
+inventing a Copilot conversation ID.
+
+The supplier binding was reconciled locally after a fresh explicit Alex identity
+check, unique sender/topic discovery, exact approved corpus comparison and the
+existing evidence validator. Only the supplier source ID and derived receipt
+changed in the ignored environment; rollback values remain in ignored notes.
+No cloud binding or revision has changed yet. Application acceptance remains
+pending; standalone CLI success is not a substitute for the deployed OBO flow.
+
+## Previous investigation — content readable; supplier binding mismatch isolated
+
+A bounded Alex Work IQ CLI investigation found that supplier `ask` citations and
+a structured mail search converge on the same email after Outlook ID conversion.
+Its individually fetched body exactly matches the approved 249-character corpus,
+but its ID differs from the configured supplier source ID. No binding was changed.
+Structured Team/channel discovery independently located Jordan's expected post;
+its individual read passed the existing evidence validator. Natural-language
+Teams discovery still returned different chat-context identities.
+
+These are operator diagnostic results, not deployed MCP/OBO acceptance or a
+successful analysis. The website is unchanged. See the
+[live investigation record](../research/2026-09-08-workiq-discovery-live-result.md)
+and [Microsoft contract research](../research/2026-09-08-workiq-discovery-contract.md)
+for the exact checks and the design decision needed before integration.
+
+## Current local correction — Outlook links parse; evidence gate still blocked
+
+The user approved the targeted format correction and retrieval/evidence checks
+before another deployment. No new revision was deployed; revision17 below remains
+the deployed baseline.
+
+Bounded Work IQ CLI inspection explicitly used `agent@willmacdonald.com` and kept
+answers in process memory. Outlook citations contained an EWS-format ItemID with
+`/` and UUID-valued `EntityRepresentationId` metadata. The local parser now allows
+that metadata and applies Microsoft's Outlook `convertToRestId` mapping (`/` to
+`-`, `+` to `_`) only at the OWA ItemID boundary. An unfragmented live citation
+retained in memory changed from rejected to one deduplicated location. REST paths,
+query allowlists, duplicate-key checks and fragment rejection remain unchanged.
+
+The Teams results were `contextType=chat` links, not complete channel-message
+locations. They remain rejected; no configured team ID is inserted. The Quality
+question now explicitly requests a complete channel location and excludes chat
+and search links, without giving it source IDs or expected facts.
+
+A subsequent bounded CLI check used the current questions, parser, trusted source
+bindings, and existing evidence validator. Safe outcomes:
+
+```text
+supplier: parsed=1 scoped=1 matched=0; no fetch
+quality: parsed=0 scoped=0 matched=0; no fetch
+```
+
+All six local source/author/location binding values were independently compared
+with the deployed Container App and matched. The supplier mismatch is not yet
+diagnosed as a different message versus an additional ID-format issue. The
+Quality answer supplied no complete supported channel location. Neither source
+reached live entity validation, and no validated evidence pair is claimed.
+
+Four parser/prompt regressions failed before implementation and passed afterward.
+The targeted parser/evidence/live-wiring suites passed 124 tests; an independent
+reviewer found no actionable issues and separately passed 84 tests. Scoped
+Ruff/Pyright and the Python package build passed. Full Python regression passed
+1,055 tests with 14 expected skips and the existing Starlette/httpx deprecation
+warning. The first sandboxed run had four Power BI dependency-restore failures;
+the rerun with public NuGet access passed without code changes. No raw answers,
+source bodies, or credentials were persisted; temporary operator scripts were
+removed after their processes exited. No commit or push in this correction turn.
+
+This CLI check is not deployed application/OBO acceptance. Do not relax bindings,
+fetch configured IDs, reinterpret chats as channel posts, or deploy another
+supposed complete fix without proving both source paths.
+
+References: [Microsoft Outlook implementation](https://appsforoffice.microsoft.com/lib/1/hosted/outlook-web-16.01.js),
+[Teams chat versus channel link semantics](https://learn.microsoft.com/en-us/microsoftteams/platform/concepts/build-and-test/deep-link-teams).
+
+## Deployed baseline — field handling fixed; no recognized locations, revision17
 
 The user approved the correction, deployment and one normal Alex Analyze.
 Commit `5566822` accepts either bounded `answer` or documented `response`,

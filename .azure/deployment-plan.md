@@ -1,6 +1,54 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed — revision17 is healthy. The answer-field fix passed the single Alex live test at the field boundary; both sources then failed locator parsing with no recognized locations. Live evidence acceptance remains pending. No permissions, billing, source, prompt or evidence-policy changes.
+> **Status:** Validated — structured Work IQ discovery and verified supplier-binding reconciliation. Release checks passed; revision17 remains deployed until the approved release executes.
+
+## Validation Proof — structured discovery (2026-09-08)
+
+User approved the documented bounded Work IQ entity-query approach and supplier
+binding reconciliation. No new resources, roles, billing, source edits, direct
+Graph client or Git push. Preserve existing Alex OBO, source validators and
+timeouts. Exact scope: docs/superpowers/specs/2026-09-08-workiq-structured-discovery-design.md.
+
+- [x] All validation checks pass.
+  - [x] 1. AZD Installation.
+  - [x] 2. Schema Validation.
+  - [x] 3. Environment Setup.
+  - [x] 4. Authentication Check.
+  - [x] 5. Subscription/Location Check.
+  - [x] 6. Aspire Pre-Provisioning Checks (not applicable).
+  - [x] 7. Provision Preview.
+  - [x] 8. Build Verification.
+  - [x] 9. Docker Build Context Validation.
+  - [x] 10. Package Validation.
+  - [x] 11. Azure Policy Validation.
+  - [x] 12. Aspire Post-Provisioning Checks (not applicable).
+  - [x] Static role verification.
+
+Baseline: existing 84 discovery/evidence tests passed before implementation.
+Before 05:59 UTC, fresh AZD1.30.0, Will authentication, default named environment,
+Azure Dev tenant/subscription/East US2 checks passed. Read-only preflight (including
+reconciled binding receipt), named provision preview and azd package passed.
+Preview accepted azure.yaml and has no new resources: existing Container App
+and Insights metadata reconciliation only. Dockerfile/ignore and locked inputs
+checked; no Aspire or schema/grant change applies. Policy inventory has no new
+denials. Static roles match the exact three existing scoped live roles for the
+unchanged identity. Revision17 remains Healthy/Running, same scale0–2/traffic.
+Frontend51 tests and production build passed; Python package passed. Full Python
+regression passed after allowing the existing validator's public NuGet restore
+(first restricted run failed only four dependency-download cases). Expected14
+live skips and existing Starlette/httpx warning remain. Independent review of
+d581d43 identified duplicate/nonmatching malformed collection rejection gaps;
+test-first correction and full scoped typing verification are in progress.
+Correction0466aac rejects every malformed/duplicate ID before filtering; restored
+actor, sanitizer and individual-fetch deadline tests. Independent re-review
+approved with no findings (35 tests independently run), including the final
+test-only Team/channel duplicate cases. At approximately06:05 UTC, final full
+`.venv/bin/pytest -q -ra` exited0 with14 expected live skips and the existing
+warning. `uv build` passed; scoped Pyright including all changed tests returned
+0 errors. Controller49 focused tests and final22 structured tests passed; commit
+hooks ran Ruff clean. No runtime changes since0466aac. Existing revision17 digest
+and old supplier binding/receipt are retained as rollback inputs in ignored notes.
+Normal application MCP/OBO acceptance remains a post-deployment gate.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 

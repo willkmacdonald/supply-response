@@ -1,6 +1,6 @@
 # Supply Response Roadmap
 
-**Last updated:** 2026-09-07 UTC
+**Last updated:** 2026-09-08 UTC
 **Source of truth:** [Frozen demo contract](superpowers/specs/2026-08-30-supply-response-demo-contract-design.md) and [implementation plan](superpowers/plans/2026-08-30-supply-response-demo-implementation.md)
 
 This roadmap reports the durable, reviewed repository baseline. Uncommitted or actively developed work is not counted as complete.
@@ -16,7 +16,7 @@ This roadmap reports the durable, reviewed repository baseline. Uncommitted or a
 | Fabric SQL | Canonical source loaded and verified live | Schema version 12; canonical RL-001 loader passed planned → inserted → unchanged with exact metadata/payload and production-adapter readback; deployed app created a live Case |
 | Power BI | Published; empty-state live render validated | The semantic model and two-page report are published, OAuth2-bound to Fabric SQL, DAX-queryable, and visually clean with an empty database; populated Decision-ID parity remains a post-application-deployment gate |
 | Entra ID and persona authorization | Alex sign-in passed; full authorization journey pending | Private-browser Alex request passed authentication and reached analysis; approval/rejection and downstream gates remain |
-| Work IQ | Answer-field mismatch fixed; no recognized message locations | Revision17 is healthy. The single Alex retest passed answer validation for both sources, then parsed zero locations. Absent links versus unsupported link formats remains unresolved; no fetch or accepted live analysis. See the [result](deployment/workiq-discovery-integration-result.md) |
+| Work IQ | Structured discovery approved; implementation in progress | CLI entity queries found/read both sources; Jordan passed validation. Supplier binding reconciled locally against the exact approved email. Revision17 remains deployed; application MCP/OBO and accepted live analysis still pending. See the [result](deployment/workiq-discovery-integration-result.md) |
 | Foundry orchestration | Implemented and agents published; invocation pending | Signal, context, and decision agents are verified as immutable version `1` contracts on `gpt-5.6-luna`; no live invocation or evaluation has run |
 | Complete live Case journey | Live Case creation passed; analysis gated | Correct fixed scenario time displayed; delegated analysis, Decision, five actions, ten observations, and populated Power BI parity remain unverified |
 | Personal-tenant deployment and hardening | Updated application and readiness verified | New immutable revision ready; exact Azure roles and live Fabric/Foundry readiness passed; delegated acceptance checks remain |
@@ -106,7 +106,7 @@ Completed implementation and tenant setup:
 
 Still required:
 
-- Distinguish absent message links from unsupported locator formats after both answers parsed zero locations on revision17. Further bounded inspection requires approval. Then verify normal Alex Analyze independently discovers, fetches, validates, and cites both sources.
+- Resolve the supplier discovered-ID mismatch and missing complete Quality channel location without changing trusted bindings or substituting configured IDs. Local Outlook citation parsing is corrected; the CLI evidence gate remains blocked. Then verify normal Alex Analyze independently discovers, fetches, validates, and cites both sources.
 - Invoke and evaluate the published Foundry agents through a separately approved live gate.
 - Complete populated Power BI parity after an approved live Decision.
 - Run deployed Entra authentication, Work IQ citation navigation, and the complete live browser journey.
@@ -134,7 +134,7 @@ Final completion requires all 20 frozen acceptance criteria to pass. Local imple
 The Entra, Foundry, Fabric SQL, Work IQ Demo Corpus, and Power BI prerequisites
 are configured and recorded in deployment-local storage. The remaining gates are:
 
-1. Resolve the observed locator boundary: both answers pass field validation but yield no recognized locations. Separately approve bounded inspection to distinguish absent links from unsupported formats; preserve strict validation and discovered-only fetch.
+1. Resolve the supplier discovered-ID mismatch and Work IQ's missing complete Quality channel location. Preserve strict validation and discovered-only fetch. Do not deploy the local citation correction as an end-to-end fix while this pre-deployment evidence gate is blocked.
 2. Run normal Alex live analysis, verify both cited Work IQ sources, and observe the pinned Foundry invocation.
 3. Record the approved Decision, verify five linked actions and ten simulated observations.
 4. Verify Power BI refresh, filters, and Decision-ID parity for that same Case.
@@ -163,7 +163,7 @@ third-party Starlette deprecation warning; these are not reported as clean gates
 | 12 | Fabric SQL adapter and analytics views | Complete; live Fabric SQL setup, schema, idempotency, and health checks passed |
 | 13 | Two-page Power BI project | Published; OAuth2 binding, DAX smoke query, and empty-state live render passed; populated parity pending |
 | 14 | Single-tenant Entra authentication and persona roles | Complete locally; tenant configuration verified; deployed auth gate pending |
-| 15 | Cited Microsoft 365 evidence through Work IQ | Reviewed MCP integration and answer-field fix deployed on revision17; both answers yield zero recognized locations; fetch and normal live acceptance pending |
+| 15 | Cited Microsoft 365 evidence through Work IQ | Revision17 deployed; local citation correction reviewed. CLI supplier identity and Quality discovery gates still fail; fetch and normal live acceptance pending |
 | 16 | Foundry-managed Agent Framework orchestration | Complete locally; three Luna agents published and verified; invocation/evaluation pending |
 | 17 | Complete live Case journey | Live Case creation passed; Alex-authenticated analysis and downstream browser gates pending |
 | 18 | Personal-tenant provisioning and deployment | Updated Azure revision, exact roles, and live readiness verified; delegated acceptance pending |
