@@ -16,10 +16,10 @@ The user approved narrowly scoped statuses and one further Alex Analyze on
   errors, prompts, fetches, policy and limits unchanged.
 - [x] Pass focused/full regression, scoped static checks and package build;
   independently review the bounded diff and commit locally without pushing.
-- [ ] Follow Azure validation/deployment workflow for the existing app only.
+- [x] Follow Azure validation/deployment workflow for the existing app only.
   Confirm readiness, revision, identity and roles; invoke normal Analyze once
   as Alex on the existing case where available.
-- [ ] Read only allowlisted diagnostic records for that attempt, document the
+- [x] Read only allowlisted diagnostic records for that attempt, document the
   supported conclusion and stop. No automatic retry, Graph, new permissions,
   billing, resources, source changes, approval or execution.
 
@@ -29,3 +29,8 @@ offline because raw responses were deliberately discarded. These tests prove
 the diagnostic distinction, not a fix for the unknown live failure. Existing
 candidate filters and retrieval outputs must remain identical. Failed live
 acceptance is not permission to implement a speculative fix.
+
+Completed 2026-09-08: revision15 is healthy; one existing-Case Alex Analyze
+returned supplier/discovery503. Both sources failed `ask` answer-shape validation
+before locator parsing (`discovery_shape`; all counts-1). The allowed diagnostic
+distinction is established, not a live discovery fix. See the deployment result.

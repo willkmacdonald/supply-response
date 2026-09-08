@@ -4,7 +4,7 @@ Supply Response is a decision-support demonstration for managing a fictional sup
 
 The project combines a deterministic supply-response core with a FastAPI application, a React decision console, durable SQLite or Fabric SQL persistence, and a two-page Power BI project. Microsoft 365 and Azure integrations are added through explicit adapters so the complete live demonstration can use Work IQ, Microsoft Fabric, Microsoft Foundry, Microsoft Agent Framework, Entra ID, and Power BI without coupling the business logic to those services.
 
-> **Current status (2026-09-07 UTC):** Fabric SQL data and Alex sign-in are verified. The reviewed Work IQ MCP discovery/fetch/evidence integration is deployed on healthy revision 14. Its single normal Alex Analyze attempt failed at supplier `discovery`; existing safe logs do not identify the precise discovery substep. Live two-source evidence and downstream acceptance remain unverified. See the [deployment result](docs/deployment/workiq-discovery-integration-result.md) and [roadmap](docs/ROADMAP.md).
+> **Current status (2026-09-08 UTC):** Fabric SQL data and Alex sign-in are verified. The Work IQ integration and safe diagnostics are deployed on healthy revision 15. One approved Alex diagnostic analysis reached `ask` for both sources, but the adapter rejected the answer structure before parsing message locations. This does not establish that discovery found no messages. Live two-source evidence and downstream acceptance remain unverified. See the [deployment result](docs/deployment/workiq-discovery-integration-result.md) and [roadmap](docs/ROADMAP.md).
 
 ## What the demo shows
 

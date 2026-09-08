@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — approved discovery-substep diagnostics and one further Alex Analyze. Existing revision14 remains deployed pending execution. No new permissions, billing, source edits, resources, or raw-response capture.
+> **Status:** Deployed — revision15 diagnostic update is healthy. The single approved Alex Analyze failed at `ask` answer-shape validation for both sources, before locator parsing. No new permissions, billing, source edits, resources, or raw-response capture.
 
 Generated: 2026-08-31; validation evidence updated 2026-09-07 UTC
 
@@ -48,7 +48,21 @@ supply-response-personal` passed: no new resources; existing Container App and
 Application Insights metadata reconciliation only. Existing Dockerfile/ignore,
 locked inputs and registry/vault/Foundry role modules are unchanged. Live baseline
 is revision14, same identity and exactly the existing three scoped roles.
-No live source invocation or cloud deployment yet this turn.
+Deployment `e145843` completed as ACR build `ch15`, immutable digest
+`d9341d15de084ff516d7d125218bf821965cd3e095adb519a98e760eac921c9a`.
+Revision15 is sole active/latest-ready, Healthy/Running, 100% traffic. Identity,
+exact three scoped roles and scale0–2 remain unchanged. Post-deploy `--smoke`
+passed live Fabric/Foundry readiness. `azd show` confirms the existing environment;
+this infrastructure-only project has no AZD service entries, so the endpoint
+was independently verified from the Container App's ingress configuration.
+
+One normal Alex Analyze on the existing Case at approximately02:14 UTC returned
+the same public supplier/discovery503. Both safe records show `step=ask`,
+`reason=discovery_shape`, status0 and parsed/scoped/matched counts-1. OBO and
+initialization completed; the decoded ask result failed expected response and/or
+conversationId string constraints before locator parsing. Which field/type/bound
+failed is not established. No message fetch or accepted evidence is claimed.
+No retry or Git push. See the updated deployment result for the precise next gate.
 
 ## Validation Proof — production Work IQ discovery/evidence integration
 
