@@ -20,7 +20,7 @@
 - “This is an inspection view of existing evidence, not a new authority or approval gate.”
 - “Do not mutate immutable analysis material, source bundles, hashes, or stored citations, and do not weaken existing trusted-URL validation or approval rules.”
 - No live calls, API/backend/report changes, or new Power BI links. The existing header report action belongs to the coordinated navigation stage; this increment removes generic Fabric citation actions from the evidence path.
-- Do not commit during this planning assignment. During execution the parent coordinates commits in this shared worktree after each review gate.
+- Do not commit during this planning assignment. During execution the parent coordinates scoped task commits for review packages; no next task starts before the preceding review gate passes.
 
 ---
 
