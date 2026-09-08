@@ -17,7 +17,7 @@
 - Badges belong at the bottom; critical failures remain near the claim.
 - No source-message, immutable-analysis, permission, licensing, or approval-policy changes.
 - No production create/analyze/approve/playback calls, deployment, or push in this stage.
-- Run all commands from `/Users/willmacdonald/Documents/Code/m365/supply-response`.
+- Run all commands from `/Users/willmacdonald/Documents/Code/m365/supply-response/.worktrees/planner-experience`.
 
 ## File structure
 
@@ -129,14 +129,10 @@ function instant(value: string | null): number {
   return value && /(Z|[+-]\d{2}:\d{2})$/.test(value) ? Date.parse(value) : NaN;
 }
 export function evidenceStatus(item: StatusItem, context: StatusContext): EvidenceStatus {
-  const fixture = item.synthetic || context.runtime_mode === "fallback";
+  const fixture = item.synthetic;
   const platform = fixture ? "Synthetic fixture" :
     item.source_system === "work_iq" ? "Work IQ" :
     item.source_system === "fabric" ? "Microsoft Fabric" : "Other source";
-  if (fixture) return {
-    platform, retrieval: "Demo fixture — not a live retrieval", recordedAt: null,
-    validation: "Fixture evidence", warning: null,
-  };
   const bound = item.case_id === context.case_id &&
     item.runtime_mode === context.runtime_mode &&
     item.retrieved_for_analysis_id === context.analysis_id;
@@ -146,7 +142,8 @@ export function evidenceStatus(item: StatusItem, context: StatusContext): Eviden
   const retrieved = bound && inWindow && item.retrieval_health === "healthy";
   const matches = context.results.filter(result => result.evidence_id === item.evidence_id);
   const check = bound && matches.length === 1 ? matches[0] : undefined;
-  const passed = retrieved && check?.authoritative === true &&
+  const passed = retrieved && check !== undefined &&
+    (check.requirement === "contextual" || check.authoritative === true) &&
     check.freshness === "current" && check.business_validity === "valid" &&
     check.uncertainty_state !== "conflicted" && check.retrieval_health === "healthy" &&
     check.blocking_codes.length === 0;
@@ -160,16 +157,20 @@ export function evidenceStatus(item: StatusItem, context: StatusContext): Eviden
     check.blocking_codes.length > 0 ? "Evidence checks need attention" : null;
   return {
     platform,
-    retrieval: retrieved ? "Retrieved for this analysis" : "Retrieval not verified for this analysis",
-    recordedAt: retrieved ? item.retrieved_at : null,
-    validation: passed ? "Evidence policy checks passed" :
+    retrieval: fixture ? "Demo fixture — not a live retrieval" :
+      retrieved ? (context.runtime_mode === "fallback" ? "Recorded for this analysis (fallback)" :
+        "Retrieved for this analysis") : "Retrieval not verified for this analysis",
+    recordedAt: retrieved && !fixture ? item.retrieved_at : null,
+    validation: passed ? (check?.requirement === "contextual" ?
+      "Supporting context — not authoritative evidence" : "Evidence policy checks passed") :
       !check ? "Validation result unavailable" : "Not accepted as authoritative evidence",
     warning,
   };
 }
 ```
 
-- [ ] Run the same test command; expect all cases to pass. Add a case with `authoritative: false` and assert that the returned validation is not a success; contextual evidence is not automatically a failed source.
+- [ ] Extend the tests before final implementation verification: synthetic evidence with wrong binding, stale validation, unhealthy retrieval and missing/duplicate results must still warn; a valid fallback server source must not be labeled Synthetic fixture; valid contextual results with `authoritative: false` must say **Supporting context — not authoritative evidence** without a failure warning. Required-authoritative evidence with `authoritative: false` must not pass. These corrections preserve the approved distinction between provenance and validity, and between supporting context and authoritative facts.
+- [ ] Run the same test command; expect all cases to pass.
 - [ ] Run `git diff --check`, then commit only the two presenter files with message `feat: describe evidence retrieval and validation conservatively`.
 
 ## Task 2: Bottom footer and prominent warnings
