@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — coordinated planner publication with reporting links inactive. Native acceptance remains pending.
+> **Status:** Deployed — planner revision21 and coordinated reporting published; new report links inactive pending native acceptance.
 
 ## Validation Proof — coordinated planner reporting release (2026-09-09)
 
@@ -74,6 +74,41 @@ No test cases, approvals, action execution or source-message edits are included.
 Existing saved records have not been changed. Owner-only rollback
 snapshot: `/private/tmp/planner-release-baseline-p_55r30z` (report/model definitions,
 association, datasource and access metadata). Retain it until acceptance closes.
+
+### Publication result — 2026-09-09 21:53 UTC
+
+- Source release `ae17131`; registry build `ch1b` succeeded. Immutable image digest
+  `b5b6c974ac775e6465b890e56306adf9f35da5d69cfeda1f35c089609a2b26df`.
+- Applied reviewed `002_analytics_views.sql` batches in one transaction. Before
+  and after hashes of saved case, analysis and decision payloads match exactly:
+  ten cases, five analyses, zero decisions. No fixture or business operation was
+  created. Prior SQL definitions/fingerprints retained in owner-only
+  `planner-sql-rollback-fbbob76c` under the task's temporary directory.
+- Published the existing SemanticModel and Report with `fabric/deploy.py`.
+  Read-back retains the same report/model association and SQL datasource. Pages
+  API returns all eight expected pages. Read-only DAX returns five saved analyses,
+  fifty supporting records and thirty options, matching SQL counts. This is a
+  publication/data-connectivity check, not complete DAX/native acceptance.
+- Guarded app deployment completed. Existing-health requests initially timed out
+  twice, then passed without bypass. Revision `ca-sr-demo--0000021` is latest-ready,
+  provisioning Succeeded and receives100% latest-revision traffic. System identity,
+  scale0–2 and exact-resource AcrPull/vault secret-read/Foundry User roles remain
+  unchanged. No placeholder revision was deployed.
+- `/health` HTTP200 confirms live Fabric SQL/schema12. `/api/runtime` HTTP200
+  reports all existing capabilities ready. The new reporting receipt is explicitly
+  empty and `power_bi_reporting_contract` is absent, so new report links remain
+  inactive. No acceptance receipt was issued.
+- Public HTML and `/assets/index-BRNVKedn.js` return HTTP200. Deployed bundle
+  contains all three investigation-row labels and bottom-of-card evidence status.
+  `azd show` confirms the selected environment; service URLs are absent because
+  this project intentionally builds via its guarded script. Container App ingress
+  independently confirms the existing HTTPS demo endpoint.
+
+Remaining: native report layout/text fit, Alex access, historical filter
+persistence and every card-to-exact-record journey, then receipt activation.
+The Mac lock and unapproved historical fixture do not invalidate publication;
+they remain acceptance constraints. No merge, Git push, source-message edits,
+case creation, analysis invocation, decision approval or action execution occurred.
 
 ## Validation Proof — descriptive citation labels (2026-09-08)
 
