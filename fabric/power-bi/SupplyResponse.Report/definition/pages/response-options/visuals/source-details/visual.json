@@ -153,7 +153,7 @@
               },
               "queryRef": "SavedOptions.option_name",
               "nativeQueryRef": "option_name",
-              "displayName": "Option name"
+              "displayName": "Response option"
             },
             {
               "field": {

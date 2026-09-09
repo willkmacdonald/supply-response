@@ -235,6 +235,64 @@ def test_option_comparison_includes_protected_customer_orders_column():
     assert visual["visualType"] == "tableEx"
 
 
+def test_option_comparison_uses_planner_labels_without_changing_bindings():
+    visual = report_pages.artifacts()[
+        "pages/response-options/visuals/option-comparison/visual.json"
+    ]["visual"]
+    projections = visual["query"]["queryState"]["Values"]["projections"]
+    by_property = {
+        projection["field"]["Column"]["Property"]: projection
+        for projection in projections
+    }
+    expected = {
+        "option_name": "Response option",
+        "response_cost": "Response cost",
+        "revenue_at_risk": "Revenue at risk",
+        "otif_loss_percentage": "Service-target exposure (%)",
+        "uncovered_part_demand": "Parts still needed",
+        "executable": "Meets planning requirements",
+        "is_baseline": "Do-nothing comparison",
+        "blockers_text": "Planning blockers",
+        "required_roles_text": "Required review roles",
+    }
+    for property_name, display_name in expected.items():
+        projection = by_property[property_name]
+        assert projection["displayName"] == display_name
+        assert projection["queryRef"] == f"SavedOptions.{property_name}"
+        assert projection["nativeQueryRef"] == property_name
+
+
+def test_report_copy_matches_planner_language_and_preserves_required_context():
+    artifacts = report_pages.artifacts()
+
+    def title(page, visual):
+        return artifacts[f"pages/{page}/visuals/{visual}/visual.json"]["visual"][
+            "visualContainerObjects"
+        ]["title"][0]["properties"]["text"]
+
+    assert report_pages.WALKTHROUGH[-1] == (
+        "actions-outcomes",
+        "5. Review the decision",
+    )
+    assert title("supplier-shipment", "supporting-records") == report_pages.literal(
+        "Supporting records"
+    )
+    assert title("actions-outcomes", "decision-id") == report_pages.literal(
+        "Current decision"
+    )
+    assert title("actions-outcomes", "projection-refresh") == report_pages.literal(
+        "Report data updated"
+    )
+    assert report_pages.DETAILS["supplier-shipment"][0] == (
+        "What can Supplier Alpha still supply?"
+    )
+    footer = artifacts["pages/supplier-shipment/visuals/fictional-footer/visual.json"][
+        "visual"
+    ]["objects"]["general"][0]["properties"]["paragraphs"][0]["textRuns"][0]["value"]
+    assert "Snapshot used for this analysis" in footer
+    assert "Demo corpus — fictional" in footer
+
+
 def test_clearable_case_selector_is_shared_without_a_default():
     for page in report_pages.ORDER:
         value = report_pages.artifacts()[
@@ -783,6 +841,99 @@ def test_business_measures_are_implemented_and_use_saved_values():
     assert "DIVIDE(Observed - Predicted, ABS(Predicted))" in variance
     assert "ISBLANK(Predicted) || ISBLANK(Observed) || Predicted == 0" in variance
     assert "[Observation Row Visible] == 1" in variance
+
+
+def test_disruption_answer_keeps_original_requirement_separate_from_response():
+    definitions = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"]
+    expression = definitions["Disruption Answer"]["expression"]
+    assert "[Overview disruption original_quantity]" in expression
+    assert "[Overview disruption original_due_date]" in expression
+    assert "[Overview disruption partial_quantity]" not in expression
+    assert "in the partial response" not in expression
+    assert "Original delivery:" in expression
+
+    shipment = definitions["Shipment Answer"]["expression"]
+    assert "[Overview shipment quantity]" in shipment
+    assert "[Overview shipment due_date]" in shipment
+    assert "Proposed shipment" in shipment
+
+
+def test_role_qualified_entities_and_scope_guards_remain_in_generated_dax():
+    definitions = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"]
+    supplier = definitions["Overview shipment Supplier"]["expression"]
+    qualification = definitions["Overview qualification Supplier"]["expression"]
+    assert "RL-Supplier Alpha — Current supplier" in supplier
+    assert "RL-Supplier Beta — Alternate supplier" in qualification
+
+    for name in ("Disruption Answer", "Shipment Answer", "Qualification Answer"):
+        assert "[Overview Analysis Key]" in definitions[name]["expression"]
+
+
+def test_main_report_explanations_use_business_language():
+    artifacts = report_pages.artifacts()
+    definitions = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"]
+
+    assert (
+        "saved shipment record" not in definitions["Record Explanation"]["expression"]
+    )
+    assert "Saved dispatch" not in definitions["Record Explanation"]["expression"]
+    assert (
+        "saved baseline predictions"
+        not in definitions["Orders Explanation"]["expression"]
+    )
+    assert (
+        "shared saved calculation engine"
+        not in definitions["Options Explanation"]["expression"]
+    )
+    assert (
+        "Compare the do-nothing option" in definitions["Options Answer"]["expression"]
+    )
+    assert (
+        "Recommendation for this analysis"
+        in definitions["Recommendation Answer"]["expression"]
+    )
+    assert "Review with AI assistance" in definitions["Review Approach"]["expression"]
+
+    affected_lines = artifacts["pages/customer-orders/visuals/answer-3/visual.json"][
+        "visual"
+    ]["visualContainerObjects"]["title"][0]["properties"]["text"]
+    option_table = artifacts[
+        "pages/response-options/visuals/option-comparison/visual.json"
+    ]["visual"]["visualContainerObjects"]["title"][0]["properties"]["text"]
+    action_explanation = artifacts[
+        "pages/actions-outcomes/visuals/action-explanation/visual.json"
+    ]["visual"]["visualContainerObjects"]["title"][0]["properties"]["text"]
+    assert affected_lines == report_pages.literal("Order lines in this analysis")
+    assert option_table == report_pages.literal(
+        "Response options — expected results, subject to planning requirements"
+    )
+    assert action_explanation == report_pages.literal("Decision and outcome context")
+
+
+def test_walkthrough_preserves_routes_replay_disclosure_and_read_only_rehearsal():
+    walkthrough = (
+        ROOT / "docs/demo/traditional-and-assisted-walkthrough.md"
+    ).read_text(encoding="utf-8")
+    normalized = re.sub(r"\s+", " ", walkthrough)
+    for required in (
+        "Explore in Power BI",
+        "Review with AI assistance",
+        "same case and analysis",
+        "Analysis source details",
+        "Analysis saved at",
+        "replays those saved records",
+        "shared saved calculation engine",
+        "RL-Supplier Alpha — Current supplier",
+        "RL-Supplier Beta — Alternate supplier",
+        "No option is highlighted as the recommendation",
+        "review and approval",
+        "Do not create",
+        "Do not approve",
+        "start a simulation",
+        "start playback",
+        "Presenter notes",
+    ):
+        assert required in normalized
 
 
 def test_overview_answers_bind_explicit_saved_prediction_bases():

@@ -26,7 +26,7 @@ WALKTHROUGH = (
     ("plant-transfer", "3. Check the plant transfer"),
     ("supplier-qualification", "3. Check qualification"),
     ("response-options", "4. Weigh the trade-offs"),
-    ("actions-outcomes", "5. Review the decision boundary"),
+    ("actions-outcomes", "5. Review the decision"),
 )
 GREEN, TEAL, AMBER, CREAM, WHITE = "#183E35", "#187D78", "#9A641C", "#F5F3EA", "#FFFFFF"
 CC, SR, SO, AO = "CaseCommandCenter", "SavedRecords", "SavedOptions", "ActionOutcomes"
@@ -81,11 +81,29 @@ def measure(name, label=None, table=CC):
 
 
 def column(table, name):
-    label = (
-        "Customer orders protected"
-        if name == "protected_customer_order_count"
-        else name.replace("_", " ").capitalize()
-    )
+    labels = {
+        "action_kind": "Action",
+        "action_status": "Status",
+        "arrival_date": "Arrival date",
+        "audit_complete": "Audit requirement met",
+        "blockers_text": "Planning blockers",
+        "dispatch_date": "Dispatch date",
+        "due_date": "Due date",
+        "protected_customer_order_count": "Customer orders protected",
+        "uncovered_part_demand": "Parts still needed",
+        "executable": "Meets planning requirements",
+        "expected_decision_date": "Qualification review date",
+        "first_article_complete": "First article requirement met",
+        "incremental_cost_per_unit": "Incremental cost per unit",
+        "is_baseline": "Do-nothing comparison",
+        "observation_kind": "Outcome type",
+        "option_name": "Response option",
+        "otif_loss_percentage": "Service-target exposure (%)",
+        "required_roles_text": "Required review roles",
+        "response_cost": "Response cost",
+        "revenue_at_risk": "Revenue at risk",
+    }
+    label = labels.get(name, name.replace("_", " ").capitalize())
     return projection("Column", table, name, label)
 
 
@@ -342,7 +360,7 @@ RECORD_IDS = ("case_key", "analysis_key", "record_key", "record_family")
 OPTION_IDS = ("case_key", "analysis_key", "option_key")
 DETAILS = {
     "supplier-shipment": (
-        "What can the original supplier still supply?",
+        "What can Supplier Alpha still supply?",
         "shipment",
         "Record State",
         (
@@ -432,7 +450,7 @@ DETAILS = {
                 "Order lines expected to miss on-time, in-full",
                 "Orders Baseline OTIF Display",
             ),
-            ("Order lines in this saved plan", "Affected Lines Display"),
+            ("Order lines in this analysis", "Affected Lines Display"),
         ),
         "Orders Explanation",
         "Order Row Visible",
@@ -527,7 +545,7 @@ def detail(page):
     )
     supporting = table(
         "supporting-records",
-        "Supporting saved records",
+        "Supporting records",
         SR,
         fields,
         scope,
@@ -638,7 +656,7 @@ def overview():
             (
                 (
                     "scenario-effective-time",
-                    "What can the original supplier still supply?",
+                    "What can Supplier Alpha still supply?",
                     "Shipment Answer",
                 ),
                 ("showcase-cases", "Can another plant help?", "Transfer Answer"),
@@ -704,7 +722,7 @@ def options():
     )
     comparison = table(
         "option-comparison",
-        "Saved options — expected results, subject to planning requirements",
+        "Response options — expected results, subject to planning requirements",
         SO,
         (
             "option_name",
@@ -748,17 +766,17 @@ def actions():
     items = common("Current decision: actions and outcomes", "Actions State")
     for i, (name, title, value) in enumerate(
         (
-            ("decision-id", "Current governing decision", "Current Decision Display"),
+            ("decision-id", "Current decision", "Current Decision Display"),
             ("observation-kind", "Observation context", "Current Observation Display"),
             ("scenario-effective-time", "In this scenario, as of", "Scenario Context"),
-            ("projection-refresh", "Projection updated", "Projection Updated Display"),
+            ("projection-refresh", "Report data updated", "Projection Updated Display"),
         )
     ):
         items.append(card(name, title, value, (24 + 312 * i, 164, 296, 108), size=14))
     items.append(
         card(
             "action-explanation",
-            "Current decision lineage",
+            "Decision and outcome context",
             "Action Explanation",
             (24, 284, 1232, 90),
             size=14,

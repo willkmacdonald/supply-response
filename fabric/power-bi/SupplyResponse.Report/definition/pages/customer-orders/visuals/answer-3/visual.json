@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Order lines in this saved plan'"
+                  "Value": "'Order lines in this analysis'"
                 }
               }
             },
@@ -153,7 +153,7 @@
               },
               "queryRef": "CaseCommandCenter.Affected Lines Display",
               "nativeQueryRef": "Affected Lines Display",
-              "displayName": "Order lines in this saved plan"
+              "displayName": "Order lines in this analysis"
             }
           ]
         }

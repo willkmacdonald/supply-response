@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Supporting saved records'"
+                  "Value": "'Supporting records'"
                 }
               }
             },
@@ -198,7 +198,7 @@
               },
               "queryRef": "SavedRecords.audit_complete",
               "nativeQueryRef": "audit_complete",
-              "displayName": "Audit complete"
+              "displayName": "Audit requirement met"
             },
             {
               "field": {
@@ -213,7 +213,7 @@
               },
               "queryRef": "SavedRecords.first_article_complete",
               "nativeQueryRef": "first_article_complete",
-              "displayName": "First article complete"
+              "displayName": "First article requirement met"
             },
             {
               "field": {
@@ -228,7 +228,7 @@
               },
               "queryRef": "SavedRecords.expected_decision_date",
               "nativeQueryRef": "expected_decision_date",
-              "displayName": "Expected decision date"
+              "displayName": "Qualification review date"
             }
           ]
         }

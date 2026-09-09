@@ -200,7 +200,7 @@ table CaseCommandCenter
   measure 'Review Approach' =
       IF([Walkthrough Requested] == 1,
               IF([Traditional Mode] == 1,
-                  "Compare cost, service exposure, parts still needed and planning blockers. State your proposed response before reviewing AI assistance.",
+                  "Compare cost, service exposure, parts still needed, and planning blockers. State your proposed response before opening Review with AI assistance.",
                   "Walkthrough selection unavailable"),
               [Recommendation Answer])
 
@@ -675,8 +675,8 @@ table CaseCommandCenter
 
   measure 'Record Explanation' =
       IF(NOT ISBLANK([Selected Record Key]),SWITCH([Selected Record Family],
-              "shipment","Scheduled receipt from the saved shipment record. Supplier statements remain in the original supplier email. This is not approval or execution.",
-              "transfer","Saved dispatch and arrival dates describe the planned plant transfer. Approval and execution are separate.",
+              "shipment","This proposed shipment is a response option under review. The quantity, date, and cost above come from the shipment record; the supplier statement remains in the original supplier email. It is not approved or delivered.",
+              "transfer","This planned transfer could move stock between the plants shown above. Its dispatch, arrival, and cost are not approval or proof of completion.",
               "qualification","Audit: " & [Record Audit Display] & "; first article: " & [Record First Article Display]
                   & ". Review date: " & IF(ISBLANK([Record expected_decision_date]),"Unavailable",FORMAT([Record expected_decision_date],"MMM d, yyyy"))
                   & ". A review date is not an approval or delivery date."))
@@ -790,7 +790,7 @@ table CaseCommandCenter
       IF(NOT ISBLANK([Selected Analysis Key]),"Usable component stock = on hand − quality holds − protected allocations, for the disruption’s exact part and plant.")
 
   measure 'Orders Basis Display' =
-      IF(NOT ISBLANK([Selected Analysis Key]),"Customer lines participating in this saved plan")
+      IF(NOT ISBLANK([Selected Analysis Key]),"Customer order lines in this analysis")
 
   measure 'Orders Baseline Revenue' =
       IF(NOT ISBLANK([Selected Analysis Key]),[Baseline revenue_at_risk])
@@ -807,7 +807,7 @@ table CaseCommandCenter
       VAR V = [Orders Baseline OTIF] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "0") & "%")
 
   measure 'Orders Explanation' =
-      IF(NOT ISBLANK([Selected Analysis Key]),"Without a response: saved baseline predictions from the same calculation as the card. The supporting rows are customer lines included in this plan; their line values are not predicted revenue at risk, and these rows do not identify individual missed service targets.")
+      IF(NOT ISBLANK([Selected Analysis Key]),"Without a response, the analysis predicts the exposure above. The supporting rows are customer order lines in scope; their line values are not predicted revenue at risk, and these rows do not identify individual missed service targets.")
 
   measure 'External Option Requested' =
       INT(ISFILTERED(SavedOptions[option_key]))
@@ -896,7 +896,7 @@ table CaseCommandCenter
       VAR V = [Selected Option response_cost] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "#,0.##") & "; currency not specified")
 
   measure 'Options Explanation' =
-      IF(NOT ISBLANK([Selected Analysis Key]),IF([Option Requested] == 0,"Expected results from the shared saved calculation engine. Meeting planning requirements is separate from approval.",IF(NOT ISBLANK([Selected Option Key]),COALESCE([Selected Option blockers_text],"Planning blockers unavailable") & ". " & COALESCE([Selected Option required_roles_text],"Required roles unavailable"))))
+      IF(NOT ISBLANK([Selected Analysis Key]),IF([Option Requested] == 0,"Compare expected cost, service exposure, parts still needed, and whether each option meets the planning requirements. These predictions are not approved actions or outcomes.",IF(NOT ISBLANK([Selected Option Key]),COALESCE([Selected Option blockers_text],"Planning blockers unavailable") & ". " & COALESCE([Selected Option required_roles_text],"Required roles unavailable"))))
 
   measure 'Baseline option_name' =
       VAR ScopeCase = [Selected Case Key]
@@ -1137,12 +1137,13 @@ table CaseCommandCenter
     isHidden
 
   measure 'Disruption Answer' =
-      VAR Q = [Overview disruption original_quantity] VAR P = [Overview disruption partial_quantity]
-              RETURN IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK(Q)||ISBLANK(P),"Disruption details unavailable",
-              [Overview disruption Supplier] & "; part " & COALESCE([Overview disruption part_id],"unavailable")
-              & " at " & [Overview Disruption Plant] & ": " & FORMAT(Q,"#,0") & " component units originally due "
+      VAR Q = [Overview disruption original_quantity]
+              RETURN IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK(Q),"Disruption details unavailable",
+              "Original delivery: " & FORMAT(Q,"#,0") & " component units of "
+              & COALESCE([Overview disruption part_id],"part unavailable") & " were due at "
+              & [Overview Disruption Plant] & " on "
               & IF(ISBLANK([Overview disruption original_due_date]),"date unavailable",FORMAT([Overview disruption original_due_date],"MMM d"))
-              & "; " & FORMAT(P,"#,0") & " in the partial response."))
+              & ". Disruption reported for " & [Overview disruption Supplier] & "."))
 
   measure 'Availability Answer' =
       IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK([Overview Stock]),"Available stock unavailable",FORMAT([Overview Stock],"#,0") & " usable component units after holds and protected allocations"))
@@ -1157,7 +1158,7 @@ table CaseCommandCenter
               & "; response cost: " & IF(ISBLANK(ScopeCase),"unavailable",FORMAT(ScopeCase,"#,0.00") & "; currency not specified"))
 
   measure 'Shipment Answer' =
-      VAR Q = [Overview shipment quantity] VAR D = [Overview shipment due_date] RETURN IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK(Q),"Supporting record unavailable",([Overview shipment Supplier]) & ": " & FORMAT(Q,"#,0") & " component units; " & IF(ISBLANK(D),"date unavailable",FORMAT(D,"MMM d, yyyy"))))
+      VAR Q = [Overview shipment quantity] VAR D = [Overview shipment due_date] RETURN IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK(Q),"Supporting record unavailable",("Proposed shipment from " & [Overview shipment Supplier]) & ": " & FORMAT(Q,"#,0") & " component units; " & IF(ISBLANK(D),"date unavailable",FORMAT(D,"MMM d, yyyy"))))
 
   measure 'Transfer Answer' =
       VAR Q = [Overview transfer quantity] VAR D = [Overview transfer arrival_date] RETURN IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK(Q),"Supporting record unavailable",([Overview Transfer Source] & " to " & [Overview Transfer Destination]) & ": " & FORMAT(Q,"#,0") & " component units; " & IF(ISBLANK(D),"date unavailable",FORMAT(D,"MMM d, yyyy"))))
@@ -1166,7 +1167,7 @@ table CaseCommandCenter
       IF(NOT ISBLANK([Overview Analysis Key]),[Overview qualification Supplier] & ": " & [Overview Qualification Status Display])
 
   measure 'Options Answer' =
-      IF(NOT ISBLANK([Overview Analysis Key]),"Compare saved baseline and response options by cost, service exposure, and parts still needed. Predictions are not observed results.")
+      IF(NOT ISBLANK([Overview Analysis Key]),"Compare the do-nothing option and response options by cost, service exposure, parts still needed, and planning requirements. Predictions are not observed results.")
 
   measure 'Recommendation Answer' =
       IF(NOT ISBLANK([Overview Analysis Key]),IF([Overview no_feasible_mitigation] == TRUE(),
@@ -1179,7 +1180,7 @@ table CaseCommandCenter
               & "; revenue at risk " & IF(ISBLANK([Recommended revenue_at_risk]),"unavailable",FORMAT([Recommended revenue_at_risk],"#,0.00"))
               & "; response cost " & IF(ISBLANK([Recommended response_cost]),"unavailable",FORMAT([Recommended response_cost],"#,0.00"))
               & " (currency not specified)"
-              & ". Saved recommendation. Current decision is shown separately.")))
+              & ". Recommendation for this analysis. Current decision is shown separately.")))
 
   measure 'Decision Answer' =
       IF(NOT ISBLANK([Selected Case Key]),IF(ISBLANK([Current Decision Key]),
@@ -1246,7 +1247,7 @@ table CaseCommandCenter
       VAR V = [Projection Refresh Time] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "MMM d, yyyy HH:mm") & " UTC")
 
   measure 'Actions State' =
-      IF(ISBLANK([Selected Case Key]),[Case Selection State],IF(ISBLANK([Current Decision Key]),"No current decision recorded","Current governing decision" & IF([Analysis Requested] == 1 && ISBLANK([Selected Analysis Key])," · Requested analysis unavailable; these are current-decision records",IF(NOT ISBLANK([Selected Analysis Key]) && [Selected Analysis Key] <> [Decision Analysis Key]," · Decision belongs to a different saved analysis from the one being viewed",""))))
+      IF(ISBLANK([Selected Case Key]),[Case Selection State],IF(ISBLANK([Current Decision Key]),"No current decision recorded","Current decision" & IF([Analysis Requested] == 1 && ISBLANK([Selected Analysis Key])," · Requested analysis unavailable; these are current-decision records",IF(NOT ISBLANK([Selected Analysis Key]) && [Selected Analysis Key] <> [Decision Analysis Key]," · Decision belongs to a different saved analysis from the one being viewed",""))))
 
   measure 'Action Explanation' =
       IF(NOT ISBLANK([Selected Case Key]),[Current Action Status Display] & ". " & [Current Observation Display] & ". Predictions and observations remain separate. Simulated observations are not real-world outcomes.")

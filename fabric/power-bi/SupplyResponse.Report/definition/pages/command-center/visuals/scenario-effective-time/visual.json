@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'What can the original supplier still supply?'"
+                  "Value": "'What can Supplier Alpha still supply?'"
                 }
               }
             },
@@ -153,7 +153,7 @@
               },
               "queryRef": "CaseCommandCenter.Shipment Answer",
               "nativeQueryRef": "Shipment Answer",
-              "displayName": "What can the original supplier still supply?"
+              "displayName": "What can Supplier Alpha still supply?"
             }
           ]
         }

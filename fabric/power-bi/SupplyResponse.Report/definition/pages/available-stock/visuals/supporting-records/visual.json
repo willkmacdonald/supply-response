@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Supporting saved records'"
+                  "Value": "'Supporting records'"
                 }
               }
             },

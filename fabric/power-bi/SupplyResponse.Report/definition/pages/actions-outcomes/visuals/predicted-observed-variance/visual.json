@@ -172,7 +172,7 @@
               },
               "queryRef": "ActionOutcomes.observation_kind",
               "nativeQueryRef": "observation_kind",
-              "displayName": "Observation kind"
+              "displayName": "Outcome type"
             }
           ]
         },

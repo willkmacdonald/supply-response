@@ -344,7 +344,7 @@ def measures():
         "Review Approach",
         """IF([Walkthrough Requested] == 1,
         IF([Traditional Mode] == 1,
-            "Compare cost, service exposure, parts still needed and planning blockers. State your proposed response before reviewing AI assistance.",
+            "Compare cost, service exposure, parts still needed, and planning blockers. State your proposed response before opening Review with AI assistance.",
             "Walkthrough selection unavailable"),
         [Recommendation Answer])""",
     )
@@ -685,8 +685,8 @@ def measures():
     add(
         "Record Explanation",
         """IF(NOT ISBLANK([Selected Record Key]),SWITCH([Selected Record Family],
-        "shipment","Scheduled receipt from the saved shipment record. Supplier statements remain in the original supplier email. This is not approval or execution.",
-        "transfer","Saved dispatch and arrival dates describe the planned plant transfer. Approval and execution are separate.",
+        "shipment","This proposed shipment is a response option under review. The quantity, date, and cost above come from the shipment record; the supplier statement remains in the original supplier email. It is not approved or delivered.",
+        "transfer","This planned transfer could move stock between the plants shown above. Its dispatch, arrival, and cost are not approval or proof of completion.",
         "qualification","Audit: " & [Record Audit Display] & "; first article: " & [Record First Article Display]
             & ". Review date: " & IF(ISBLANK([Record expected_decision_date]),"Unavailable",FORMAT([Record expected_decision_date],"MMM d, yyyy"))
             & ". A review date is not an approval or delivery date."))""",
@@ -827,7 +827,7 @@ def measures():
     )
     add(
         "Orders Basis Display",
-        'IF(NOT ISBLANK([Selected Analysis Key]),"Customer lines participating in this saved plan")',
+        'IF(NOT ISBLANK([Selected Analysis Key]),"Customer order lines in this analysis")',
     )
     add(
         "Orders Baseline Revenue",
@@ -849,7 +849,7 @@ def measures():
     display("Orders Baseline OTIF Display", "Orders Baseline OTIF", "%", "0")
     add(
         "Orders Explanation",
-        'IF(NOT ISBLANK([Selected Analysis Key]),"Without a response: saved baseline predictions from the same calculation as the card. The supporting rows are customer lines included in this plan; their line values are not predicted revenue at risk, and these rows do not identify individual missed service targets.")',
+        'IF(NOT ISBLANK([Selected Analysis Key]),"Without a response, the analysis predicts the exposure above. The supporting rows are customer order lines in scope; their line values are not predicted revenue at risk, and these rows do not identify individual missed service targets.")',
     )
 
     external(
@@ -930,7 +930,7 @@ def measures():
     )
     add(
         "Options Explanation",
-        'IF(NOT ISBLANK([Selected Analysis Key]),IF([Option Requested] == 0,"Expected results from the shared saved calculation engine. Meeting planning requirements is separate from approval.",IF(NOT ISBLANK([Selected Option Key]),COALESCE([Selected Option blockers_text],"Planning blockers unavailable") & ". " & COALESCE([Selected Option required_roles_text],"Required roles unavailable"))))',
+        'IF(NOT ISBLANK([Selected Analysis Key]),IF([Option Requested] == 0,"Compare expected cost, service exposure, parts still needed, and whether each option meets the planning requirements. These predictions are not approved actions or outcomes.",IF(NOT ISBLANK([Selected Option Key]),COALESCE([Selected Option blockers_text],"Planning blockers unavailable") & ". " & COALESCE([Selected Option required_roles_text],"Required roles unavailable"))))',
     )
 
     # Overview basis measures ignore detail/option selection only after exact overview scope is captured.
@@ -1069,12 +1069,13 @@ def measures():
     )
     add(
         "Disruption Answer",
-        """VAR Q = [Overview disruption original_quantity] VAR P = [Overview disruption partial_quantity]
-        RETURN IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK(Q)||ISBLANK(P),"Disruption details unavailable",
-        [Overview disruption Supplier] & "; part " & COALESCE([Overview disruption part_id],"unavailable")
-        & " at " & [Overview Disruption Plant] & ": " & FORMAT(Q,"#,0") & " component units originally due "
+        """VAR Q = [Overview disruption original_quantity]
+        RETURN IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK(Q),"Disruption details unavailable",
+        "Original delivery: " & FORMAT(Q,"#,0") & " component units of "
+        & COALESCE([Overview disruption part_id],"part unavailable") & " were due at "
+        & [Overview Disruption Plant] & " on "
         & IF(ISBLANK([Overview disruption original_due_date]),"date unavailable",FORMAT([Overview disruption original_due_date],"MMM d"))
-        & "; " & FORMAT(P,"#,0") & " in the partial response."))""",
+        & ". Disruption reported for " & [Overview disruption Supplier] & "."))""",
     )
     add(
         "Availability Answer",
@@ -1091,7 +1092,12 @@ def measures():
         & "; response cost: " & IF(ISBLANK(C),"unavailable",FORMAT(C,"#,0.00") & "; currency not specified"))""",
     )
     for label, family, datefield, entity_expression in (
-        ("Shipment", "shipment", "due_date", "[Overview shipment Supplier]"),
+        (
+            "Shipment",
+            "shipment",
+            "due_date",
+            '"Proposed shipment from " & [Overview shipment Supplier]',
+        ),
         (
             "Transfer",
             "transfer",
@@ -1119,7 +1125,7 @@ def measures():
     )
     add(
         "Options Answer",
-        'IF(NOT ISBLANK([Overview Analysis Key]),"Compare saved baseline and response options by cost, service exposure, and parts still needed. Predictions are not observed results.")',
+        'IF(NOT ISBLANK([Overview Analysis Key]),"Compare the do-nothing option and response options by cost, service exposure, parts still needed, and planning requirements. Predictions are not observed results.")',
     )
     add(
         "Recommendation Answer",
@@ -1133,7 +1139,7 @@ def measures():
         & "; revenue at risk " & IF(ISBLANK([Recommended revenue_at_risk]),"unavailable",FORMAT([Recommended revenue_at_risk],"#,0.00"))
         & "; response cost " & IF(ISBLANK([Recommended response_cost]),"unavailable",FORMAT([Recommended response_cost],"#,0.00"))
         & " (currency not specified)"
-        & ". Saved recommendation. Current decision is shown separately.")))""",
+        & ". Recommendation for this analysis. Current decision is shown separately.")))""",
     )
     add(
         "Decision Answer",
@@ -1252,7 +1258,7 @@ def measures():
     )
     add(
         "Actions State",
-        'IF(ISBLANK([Selected Case Key]),[Case Selection State],IF(ISBLANK([Current Decision Key]),"No current decision recorded","Current governing decision" & IF([Analysis Requested] == 1 && ISBLANK([Selected Analysis Key])," · Requested analysis unavailable; these are current-decision records",IF(NOT ISBLANK([Selected Analysis Key]) && [Selected Analysis Key] <> [Decision Analysis Key]," · Decision belongs to a different saved analysis from the one being viewed",""))))',
+        'IF(ISBLANK([Selected Case Key]),[Case Selection State],IF(ISBLANK([Current Decision Key]),"No current decision recorded","Current decision" & IF([Analysis Requested] == 1 && ISBLANK([Selected Analysis Key])," · Requested analysis unavailable; these are current-decision records",IF(NOT ISBLANK([Selected Analysis Key]) && [Selected Analysis Key] <> [Decision Analysis Key]," · Decision belongs to a different saved analysis from the one being viewed",""))))',
     )
     add(
         "Action Explanation",

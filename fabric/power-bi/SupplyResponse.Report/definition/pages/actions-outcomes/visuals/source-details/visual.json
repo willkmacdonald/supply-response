@@ -153,7 +153,7 @@
               },
               "queryRef": "ActionOutcomes.action_kind",
               "nativeQueryRef": "action_kind",
-              "displayName": "Action kind"
+              "displayName": "Action"
             },
             {
               "field": {
