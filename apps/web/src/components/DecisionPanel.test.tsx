@@ -59,6 +59,36 @@ describe("DecisionPanel", () => {
     expect(onReject).toHaveBeenCalledWith("Wait for confirmed supply.");
   });
 
+  it("keeps inherited and unknown requirement identifiers out of the main decision copy", () => {
+    const unsafeOption = {...combined, prerequisite_roles: ["constructor", "custom_approver"]};
+    const unsafeState = state({selectedOption: unsafeOption, decisionBlocked: true});
+    unsafeState.analysis = {
+      ...unsafeState.analysis!,
+      evidence_validation: {
+        ...unsafeState.analysis!.evidence_validation,
+        global_blocking_codes: ["toString"],
+        blocking_codes: ["CUSTOM_BLOCKER"],
+      },
+      approval_satisfactions: [],
+    };
+
+    render(<DecisionPanel state={unsafeState} onApprove={vi.fn()} onReject={vi.fn()} />);
+
+    const blockerList = document.querySelector<HTMLElement>(".blocking-codes")!;
+    expect(within(blockerList).getAllByText("A planning requirement is unresolved")).toHaveLength(2);
+    expect(blockerList).not.toHaveTextContent("toString");
+    expect(blockerList).not.toHaveTextContent("CUSTOM_BLOCKER");
+    const roles = screen.getByRole("list", {name: "Required approval roles"});
+    expect(within(roles).getAllByText(/Additional authorization role: Authorization still required/)).toHaveLength(2);
+    expect(roles).not.toHaveTextContent("constructor");
+    expect(roles).not.toHaveTextContent("custom_approver");
+    const details = screen.getByText("Decision details").closest("details");
+    expect(details).toHaveTextContent("toString");
+    expect(details).toHaveTextContent("CUSTOM_BLOCKER");
+    expect(details).toHaveTextContent("constructor");
+    expect(details).toHaveTextContent("custom_approver");
+  });
+
   it("shows the recorded approved response and roles instead of the mutable selection", () => {
     render(<DecisionPanel state={state({
       selectedOption: expedite,

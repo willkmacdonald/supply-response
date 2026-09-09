@@ -95,3 +95,26 @@ Implementation checkpoint: `9354907 fix(web): clarify planner lifecycle states`.
 
 - The successful build emits the existing Vite bundle-size advisory; Task 2 did not alter bundling architecture.
 - This is local headless/type/build verification, not live UI acceptance. No live case, decision, action, playback, external system, permission, deployment, push, or merge operation was performed.
+
+## Independent review correction
+
+The independent Task 2 review otherwise approved the lifecycle, API, action-map, and binding changes, and requested one bounded correction for remaining open-string presentation lookups.
+
+- Converted blocker, authorization-role, and ranking-comparator lookups in `plannerFormatting.ts` to own-key-safe `Map` instances.
+- Unknown blockers now render `A planning requirement is unresolved`; unknown roles render `Additional authorization role`. Raw blocker codes, role values, analysis ID, and selected option ID remain available under expandable decision details rather than in the main story.
+- Added rendered DecisionPanel coverage for `constructor`, `toString`, and ordinary unknown role/blocker values, plus helper-level inherited comparator coverage.
+- Updated the existing blocked-analysis assertion to check the safe main copy and preserved raw code in details. Controls and blocking calculations are unchanged.
+
+Correction RED:
+
+`npm --prefix apps/web test -- --run src/components/DecisionPanel.test.tsx src/components/PredictionSummary.test.tsx`
+
+Result: 3 expected failures and 240 passes across 243 tests. The inherited blocker produced a React function-child warning, the unknown blocker exposed its raw code, and the inherited comparator produced an `undefined` narrative.
+
+Correction GREEN and final verification:
+
+- Focused command above: 18 files passed, 243 tests passed.
+- `npm --prefix apps/web test`: 18 files passed, 243 tests passed.
+- `npm --prefix apps/web run build`: passed; 191 modules transformed, with the same existing bundle-size advisory.
+
+Correction files: `apps/web/src/components/plannerFormatting.ts`, `apps/web/src/components/DecisionPanel.tsx`, `apps/web/src/components/DecisionPanel.test.tsx`, `apps/web/src/components/PredictionSummary.test.tsx`, and the expected-copy assertion in `apps/web/src/App.test.tsx`.

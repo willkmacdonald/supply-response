@@ -17,29 +17,33 @@ export const supplier = (id: string) => id === "RL-SUP-ALPHA" ? "RL-Supplier Alp
   : id === "RL-SUP-BETA" ? "RL-Supplier Beta — Alternate supplier" : `Supplier ${id}`;
 export const plant = (id: string) => id === "RL-PLANT-DAL" ? "Dallas plant"
   : id === "RL-PLANT-CHI" ? "Chicago plant" : `Plant ${id}`;
-const blockers: Record<string, string> = {
-  QUALITY_QUALIFICATION_PENDING: "Cannot use Supplier Beta yet: supplier qualification is incomplete",
-  ALPHA_PARTIAL_SHIPMENT_UNAVAILABLE: "No partial shipment from Supplier Alpha is available",
-  TRANSFER_INVENTORY_UNAVAILABLE: "The source plant does not have enough available inventory for this transfer",
-  RESEQUENCE_NOT_APPLICABLE: "Changing the production sequence does not provide a response for this plan",
-};
-export const blocker = (code: string) => blockers[code] ?? `Planning requirement unresolved (${code})`;
-const roles: Record<string, string> = {material_planner: "Material planner", finance_approver: "Finance approver",
-  quality_approver: "Quality approver", response_approver: "Response approver"};
-export const role = (value: string) => roles[value] ?? `Required role: ${value}`;
-const comparators: Record<string, {label: string; unit: string}> = {
-  uncovered_part_demand: {label: "parts still needed", unit: "component units"},
-  otif_loss_percentage: {label: "service-target exposure", unit: "percentage points"},
-  revenue_at_risk: {label: "revenue at risk", unit: "currency units (currency not specified)"},
-  margin_at_risk: {label: "margin at risk", unit: "currency units (currency not specified)"},
-  response_cost: {label: "response cost", unit: "currency units (currency not specified)"},
-  approval_burden: {label: "required approval burden", unit: "roles"},
-  execution_risk: {label: "execution risk", unit: "score points"},
-};
+const blockers = new Map<string, string>([
+  ["QUALITY_QUALIFICATION_PENDING", "Cannot use Supplier Beta yet: supplier qualification is incomplete"],
+  ["ALPHA_PARTIAL_SHIPMENT_UNAVAILABLE", "No partial shipment from Supplier Alpha is available"],
+  ["TRANSFER_INVENTORY_UNAVAILABLE", "The source plant does not have enough available inventory for this transfer"],
+  ["RESEQUENCE_NOT_APPLICABLE", "Changing the production sequence does not provide a response for this plan"],
+]);
+export const blocker = (code: string) => blockers.get(code) ?? "A planning requirement is unresolved";
+const roles = new Map<string, string>([
+  ["material_planner", "Material planner"],
+  ["finance_approver", "Finance approver"],
+  ["quality_approver", "Quality approver"],
+  ["response_approver", "Response approver"],
+]);
+export const role = (value: string) => roles.get(value) ?? "Additional authorization role";
+const comparators = new Map<string, {label: string; unit: string}>([
+  ["uncovered_part_demand", {label: "parts still needed", unit: "component units"}],
+  ["otif_loss_percentage", {label: "service-target exposure", unit: "percentage points"}],
+  ["revenue_at_risk", {label: "revenue at risk", unit: "currency units (currency not specified)"}],
+  ["margin_at_risk", {label: "margin at risk", unit: "currency units (currency not specified)"}],
+  ["response_cost", {label: "response cost", unit: "currency units (currency not specified)"}],
+  ["approval_burden", {label: "required approval burden", unit: "roles"}],
+  ["execution_risk", {label: "execution risk", unit: "score points"}],
+]);
 export function rankingReason(stage: RankingStage, optionId: string): string {
   if (!stage.retained_option_ids.includes(optionId)) return "This saved comparison stage did not retain the displayed option.";
   if (stage.comparator === "option_id") return "The saved comparison used its stable option identifier to resolve the remaining tie.";
-  const known = comparators[stage.comparator];
+  const known = comparators.get(stage.comparator);
   if (!known) return "The option was retained by an additional saved comparison rule; technical details are available below.";
   const count = stage.eliminated_option_ids.length;
   const outcome = count > 0

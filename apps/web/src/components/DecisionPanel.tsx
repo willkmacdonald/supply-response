@@ -40,6 +40,7 @@ export function DecisionPanel({state, onApprove, onReject}: DecisionPanelProps) 
           <div><dt>Decision</dt><dd>{state.decision.decision_id}</dd></div>
           <div><dt>Analysis</dt><dd>{state.decision.analysis_id}</dd></div>
           <div><dt>Selected option</dt><dd>{state.decision.selected_option_id ?? "None recorded"}</dd></div>
+          <div><dt>Recorded roles</dt><dd>{state.decision.prerequisite_roles.join(", ") || "None recorded"}</dd></div>
           <div><dt>Runtime</dt><dd>{state.decision.runtime_mode}</dd></div>
         </dl>
       </details>
@@ -68,6 +69,13 @@ export function DecisionPanel({state, onApprove, onReject}: DecisionPanelProps) 
           Reject recommendation
         </button>
       </div>
+      <details>
+        <summary>Decision details</summary>
+        <p>Analysis {state.analysis.analysis_id}</p>
+        <p>Selected option {state.selectedOption?.option_id ?? "None recorded"}</p>
+        {blockingCodes.length > 0 && <p>Recorded blocking codes: {blockingCodes.join(", ")}</p>}
+        {state.selectedOption && <p>Recorded roles: {state.selectedOption.prerequisite_roles.join(", ") || "None recorded"}</p>}
+      </details>
     </>}
     <footer className="saved-analysis-footer">Approval remains an explicit user action. Any execution shown afterward is separately labeled.</footer>
   </section>;

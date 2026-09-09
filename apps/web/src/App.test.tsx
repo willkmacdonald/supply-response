@@ -514,7 +514,8 @@ describe("progressive Case workspace", () => {
     await screen.findByText("Fallback mode");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
-    expect(await screen.findByText("Planning requirement unresolved (REQUIRED_EVIDENCE_STALE)")).toBeVisible();
+    expect(await screen.findByText("A planning requirement is unresolved")).toBeVisible();
+    expect(screen.getByText("Decision details").closest("details")).toHaveTextContent("REQUIRED_EVIDENCE_STALE");
     expect(screen.getByRole("button", {name: "Approve combined response"})).toBeDisabled();
     expect(screen.getByRole("button", {name: "Reject recommendation"})).toBeDisabled();
   });

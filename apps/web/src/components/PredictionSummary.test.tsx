@@ -28,7 +28,8 @@ it("formats calendar dates without day shifts and keeps unsafe values unavailabl
   expect(money("0.00")).toBe("0.00 (currency not specified)");
   expect(money("NaN")).toBe("Unavailable");
   expect(blocker("QUALITY_QUALIFICATION_PENDING")).toBe("Cannot use Supplier Beta yet: supplier qualification is incomplete");
-  expect(blocker("NEW_POLICY_CODE")).toBe("Planning requirement unresolved (NEW_POLICY_CODE)");
+  expect(blocker("NEW_POLICY_CODE")).toBe("A planning requirement is unresolved");
+  expect(blocker("constructor")).toBe("A planning requirement is unresolved");
 });
 it("describes recorded ranking with business meaning and units without asserting a new ranking", () => {
   const stage = {comparator: "uncovered_part_demand", threshold: "500", lower_is_better: true,
@@ -37,6 +38,7 @@ it("describes recorded ranking with business meaning and units without asserting
   expect(rankingReason({...stage, comparator: "otif_loss_percentage", threshold: "10"}, "a")).toContain("10 percentage points");
   expect(rankingReason({...stage, comparator: "response_cost", threshold: "10000"}, "a")).toContain("currency not specified");
   expect(rankingReason({...stage, comparator: "unknown"}, "a")).toContain("additional saved comparison rule");
+  expect(rankingReason({...stage, comparator: "constructor"}, "a")).toContain("additional saved comparison rule");
   expect(decisionContext(null, "a", false)).toBe("Case context unavailable; no decision is shown");
 });
 it("keeps the comparison summary compact with parts, service and response cost", () => {
