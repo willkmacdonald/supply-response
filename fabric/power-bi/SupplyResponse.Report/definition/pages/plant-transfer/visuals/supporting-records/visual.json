@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "SavedRecords.source_plant_id",
+              "nativeQueryRef": "source_plant_id",
               "displayName": "Source plant id"
             },
             {
@@ -166,6 +167,7 @@
                 }
               },
               "queryRef": "SavedRecords.destination_plant_id",
+              "nativeQueryRef": "destination_plant_id",
               "displayName": "Destination plant id"
             },
             {
@@ -180,6 +182,7 @@
                 }
               },
               "queryRef": "SavedRecords.part_id",
+              "nativeQueryRef": "part_id",
               "displayName": "Part id"
             },
             {
@@ -194,6 +197,7 @@
                 }
               },
               "queryRef": "SavedRecords.quantity",
+              "nativeQueryRef": "quantity",
               "displayName": "Quantity"
             },
             {
@@ -208,6 +212,7 @@
                 }
               },
               "queryRef": "SavedRecords.dispatch_date",
+              "nativeQueryRef": "dispatch_date",
               "displayName": "Dispatch date"
             },
             {
@@ -222,6 +227,7 @@
                 }
               },
               "queryRef": "SavedRecords.arrival_date",
+              "nativeQueryRef": "arrival_date",
               "displayName": "Arrival date"
             },
             {
@@ -236,6 +242,7 @@
                 }
               },
               "queryRef": "SavedRecords.incremental_cost_per_unit",
+              "nativeQueryRef": "incremental_cost_per_unit",
               "displayName": "Incremental cost per unit"
             }
           ]
@@ -355,7 +362,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "LockedRecordRowVisible",
+        "name": "plant-transfer-supporting-records-LockedRecordRowVisible",
         "field": {
           "Measure": {
             "Expression": {

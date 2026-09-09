@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Action Explanation",
+              "nativeQueryRef": "Action Explanation",
               "displayName": "Current decision lineage"
             }
           ]

@@ -10,7 +10,7 @@
     "tabOrder": 7
   },
   "visual": {
-    "visualType": "tableEx",
+    "visualType": "pivotTable",
     "visualContainerObjects": {
       "background": [
         {
@@ -134,11 +134,24 @@
             }
           }
         }
+      ],
+      "stylePreset": [
+        {
+          "properties": {
+            "name": {
+              "expr": {
+                "Literal": {
+                  "Value": "'None'"
+                }
+              }
+            }
+          }
+        }
       ]
     },
     "query": {
       "queryState": {
-        "Values": {
+        "Rows": {
           "projections": [
             {
               "field": {
@@ -152,6 +165,7 @@
                 }
               },
               "queryRef": "SavedRecords.part_id",
+              "nativeQueryRef": "part_id",
               "displayName": "Part id"
             },
             {
@@ -166,8 +180,13 @@
                 }
               },
               "queryRef": "SavedRecords.plant_id",
+              "nativeQueryRef": "plant_id",
               "displayName": "Plant id"
-            },
+            }
+          ]
+        },
+        "Values": {
+          "projections": [
             {
               "field": {
                 "Measure": {
@@ -180,6 +199,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Stock On Hand Row",
+              "nativeQueryRef": "Stock On Hand Row",
               "displayName": "On hand"
             },
             {
@@ -194,6 +214,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Stock Held Row",
+              "nativeQueryRef": "Stock Held Row",
               "displayName": "Quality hold"
             },
             {
@@ -208,6 +229,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Stock Protected Row",
+              "nativeQueryRef": "Stock Protected Row",
               "displayName": "Protected allocation"
             },
             {
@@ -222,6 +244,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Stock Usable Row",
+              "nativeQueryRef": "Stock Usable Row",
               "displayName": "Usable units"
             }
           ]
@@ -258,6 +281,20 @@
               "expr": {
                 "Literal": {
                   "Value": "11D"
+                }
+              }
+            },
+            "autoSizeColumnWidth": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "columnAdjustment": {
+              "expr": {
+                "Literal": {
+                  "Value": "'growToFit'"
                 }
               }
             }
@@ -306,17 +343,15 @@
                   "Value": "11D"
                 }
               }
-            }
-          }
-        }
-      ],
-      "total": [
-        {
-          "properties": {
-            "totals": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
+            },
+            "fontColorSecondary": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#183E35'"
+                    }
+                  }
                 }
               }
             }
@@ -335,13 +370,178 @@
             }
           }
         }
+      ],
+      "rowHeaders": [
+        {
+          "properties": {
+            "stepped": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "repeatRowHeaders": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "showExpandCollapseButtons": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#183E35'"
+                    }
+                  }
+                }
+              }
+            },
+            "backColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#FFFFFF'"
+                    }
+                  }
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "11D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "subTotals": [
+        {
+          "properties": {
+            "rowSubtotals": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "columnSubtotals": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        },
+        {
+          "selector": {
+            "id": "Row"
+          },
+          "properties": {
+            "rowSubtotals": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "columnSubtotals": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        },
+        {
+          "selector": {
+            "id": "Column"
+          },
+          "properties": {
+            "rowSubtotals": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "columnSubtotals": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
       ]
-    }
+    },
+    "expansionStates": [
+      {
+        "roles": [
+          "Rows"
+        ],
+        "levels": [
+          {
+            "queryRefs": [
+              "SavedRecords.part_id"
+            ],
+            "identityKeys": [
+              {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "SavedRecords"
+                    }
+                  },
+                  "Property": "part_id"
+                }
+              }
+            ],
+            "isCollapsed": false,
+            "isPinned": true
+          },
+          {
+            "queryRefs": [
+              "SavedRecords.plant_id"
+            ],
+            "identityKeys": [
+              {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "SavedRecords"
+                    }
+                  },
+                  "Property": "plant_id"
+                }
+              }
+            ],
+            "isCollapsed": false,
+            "isPinned": true
+          }
+        ]
+      }
+    ]
   },
   "filterConfig": {
     "filters": [
       {
-        "name": "LockedStockRowVisible",
+        "name": "available-stock-supporting-records-LockedStockRowVisible",
         "field": {
           "Measure": {
             "Expression": {

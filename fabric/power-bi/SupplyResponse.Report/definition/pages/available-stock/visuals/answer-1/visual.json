@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Stock Usable Display",
+              "nativeQueryRef": "Stock Usable Display",
               "displayName": "Usable component units"
             }
           ]

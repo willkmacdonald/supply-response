@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Option Cost Display",
+              "nativeQueryRef": "Option Cost Display",
               "displayName": "Response cost"
             }
           ]

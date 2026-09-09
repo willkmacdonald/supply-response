@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Shipment Answer",
+              "nativeQueryRef": "Shipment Answer",
               "displayName": "What can the original supplier still supply?"
             }
           ]

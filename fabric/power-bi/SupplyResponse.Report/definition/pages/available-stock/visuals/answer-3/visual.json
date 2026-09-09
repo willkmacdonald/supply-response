@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Stock Protected Display",
+              "nativeQueryRef": "Stock Protected Display",
               "displayName": "Protected allocation"
             }
           ]

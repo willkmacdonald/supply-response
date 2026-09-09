@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Recommendation Answer",
+              "nativeQueryRef": "Recommendation Answer",
               "displayName": "Saved recommendation"
             }
           ]

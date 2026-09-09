@@ -43,7 +43,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "LockedRecordFamily",
+        "name": "plant-transfer-LockedRecordFamily",
         "field": {
           "Column": {
             "Expression": {

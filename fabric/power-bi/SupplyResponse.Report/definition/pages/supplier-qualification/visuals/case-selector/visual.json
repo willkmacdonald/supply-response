@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.case_id",
+              "nativeQueryRef": "case_id",
               "displayName": "Case id"
             }
           ]

@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Stock Held Display",
+              "nativeQueryRef": "Stock Held Display",
               "displayName": "Units on quality hold"
             }
           ]

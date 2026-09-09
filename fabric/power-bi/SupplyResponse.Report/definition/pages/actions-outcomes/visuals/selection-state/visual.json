@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Actions State",
+              "nativeQueryRef": "Actions State",
               "displayName": "Selected case and analysis"
             }
           ]

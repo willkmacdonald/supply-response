@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Record Explanation",
+              "nativeQueryRef": "Record Explanation",
               "displayName": "What this means for the response"
             }
           ]

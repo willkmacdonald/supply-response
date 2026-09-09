@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "SavedOptions.option_name",
+              "nativeQueryRef": "option_name",
               "displayName": "Option name"
             },
             {
@@ -166,6 +167,7 @@
                 }
               },
               "queryRef": "SavedOptions.is_baseline",
+              "nativeQueryRef": "is_baseline",
               "displayName": "Is baseline"
             },
             {
@@ -180,6 +182,7 @@
                 }
               },
               "queryRef": "SavedOptions.executable",
+              "nativeQueryRef": "executable",
               "displayName": "Executable"
             },
             {
@@ -194,6 +197,7 @@
                 }
               },
               "queryRef": "SavedOptions.response_cost",
+              "nativeQueryRef": "response_cost",
               "displayName": "Response cost"
             },
             {
@@ -208,6 +212,7 @@
                 }
               },
               "queryRef": "SavedOptions.revenue_at_risk",
+              "nativeQueryRef": "revenue_at_risk",
               "displayName": "Revenue at risk"
             },
             {
@@ -222,6 +227,7 @@
                 }
               },
               "queryRef": "SavedOptions.otif_loss_percentage",
+              "nativeQueryRef": "otif_loss_percentage",
               "displayName": "Otif loss percentage"
             },
             {
@@ -236,6 +242,7 @@
                 }
               },
               "queryRef": "SavedOptions.uncovered_part_demand",
+              "nativeQueryRef": "uncovered_part_demand",
               "displayName": "Uncovered part demand"
             },
             {
@@ -250,6 +257,7 @@
                 }
               },
               "queryRef": "SavedOptions.blockers_text",
+              "nativeQueryRef": "blockers_text",
               "displayName": "Blockers text"
             },
             {
@@ -264,6 +272,7 @@
                 }
               },
               "queryRef": "SavedOptions.required_roles_text",
+              "nativeQueryRef": "required_roles_text",
               "displayName": "Required roles text"
             }
           ]
@@ -383,7 +392,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "LockedOptionRowVisible",
+        "name": "response-options-option-comparison-LockedOptionRowVisible",
         "field": {
           "Measure": {
             "Expression": {

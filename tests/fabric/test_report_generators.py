@@ -52,7 +52,11 @@ def test_deterministic_native_pages_match_pinned_schemas(tmp_path):
         visual = value["visual"]
         if visual["visualType"] == "cardVisual":
             assert set(visual["query"]["queryState"]) == {"Data"}
-        if visual["visualType"] in {"tableEx", "clusteredColumnChart"}:
+        if visual["visualType"] in {
+            "tableEx",
+            "pivotTable",
+            "clusteredColumnChart",
+        }:
             (gate,) = value["filterConfig"]["filters"]
             assert gate["isHiddenInViewMode"] and gate["isLockedInViewMode"]
             condition = gate["filter"]["Where"][0]["Condition"]["Comparison"]
@@ -118,9 +122,14 @@ def test_business_tables_preserve_stock_totals_and_order_line_grain():
     artifacts = report_pages.artifacts()
 
     def projections(page):
-        return artifacts[f"pages/{page}/visuals/supporting-records/visual.json"][
+        state = artifacts[f"pages/{page}/visuals/supporting-records/visual.json"][
             "visual"
-        ]["query"]["queryState"]["Values"]["projections"]
+        ]["query"]["queryState"]
+        return [
+            projection
+            for role in ("Rows", "Values")
+            for projection in state.get(role, {}).get("projections", [])
+        ]
 
     stock = projections("available-stock")
     assert [item["queryRef"] for item in stock] == [
@@ -137,6 +146,115 @@ def test_business_tables_preserve_stock_totals_and_order_line_grain():
         and item["displayName"] == "Order line"
         for item in orders
     )
+
+
+def test_every_projection_has_native_property_reference():
+    for path, artifact in report_pages.artifacts().items():
+        visual = artifact.get("visual", {})
+        refs = []
+        for role in visual.get("query", {}).get("queryState", {}).values():
+            for projection in role["projections"]:
+                binding = next(iter(projection["field"].values()))
+                assert projection.get("nativeQueryRef") == binding["Property"], path
+                refs.append(projection["nativeQueryRef"])
+        assert len(refs) == len(set(refs)), path
+
+
+def test_filters_have_globally_unique_names_and_preserve_conditions():
+    names = []
+    for path, artifact in report_pages.artifacts().items():
+        for item in artifact.get("filterConfig", {}).get("filters", []):
+            names.append(item["name"])
+            if "visual" in artifact:
+                expected = report_pages.gate(item["field"]["Measure"]["Property"])
+            else:
+                family = report_pages.DETAILS[artifact["name"]][1]
+                expected = report_pages.family_filter(family)
+            actual = deepcopy(item)
+            actual.pop("name")
+            expected.pop("name")
+            assert actual == expected, path
+    assert names
+    assert len(names) == len(set(names))
+
+
+def test_common_text_fits_font_floors_and_does_not_overlap():
+    from math import ceil
+
+    artifacts = report_pages.artifacts()
+    for page in report_pages.ORDER:
+        prefix = f"pages/{page}/visuals/"
+        title = artifacts[prefix + "page-title/visual.json"]["position"]
+        state = artifacts[prefix + "selection-state/visual.json"]["position"]
+        assert title["y"] + title["height"] <= state["y"]
+    for path, artifact in artifacts.items():
+        visual = artifact.get("visual", {})
+        if visual.get("visualType") != "textbox":
+            continue
+        paragraphs = visual["objects"]["general"][0]["properties"]["paragraphs"]
+        size = max(
+            float(run["textStyle"]["fontSize"].removesuffix("px"))
+            for paragraph in paragraphs
+            for run in paragraph["textRuns"]
+        )
+        padding = visual["visualContainerObjects"]["padding"][0]["properties"]
+        vertical = sum(
+            float(padding[key]["expr"]["Literal"]["Value"].removesuffix("D"))
+            for key in ("top", "bottom")
+        )
+        position = artifact["position"]
+        assert position["height"] >= max(18, ceil(size * 25 / 16)) + vertical, path
+        assert position["y"] + position["height"] <= 720, path
+
+
+def test_stock_matrix_retains_part_plant_grain_and_guarded_measures():
+    artifact = report_pages.artifacts()[
+        "pages/available-stock/visuals/supporting-records/visual.json"
+    ]
+    visual = artifact["visual"]
+    assert visual["visualType"] == "pivotTable"
+    roles = visual["query"]["queryState"]
+    assert set(roles) == {"Rows", "Values"}
+    assert roles["Rows"]["projections"] == [
+        report_pages.column(report_pages.SR, "part_id"),
+        report_pages.column(report_pages.SR, "plant_id"),
+    ]
+    assert roles["Values"]["projections"] == [
+        report_pages.measure("Stock On Hand Row", "On hand"),
+        report_pages.measure("Stock Held Row", "Quality hold"),
+        report_pages.measure("Stock Protected Row", "Protected allocation"),
+        report_pages.measure("Stock Usable Row", "Usable units"),
+    ]
+    assert artifact["filterConfig"]["filters"][0]["field"] == report_pages.field(
+        "Measure", report_pages.CC, "Stock Row Visible"
+    )
+    assert visual["expansionStates"] == [
+        {
+            "roles": ["Rows"],
+            "levels": [
+                {
+                    "queryRefs": [item["queryRef"]],
+                    "identityKeys": [item["field"]],
+                    "isCollapsed": False,
+                    "isPinned": True,
+                }
+                for item in roles["Rows"]["projections"]
+            ],
+        }
+    ]
+    assert "total" not in visual["objects"]
+    for instance in visual["objects"]["subTotals"]:
+        assert instance["properties"] == {
+            "rowSubtotals": report_pages.literal(False),
+            "columnSubtotals": report_pages.literal(False),
+        }
+    for path, value in report_pages.artifacts().items():
+        item = value.get("visual", {})
+        if item.get("visualType") == "tableEx":
+            assert all(
+                "Column" in p["field"]
+                for p in item["query"]["queryState"]["Values"]["projections"]
+            ), path
 
 
 @pytest.mark.parametrize(

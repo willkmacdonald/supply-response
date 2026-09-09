@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "SavedRecords.source_record_id",
+              "nativeQueryRef": "source_record_id",
               "displayName": "Order line"
             },
             {
@@ -166,6 +167,7 @@
                 }
               },
               "queryRef": "SavedRecords.customer_order_id",
+              "nativeQueryRef": "customer_order_id",
               "displayName": "Customer order id"
             },
             {
@@ -180,6 +182,7 @@
                 }
               },
               "queryRef": "SavedRecords.product_id",
+              "nativeQueryRef": "product_id",
               "displayName": "Product id"
             },
             {
@@ -194,6 +197,7 @@
                 }
               },
               "queryRef": "SavedRecords.plant_id",
+              "nativeQueryRef": "plant_id",
               "displayName": "Plant id"
             },
             {
@@ -208,6 +212,7 @@
                 }
               },
               "queryRef": "SavedRecords.quantity",
+              "nativeQueryRef": "quantity",
               "displayName": "Quantity"
             },
             {
@@ -222,6 +227,7 @@
                 }
               },
               "queryRef": "SavedRecords.due_date",
+              "nativeQueryRef": "due_date",
               "displayName": "Due date"
             },
             {
@@ -236,6 +242,7 @@
                 }
               },
               "queryRef": "SavedRecords.line_revenue",
+              "nativeQueryRef": "line_revenue",
               "displayName": "Line revenue"
             }
           ]
@@ -355,7 +362,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "LockedOrderRowVisible",
+        "name": "customer-orders-supporting-records-LockedOrderRowVisible",
         "field": {
           "Measure": {
             "Expression": {

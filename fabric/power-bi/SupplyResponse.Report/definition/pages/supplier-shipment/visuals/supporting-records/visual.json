@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "SavedRecords.supplier_id",
+              "nativeQueryRef": "supplier_id",
               "displayName": "Supplier id"
             },
             {
@@ -166,6 +167,7 @@
                 }
               },
               "queryRef": "SavedRecords.part_id",
+              "nativeQueryRef": "part_id",
               "displayName": "Part id"
             },
             {
@@ -180,6 +182,7 @@
                 }
               },
               "queryRef": "SavedRecords.plant_id",
+              "nativeQueryRef": "plant_id",
               "displayName": "Plant id"
             },
             {
@@ -194,6 +197,7 @@
                 }
               },
               "queryRef": "SavedRecords.quantity",
+              "nativeQueryRef": "quantity",
               "displayName": "Quantity"
             },
             {
@@ -208,6 +212,7 @@
                 }
               },
               "queryRef": "SavedRecords.due_date",
+              "nativeQueryRef": "due_date",
               "displayName": "Due date"
             },
             {
@@ -222,6 +227,7 @@
                 }
               },
               "queryRef": "SavedRecords.incremental_cost_per_unit",
+              "nativeQueryRef": "incremental_cost_per_unit",
               "displayName": "Incremental cost per unit"
             }
           ]
@@ -341,7 +347,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "LockedRecordRowVisible",
+        "name": "supplier-shipment-supporting-records-LockedRecordRowVisible",
         "field": {
           "Measure": {
             "Expression": {

@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Record Arrival Date Display",
+              "nativeQueryRef": "Record Arrival Date Display",
               "displayName": "Arrival date"
             }
           ]

@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Current Decision Display",
+              "nativeQueryRef": "Current Decision Display",
               "displayName": "Current governing decision"
             }
           ]

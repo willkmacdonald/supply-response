@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Record First Article Display",
+              "nativeQueryRef": "Record First Article Display",
               "displayName": "First article requirement"
             }
           ]

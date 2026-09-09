@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "ActionOutcomes.action_kind",
+              "nativeQueryRef": "action_kind",
               "displayName": "Action kind"
             },
             {
@@ -166,6 +167,7 @@
                 }
               },
               "queryRef": "ActionOutcomes.case_key",
+              "nativeQueryRef": "case_key",
               "displayName": "Case key"
             },
             {
@@ -180,6 +182,7 @@
                 }
               },
               "queryRef": "ActionOutcomes.decision_key",
+              "nativeQueryRef": "decision_key",
               "displayName": "Decision key"
             },
             {
@@ -194,6 +197,7 @@
                 }
               },
               "queryRef": "ActionOutcomes.action_key",
+              "nativeQueryRef": "action_key",
               "displayName": "Action key"
             }
           ]
@@ -313,7 +317,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "LockedActionRowVisible",
+        "name": "actions-outcomes-source-details-LockedActionRowVisible",
         "field": {
           "Measure": {
             "Expression": {

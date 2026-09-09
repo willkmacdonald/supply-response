@@ -369,6 +369,7 @@ def test_every_visual_is_schema_shaped_and_inside_its_page() -> None:
                 "objects",
                 "visualContainerObjects",
                 "syncGroup",
+                "expansionStates",
             }
             assert isinstance(visual_container["visual"]["visualType"], str)
             if visual_container["visual"]["visualType"] == "textbox":
@@ -376,11 +377,21 @@ def test_every_visual_is_schema_shaped_and_inside_its_page() -> None:
                 continue
             query_state = visual_container["visual"]["query"]["queryState"]
             assert query_state
+            assert "rows" not in query_state
             for projection_state in query_state.values():
                 assert set(projection_state) == {"projections"}
                 for projection in projection_state["projections"]:
-                    assert set(projection) <= {"field", "queryRef", "displayName"}
-                    assert set(projection) >= {"field", "queryRef"}
+                    assert set(projection) <= {
+                        "field",
+                        "queryRef",
+                        "nativeQueryRef",
+                        "displayName",
+                    }
+                    assert set(projection) >= {
+                        "field",
+                        "queryRef",
+                        "nativeQueryRef",
+                    }
                     field = projection["field"]
                     assert set(field) in ({"Column"}, {"Measure"}, {"Aggregation"})
                     if "Aggregation" in field:
@@ -800,6 +811,7 @@ def test_all_business_tables_and_variance_have_locked_scope_gates():
         value = _load(path)
         if value["visual"]["visualType"] not in {
             "tableEx",
+            "pivotTable",
             "clusteredColumnChart",
         }:
             continue
@@ -846,6 +858,21 @@ def test_no_persisted_case_default_or_latest_showcase_override():
 
 
 def test_report_has_no_embedded_rows_or_environment_specific_identifiers() -> None:
+    def assert_rows_are_query_roles(value, path=()):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key.lower() == "rows":
+                    assert key == "Rows"
+                    assert path[-1:] == ("queryState",)
+                    assert isinstance(child, dict)
+                    assert set(child) == {"projections"}
+                assert_rows_are_query_roles(child, path + (key,))
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                assert_rows_are_query_roles(child, path + (index,))
+
+    for path in POWER_BI.rglob("*.json"):
+        assert_rows_are_query_roles(_load(path))
     text = "\n".join(
         path.read_text(encoding="utf-8")
         for path in POWER_BI.rglob("*")
@@ -854,7 +881,6 @@ def test_report_has_no_embedded_rows_or_environment_specific_identifiers() -> No
     lowered = text.lower()
     assert '"staticdata":' not in lowered
     assert '"datavalues":' not in lowered
-    assert '"rows":' not in lowered
     assert "analysis.windows.net" not in lowered
     assert not re.search(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", lowered)
     assert ".datawarehouse.fabric.microsoft.com" not in lowered

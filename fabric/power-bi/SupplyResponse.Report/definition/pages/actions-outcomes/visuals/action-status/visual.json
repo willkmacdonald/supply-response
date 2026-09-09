@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "ActionOutcomes.action_kind",
+              "nativeQueryRef": "action_kind",
               "displayName": "Action kind"
             },
             {
@@ -166,6 +167,7 @@
                 }
               },
               "queryRef": "ActionOutcomes.action_status",
+              "nativeQueryRef": "action_status",
               "displayName": "Action status"
             }
           ]
@@ -285,7 +287,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "LockedActionRowVisible",
+        "name": "actions-outcomes-action-status-LockedActionRowVisible",
         "field": {
           "Measure": {
             "Expression": {

@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Option Revenue Display",
+              "nativeQueryRef": "Option Revenue Display",
               "displayName": "Expected revenue at risk"
             }
           ]

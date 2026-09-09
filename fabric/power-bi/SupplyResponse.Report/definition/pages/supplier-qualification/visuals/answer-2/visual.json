@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Record Audit Display",
+              "nativeQueryRef": "Record Audit Display",
               "displayName": "Audit requirement"
             }
           ]

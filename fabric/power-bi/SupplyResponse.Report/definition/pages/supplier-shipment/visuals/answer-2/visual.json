@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Record Due Date Display",
+              "nativeQueryRef": "Record Due Date Display",
               "displayName": "Scheduled receipt"
             }
           ]

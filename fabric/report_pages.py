@@ -56,7 +56,11 @@ def field(kind, table, name, source=False):
 
 
 def projection(kind, table, name, label=None):
-    result = {"field": field(kind, table, name), "queryRef": table + "." + name}
+    result = {
+        "field": field(kind, table, name),
+        "queryRef": table + "." + name,
+        "nativeQueryRef": name,
+    }
     if label is not None:
         result["displayName"] = label
     return result
@@ -386,7 +390,7 @@ def case_selector():
 
 def common(title, state):
     return [
-        text("page-title", title, (24, 14, 1232, 40), 26),
+        text("page-title", title, (24, 12, 1232, 49), 26),
         card(
             "selection-state",
             "Selected case and analysis",
@@ -398,7 +402,7 @@ def common(title, state):
         text(
             "fictional-footer",
             "Snapshot used for this analysis · Demo corpus — fictional · Use page tabs to explore this case",
-            (24, 682, 1232, 26),
+            (24, 682, 1232, 29),
             13,
         ),
     ]
@@ -435,14 +439,63 @@ def detail(page):
         (24, 386, 1232, 166),
     )
     if page == "available-stock":
-        supporting["visual"]["query"]["queryState"]["Values"]["projections"] = [
-            column(SR, "part_id"),
-            column(SR, "plant_id"),
-            measure("Stock On Hand Row", "On hand"),
-            measure("Stock Held Row", "Quality hold"),
-            measure("Stock Protected Row", "Protected allocation"),
-            measure("Stock Usable Row", "Usable units"),
+        visual = supporting["visual"]
+        visual["visualType"] = "pivotTable"
+        rows = [column(SR, "part_id"), column(SR, "plant_id")]
+        visual["query"]["queryState"] = {
+            "Rows": {"projections": rows},
+            "Values": {
+                "projections": [
+                    measure("Stock On Hand Row", "On hand"),
+                    measure("Stock Held Row", "Quality hold"),
+                    measure("Stock Protected Row", "Protected allocation"),
+                    measure("Stock Usable Row", "Usable units"),
+                ]
+            },
+        }
+        visual["expansionStates"] = [
+            {
+                "roles": ["Rows"],
+                "levels": [
+                    {
+                        "queryRefs": [item["queryRef"]],
+                        "identityKeys": [item["field"]],
+                        "isCollapsed": False,
+                        "isPinned": True,
+                    }
+                    for item in rows
+                ],
+            }
         ]
+        objects = visual["objects"]
+        del objects["total"]
+        objects["rowHeaders"] = obj(
+            {
+                "stepped": literal(False),
+                "repeatRowHeaders": literal(True),
+                "showExpandCollapseButtons": literal(False),
+                "fontColor": color(GREEN),
+                "backColor": color(WHITE),
+                "fontSize": literal(11),
+            }
+        )
+        totals = {
+            "rowSubtotals": literal(False),
+            "columnSubtotals": literal(False),
+        }
+        objects["subTotals"] = [
+            {"properties": totals},
+            {"selector": {"id": "Row"}, "properties": totals},
+            {"selector": {"id": "Column"}, "properties": totals},
+        ]
+        objects["columnHeaders"][0]["properties"].update(
+            {
+                "autoSizeColumnWidth": literal(True),
+                "columnAdjustment": literal("growToFit"),
+            }
+        )
+        objects["values"][0]["properties"]["fontColorSecondary"] = color(GREEN)
+        visual["visualContainerObjects"]["stylePreset"] = obj({"name": literal("None")})
     elif page == "customer-orders":
         supporting["visual"]["query"]["queryState"]["Values"]["projections"].insert(
             0, projection("Column", SR, "source_record_id", "Order line")
@@ -692,11 +745,17 @@ def artifacts():
         }
         if family:
             definition["filterConfig"] = {"filters": [family_filter(family)]}
+        for filter_item in definition.get("filterConfig", {}).get("filters", []):
+            filter_item["name"] = page + "-" + filter_item["name"]
         result[f"pages/{page}/page.json"] = definition
         for order, visual in enumerate(
             sorted(items, key=lambda v: (v["position"]["y"], v["position"]["x"]))
         ):
             visual["position"].update(z=order, tabOrder=order)
+            for filter_item in visual.get("filterConfig", {}).get("filters", []):
+                filter_item["name"] = (
+                    page + "-" + visual["name"] + "-" + filter_item["name"]
+                )
             result[f"pages/{page}/visuals/{visual['name']}/visual.json"] = visual
     return result
 

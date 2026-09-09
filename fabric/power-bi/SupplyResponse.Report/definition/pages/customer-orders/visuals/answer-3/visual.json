@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Affected Lines Display",
+              "nativeQueryRef": "Affected Lines Display",
               "displayName": "Order lines in this saved plan"
             }
           ]

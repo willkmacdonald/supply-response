@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Record Status Display",
+              "nativeQueryRef": "Record Status Display",
               "displayName": "Qualification status"
             }
           ]

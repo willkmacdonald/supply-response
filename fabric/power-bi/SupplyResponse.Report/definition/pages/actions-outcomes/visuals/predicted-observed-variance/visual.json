@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "ActionOutcomes.metric",
+              "nativeQueryRef": "metric",
               "displayName": "Metric"
             }
           ]
@@ -170,6 +171,7 @@
                 }
               },
               "queryRef": "ActionOutcomes.observation_kind",
+              "nativeQueryRef": "observation_kind",
               "displayName": "Observation kind"
             }
           ]
@@ -188,6 +190,7 @@
                 }
               },
               "queryRef": "ActionOutcomes.Observed Variance",
+              "nativeQueryRef": "Observed Variance",
               "displayName": "Variance"
             }
           ]
@@ -290,7 +293,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "LockedObservationRowVisible",
+        "name": "actions-outcomes-predicted-observed-variance-LockedObservationRowVisible",
         "field": {
           "Measure": {
             "Expression": {

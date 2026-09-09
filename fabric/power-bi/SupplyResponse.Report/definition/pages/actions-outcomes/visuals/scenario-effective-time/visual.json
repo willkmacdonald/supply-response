@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Scenario Context",
+              "nativeQueryRef": "Scenario Context",
               "displayName": "In this scenario, as of"
             }
           ]

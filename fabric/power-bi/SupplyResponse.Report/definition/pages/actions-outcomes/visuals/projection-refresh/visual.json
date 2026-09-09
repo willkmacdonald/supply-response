@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Projection Updated Display",
+              "nativeQueryRef": "Projection Updated Display",
               "displayName": "Projection updated"
             }
           ]

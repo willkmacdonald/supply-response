@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Record State",
+              "nativeQueryRef": "Record State",
               "displayName": "Selected case and analysis"
             }
           ]

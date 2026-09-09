@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Record Quantity Display",
+              "nativeQueryRef": "Record Quantity Display",
               "displayName": "Scheduled quantity"
             }
           ]

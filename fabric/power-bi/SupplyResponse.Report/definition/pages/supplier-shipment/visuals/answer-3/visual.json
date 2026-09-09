@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Record Unit Cost Display",
+              "nativeQueryRef": "Record Unit Cost Display",
               "displayName": "Incremental cost per unit"
             }
           ]

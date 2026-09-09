@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Stock Explanation",
+              "nativeQueryRef": "Stock Explanation",
               "displayName": "What this means for the response"
             }
           ]

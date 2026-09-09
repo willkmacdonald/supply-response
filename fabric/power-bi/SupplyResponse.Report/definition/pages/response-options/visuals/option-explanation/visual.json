@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Options Explanation",
+              "nativeQueryRef": "Options Explanation",
               "displayName": "Expected if we take this option"
             }
           ]

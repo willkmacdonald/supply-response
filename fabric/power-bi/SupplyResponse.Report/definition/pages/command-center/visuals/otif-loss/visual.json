@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Exposure Answer",
+              "nativeQueryRef": "Exposure Answer",
               "displayName": "What does that put at risk?"
             }
           ]

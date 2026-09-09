@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Qualification Answer",
+              "nativeQueryRef": "Qualification Answer",
               "displayName": "Can we use the alternate supplier?"
             }
           ]

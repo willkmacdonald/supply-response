@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Options Answer",
+              "nativeQueryRef": "Options Answer",
               "displayName": "Compare the options"
             }
           ]

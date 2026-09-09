@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Stock State",
+              "nativeQueryRef": "Stock State",
               "displayName": "Selected case and analysis"
             }
           ]

@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Decision Answer",
+              "nativeQueryRef": "Decision Answer",
               "displayName": "Recorded decision"
             }
           ]

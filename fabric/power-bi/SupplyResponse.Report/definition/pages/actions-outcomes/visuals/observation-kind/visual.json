@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Current Observation Display",
+              "nativeQueryRef": "Current Observation Display",
               "displayName": "Observation context"
             }
           ]

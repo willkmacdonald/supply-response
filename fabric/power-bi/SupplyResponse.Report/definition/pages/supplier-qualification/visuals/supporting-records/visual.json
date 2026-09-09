@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "SavedRecords.supplier_id",
+              "nativeQueryRef": "supplier_id",
               "displayName": "Supplier id"
             },
             {
@@ -166,6 +167,7 @@
                 }
               },
               "queryRef": "SavedRecords.part_id",
+              "nativeQueryRef": "part_id",
               "displayName": "Part id"
             },
             {
@@ -180,6 +182,7 @@
                 }
               },
               "queryRef": "SavedRecords.status",
+              "nativeQueryRef": "status",
               "displayName": "Status"
             },
             {
@@ -194,6 +197,7 @@
                 }
               },
               "queryRef": "SavedRecords.audit_complete",
+              "nativeQueryRef": "audit_complete",
               "displayName": "Audit complete"
             },
             {
@@ -208,6 +212,7 @@
                 }
               },
               "queryRef": "SavedRecords.first_article_complete",
+              "nativeQueryRef": "first_article_complete",
               "displayName": "First article complete"
             },
             {
@@ -222,6 +227,7 @@
                 }
               },
               "queryRef": "SavedRecords.expected_decision_date",
+              "nativeQueryRef": "expected_decision_date",
               "displayName": "Expected decision date"
             }
           ]
@@ -341,7 +347,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "LockedRecordRowVisible",
+        "name": "supplier-qualification-supporting-records-LockedRecordRowVisible",
         "field": {
           "Measure": {
             "Expression": {

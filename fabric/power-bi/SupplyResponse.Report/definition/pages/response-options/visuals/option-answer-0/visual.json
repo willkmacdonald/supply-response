@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Selected Option Display",
+              "nativeQueryRef": "Selected Option Display",
               "displayName": "Selected option"
             }
           ]

@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Availability Answer",
+              "nativeQueryRef": "Availability Answer",
               "displayName": "What do we have available?"
             }
           ]

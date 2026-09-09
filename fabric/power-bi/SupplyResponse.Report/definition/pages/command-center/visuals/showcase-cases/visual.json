@@ -152,6 +152,7 @@
                 }
               },
               "queryRef": "CaseCommandCenter.Transfer Answer",
+              "nativeQueryRef": "Transfer Answer",
               "displayName": "Can another plant help?"
             }
           ]
