@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RuntimeStatus } from "../types";
-import { buildReportUrl, reportIdentityKey, REPORTING_CONTRACT } from "./reportNavigation";
+import { buildReportUrl, buildTraditionalReportUrl, reportIdentityKey, REPORTING_CONTRACT } from "./reportNavigation";
 
 const base = "https://app.powerbi.com/groups/dc3ac590-d892-40a7-9388-65dec120d67a/reports/e7611c8c-c887-443f-858a-13b1044bb4b9";
 const runtime: RuntimeStatus = {
@@ -85,5 +85,42 @@ describe("exact report navigation", () => {
   it("rejects missing case and analysis without creating a generic link", () => {
     expect(buildReportUrl(runtime, { ...shipment, caseId: "" })).toBeNull();
     expect(buildReportUrl(runtime, { ...shipment, analysisId: "" })).toBeNull();
+  });
+  it("launches traditional mode without a record or option preselection", () => {
+    const result = new URL(buildTraditionalReportUrl(runtime, {
+      caseId: "Case-A", analysisId: "Historical-A", runtimeMode: "live",
+    })!);
+    expect(result.pathname.endsWith("/command-center")).toBe(true);
+    expect(result.searchParams.get("filter")).toBe([
+      `CaseCommandCenter/case_key eq '${reportIdentityKey("Case-A")}'`,
+      `SavedAnalyses/analysis_key eq '${reportIdentityKey("Historical-A")}'`,
+      "CaseCommandCenter/walkthrough_route eq 'traditional'",
+    ].join(" and "));
+    expect(result.search).not.toContain("SavedRecords");
+    expect(result.search).not.toContain("SavedOptions");
+  });
+  it("rejects a traditional route without an explicit analysis", () => {
+    expect(buildTraditionalReportUrl(runtime, {
+      caseId: "Case-A", analysisId: "", runtimeMode: "live",
+    })).toBeNull();
+  });
+  it.each([
+    { ...runtime, deployment_contract: null },
+    { ...runtime, power_bi_available: false },
+    { ...runtime, runtime_mode: "fallback" as const },
+    { ...runtime, power_bi_url: "https://evil.example" },
+    { ...runtime, power_bi_url: base + "?filter=stale" },
+  ])("rejects unavailable traditional report configurations", unavailable => {
+    expect(buildTraditionalReportUrl(unavailable, {
+      caseId: "Case-A", analysisId: "Analysis-A", runtimeMode: "live",
+    })).toBeNull();
+  });
+  it.each(["", " ", "bad\nidentity", "x".repeat(257)])("rejects invalid traditional analysis IDs", analysisId => {
+    expect(buildTraditionalReportUrl(runtime, { caseId: "Case-A", analysisId, runtimeMode: "live" })).toBeNull();
+  });
+  it("rejects an overlong encoded traditional query", () => {
+    expect(buildTraditionalReportUrl(runtime, {
+      caseId: "C".repeat(256), analysisId: "A".repeat(256), runtimeMode: "live",
+    })).toBeNull();
   });
 });

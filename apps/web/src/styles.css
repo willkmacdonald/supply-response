@@ -114,6 +114,8 @@ h3 { margin: 0.75rem 0 0.45rem; }
 .source-footers .evidence-footer { padding-top: 0.5rem; }
 .saved-analysis-footer { margin-top: auto; border-top: 1px solid #dde4dd; padding-top: 0.9rem; font-size: 0.8rem; color: #52645e; }
 .planner-options { display: grid; gap: 0.8rem; }
+.planning-route-actions { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; }
+.planning-route-actions a { display: inline-flex; align-items: center; min-height: 2.75rem; }
 .planner-options .option-card { padding: 0.75rem; }
 [aria-labelledby="decision-row"] .investigation-cards { align-items: start; }
 [aria-labelledby="decision-row"] [aria-labelledby="options-heading"] .planner-options { gap: 0.6rem; }

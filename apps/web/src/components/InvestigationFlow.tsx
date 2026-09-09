@@ -16,7 +16,7 @@ export function InvestigationFlow({state}: {state: CaseWorkspaceState}) {
     analysisId: analysis.analysis_id,
     runtimeMode: analysis.runtime_mode,
   } : null;
-  return <div className="investigation-flow"><div className="analysis-context">
+  return <div id="assisted-review" className="investigation-flow"><div className="analysis-context">
     <p>{analysis.material.corpus === "demo_corpus" ? "Demo corpus — fictional" : "Fictional provenance not established for this analysis"}</p>
     <p>Snapshot used for this analysis · In this scenario, as of {instant(analysis.scenario_effective_time)}</p><p>Analysis saved at {instant(analysis.created_at)}. Saved records do not indicate ongoing monitoring.</p>
     {analysis.runtime_mode === "fallback" && <p>Demo fixture — not a live retrieval</p>}<details><summary>Analysis source details</summary><p>Case {analysis.case_id}</p><p>Analysis {analysis.analysis_id}</p></details>

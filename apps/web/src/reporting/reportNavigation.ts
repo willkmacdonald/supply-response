@@ -77,3 +77,16 @@ export function buildReportUrl(runtime: RuntimeStatus, target: ReportTarget): st
   url.searchParams.set("filter", filters.join(" and "));
   return url.search.length <= 2000 ? url.href : null;
 }
+
+export function buildTraditionalReportUrl(
+  runtime: RuntimeStatus,
+  target: { caseId: string; analysisId: string; runtimeMode: "live" | "fallback" },
+): string | null {
+  const base = buildReportUrl(runtime, { ...target, page: "command-center" });
+  if (!base || !usableIdentity(target.analysisId)) return null;
+  const url = new URL(base);
+  const filter = url.searchParams.get("filter");
+  if (!filter) return null;
+  url.searchParams.set("filter", filter + " and CaseCommandCenter/walkthrough_route eq 'traditional'");
+  return url.search.length <= 2000 ? url.href : null;
+}

@@ -2,6 +2,7 @@ import {CaseHeader} from "./components/CaseHeader";
 import {ExecutionPanel} from "./components/ExecutionPanel";
 import {InvestigationFlow} from "./components/InvestigationFlow";
 import {OutcomePanel} from "./components/OutcomePanel";
+import {PlanningRoutes} from "./components/PlanningRoutes";
 import {useAuth} from "./auth/AuthProvider";
 import {useCaseWorkspace} from "./hooks/useCaseWorkspace";
 import "./styles.css";
@@ -30,6 +31,11 @@ function CaseWorkspace() {
       analyzing={workspace.operation === "analyzing"}
       onCreate={workspace.create}
       onAnalyze={workspace.analyze}
+    />
+    <PlanningRoutes
+      runtime={workspace.runtime}
+      caseInstance={workspace.caseInstance}
+      analysis={workspace.analysis}
     />
     <InvestigationFlow state={workspace} />
     <ExecutionPanel

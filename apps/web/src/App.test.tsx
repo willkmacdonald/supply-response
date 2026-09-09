@@ -614,4 +614,21 @@ describe("progressive Case workspace", () => {
     render(<App />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to initialize the Case workspace");
   });
+
+  it("keeps the loaded analysis when entering assisted review", async () => {
+    const fetchMock = mockFallbackCaseLifecycle();
+    render(<App />);
+    await screen.findByText("Fallback mode");
+    await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
+    await screen.findByText("RL-CASE-1");
+    await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
+    await screen.findByText("Combined response");
+    const content = document.getElementById("assisted-review")!;
+    expect(content).not.toBeNull();
+    const beforeContent = content.textContent;
+    const beforeCalls = fetchMock.mock.calls.length;
+    await userEvent.click(screen.getByRole("link", {name: "Review with AI assistance"}));
+    expect(fetchMock.mock.calls).toHaveLength(beforeCalls);
+    expect(content.textContent).toBe(beforeContent);
+  });
 });
