@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 from decimal import Decimal
@@ -1071,3 +1072,156 @@ def test_partition_lists_are_ordered_validated_and_do_not_multiply_options(
     assert len(result) == 1
     assert result[0][output] == expected
     assert result[0]["response_cost"] == Decimal(0)
+
+
+COMPLETENESS_FIXTURES = {
+    "inventory_positions": (
+        "inventory_complete",
+        {
+            "inventory_id": "scope-record",
+            "part_id": "part",
+            "plant_id": "plant",
+            "on_hand": 0,
+            "quality_hold": 0,
+            "protected_allocation": 0,
+        },
+        "inventory_id",
+        "on_hand",
+    ),
+    "production_orders": (
+        "production_orders_complete",
+        {
+            "production_order_id": "scope-record",
+            "product_id": "product",
+            "plant_id": "plant",
+            "quantity": 1,
+            "due_date": "2026-09-05",
+            "component_demand": 1,
+        },
+        "production_order_id",
+        "quantity",
+    ),
+    "customer_orders": (
+        "customer_orders_complete",
+        {
+            "customer_order_line_id": "scope-record",
+            "customer_id": "customer",
+            "production_order_id": "production",
+            "product_id": "product",
+            "plant_id": "plant",
+            "quantity": 1,
+            "due_date": "2026-09-05",
+            "unit_revenue": "0.00",
+            "unit_margin": "0.00",
+        },
+        "customer_order_line_id",
+        "quantity",
+    ),
+}
+
+
+def completeness_flags(engine, case_id):
+    records = partition_rows(engine, "SavedAnalyses", case_id)
+    assert len(records) == 1
+    return {
+        name: records[0][name]
+        for name in (
+            "inventory_complete",
+            "production_orders_complete",
+            "customer_orders_complete",
+        )
+    }
+
+
+@pytest.mark.parametrize("member", tuple(COMPLETENESS_FIXTURES))
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "valid",
+        "empty",
+        "primitive",
+        "missing-id",
+        "duplicate-id-survivor",
+        "invalid-numeric-survivor",
+        "duplicate-property",
+    ),
+)
+def test_partition_completeness_detects_missing_projected_members(
+    engine, member, mutation
+):
+    flag, valid, id_field, numeric_field = COMPLETENESS_FIXTURES[member]
+    item = copy.deepcopy(valid)
+    survivor = {**valid, id_field: "survivor"}
+    expected = mutation in {"valid", "empty"}
+    source = [item]
+    if mutation == "empty":
+        source = []
+    elif mutation == "primitive":
+        source = [item, 42]
+    elif mutation == "missing-id":
+        item.pop(id_field)
+        source = [item, survivor]
+    elif mutation == "duplicate-id-survivor":
+        source = [item, copy.deepcopy(item), survivor]
+    elif mutation == "invalid-numeric-survivor":
+        item[numeric_field] = "invalid-number"
+        source = [item, survivor]
+    case_id, analysis_id, _ = seed(engine, snapshot={member: source})
+    if mutation == "duplicate-property":
+        payload = json.loads(
+            rows(
+                engine,
+                "SELECT payload_json FROM app.analysis_versions WHERE analysis_id=:a",
+                a=analysis_id,
+            )[0]["payload_json"]
+        )
+        snapshot = payload["material"]["operational_snapshot_json"]
+        # Add a second exact property name without round-tripping through a dict.
+        payload["material"]["operational_snapshot_json"] = (
+            snapshot[:-1] + "," + json.dumps(member) + ":[]}"
+        )
+        rewrite_fixture_payload(engine, analysis_id, payload)
+    flags = completeness_flags(engine, case_id)
+    assert flags[flag] is expected
+    # Well-formed empty sibling collections remain complete.
+    assert all(value for name, value in flags.items() if name != flag)
+
+
+@pytest.mark.parametrize("member", tuple(COMPLETENESS_FIXTURES))
+@pytest.mark.parametrize("bad_property", ("missing", "null", "object", "string"))
+def test_partition_completeness_requires_present_array_property(
+    engine, member, bad_property
+):
+    flag, valid, _, _ = COMPLETENESS_FIXTURES[member]
+    case_id, analysis_id, _ = seed(engine, snapshot={member: [valid]})
+    payload = json.loads(
+        rows(
+            engine,
+            "SELECT payload_json FROM app.analysis_versions WHERE analysis_id=:a",
+            a=analysis_id,
+        )[0]["payload_json"]
+    )
+    snapshot = json.loads(payload["material"]["operational_snapshot_json"])
+    if bad_property == "missing":
+        snapshot.pop(member)
+    else:
+        snapshot[member] = {"null": None, "object": {}, "string": "[]"}[bad_property]
+    payload["material"]["operational_snapshot_json"] = json.dumps(snapshot)
+    rewrite_fixture_payload(engine, analysis_id, payload)
+    # Existing saved_analyses may invalidate the whole snapshot, which is conservative.
+    assert completeness_flags(engine, case_id)[flag] is False
+
+
+@pytest.mark.parametrize("member", tuple(COMPLETENESS_FIXTURES))
+def test_partition_completeness_isolated_for_reused_ids(engine, member):
+    flag, valid, id_field, _ = COMPLETENESS_FIXTURES[member]
+    good, _, _ = seed(engine, snapshot={member: [valid]})
+    bad, _, _ = seed(
+        engine,
+        snapshot={
+            member: [valid, copy.deepcopy(valid), {**valid, id_field: "survivor"}]
+        },
+    )
+    assert completeness_flags(engine, good)[flag] is True
+    assert completeness_flags(engine, bad)[flag] is False
+    assert completeness_flags(engine, good)[flag] is True
