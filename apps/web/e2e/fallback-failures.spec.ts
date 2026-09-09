@@ -27,17 +27,27 @@ async function armFault(page: Page, caseId: string, fault: string): Promise<void
 }
 
 test("rejection keeps evidence visible and permits reanalysis", async ({page}) => {
-  await createAutomatedTestCase(page);
+  const caseId = await createAutomatedTestCase(page);
   await analyze(page);
+  const disruption = page.getByRole("region", {name: "1. Understand the disruption", exact: true});
+  const responses = page.getByRole("region", {name: "2. Investigate responses", exact: true});
+  await expect(disruption).toBeVisible();
+  await expect(responses).toBeVisible();
+  const disruptionBefore = await disruption.textContent();
+  const evidenceBefore = await responses.textContent();
   await page.getByLabel("Rejection reason").fill("Refresh the supplier evidence before deciding.");
   await page.getByRole("button", {name: "Reject recommendation"}).click();
   await expect(page.getByTestId("decision-receipt")).toContainText("Rejected");
-  await expect(page.getByRole("heading", {name: "Evidence items"})).toBeVisible();
+  await expect(disruption).toBeVisible();
+  await expect(responses).toBeVisible();
+  expect(await disruption.textContent()).toBe(disruptionBefore);
+  expect(await responses.textContent()).toBe(evidenceBefore);
 
   await page.getByRole("button", {name: "Analyze disruption"}).click();
-  await expect(page.getByRole("heading", {name: "Decision"})).toBeVisible();
+  await expect(page.getByRole("heading", {name: "Review and approve.", exact: true})).toBeVisible();
   await expect(page.getByRole("button", {name: "Approve combined response"})).toBeEnabled();
   await expect(page.getByTestId("decision-receipt")).toHaveCount(0);
+  await expect(page.locator(".case-id")).toHaveText(caseId);
 });
 
 test("the server blocks a stale analysis without recording a Decision", async ({page}) => {
