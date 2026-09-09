@@ -226,7 +226,12 @@ def test_option_comparison_includes_protected_customer_orders_column():
         )
         == 1
     )
-    assert "recommend" not in protected
+    assert all(
+        "recommend" not in projection["nativeQueryRef"].lower()
+        for projection in projections
+    )
+    assert set(visual["query"]["queryState"]) == {"Values"}
+    assert "conditionalFormatting" not in visual["objects"]
     assert visual["visualType"] == "tableEx"
 
 
