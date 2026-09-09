@@ -38,6 +38,14 @@ The packaged API artifact marker was regenerated and independently reviewed at
 The activation regression set passes 62 tests, including raw-settings versus
 composed-report-URL bindings. No reporting receipt has been issued or installed.
 
+Final-review corrections at `605015e` subsequently refreshed the digest; see the
+[activation checkpoint](2026-09-09-report-activation.md#execution-checkpoint)
+for its current value. Those corrections passed 184 focused local checks and
+independent source re-review. Updated real-SQL verification is pending. Adding
+protected customer orders to the comparison remains a user decision because
+the exact column list below conflicts with the approved specification's report
+content requirement; do not treat that omission as an approved scope reduction.
+
 Native serialization is now established by Microsoft's authored Power BI Visuals sample, with formatting confirmed by official `@microsoft/powerbi-report-authoring-cli@0.1.4` and its `@microsoft/powerbi-core-visual-schema@0.1.1` dependency. The sample uses `actionButton`, `visualContainerObjects.visualLink`, and literal expressions for `show`, `type='PageNavigation'`, and `navigationSection='<page name>'`. The concrete helper below follows that artifact, not an inferred schema value. Its source artifact uses visualContainer 2.7.0; this project's generator uses pinned 2.9.0 and must validate the resulting structure against that version.
 
 There is no remaining serialization blocker to implementation. Read-only actual-engine navigation/layout acceptance remains part of the existing release gate, not this design task. Generated JSON/TMDL validation cannot establish that case/analysis context persists in a real session. Do not claim runtime Stage 5 acceptance or activate externally until that check is recorded.

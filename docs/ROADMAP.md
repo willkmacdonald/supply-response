@@ -30,6 +30,12 @@ baseline recorded below.
 - Final local regression: 1,179 non-live Python tests and all six local browser
   lifecycle tests pass. See the [verification checkpoint](superpowers/plans/2026-09-08-planner-experience-delivery.md#final-local-regression-checkpoint-2026-09-09)
   for deliberate live-test exclusions and the remaining release boundary.
+- Final-review follow-up `605015e` corrects the no-feasible-response state,
+  baseline parts/cost and recommended service exposure. Independent source
+  re-review accepted those corrections; 184 focused checks and a fresh full
+  non-live Python run (1,181 passed) are green. Additional SQL verification and
+  the protected-customer-orders column choice are pending before whole-branch
+  acceptance.
 - Still required: coordinated publication, actual DAX/value parity, native
   layouts/navigation, Alex's access, and every card-to-source journey. No new
   reporting receipt has been issued or installed.

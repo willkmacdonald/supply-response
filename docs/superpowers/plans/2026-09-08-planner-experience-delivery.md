@@ -38,6 +38,22 @@ verification are tracked separately; these checkpoints do not activate any link.
 
 ### Final local regression checkpoint (2026-09-09)
 
+The following results cover the pre-final-review implementation through
+`2fadc42`. Final review found missing report comparison fields and an absent
+explicit no-feasible-response state. The unblocked corrections are implemented
+at `605015e` and accepted on independent source re-review: 184 focused local
+checks pass and offline visual validation reports zero errors/warnings. The
+new SQL behavior still requires a fresh real-SQL run. The
+protected-customer-orders column awaits resolution of the spec versus the later
+fixed-column-list conflict. Whole-branch acceptance remains conditional on
+these two items. During native acceptance, also inspect the longer overview
+copy inside the existing 334×156 cards; geometry checks do not prove text fit.
+
+After `605015e`, the full non-live Python rerun passed **1,181 tests**, with
+125 locally unconfigured SQL skips, 14 deliberately deselected live tests, and
+the same inherited warning (132.71 seconds). The 11 new SQL cases are among
+those skips; this result does not close the updated real-SQL gate.
+
 - Non-live Python suite: **1,179 passed**, 114 skipped for locally unconfigured
   SQL connections, and 14 live tests deliberately deselected. The actual SQL
   suite independently passed **126 tests** on the private disposable database.
