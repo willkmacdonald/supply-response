@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "fictional-footer",
+  "name": "walkthrough-step",
   "position": {
     "x": 24,
-    "y": 770,
-    "width": 1232,
-    "height": 30,
-    "z": 17,
-    "tabOrder": 17
+    "y": 714,
+    "width": 768,
+    "height": 44,
+    "z": 9,
+    "tabOrder": 9
   },
   "visual": {
     "visualType": "textbox",
@@ -144,10 +144,10 @@
               {
                 "textRuns": [
                   {
-                    "value": "Snapshot used for this analysis · Demo corpus — fictional · Use page tabs to explore this case · Return to the existing demo tab for original messages and AI assistance.",
+                    "value": "3. Check the partial shipment",
                     "textStyle": {
                       "fontFamily": "Segoe UI",
-                      "fontSize": "13px",
+                      "fontSize": "18px",
                       "color": "#183E35"
                     }
                   }

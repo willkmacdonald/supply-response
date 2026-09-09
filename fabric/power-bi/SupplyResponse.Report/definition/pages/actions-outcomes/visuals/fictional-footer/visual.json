@@ -3,11 +3,11 @@
   "name": "fictional-footer",
   "position": {
     "x": 24,
-    "y": 682,
+    "y": 770,
     "width": 1232,
-    "height": 29,
-    "z": 11,
-    "tabOrder": 11
+    "height": 30,
+    "z": 13,
+    "tabOrder": 13
   },
   "visual": {
     "visualType": "textbox",
@@ -144,7 +144,7 @@
               {
                 "textRuns": [
                   {
-                    "value": "Snapshot used for this analysis · Demo corpus — fictional · Use page tabs to explore this case",
+                    "value": "Snapshot used for this analysis · Demo corpus — fictional · Use page tabs to explore this case · Return to the existing demo tab for original messages and AI assistance.",
                     "textStyle": {
                       "fontFamily": "Segoe UI",
                       "fontSize": "13px",

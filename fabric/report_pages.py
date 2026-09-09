@@ -18,6 +18,16 @@ ORDER = (
     "customer-orders",
     "response-options",
 )
+WALKTHROUGH = (
+    ("command-center", "1. Investigate the delay"),
+    ("available-stock", "2. Check available stock"),
+    ("customer-orders", "2. Inspect affected order lines"),
+    ("supplier-shipment", "3. Check the partial shipment"),
+    ("plant-transfer", "3. Check the plant transfer"),
+    ("supplier-qualification", "3. Check qualification"),
+    ("response-options", "4. Weigh the trade-offs"),
+    ("actions-outcomes", "5. Review the decision boundary"),
+)
 GREEN, TEAL, AMBER, CREAM, WHITE = "#183E35", "#187D78", "#9A641C", "#F5F3EA", "#FFFFFF"
 CC, SR, SO, AO = "CaseCommandCenter", "SavedRecords", "SavedOptions", "ActionOutcomes"
 
@@ -184,6 +194,86 @@ def text(name, value, rect, size=20, fill=CREAM, ink=GREEN):
         )
     }
     return v
+
+
+def navigation_button(name, label, rect, destination):
+    if destination not in ORDER:
+        raise ValueError("Unknown walkthrough page: " + destination)
+    visual = base_visual(name, "actionButton", rect, fill=CREAM)
+    visual["visual"]["objects"] = {
+        "text": [
+            {"properties": {"show": literal(True)}},
+            {
+                "selector": {"id": "default"},
+                "properties": {
+                    "text": literal(label),
+                    "fontFamily": literal("Segoe UI"),
+                    "fontSize": literal(14),
+                    "fontColor": color(WHITE),
+                },
+            },
+        ],
+        "fill": [
+            {"properties": {"show": literal(True)}},
+            {
+                "selector": {"id": "default"},
+                "properties": {
+                    "fillColor": color(GREEN),
+                    "transparency": literal(0),
+                },
+            },
+            {
+                "selector": {"id": "hover"},
+                "properties": {
+                    "fillColor": color(TEAL),
+                    "transparency": literal(0),
+                },
+            },
+        ],
+        "outline": [
+            {"properties": {"show": literal(False)}},
+            {
+                "selector": {"id": "default"},
+                "properties": {"show": literal(False)},
+            },
+        ],
+    }
+    visual["visual"]["visualContainerObjects"]["visualLink"] = obj(
+        {
+            "show": literal(True),
+            "type": literal("PageNavigation"),
+            "navigationSection": literal(destination),
+        }
+    )
+    visual["visual"]["visualContainerObjects"]["general"] = obj(
+        {"altText": literal(label)}
+    )
+    return visual
+
+
+def walkthrough_controls(page):
+    sequence = tuple(name for name, title in WALKTHROUGH)
+    index = sequence.index(page)
+    items = [text("walkthrough-step", WALKTHROUGH[index][1], (24, 714, 768, 44), 18)]
+    if index > 0:
+        items.append(
+            navigation_button(
+                "walkthrough-previous",
+                "Previous",
+                (800, 714, 220, 44),
+                sequence[index - 1],
+            )
+        )
+    if index + 1 < len(sequence):
+        items.append(
+            navigation_button(
+                "walkthrough-next",
+                "Next",
+                (1036, 714, 220, 44),
+                sequence[index + 1],
+            )
+        )
+    return items
 
 
 def card(name, title, value, rect, accent=TEAL, size=18):
@@ -401,8 +491,8 @@ def common(title, state):
         case_selector(),
         text(
             "fictional-footer",
-            "Snapshot used for this analysis · Demo corpus — fictional · Use page tabs to explore this case",
-            (24, 682, 1232, 29),
+            "Snapshot used for this analysis · Demo corpus — fictional · Use page tabs to explore this case · Return to the existing demo tab for original messages and AI assistance.",
+            (24, 770, 1232, 30),
             13,
         ),
     ]
@@ -560,8 +650,8 @@ def overview():
                 ("options-answer", "Compare the options", "Options Answer"),
                 (
                     "recommendation-answer",
-                    "Saved recommendation",
-                    "Recommendation Answer",
+                    "Review approach",
+                    "Review Approach",
                 ),
                 ("current-decision", "Recorded decision", "Decision Answer"),
             ),
@@ -607,26 +697,34 @@ def options():
             size=14,
         )
     )
-    items.append(
-        table(
-            "option-comparison",
-            "Saved options — expected results, subject to planning requirements",
-            SO,
-            (
-                "option_name",
-                "is_baseline",
-                "executable",
-                "response_cost",
-                "revenue_at_risk",
-                "otif_loss_percentage",
-                "uncovered_part_demand",
-                "blockers_text",
-                "required_roles_text",
-            ),
-            "Option Row Visible",
-            (24, 386, 1232, 176),
-        )
+    comparison = table(
+        "option-comparison",
+        "Saved options — expected results, subject to planning requirements",
+        SO,
+        (
+            "option_name",
+            "is_baseline",
+            "executable",
+            "response_cost",
+            "revenue_at_risk",
+            "otif_loss_percentage",
+            "uncovered_part_demand",
+            "blockers_text",
+            "required_roles_text",
+        ),
+        "Option Row Visible",
+        (24, 386, 1232, 176),
     )
+    comparison["visual"]["query"]["sortDefinition"] = {
+        "sort": [
+            {
+                "field": field("Column", SO, "option_name"),
+                "direction": "Ascending",
+            }
+        ],
+        "isDefaultSort": False,
+    }
+    items.append(comparison)
     items.append(
         table(
             "source-details",
@@ -723,13 +821,14 @@ def artifacts():
             if page == "response-options"
             else detail(page)
         )
+        items.extend(walkthrough_controls(page))
         definition = {
             "$schema": PAGE_SCHEMA,
             "name": page,
             "displayName": title,
             "displayOption": "FitToPage",
             "width": 1280,
-            "height": 720,
+            "height": 808,
             "objects": {
                 "background": obj({"color": color(CREAM), "transparency": literal(0)}),
                 "pageRefresh": [

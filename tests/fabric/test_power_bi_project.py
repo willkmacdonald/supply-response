@@ -333,7 +333,7 @@ def test_pages_have_exact_identity_size_and_thirty_second_refresh() -> None:
         assert page["displayName"] == display_name
         assert page["displayOption"] == "FitToPage"
         assert page["width"] == 1280
-        assert page["height"] == 720
+        assert page["height"] == 808
         page_refresh = page["objects"]["pageRefresh"]
         assert page_refresh == [
             {
@@ -349,6 +349,7 @@ def test_pages_have_exact_identity_size_and_thirty_second_refresh() -> None:
 def test_every_visual_is_schema_shaped_and_inside_its_page() -> None:
     required_top_level = {"$schema", "name", "position", "visual"}
     for page_name in PAGES:
+        page = _load(REPORT / "pages" / page_name / "page.json")
         visual_files = _visual_files(page_name)
         assert visual_files, f"{page_name} has no visual containers"
         names: list[str] = []
@@ -361,8 +362,8 @@ def test_every_visual_is_schema_shaped_and_inside_its_page() -> None:
             position = visual_container["position"]
             assert set(position) == {"x", "y", "z", "width", "height", "tabOrder"}
             assert position["x"] >= 0 and position["y"] >= 0
-            assert position["x"] + position["width"] <= 1280
-            assert position["y"] + position["height"] <= 720
+            assert position["x"] + position["width"] <= page["width"]
+            assert position["y"] + position["height"] <= page["height"]
             assert set(visual_container["visual"]) <= {
                 "visualType",
                 "query",
@@ -372,7 +373,7 @@ def test_every_visual_is_schema_shaped_and_inside_its_page() -> None:
                 "expansionStates",
             }
             assert isinstance(visual_container["visual"]["visualType"], str)
-            if visual_container["visual"]["visualType"] == "textbox":
+            if visual_container["visual"]["visualType"] in {"textbox", "actionButton"}:
                 assert "query" not in visual_container["visual"]
                 continue
             query_state = visual_container["visual"]["query"]["queryState"]
@@ -775,7 +776,7 @@ def test_case_picker_is_explicit_single_select_and_synced_on_every_page():
         )
 
 
-def test_overview_contains_nine_saved_answer_bindings():
+def test_overview_contains_eight_saved_answers_and_neutral_review_approach():
     expected = {
         "Disruption",
         "Availability",
@@ -784,7 +785,6 @@ def test_overview_contains_nine_saved_answer_bindings():
         "Transfer",
         "Qualification",
         "Options",
-        "Recommendation",
         "Decision",
     }
     actual = {
@@ -793,6 +793,7 @@ def test_overview_contains_nine_saved_answer_bindings():
         if ref.endswith(" Answer")
     }
     assert actual == expected
+    assert "CaseCommandCenter.Review Approach" in QUERY_REF_ALLOWLIST["command-center"]
     report_pages.verify(REPORT)
 
 

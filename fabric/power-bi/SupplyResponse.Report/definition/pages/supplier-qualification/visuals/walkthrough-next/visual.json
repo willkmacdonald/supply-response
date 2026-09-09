@@ -1,16 +1,16 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "recommendation-answer",
+  "name": "walkthrough-next",
   "position": {
-    "x": 574,
-    "y": 506,
-    "width": 334,
-    "height": 156,
-    "z": 12,
-    "tabOrder": 12
+    "x": 1036,
+    "y": 714,
+    "width": 220,
+    "height": 44,
+    "z": 11,
+    "tabOrder": 11
   },
   "visual": {
-    "visualType": "cardVisual",
+    "visualType": "actionButton",
     "visualContainerObjects": {
       "background": [
         {
@@ -27,7 +27,7 @@
                 "color": {
                   "expr": {
                     "Literal": {
-                      "Value": "'#FFFFFF'"
+                      "Value": "'#F5F3EA'"
                     }
                   }
                 }
@@ -96,14 +96,14 @@
             "show": {
               "expr": {
                 "Literal": {
-                  "Value": "true"
+                  "Value": "false"
                 }
               }
             },
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Review approach'"
+                  "Value": "''"
                 }
               }
             },
@@ -134,35 +134,80 @@
             }
           }
         }
-      ]
-    },
-    "query": {
-      "queryState": {
-        "Data": {
-          "projections": [
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "CaseCommandCenter"
-                    }
-                  },
-                  "Property": "Review Approach"
-                }
-              },
-              "queryRef": "CaseCommandCenter.Review Approach",
-              "nativeQueryRef": "Review Approach",
-              "displayName": "Review approach"
-            }
-          ]
-        }
-      }
-    },
-    "objects": {
-      "value": [
+      ],
+      "visualLink": [
         {
           "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "type": {
+              "expr": {
+                "Literal": {
+                  "Value": "'PageNavigation'"
+                }
+              }
+            },
+            "navigationSection": {
+              "expr": {
+                "Literal": {
+                  "Value": "'response-options'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "general": [
+        {
+          "properties": {
+            "altText": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Next'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "objects": {
+      "text": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        },
+        {
+          "selector": {
+            "id": "default"
+          },
+          "properties": {
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Next'"
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Segoe UI'"
+                }
+              }
+            },
             "fontSize": {
               "expr": {
                 "Literal": {
@@ -175,19 +220,16 @@
                 "color": {
                   "expr": {
                     "Literal": {
-                      "Value": "'#183E35'"
+                      "Value": "'#FFFFFF'"
                     }
                   }
                 }
               }
             }
-          },
-          "selector": {
-            "id": "default"
           }
         }
       ],
-      "label": [
+      "fill": [
         {
           "properties": {
             "show": {
@@ -196,24 +238,57 @@
                   "Value": "true"
                 }
               }
-            },
-            "text": {
-              "expr": {
-                "Literal": {
-                  "Value": "''"
+            }
+          }
+        },
+        {
+          "selector": {
+            "id": "default"
+          },
+          "properties": {
+            "fillColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#183E35'"
+                    }
+                  }
                 }
               }
             },
-            "fontSize": {
+            "transparency": {
               "expr": {
                 "Literal": {
-                  "Value": "12D"
+                  "Value": "0D"
                 }
               }
             }
-          },
+          }
+        },
+        {
           "selector": {
-            "id": "default"
+            "id": "hover"
+          },
+          "properties": {
+            "fillColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#187D78'"
+                    }
+                  }
+                }
+              }
+            },
+            "transparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            }
           }
         }
       ],
@@ -227,98 +302,20 @@
                 }
               }
             }
-          },
+          }
+        },
+        {
           "selector": {
             "id": "default"
-          }
-        }
-      ],
-      "padding": [
-        {
-          "properties": {
-            "paddingUniform": {
-              "expr": {
-                "Literal": {
-                  "Value": "4D"
-                }
-              }
-            }
           },
-          "selector": {
-            "id": "default"
-          }
-        }
-      ],
-      "layout": [
-        {
-          "properties": {
-            "paddingUniform": {
-              "expr": {
-                "Literal": {
-                  "Value": "0D"
-                }
-              }
-            }
-          },
-          "selector": {
-            "id": "default"
-          }
-        }
-      ],
-      "spacing": [
-        {
-          "properties": {
-            "verticalSpacing": {
-              "expr": {
-                "Literal": {
-                  "Value": "0D"
-                }
-              }
-            }
-          },
-          "selector": {
-            "id": "default"
-          }
-        }
-      ],
-      "accentBar": [
-        {
           "properties": {
             "show": {
               "expr": {
                 "Literal": {
-                  "Value": "true"
-                }
-              }
-            },
-            "position": {
-              "expr": {
-                "Literal": {
-                  "Value": "'Left'"
-                }
-              }
-            },
-            "width": {
-              "expr": {
-                "Literal": {
-                  "Value": "3D"
-                }
-              }
-            },
-            "color": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "Literal": {
-                      "Value": "'#9A641C'"
-                    }
-                  }
+                  "Value": "false"
                 }
               }
             }
-          },
-          "selector": {
-            "id": "default"
           }
         }
       ]

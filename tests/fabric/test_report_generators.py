@@ -47,8 +47,20 @@ def test_deterministic_native_pages_match_pinned_schemas(tmp_path):
         if not path.endswith("visual.json"):
             continue
         position = value["position"]
-        assert 0 <= position["x"] < position["x"] + position["width"] <= 1280
-        assert 0 <= position["y"] < position["y"] + position["height"] <= 720
+        page_name = path.split("/")[1]
+        page_definition = report_pages.artifacts()[f"pages/{page_name}/page.json"]
+        assert (
+            0
+            <= position["x"]
+            < position["x"] + position["width"]
+            <= page_definition["width"]
+        )
+        assert (
+            0
+            <= position["y"]
+            < position["y"] + position["height"]
+            <= page_definition["height"]
+        )
         visual = value["visual"]
         if visual["visualType"] == "cardVisual":
             assert set(visual["query"]["queryState"]) == {"Data"}
@@ -94,6 +106,84 @@ def test_preserves_existing_visual_identities_and_three_rows():
     )
     for row in (1, 2, 3):
         assert f"pages/command-center/visuals/row-label-{row}/visual.json" in artifacts
+
+
+def test_walkthrough_sequence_uses_all_existing_pages_once():
+    sequence = tuple(page for page, title in report_pages.WALKTHROUGH)
+    assert len(sequence) == len(set(sequence)) == 8
+    assert set(sequence) == set(report_pages.ORDER)
+    assert sequence[0] == "command-center"
+    assert sequence[-1] == "actions-outcomes"
+
+
+def test_native_previous_next_match_official_action_shape():
+    artifacts = report_pages.artifacts()
+    sequence = tuple(page for page, _ in report_pages.WALKTHROUGH)
+    controls = []
+    for index, page in enumerate(sequence):
+        prefix = f"pages/{page}/visuals/"
+        expected = {}
+        if index:
+            expected["walkthrough-previous"] = sequence[index - 1]
+        if index + 1 < len(sequence):
+            expected["walkthrough-next"] = sequence[index + 1]
+        for name in ("walkthrough-previous", "walkthrough-next"):
+            key = prefix + name + "/visual.json"
+            if name not in expected:
+                assert key not in artifacts
+                continue
+            control = artifacts[key]
+            controls.append(control)
+            assert control["visual"]["visualType"] == "actionButton"
+            assert "filterConfig" not in control
+            assert control["visual"]["visualContainerObjects"]["visualLink"] == [
+                {
+                    "properties": {
+                        "show": {"expr": {"Literal": {"Value": "true"}}},
+                        "type": {"expr": {"Literal": {"Value": "'PageNavigation'"}}},
+                        "navigationSection": {
+                            "expr": {"Literal": {"Value": "'" + expected[name] + "'"}}
+                        },
+                    },
+                }
+            ]
+            assert control["position"]["height"] >= 44
+            assert control["visual"]["visualContainerObjects"]["general"][0][
+                "properties"
+            ]["altText"]
+    assert len(controls) == 14
+
+
+def test_native_navigation_rejects_unrecognized_destinations():
+    with pytest.raises(ValueError, match="Unknown walkthrough page"):
+        report_pages.navigation_button(
+            "next", "Next", (0, 0, 220, 44), "https://evil.example"
+        )
+
+
+def test_traditional_pages_are_neutral_and_options_sort_by_name():
+    artifacts = report_pages.artifacts()
+    review = artifacts[
+        "pages/command-center/visuals/recommendation-answer/visual.json"
+    ]["visual"]
+    assert review["query"]["queryState"]["Data"]["projections"][0]["queryRef"] == (
+        "CaseCommandCenter.Review Approach"
+    )
+    assert review["visualContainerObjects"]["title"][0]["properties"]["text"] == (
+        report_pages.literal("Review approach")
+    )
+    comparison = artifacts[
+        "pages/response-options/visuals/option-comparison/visual.json"
+    ]["visual"]
+    assert comparison["query"]["sortDefinition"] == {
+        "sort": [
+            {
+                "field": report_pages.field("Column", report_pages.SO, "option_name"),
+                "direction": "Ascending",
+            }
+        ],
+        "isDefaultSort": False,
+    }
 
 
 def test_clearable_case_selector_is_shared_without_a_default():
@@ -204,7 +294,9 @@ def test_common_text_fits_font_floors_and_does_not_overlap():
         )
         position = artifact["position"]
         assert position["height"] >= max(18, ceil(size * 25 / 16)) + vertical, path
-        assert position["y"] + position["height"] <= 720, path
+        page_name = path.split("/")[1]
+        page = artifacts[f"pages/{page_name}/page.json"]
+        assert position["y"] + position["height"] <= page["height"], path
 
 
 def test_stock_matrix_retains_part_plant_grain_and_guarded_measures():
