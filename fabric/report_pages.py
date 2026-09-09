@@ -81,7 +81,12 @@ def measure(name, label=None, table=CC):
 
 
 def column(table, name):
-    return projection("Column", table, name, name.replace("_", " ").capitalize())
+    label = (
+        "Customer orders protected"
+        if name == "protected_customer_order_count"
+        else name.replace("_", " ").capitalize()
+    )
+    return projection("Column", table, name, label)
 
 
 def gate(name):
@@ -709,6 +714,7 @@ def options():
             "revenue_at_risk",
             "otif_loss_percentage",
             "uncovered_part_demand",
+            "protected_customer_order_count",
             "blockers_text",
             "required_roles_text",
         ),

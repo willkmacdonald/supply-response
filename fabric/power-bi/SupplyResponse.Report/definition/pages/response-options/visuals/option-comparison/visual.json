@@ -253,6 +253,21 @@
                       "Entity": "SavedOptions"
                     }
                   },
+                  "Property": "protected_customer_order_count"
+                }
+              },
+              "queryRef": "SavedOptions.protected_customer_order_count",
+              "nativeQueryRef": "protected_customer_order_count",
+              "displayName": "Customer orders protected"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "SavedOptions"
+                    }
+                  },
                   "Property": "blockers_text"
                 }
               },

@@ -200,6 +200,36 @@ def test_traditional_pages_are_neutral_and_options_sort_by_name():
     }
 
 
+def test_option_comparison_includes_protected_customer_orders_column():
+    visual = report_pages.artifacts()[
+        "pages/response-options/visuals/option-comparison/visual.json"
+    ]["visual"]
+    projections = visual["query"]["queryState"]["Values"]["projections"]
+    assert [projection["queryRef"] for projection in projections] == [
+        "SavedOptions.option_name",
+        "SavedOptions.is_baseline",
+        "SavedOptions.executable",
+        "SavedOptions.response_cost",
+        "SavedOptions.revenue_at_risk",
+        "SavedOptions.otif_loss_percentage",
+        "SavedOptions.uncovered_part_demand",
+        "SavedOptions.protected_customer_order_count",
+        "SavedOptions.blockers_text",
+        "SavedOptions.required_roles_text",
+    ]
+    protected = projections[7]
+    assert protected["displayName"] == "Customer orders protected"
+    assert (
+        sum(
+            projection["nativeQueryRef"] == "protected_customer_order_count"
+            for projection in projections
+        )
+        == 1
+    )
+    assert "recommend" not in protected
+    assert visual["visualType"] == "tableEx"
+
+
 def test_clearable_case_selector_is_shared_without_a_default():
     for page in report_pages.ORDER:
         value = report_pages.artifacts()[
