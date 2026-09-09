@@ -68,6 +68,7 @@ def test_analytics_views_preserve_decision_lineage_and_provenance():
 
     assert "create or alter view analytics.case_command_center" in sql
     assert "create or alter view analytics.action_outcomes" in sql
+    assert "create or alter view analytics.saved_analyses" in sql
     assert "d.decision_id = c.current_decision_id" in sql
     assert "x.decision_id = d.decision_id" in sql
     assert "o.decision_id = d.decision_id" in sql
@@ -160,7 +161,7 @@ def test_schemas_views_and_version_publication_are_idempotent():
         analytics,
         re.IGNORECASE,
     )
-    assert len(re.findall(r"CREATE OR ALTER VIEW", analytics, re.IGNORECASE)) == 4
+    assert len(re.findall(r"CREATE OR ALTER VIEW", analytics, re.IGNORECASE)) == 5
     assert "MERGE app.schema_version WITH (HOLDLOCK)" in operational
     assert "schema_version < 12" in analytics
     assert "@@ROWCOUNT" not in analytics
@@ -256,6 +257,7 @@ def test_real_script_sequence_promotes_readiness_only_after_analytics():
         "app.decision_projection",
         "analytics.case_command_center",
         "analytics.action_outcomes",
+        "analytics.saved_analyses",
     }
     health = check_fabric_health(typed_engine)
     assert health.schema_version == FABRIC_SCHEMA_VERSION

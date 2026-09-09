@@ -2,6 +2,118 @@ IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = N'analytics')
     EXEC(N'CREATE SCHEMA analytics');
 GO
 
+CREATE OR ALTER FUNCTION analytics.report_scalar
+(@json nvarchar(max), @key nvarchar(128), @kind nvarchar(32))
+RETURNS nvarchar(4000)
+AS
+BEGIN
+    DECLARE @safe nvarchar(max)=CASE WHEN ISJSON(@json)=1
+        AND LEFT(LTRIM(@json),1)=N'{' THEN @json ELSE N'{}' END;
+    DECLARE @value nvarchar(max), @type int, @count int;
+    SELECT @count=COUNT(*),@value=MAX([value]),@type=MAX([type])
+    FROM OPENJSON(@safe) WHERE [key] COLLATE Latin1_General_100_BIN2=@key COLLATE Latin1_General_100_BIN2;
+    IF @count<>1 RETURN NULL;
+    IF LEFT(@kind,9)=N'nullable_'
+    BEGIN
+        IF @type=0 RETURN N'#null';
+        SET @kind=SUBSTRING(@kind,10,32);
+    END;
+    IF @value IS NULL OR DATALENGTH(@value)>8000 RETURN NULL;
+    IF @kind=N'text' AND @type=1 AND LEN(LTRIM(RTRIM(@value)))>0
+       AND DATALENGTH(@value)=DATALENGTH(LTRIM(RTRIM(@value)))
+       AND CHARINDEX(NCHAR(9),@value)=0 AND CHARINDEX(NCHAR(10),@value)=0
+       AND CHARINDEX(NCHAR(13),@value)=0 RETURN @value;
+    IF @kind=N'flag' AND @type=3 AND @value IN (N'true',N'false') RETURN @value;
+    IF @kind=N'integer' AND @type=2 AND LEN(@value)>0
+       AND @value COLLATE Latin1_General_100_BIN2 NOT LIKE N'%[^0-9]%'
+       AND TRY_CONVERT(int,@value)>=0 RETURN @value;
+    IF @kind=N'money' AND @type=1
+    BEGIN
+        IF LEN(@value)<4 RETURN NULL;
+        IF DATALENGTH(@value)=2*LEN(@value)
+           AND SUBSTRING(@value,LEN(@value)-2,1)=N'.'
+           AND LEFT(@value,LEN(@value)-3) COLLATE Latin1_General_100_BIN2 NOT LIKE N'%[^0-9]%'
+           AND RIGHT(@value,2) COLLATE Latin1_General_100_BIN2 NOT LIKE N'%[^0-9]%'
+           AND TRY_CONVERT(decimal(19,4),@value) IS NOT NULL RETURN @value;
+    END;
+    IF @kind IN (N'date',N'instant') AND @type=1
+    BEGIN
+        DECLARE @day nvarchar(10)=LEFT(@value,10);
+        IF DATALENGTH(@day)<>20 OR @day COLLATE Latin1_General_100_BIN2
+            NOT LIKE N'[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+            OR TRY_CONVERT(date,@day,23) IS NULL
+            OR CONVERT(nvarchar(10),TRY_CONVERT(date,@day,23),23) COLLATE Latin1_General_100_BIN2<>@day COLLATE Latin1_General_100_BIN2 RETURN NULL;
+        IF @kind=N'date' AND DATALENGTH(@value)=20 RETURN @value;
+        IF @kind=N'instant'
+        BEGIN
+            DECLARE @length int=DATALENGTH(@value)/2;
+            IF @length<20 OR @length>32 RETURN NULL;
+            IF SUBSTRING(@value,11,9) COLLATE Latin1_General_100_BIN2
+               NOT LIKE N'T[0-2][0-9]:[0-5][0-9]:[0-5][0-9]' RETURN NULL;
+            IF TRY_CONVERT(int,SUBSTRING(@value,12,2))>23 RETURN NULL;
+            DECLARE @zone_length int;
+            IF RIGHT(@value,1) COLLATE Latin1_General_100_BIN2=N'Z' SET @zone_length=1;
+            ELSE IF RIGHT(@value,6) COLLATE Latin1_General_100_BIN2 LIKE N'[-+][0-1][0-9]:[0-5][0-9]' SET @zone_length=6;
+            ELSE RETURN NULL;
+            IF @length<19+@zone_length RETURN NULL;
+            DECLARE @fraction nvarchar(32)=SUBSTRING(@value,20,@length-19-@zone_length);
+            IF @fraction<>N'' AND (LEFT(@fraction,1)<>N'.' OR LEN(@fraction)<2 OR LEN(@fraction)>7
+               OR SUBSTRING(@fraction,2,32) COLLATE Latin1_General_100_BIN2 LIKE N'%[^0-9]%') RETURN NULL;
+            IF TRY_CONVERT(datetimeoffset(6),@value,127) IS NOT NULL RETURN @value;
+        END;
+    END;
+    RETURN NULL;
+END;
+GO
+
+CREATE OR ALTER VIEW analytics.saved_analyses AS
+SELECT a.case_id, a.analysis_id, a.runtime_mode, a.analysis_started_at,
+       a.retrieval_window_ends_at, a.created_at AS analysis_created_at,
+       a.material_hash, a.payload_json,
+       TRY_CONVERT(datetimeoffset(6), analytics.report_scalar(material.value,
+           N'scenario_effective_time',N'instant'),127) AS scenario_effective_time,
+       JSON_VALUE(a.payload_json, '$.material.calculation_version') AS calculation_version,
+       CASE WHEN identity_ok.ok=1 THEN JSON_VALUE(a.payload_json, '$.ranking.recommended_option_id') END AS recommended_option_id,
+       CASE WHEN identity_ok.ok=1 THEN N'available' ELSE N'unavailable' END AS payload_state,
+       CASE WHEN identity_ok.ok=1 AND valid.ok=1 THEN N'available' ELSE N'unavailable' END AS snapshot_state,
+       CASE WHEN identity_ok.ok=1 AND valid.ok=1 THEN safe.snapshot_json END AS snapshot_json
+FROM app.analysis_versions a
+LEFT JOIN app.case_instances c ON c.case_id=a.case_id
+OUTER APPLY (SELECT JSON_QUERY(a.payload_json,N'$.material') AS value) material
+OUTER APPLY (SELECT COUNT(*) AS root_count, MAX(snapshot_json) AS snapshot_json
+    FROM OPENJSON(CASE WHEN ISJSON(a.payload_json)=1
+        AND LEFT(LTRIM(a.payload_json),1)=N'{' THEN a.payload_json ELSE N'{}' END)
+    WITH (snapshot_json nvarchar(max) '$.material.operational_snapshot_json')) extracted
+OUTER APPLY (SELECT CASE WHEN ISJSON(extracted.snapshot_json)=1
+    AND extracted.root_count=1
+    AND LEFT(LTRIM(extracted.snapshot_json),1)=N'{'
+    THEN extracted.snapshot_json ELSE N'{}' END AS snapshot_json) safe
+OUTER APPLY (SELECT CASE WHEN
+    analytics.report_scalar(a.payload_json,N'case_id',N'text') COLLATE Latin1_General_100_BIN2=a.case_id COLLATE Latin1_General_100_BIN2
+    AND analytics.report_scalar(a.payload_json,N'analysis_id',N'text') COLLATE Latin1_General_100_BIN2=a.analysis_id COLLATE Latin1_General_100_BIN2
+    AND analytics.report_scalar(material.value,N'case_id',N'text') COLLATE Latin1_General_100_BIN2=a.case_id COLLATE Latin1_General_100_BIN2
+    AND analytics.report_scalar(material.value,N'runtime_mode',N'text') COLLATE Latin1_General_100_BIN2=a.runtime_mode COLLATE Latin1_General_100_BIN2
+    AND c.runtime_mode COLLATE Latin1_General_100_BIN2=a.runtime_mode COLLATE Latin1_General_100_BIN2
+    AND a.runtime_mode COLLATE Latin1_General_100_BIN2 IN ('live','fallback')
+    AND c.template_id COLLATE Latin1_General_100_BIN2=N'RL-001'
+    AND analytics.report_scalar(material.value,N'template_id',N'text') COLLATE Latin1_General_100_BIN2=c.template_id COLLATE Latin1_General_100_BIN2
+    AND analytics.report_scalar(material.value,N'corpus',N'text') COLLATE Latin1_General_100_BIN2=N'demo_corpus'
+    AND TRY_CONVERT(datetimeoffset(6),analytics.report_scalar(material.value,N'scenario_effective_time',N'instant'),127)=c.scenario_effective_time
+    THEN 1 ELSE 0 END AS ok) identity_ok
+OUTER APPLY (SELECT CASE WHEN
+    analytics.report_scalar(safe.snapshot_json,N'case_id',N'text') COLLATE Latin1_General_100_BIN2=a.case_id COLLATE Latin1_General_100_BIN2
+    AND analytics.report_scalar(safe.snapshot_json,N'runtime_mode',N'text') COLLATE Latin1_General_100_BIN2=a.runtime_mode COLLATE Latin1_General_100_BIN2
+    AND analytics.report_scalar(safe.snapshot_json,N'scenario_timezone',N'text') COLLATE Latin1_General_100_BIN2=N'America/Chicago'
+    AND TRY_CONVERT(datetimeoffset(6),analytics.report_scalar(safe.snapshot_json,N'scenario_effective_time',N'instant'),127)=c.scenario_effective_time
+    AND analytics.report_scalar(safe.snapshot_json,N'analysis_horizon_start',N'instant') IS NOT NULL
+    AND analytics.report_scalar(safe.snapshot_json,N'analysis_horizon_end',N'date') IS NOT NULL
+    AND LEFT(LTRIM(JSON_QUERY(safe.snapshot_json,N'$.inventory_positions')),1)=N'['
+    AND LEFT(LTRIM(JSON_QUERY(safe.snapshot_json,N'$.production_orders')),1)=N'['
+    AND LEFT(LTRIM(JSON_QUERY(safe.snapshot_json,N'$.customer_orders')),1)=N'['
+    AND LEFT(LTRIM(JSON_QUERY(safe.snapshot_json,N'$.disruption')),1)=N'{'
+    THEN 1 ELSE 0 END AS ok) valid;
+GO
+
 CREATE OR ALTER VIEW app.analysis_projection AS
 SELECT
     a.analysis_id,
