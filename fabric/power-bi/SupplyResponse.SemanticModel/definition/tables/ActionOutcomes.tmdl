@@ -61,78 +61,43 @@ table ActionOutcomes
 
   column scenario_effective_time
     dataType: dateTime
-    formatString: General Date
     sourceColumn: scenario_effective_time
     summarizeBy: none
+    formatString: MMM d, yyyy HH:mm "UTC"
 
   column projection_updated_at
     dataType: dateTime
-    formatString: General Date
     sourceColumn: projection_updated_at
     summarizeBy: none
+    formatString: MMM d, yyyy HH:mm "UTC"
 
-  measure 'Action Completion %' =
-      VAR DecisionId = [Current Decision ID]
-      VAR Actions = FILTER(ALL(ActionOutcomes), ActionOutcomes[decision_id] = DecisionId && ActionOutcomes[record_type] = "action")
-      RETURN DIVIDE(COUNTROWS(FILTER(Actions, ActionOutcomes[action_status] = "completed")), COUNTROWS(Actions))
-    formatString: 0%;-0%;0%
+  column case_key
+    dataType: string
+    sourceColumn: case_key
+    summarizeBy: none
 
-  measure 'Current Action Status' =
-      VAR DecisionId = [Current Decision ID]
-      VAR ActionKind = SELECTEDVALUE(ActionOutcomes[action_kind])
-      RETURN CALCULATE(SELECTEDVALUE(ActionOutcomes[action_status]), REMOVEFILTERS(ActionOutcomes), ActionOutcomes[decision_id] = DecisionId, ActionOutcomes[record_type] = "action", ActionOutcomes[action_kind] = ActionKind)
+  column decision_key
+    dataType: string
+    sourceColumn: decision_key
+    summarizeBy: none
 
-  measure 'Current Observation Kind' =
-      VAR DecisionId = [Current Decision ID]
-      RETURN CALCULATE(SELECTEDVALUE(ActionOutcomes[observation_kind]), REMOVEFILTERS(ActionOutcomes), ActionOutcomes[decision_id] = DecisionId, ActionOutcomes[record_type] = "observation")
+  column action_key
+    dataType: string
+    sourceColumn: action_key
+    summarizeBy: none
 
   measure 'Observed Variance' =
-      VAR DecisionId = [Current Decision ID]
-      VAR RecordType = SELECTEDVALUE(ActionOutcomes[record_type])
-      VAR MetricName = SELECTEDVALUE(ActionOutcomes[metric])
-      VAR SupportedMetric =
-          MetricName IN {
-              "alpha_expedited_quantity",
-              "dallas_transfer_quantity",
-              "total_response_arranged_supply",
-              "uncovered_part_demand",
-              "response_cost",
-              "protected_customer_orders",
-              "revenue_protected",
-              "margin_protected",
-              "otif_loss_percentage"
-          }
-      VAR PredictedText = CALCULATE(SELECTEDVALUE(ActionOutcomes[predicted_value]), ActionOutcomes[decision_id] = DecisionId)
-      VAR ObservedText = CALCULATE(SELECTEDVALUE(ActionOutcomes[observed_value]), ActionOutcomes[decision_id] = DecisionId)
-      VAR Predicted = IFERROR(VALUE(PredictedText), BLANK())
-      VAR Observed = IFERROR(VALUE(ObservedText), BLANK())
-      RETURN
-          IF(
-              RecordType <> "observation"
-                  || NOT SupportedMetric
-                  || ISBLANK(Predicted)
-                  || ISBLANK(Observed)
-                  || Predicted = 0,
-              BLANK(),
-              DIVIDE(Observed - Predicted, ABS(Predicted))
-          )
+      IF([Observation Row Visible] == 1,(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Current Decision Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(VAR PredictedText = SELECTEDVALUE(ActionOutcomes[predicted_value])
+              VAR ObservedText = SELECTEDVALUE(ActionOutcomes[observed_value])
+              VAR Predicted = IFERROR(VALUE(PredictedText), BLANK())
+              VAR Observed = IFERROR(VALUE(ObservedText), BLANK())
+              RETURN IF(ISBLANK(Predicted) || ISBLANK(Observed) || Predicted == 0,BLANK(),
+                  DIVIDE(Observed - Predicted, ABS(Predicted))), KEEPFILTERS(TREATAS({ScopeCase}, ActionOutcomes[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, ActionOutcomes[decision_key])), KEEPFILTERS(ActionOutcomes[record_type] == "observation")))))
     formatString: 0.00%;-0.00%;0.00%
-
-  measure 'Projection Refresh Time' =
-      VAR DecisionId = [Current Decision ID]
-      RETURN CALCULATE(MAX(ActionOutcomes[projection_updated_at]), REMOVEFILTERS(ActionOutcomes), ActionOutcomes[decision_id] = DecisionId)
-    formatString: General Date
-
-  measure 'Action Scenario Effective Time' =
-      VAR DecisionId = [Current Decision ID]
-      RETURN CALCULATE(MAX(ActionOutcomes[scenario_effective_time]), REMOVEFILTERS(ActionOutcomes), ActionOutcomes[decision_id] = DecisionId)
-    formatString: General Date
 
   partition ActionOutcomes = m
     mode: directQuery
     source =
-        Sql.Database(
-          FABRIC_SQL_SERVER,
-          FABRIC_SQL_DATABASE,
-          [Query="SELECT * FROM analytics.action_outcomes"]
-        )
+        Sql.Database(FABRIC_SQL_SERVER, FABRIC_SQL_DATABASE, [Query="SELECT a.case_id,a.decision_id,a.selected_option_id,a.record_type,a.action_id,#(lf) a.action_kind,a.action_status,a.metric,a.predicted_value,a.observed_value,#(lf) a.unit,a.observation_kind,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(a.scenario_effective_time,'+00:00')) AS scenario_effective_time,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(a.projection_updated_at,'+00:00')) AS projection_updated_at,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),a.case_id)),2) AS case_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),a.decision_id)),2) AS decision_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),a.action_id)),2) AS action_key#(lf)FROM analytics.action_outcomes a#(lf)"])

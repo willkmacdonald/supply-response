@@ -303,9 +303,13 @@ class Measure:
 
 def measures():
     result = {t: {} for t in TABLES}
+    used_names = {}
 
     def add(name, expression, kind="string", fmt=None, hidden=False, table=CC):
         assert name not in result[table], name
+        normalized = name.casefold()
+        assert normalized not in used_names, (used_names.get(normalized), name)
+        used_names[normalized] = name
         # Avoid R1C1-reserved single-letter C as a DAX variable name.
         expression = rename_scope_variables(expression)
         result[table][name] = Measure(expression, kind, fmt, hidden)
@@ -573,7 +577,7 @@ def measures():
     entity("Record Destination Plant", "Record destination_plant_id", "Plant")
     qualification("Record Qualification", "Record status")
     add(
-        "Record Provenance",
+        "Record Provenance Display",
         """IF(NOT ISBLANK([Selected Record Key]),SWITCH([Record provenance],
         "saved_fabric","Saved Microsoft Fabric record · fictional scenario",
         "demo_fixture","Saved demo fixture · fictional",
@@ -587,7 +591,7 @@ def measures():
         SWITCH([Selected Record Family],"shipment",[Record Supplier] & " · Partial shipment",
         "qualification",[Record Supplier] & " · Qualification",
         "transfer",[Record Source Plant] & " to " & [Record Destination Plant])
-        & " · " & [Record Provenance])""",
+        & " · " & [Record Provenance Display])""",
     )
     for name, source, suffix, fmt in (
         ("Record Quantity Display", "Record quantity", " component units", "#,0"),
@@ -994,7 +998,9 @@ def measures():
         "Plant",
     )
     entity("Overview Disruption Plant", "Overview disruption plant_id", "Plant")
-    qualification("Overview Qualification Status", "Overview qualification status")
+    qualification(
+        "Overview Qualification Status Display", "Overview qualification status"
+    )
     add(
         "Disruption Answer",
         """VAR Q = [Overview disruption original_quantity] VAR P = [Overview disruption partial_quantity]
@@ -1040,7 +1046,7 @@ def measures():
         )
     add(
         "Qualification Answer",
-        'IF(NOT ISBLANK([Overview Analysis Key]),[Overview qualification Supplier] & ": " & [Overview Qualification Status])',
+        'IF(NOT ISBLANK([Overview Analysis Key]),[Overview qualification Supplier] & ": " & [Overview Qualification Status Display])',
     )
     add(
         "Options Answer",

@@ -1,0 +1,116 @@
+table SavedOptions
+  column case_id
+    dataType: string
+    sourceColumn: case_id
+    summarizeBy: none
+
+  column analysis_id
+    dataType: string
+    sourceColumn: analysis_id
+    summarizeBy: none
+
+  column option_id
+    dataType: string
+    sourceColumn: option_id
+    summarizeBy: none
+
+  column option_kind
+    dataType: string
+    sourceColumn: option_kind
+    summarizeBy: none
+
+  column option_name
+    dataType: string
+    sourceColumn: option_name
+    summarizeBy: none
+
+  column is_baseline
+    dataType: boolean
+    sourceColumn: is_baseline
+    summarizeBy: none
+
+  column is_recommended
+    dataType: boolean
+    sourceColumn: is_recommended
+    summarizeBy: none
+
+  column executable
+    dataType: boolean
+    sourceColumn: executable
+    summarizeBy: none
+
+  column active_mitigation
+    dataType: boolean
+    sourceColumn: active_mitigation
+    summarizeBy: none
+
+  column uncovered_part_demand
+    dataType: int64
+    sourceColumn: uncovered_part_demand
+    summarizeBy: none
+    formatString: #,0
+
+  column otif_loss_percentage
+    dataType: int64
+    sourceColumn: otif_loss_percentage
+    summarizeBy: none
+    formatString: 0"%"
+
+  column revenue_at_risk
+    dataType: decimal
+    sourceColumn: revenue_at_risk
+    summarizeBy: none
+    formatString: #,0.00
+
+  column margin_at_risk
+    dataType: decimal
+    sourceColumn: margin_at_risk
+    summarizeBy: none
+    formatString: #,0.00
+
+  column response_cost
+    dataType: decimal
+    sourceColumn: response_cost
+    summarizeBy: none
+    formatString: #,0.00
+
+  column blockers_text
+    dataType: string
+    sourceColumn: blockers_text
+    summarizeBy: none
+
+  column required_roles_text
+    dataType: string
+    sourceColumn: required_roles_text
+    summarizeBy: none
+
+  column assumptions_text
+    dataType: string
+    sourceColumn: assumptions_text
+    summarizeBy: none
+
+  column protected_customer_order_count
+    dataType: int64
+    sourceColumn: protected_customer_order_count
+    summarizeBy: none
+    formatString: #,0
+
+  column case_key
+    dataType: string
+    sourceColumn: case_key
+    summarizeBy: none
+
+  column analysis_key
+    dataType: string
+    sourceColumn: analysis_key
+    summarizeBy: none
+
+  column option_key
+    dataType: string
+    sourceColumn: option_key
+    summarizeBy: none
+
+  partition SavedOptions = m
+    mode: directQuery
+    source =
+        Sql.Database(FABRIC_SQL_SERVER, FABRIC_SQL_DATABASE, [Query="SELECT o.case_id,o.analysis_id,o.option_id,o.option_kind,o.option_name,#(lf) o.is_baseline,o.is_recommended,o.executable,o.active_mitigation,#(lf) o.uncovered_part_demand,o.otif_loss_percentage,o.revenue_at_risk,#(lf) o.margin_at_risk,o.response_cost,#(lf) lists.blockers_text,lists.required_roles_text,lists.assumptions_text,#(lf) lists.protected_customer_order_count,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),o.case_id)),2) AS case_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),o.analysis_id)),2) AS analysis_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),o.option_id)),2) AS option_key#(lf)FROM analytics.saved_options o#(lf)OUTER APPLY (#(lf) SELECT#(lf)   MAX(CASE WHEN v.list_kind=N'blockers' THEN validated.display_text END) AS blockers_text,#(lf)   MAX(CASE WHEN v.list_kind=N'roles' THEN validated.display_text END) AS required_roles_text,#(lf)   MAX(CASE WHEN v.list_kind=N'assumptions' THEN validated.display_text END) AS assumptions_text,#(lf)   MAX(CASE WHEN v.list_kind=N'protected' THEN validated.item_count END) AS protected_customer_order_count#(lf) FROM (VALUES#(lf)   (N'blockers',o.blocking_codes_json),#(lf)   (N'roles',o.prerequisite_roles_json),#(lf)   (N'assumptions',o.assumptions_json),#(lf)   (N'protected',o.protected_customer_order_ids_json)#(lf) ) v(list_kind,json_text)#(lf) CROSS APPLY (SELECT CASE WHEN ISJSON(v.json_text)=1#(lf)   AND LEFT(LTRIM(v.json_text),1)=N'[' THEN 1 ELSE 0 END AS is_array) shape#(lf) CROSS APPLY (#(lf)   SELECT COUNT(*) AS item_count,#(lf)     COUNT(DISTINCT CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),j.[value])),2)) AS distinct_count,#(lf)     COALESCE(SUM(CASE WHEN j.[type]=1 AND LEN(LTRIM(RTRIM(j.[value])))>0#(lf)       THEN 0 ELSE 1 END),0) AS invalid_count,#(lf)     STRING_AGG(mapped.display_value,NCHAR(10))#(lf)       WITHIN GROUP (ORDER BY CONVERT(int,j.[key])) AS joined_text#(lf)   FROM OPENJSON(CASE WHEN shape.is_array=1 THEN v.json_text ELSE N'[]' END) j#(lf)   CROSS APPLY (SELECT CONVERT(nvarchar(max),CASE#(lf)       WHEN v.list_kind=N'blockers' THEN CASE j.[value] COLLATE Latin1_General_100_BIN2#(lf)         WHEN N'QUALITY_QUALIFICATION_PENDING' THEN N'Cannot use Supplier Beta yet: supplier qualification is incomplete'#(lf)         WHEN N'ALPHA_PARTIAL_SHIPMENT_UNAVAILABLE' THEN N'No partial shipment from Supplier Alpha is available'#(lf)         WHEN N'TRANSFER_INVENTORY_UNAVAILABLE' THEN N'The source plant does not have enough available inventory for this transfer'#(lf)         WHEN N'RESEQUENCE_NOT_APPLICABLE' THEN N'Changing the production sequence does not provide a response for this plan'#(lf)         ELSE N'Planning requirement unresolved ('+j.[value]+N')' END#(lf)       WHEN v.list_kind=N'roles' THEN CASE j.[value] COLLATE Latin1_General_100_BIN2#(lf)         WHEN N'material_planner' THEN N'Material planner'#(lf)         WHEN N'finance_approver' THEN N'Finance approver'#(lf)         WHEN N'quality_approver' THEN N'Quality approver'#(lf)         WHEN N'response_approver' THEN N'Response approver'#(lf)         ELSE N'Required role unresolved ('+j.[value]+N')' END#(lf)       ELSE j.[value]#(lf)     END) AS display_value) mapped#(lf) ) parsed#(lf) CROSS APPLY (SELECT#(lf)   CASE WHEN shape.is_array=1 AND parsed.invalid_count=0#(lf)     AND (v.list_kind<>N'protected' OR parsed.item_count=parsed.distinct_count)#(lf)     THEN CASE WHEN parsed.item_count=0 THEN#(lf)       CASE v.list_kind#(lf)         WHEN N'blockers' THEN N'No planning blockers recorded'#(lf)         WHEN N'roles' THEN N'No required roles recorded'#(lf)         WHEN N'assumptions' THEN N'No assumptions recorded'#(lf)         ELSE N'No protected customer orders recorded' END#(lf)       ELSE parsed.joined_text END END AS display_text,#(lf)   CASE WHEN shape.is_array=1 AND parsed.invalid_count=0#(lf)     AND (v.list_kind<>N'protected' OR parsed.item_count=parsed.distinct_count)#(lf)     THEN parsed.item_count END AS item_count#(lf) ) validated#(lf)) lists#(lf)"])

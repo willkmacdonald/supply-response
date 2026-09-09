@@ -52,7 +52,11 @@ def _normalized_row(payload: dict[str, object]) -> dict[str, object]:
     return rows[0]
 
 
-def test_latest_showcase_decision_reaches_power_bi_within_sixty_seconds() -> None:
+def _dax_literal(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
+def test_selected_case_decision_reaches_power_bi_within_sixty_seconds() -> None:
     import httpx
     from azure.identity import AzureCliCredential
 
@@ -105,42 +109,46 @@ def test_latest_showcase_decision_reaches_power_bi_within_sixty_seconds() -> Non
         f"{configured['SUPPLY_RESPONSE_FABRIC_WORKSPACE_ID']}/datasets/"
         f"{configured['SUPPLY_RESPONSE_POWER_BI_SEMANTIC_MODEL_ID']}/executeQueries"
     )
-    dax = f'''EVALUATE
-ROW(
-  "case_id", CALCULATE(SELECTEDVALUE(CaseCommandCenter[case_id]), CaseCommandCenter[case_id] = "{case["case_id"]}"),
-  "decision_id", CALCULATE(SELECTEDVALUE(ActionOutcomes[decision_id]), ActionOutcomes[decision_id] = "{decision["decision_id"]}"),
-  "current_decision_id", CaseCommandCenter[Current Decision ID],
-  "selected_option_id", CALCULATE(SELECTEDVALUE(ActionOutcomes[selected_option_id]), ActionOutcomes[decision_id] = "{decision["decision_id"]}"),
-  "action_count", CALCULATE(COUNTROWS(ActionOutcomes), ActionOutcomes[decision_id] = "{decision["decision_id"]}", ActionOutcomes[record_type] = "action"),
-  "action_completion", ActionOutcomes[Action Completion %],
-  "simulated_observation_count", CALCULATE(COUNTROWS(ActionOutcomes), ActionOutcomes[decision_id] = "{decision["decision_id"]}", ActionOutcomes[observation_kind] = "simulated"),
-  "observation_kind", CALCULATE(SELECTEDVALUE(ActionOutcomes[observation_kind]), ActionOutcomes[decision_id] = "{decision["decision_id"]}", ActionOutcomes[record_type] = "observation"),
-  "scenario_effective_time", ActionOutcomes[Action Scenario Effective Time],
-  "projection_refresh_time", ActionOutcomes[Projection Refresh Time]
-)'''
-    variance_dax = f'''EVALUATE
-UNION(
+    selected_case = _dax_literal(case["case_id"])
+    selected_decision = _dax_literal(decision["decision_id"])
+    dax = f"""EVALUATE
+CALCULATETABLE(
   ROW(
-    "metric", "response_cost",
-    "relative_variance", CALCULATE(
-      ActionOutcomes[Observed Variance],
-      ActionOutcomes[decision_id] = "{decision["decision_id"]}",
-      ActionOutcomes[record_type] = "observation",
-      ActionOutcomes[observation_kind] = "simulated",
-      ActionOutcomes[metric] = "response_cost"
-    )
+    "case_id", SELECTEDVALUE(CaseCommandCenter[case_id]),
+    "decision_id", SELECTEDVALUE(ActionOutcomes[decision_id]),
+    "current_decision_id", CaseCommandCenter[Current Decision ID],
+    "selected_option_id", SELECTEDVALUE(ActionOutcomes[selected_option_id]),
+    "action_count", CaseCommandCenter[Current Actions Count],
+    "action_completion", DIVIDE(
+        CALCULATE(COUNTROWS(ActionOutcomes), ActionOutcomes[record_type] = "action", ActionOutcomes[action_status] = "completed"),
+        CALCULATE(COUNTROWS(ActionOutcomes), ActionOutcomes[record_type] = "action")),
+    "simulated_observation_count", CALCULATE(COUNTROWS(ActionOutcomes), ActionOutcomes[record_type] = "observation", ActionOutcomes[observation_kind] = "simulated"),
+    "observation_kind", CaseCommandCenter[Current Observation Kind],
+    "scenario_effective_time", MAX(ActionOutcomes[scenario_effective_time]),
+    "projection_refresh_time", CaseCommandCenter[Projection Refresh Time]
   ),
-  ROW(
-    "metric", "remaining_alpha_recovery_date",
-    "relative_variance", CALCULATE(
+  TREATAS({{{selected_case}}}, CaseCommandCenter[case_id]),
+  TREATAS({{{selected_case}}}, ActionOutcomes[case_id]),
+  TREATAS({{{selected_decision}}}, ActionOutcomes[decision_id])
+)"""
+    variance_dax = f"""EVALUATE
+CALCULATETABLE(
+  UNION(
+    ROW("metric", "response_cost", "relative_variance", CALCULATE(
       ActionOutcomes[Observed Variance],
-      ActionOutcomes[decision_id] = "{decision["decision_id"]}",
       ActionOutcomes[record_type] = "observation",
       ActionOutcomes[observation_kind] = "simulated",
-      ActionOutcomes[metric] = "remaining_alpha_recovery_date"
-    )
-  )
-)'''
+      ActionOutcomes[metric] = "response_cost")),
+    ROW("metric", "remaining_alpha_recovery_date", "relative_variance", CALCULATE(
+      ActionOutcomes[Observed Variance],
+      ActionOutcomes[record_type] = "observation",
+      ActionOutcomes[observation_kind] = "simulated",
+      ActionOutcomes[metric] = "remaining_alpha_recovery_date"))
+  ),
+  TREATAS({{{selected_case}}}, CaseCommandCenter[case_id]),
+  TREATAS({{{selected_case}}}, ActionOutcomes[case_id]),
+  TREATAS({{{selected_decision}}}, ActionOutcomes[decision_id])
+)"""
 
     deadline = time.monotonic() + 60
     last_row: dict[str, object] = {}

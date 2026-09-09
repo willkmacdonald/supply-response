@@ -11,3 +11,6 @@ ref expression FABRIC_SQL_SERVER
 ref expression FABRIC_SQL_DATABASE
 ref table CaseCommandCenter
 ref table ActionOutcomes
+ref table SavedAnalyses
+ref table SavedRecords
+ref table SavedOptions

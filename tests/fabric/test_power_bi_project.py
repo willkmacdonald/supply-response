@@ -7,11 +7,13 @@ import re
 import shutil
 import subprocess
 import sys
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
 import pytest
+
+from fabric import report_model, report_pages
 
 ROOT = Path(__file__).resolve().parents[2]
 POWER_BI = ROOT / "fabric" / "power-bi"
@@ -34,55 +36,6 @@ MICROSOFT_SCHEMA_ROOTS = (
     "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.0.0/schema.json",
     "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
 )
-
-PAGES = {
-    "command-center": "Command Center",
-    "actions-outcomes": "Actions and Outcomes",
-}
-
-EXPECTED_VISUAL_IDS = {
-    "command-center": (
-        "active-cases",
-        "current-decision",
-        "otif-loss",
-        "revenue-at-risk",
-        "scenario-effective-time",
-        "showcase-cases",
-    ),
-    "actions-outcomes": (
-        "action-status",
-        "decision-id",
-        "observation-kind",
-        "predicted-observed-variance",
-        "projection-refresh",
-        "scenario-effective-time",
-    ),
-}
-
-QUERY_REF_ALLOWLIST = {
-    "command-center": {
-        "CaseCommandCenter.case_id",
-        "CaseCommandCenter.purpose",
-        "CaseCommandCenter.status",
-        "CaseCommandCenter.Latest Showcase Case",
-        "CaseCommandCenter.Current Decision ID",
-        "CaseCommandCenter.Current Decision Status",
-        "CaseCommandCenter.Revenue At Risk",
-        "CaseCommandCenter.OTIF Loss %",
-        "CaseCommandCenter.Scenario Effective Time",
-    },
-    "actions-outcomes": {
-        "CaseCommandCenter.Current Decision ID",
-        "ActionOutcomes.action_kind",
-        "ActionOutcomes.Current Action Status",
-        "ActionOutcomes.metric",
-        "ActionOutcomes.observation_kind",
-        "ActionOutcomes.Current Observation Kind",
-        "ActionOutcomes.Observed Variance",
-        "ActionOutcomes.Projection Refresh Time",
-        "ActionOutcomes.Action Scenario Effective Time",
-    },
-}
 
 JSON_SCHEMAS = {
     "SupplyResponse.pbip": (
@@ -127,6 +80,32 @@ def _query_refs(value: object) -> list[str]:
     return []
 
 
+APPROVED_REPORT = report_pages.artifacts()
+PAGES = {
+    page: APPROVED_REPORT[f"pages/{page}/page.json"]["displayName"]
+    for page in report_pages.ORDER
+}
+EXPECTED_VISUAL_IDS = {
+    page: tuple(
+        sorted(
+            Path(name).parent.name
+            for name in APPROVED_REPORT
+            if name.startswith(f"pages/{page}/visuals/")
+        )
+    )
+    for page in PAGES
+}
+QUERY_REF_ALLOWLIST = {
+    page: {
+        ref
+        for name, value in APPROVED_REPORT.items()
+        if name.startswith(f"pages/{page}/visuals/")
+        for ref in _query_refs(value)
+    }
+    for page in PAGES
+}
+
+
 def _visual_files(page_name: str) -> list[Path]:
     return sorted((REPORT / "pages" / page_name / "visuals").glob("*/visual.json"))
 
@@ -137,8 +116,7 @@ def test_required_power_bi_artifacts_exist() -> None:
         POWER_BI / "SupplyResponse.SemanticModel" / "definition.pbism",
         POWER_BI / "SupplyResponse.SemanticModel" / ".platform",
         SEMANTIC_MODEL / "model.tmdl",
-        SEMANTIC_MODEL / "tables" / "CaseCommandCenter.tmdl",
-        SEMANTIC_MODEL / "tables" / "ActionOutcomes.tmdl",
+        *(SEMANTIC_MODEL / "tables" / f"{table}.tmdl" for table in report_model.TABLES),
         POWER_BI / "SupplyResponse.Report" / "definition.pbir",
         POWER_BI / "SupplyResponse.Report" / ".platform",
         REPORT / "version.json",
@@ -326,7 +304,7 @@ def test_project_json_files_declare_current_official_schemas() -> None:
         assert _load(POWER_BI / directory / ".platform")["$schema"] == PLATFORM_SCHEMA
 
 
-def test_power_bi_project_has_only_the_two_required_pages() -> None:
+def test_power_bi_project_has_exactly_eight_generated_pages() -> None:
     pages = _load(REPORT / "pages" / "pages.json")
     assert pages == {
         "$schema": (
@@ -345,6 +323,7 @@ def test_power_bi_project_has_only_the_two_required_pages() -> None:
         name: _load(REPORT / "pages" / name / "page.json")["displayName"]
         for name in PAGES
     } == PAGES
+    assert len(PAGES) == 8
 
 
 def test_pages_have_exact_identity_size_and_thirty_second_refresh() -> None:
@@ -389,8 +368,12 @@ def test_every_visual_is_schema_shaped_and_inside_its_page() -> None:
                 "query",
                 "objects",
                 "visualContainerObjects",
+                "syncGroup",
             }
             assert isinstance(visual_container["visual"]["visualType"], str)
+            if visual_container["visual"]["visualType"] == "textbox":
+                assert "query" not in visual_container["visual"]
+                continue
             query_state = visual_container["visual"]["query"]["queryState"]
             assert query_state
             for projection_state in query_state.values():
@@ -493,7 +476,17 @@ def _mutate_projection_measure_to_column(value: dict[str, Any]) -> None:
 
 def _mutate_aggregation_function(value: dict[str, Any]) -> None:
     projection = value["visual"]["query"]["queryState"]["Data"]["projections"][0]
-    projection["field"]["Aggregation"]["Function"] = 0
+    projection["field"] = {
+        "Aggregation": {
+            "Expression": {
+                "Column": {
+                    "Expression": {"SourceRef": {"Entity": "CaseCommandCenter"}},
+                    "Property": "case_id",
+                }
+            },
+            "Function": 0,
+        }
+    }
 
 
 def _mutate_projection_display_name(value: dict[str, Any]) -> None:
@@ -507,7 +500,7 @@ def _mutate_projection_role(value: dict[str, Any]) -> None:
 
 
 def _mutate_filter_type(value: dict[str, Any]) -> None:
-    value["filterConfig"]["filters"][0]["type"] = "Advanced"
+    value["filterConfig"]["filters"][0]["type"] = "Categorical"
 
 
 def _mutate_unknown_projection_shape(value: dict[str, Any]) -> None:
@@ -572,13 +565,32 @@ def test_staged_preflight_rejects_schema_valid_visual_semantic_mutations(
 def test_preflight_has_exact_visual_inventory_and_per_visual_contracts() -> None:
     from fabric import deploy
 
-    assert {
-        page: tuple(visuals) for page, visuals in deploy.EXPECTED_VISUALS.items()
-    } == EXPECTED_VISUAL_IDS
-    deploy._validate_visual_inventory(POWER_BI / "SupplyResponse.Report" / "definition")
+    assert deploy.EXPECTED_PAGE_ORDER == report_pages.ORDER
+    assert deploy.EXPECTED_QUERY_REFS == QUERY_REF_ALLOWLIST
+    deploy._validate_visual_inventory(REPORT)
+    old_ids = {
+        "command-center": {
+            "active-cases",
+            "current-decision",
+            "otif-loss",
+            "revenue-at-risk",
+            "scenario-effective-time",
+            "showcase-cases",
+        },
+        "actions-outcomes": {
+            "action-status",
+            "decision-id",
+            "observation-kind",
+            "predicted-observed-variance",
+            "projection-refresh",
+            "scenario-effective-time",
+        },
+    }
+    for page, names in old_ids.items():
+        assert names <= set(EXPECTED_VISUAL_IDS[page])
 
 
-def test_visual_inventory_rejects_schema_valid_thirteenth_reused_queryref(
+def test_visual_inventory_rejects_schema_valid_additional_reused_queryref(
     tmp_path: Path,
 ) -> None:
     from fabric import deploy
@@ -677,199 +689,160 @@ def test_visual_inventory_rejects_wrong_page_and_altered_locked_filter(
         / "visual.json"
     )
     visual = _load(action)
-    values = visual["filterConfig"]["filters"][0]["filter"]["Where"][0]["Condition"][
-        "In"
-    ]["Values"]
-    values[0][0]["Literal"]["Value"] = "'observation'"
+    comparison = visual["filterConfig"]["filters"][0]["filter"]["Where"][0][
+        "Condition"
+    ]["Comparison"]
+    comparison["Right"]["Literal"]["Value"] = "0L"
     action.write_text(json.dumps(visual), encoding="utf-8")
-    with pytest.raises(deploy.PreflightError, match="visual filter"):
+    with pytest.raises(deploy.PreflightError, match="visual contract/filter"):
         deploy._validate_visual_inventory(
             repository / "SupplyResponse.Report" / "definition"
         )
 
 
-def test_showcase_table_binds_latest_case_and_showcase_filters() -> None:
-    table = _load(
-        REPORT
-        / "pages"
-        / "command-center"
-        / "visuals"
-        / "showcase-cases"
-        / "visual.json"
+@pytest.mark.parametrize(
+    "attack", ["unlock", "remove-gate", "alias", "picker-sync", "picker-field"]
+)
+def test_scope_mutations_fail_before_auth(tmp_path, monkeypatch, attack):
+    from fabric import deploy
+
+    repository = _staged_visual_mutation_repository(tmp_path, attack)
+    page = "supplier-shipment"
+    visual = "case-selector" if attack.startswith("picker-") else "supporting-records"
+    path = _visual_path(repository, page, visual)
+    value = _load(path)
+    if attack == "unlock":
+        value["filterConfig"]["filters"][0]["isLockedInViewMode"] = False
+    elif attack == "remove-gate":
+        del value["filterConfig"]
+    elif attack == "alias":
+        value["filterConfig"]["filters"][0]["filter"]["From"][0]["Name"] = "other"
+    elif attack == "picker-sync":
+        value["visual"]["syncGroup"]["filterChanges"] = False
+    else:
+        value["visual"]["query"]["queryState"]["Values"]["projections"][0]["field"][
+            "Column"
+        ]["Property"] = "status"
+    path.write_text(json.dumps(value), encoding="utf-8")
+    deploy._validate_offline_json_schemas(repository)
+    monkeypatch.setattr(deploy, "POWER_BI", repository)
+    monkeypatch.setattr(deploy, "_validate_python", lambda: None)
+    monkeypatch.setattr(
+        deploy, "_required_environment", lambda: VISUAL_PREFLIGHT_VALUES
     )
-    projections = table["visual"]["query"]["queryState"]["Values"]["projections"]
-    assert {projection["queryRef"] for projection in projections} >= {
-        "CaseCommandCenter.case_id",
-        "CaseCommandCenter.purpose",
-        "CaseCommandCenter.Latest Showcase Case",
-    }
-    filters = table["filterConfig"]["filters"]
-    assert {item["name"] for item in filters} == {
-        "FilterShowcasePurpose",
-        "FilterLatestShowcaseCase",
-    }
-    purpose = next(item for item in filters if item["name"] == "FilterShowcasePurpose")
-    latest = next(
-        item for item in filters if item["name"] == "FilterLatestShowcaseCase"
+    monkeypatch.setattr(
+        deploy, "_publish", lambda _: pytest.fail("publish/auth reached")
     )
-    assert purpose["field"]["Column"]["Property"] == "purpose"
-    assert purpose["filter"]["Where"][0]["Condition"]["In"]["Values"] == [
-        [{"Literal": {"Value": "'showcase'"}}]
-    ]
-    comparison = latest["filter"]["Where"][0]["Condition"]["Comparison"]
-    assert comparison["ComparisonKind"] == 0
-    assert comparison["Left"]["Column"]["Property"] == "case_id"
-    assert comparison["Right"]["Measure"]["Property"] == "Latest Showcase Case"
-
-
-def test_active_cases_card_counts_distinct_non_closed_cases() -> None:
-    card = _load(
-        REPORT / "pages" / "command-center" / "visuals" / "active-cases" / "visual.json"
+    monkeypatch.setattr(
+        deploy,
+        "_discover_publish_items",
+        lambda _: pytest.fail("SDK discovery reached"),
     )
-    projection = card["visual"]["query"]["queryState"]["Data"]["projections"][0]
-    aggregation = projection["field"]["Aggregation"]
-    assert projection["queryRef"] == "CaseCommandCenter.case_id"
-    assert aggregation["Function"] == 2
-    assert aggregation["Expression"]["Column"]["Property"] == "case_id"
-    status_filter = card["filterConfig"]["filters"]
-    assert [item["name"] for item in status_filter] == ["FilterActiveCases"]
-    condition = status_filter[0]["filter"]["Where"][0]["Condition"]
-    assert condition["Not"]["Expression"]["In"]["Values"] == [
-        [{"Literal": {"Value": "'closed'"}}]
-    ]
+    monkeypatch.setattr(sys, "argv", ["deploy.py"])
+    with pytest.raises(SystemExit):
+        deploy.main()
 
 
-def test_actions_page_binds_scenario_effective_time_card() -> None:
-    scenario = _load(
-        REPORT
-        / "pages"
-        / "actions-outcomes"
-        / "visuals"
-        / "scenario-effective-time"
-        / "visual.json"
-    )
-    projections = scenario["visual"]["query"]["queryState"]["Data"]["projections"]
-    assert [projection["queryRef"] for projection in projections] == [
-        "ActionOutcomes.Action Scenario Effective Time"
-    ]
-    assert projections[0]["field"]["Measure"]["Property"] == (
-        "Action Scenario Effective Time"
-    )
-    assert projections[0]["displayName"] == "Scenario Effective Time"
-
-
-def test_action_and_observation_visuals_have_locked_record_type_scope() -> None:
-    expected = {
-        "action-status": "action",
-        "observation-kind": "observation",
-        "predicted-observed-variance": "observation",
-    }
-    for visual_name, record_type in expected.items():
+def test_case_picker_is_explicit_single_select_and_synced_on_every_page():
+    for page in PAGES:
         visual = _load(
-            REPORT
-            / "pages"
-            / "actions-outcomes"
-            / "visuals"
-            / visual_name
-            / "visual.json"
+            REPORT / "pages" / page / "visuals" / "case-selector" / "visual.json"
+        )["visual"]
+        assert visual["visualType"] == "slicer"
+        assert visual["syncGroup"] == {
+            "groupName": "SupplyResponseCase",
+            "fieldChanges": True,
+            "filterChanges": True,
+        }
+        assert visual["objects"]["selection"][0]["properties"]["singleSelect"] == {
+            "expr": {"Literal": {"Value": "true"}}
+        }
+        assert "general" not in visual["objects"]
+        assert (
+            visual["query"]["queryState"]["Values"]["projections"][0]["queryRef"]
+            == "CaseCommandCenter.case_id"
         )
-        filters = visual["filterConfig"]["filters"]
-        assert [item["name"] for item in filters] == [
-            f"Filter{visual_name.title().replace('-', '')}RecordType"
-        ]
-        assert filters[0]["field"]["Column"]["Property"] == "record_type"
-        values = filters[0]["filter"]["Where"][0]["Condition"]["In"]["Values"]
-        assert values == [[{"Literal": {"Value": f"'{record_type}'"}}]]
-        assert filters[0]["isHiddenInViewMode"] is True
-        assert filters[0]["isLockedInViewMode"] is True
-
-    variance = _load(
-        REPORT
-        / "pages"
-        / "actions-outcomes"
-        / "visuals"
-        / "predicted-observed-variance"
-        / "visual.json"
-    )
-    query_state = variance["visual"]["query"]["queryState"]
-    assert query_state["Category"]["projections"][0]["queryRef"] == (
-        "ActionOutcomes.metric"
-    )
-    assert query_state["Series"]["projections"][0]["queryRef"] == (
-        "ActionOutcomes.observation_kind"
-    )
-    assert query_state["Y"]["projections"][0]["queryRef"] == (
-        "ActionOutcomes.Observed Variance"
-    )
 
 
-def test_latest_showcase_decision_is_the_default_visual_context() -> None:
-    actions_page = _load(REPORT / "pages" / "actions-outcomes" / "page.json")
-    assert actions_page.get("filterConfig", {}).get("filters", []) == []
-
-    decision_card = _load(
-        REPORT
-        / "pages"
-        / "actions-outcomes"
-        / "visuals"
-        / "decision-id"
-        / "visual.json"
-    )
-    decision_projection = decision_card["visual"]["query"]["queryState"]["Data"][
-        "projections"
-    ][0]
-    assert decision_projection["queryRef"] == "CaseCommandCenter.Current Decision ID"
-
-    action_table = _load(
-        REPORT
-        / "pages"
-        / "actions-outcomes"
-        / "visuals"
-        / "action-status"
-        / "visual.json"
-    )
-    action_refs = {
-        item["queryRef"]
-        for item in action_table["visual"]["query"]["queryState"]["Values"][
-            "projections"
-        ]
+def test_overview_contains_nine_saved_answer_bindings():
+    expected = {
+        "Disruption",
+        "Availability",
+        "Exposure",
+        "Shipment",
+        "Transfer",
+        "Qualification",
+        "Options",
+        "Recommendation",
+        "Decision",
     }
-    assert action_refs == {
-        "ActionOutcomes.action_kind",
-        "ActionOutcomes.Current Action Status",
+    actual = {
+        ref.removeprefix("CaseCommandCenter.").removesuffix(" Answer")
+        for ref in QUERY_REF_ALLOWLIST["command-center"]
+        if ref.endswith(" Answer")
+    }
+    assert actual == expected
+    report_pages.verify(REPORT)
+
+
+def test_actions_preserve_scenario_and_projection_context():
+    refs = QUERY_REF_ALLOWLIST["actions-outcomes"]
+    assert {
+        "CaseCommandCenter.Scenario Context",
+        "CaseCommandCenter.Projection Updated Display",
+        "CaseCommandCenter.Current Decision Display",
+    } <= refs
+    report_pages.verify(REPORT)
+
+
+def test_all_business_tables_and_variance_have_locked_scope_gates():
+    for path in REPORT.glob("pages/*/visuals/*/visual.json"):
+        value = _load(path)
+        if value["visual"]["visualType"] not in {
+            "tableEx",
+            "clusteredColumnChart",
+        }:
+            continue
+        gates = [
+            item
+            for item in value["filterConfig"]["filters"]
+            if "Measure" in item["field"]
+        ]
+        assert len(gates) == 1
+        gate = gates[0]
+        assert gate["isHiddenInViewMode"] and gate["isLockedInViewMode"]
+        assert gate["field"]["Measure"]["Property"].endswith("Row Visible")
+        assert gate["filter"]["Where"][0]["Condition"]["Comparison"]["Right"] == {
+            "Literal": {"Value": "1L"}
+        }
+    chart = _load(
+        REPORT
+        / "pages/actions-outcomes/visuals/predicted-observed-variance/visual.json"
+    )
+    assert set(_query_refs(chart)) >= {
+        "ActionOutcomes.metric",
+        "ActionOutcomes.observation_kind",
+        "ActionOutcomes.Observed Variance",
     }
 
-    observation_card = _load(
-        REPORT
-        / "pages"
-        / "actions-outcomes"
-        / "visuals"
-        / "observation-kind"
-        / "visual.json"
-    )
-    observation_projection = observation_card["visual"]["query"]["queryState"]["Data"][
-        "projections"
-    ][0]
-    assert observation_projection["queryRef"] == (
-        "ActionOutcomes.Current Observation Kind"
-    )
 
-    current_decision = _load(
-        REPORT
-        / "pages"
-        / "command-center"
-        / "visuals"
-        / "current-decision"
-        / "visual.json"
-    )
-    assert current_decision.get("filterConfig", {}).get("filters", []) == []
-    projections = current_decision["visual"]["query"]["queryState"]["Values"][
-        "projections"
-    ]
-    assert [projection["queryRef"] for projection in projections] == [
-        "CaseCommandCenter.Current Decision ID",
-        "CaseCommandCenter.Current Decision Status",
-    ]
+def test_no_persisted_case_default_or_latest_showcase_override():
+    for page in PAGES:
+        filters = (
+            _load(REPORT / "pages" / page / "page.json")
+            .get("filterConfig", {})
+            .get("filters", [])
+        )
+        assert all(
+            item["field"].get("Column", {}).get("Property") == "record_family"
+            for item in filters
+        )
+    definitions = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"]
+    assert "Latest Showcase Case" not in definitions
+    selector = definitions["External Selected Case Key"]["expression"]
+    assert "ISFILTERED" in selector and "HASONEFILTER" in selector
+    assert "COUNTROWS(CaseCommandCenter) == 1" in selector
+    assert "ALLSELECTED" in definitions["Selected Case Key"]["expression"]
 
 
 def test_report_has_no_embedded_rows_or_environment_specific_identifiers() -> None:
@@ -888,21 +861,8 @@ def test_report_has_no_embedded_rows_or_environment_specific_identifiers() -> No
 
 
 def test_semantic_model_exposes_decision_and_simulation_measures() -> None:
-    text = "\n".join(path.read_text() for path in SEMANTIC_MODEL.rglob("*.tmdl"))
-    for required in (
-        "Latest Showcase Case",
-        "Current Decision ID",
-        "Current Decision Status",
-        "Current Action Status",
-        "Current Observation Kind",
-        "Revenue At Risk",
-        "OTIF Loss %",
-        "Action Completion %",
-        "Observed Variance",
-        "Projection Refresh Time",
-        "Scenario Effective Time",
-    ):
-        assert f"measure '{required}'" in text
+    report_model.check_required_fields(report_pages.required_fields())
+    report_model.verify(SEMANTIC_MODEL, ROOT / "fabric/reporting/queries")
 
 
 def test_semantic_model_measure_names_are_unique() -> None:
@@ -925,139 +885,35 @@ def test_semantic_model_measure_names_are_unique() -> None:
     assert duplicates == {}
 
 
-def test_current_context_measures_are_scoped_to_latest_showcase_decision() -> None:
-    case_text = (SEMANTIC_MODEL / "tables" / "CaseCommandCenter.tmdl").read_text(
-        encoding="utf-8"
-    )
-    action_text = (SEMANTIC_MODEL / "tables" / "ActionOutcomes.tmdl").read_text(
-        encoding="utf-8"
-    )
-
-    status_body = case_text.split("measure 'Current Decision Status' =", 1)[1].split(
-        "measure 'Revenue At Risk' =", 1
-    )[0]
-    assert "VAR LatestCase = [Latest Showcase Case]" in status_body
-    assert "REMOVEFILTERS(CaseCommandCenter)" in status_body
-    assert "CaseCommandCenter[case_id] = LatestCase" in status_body
-
-    action_status_body = action_text.split("measure 'Current Action Status' =", 1)[
-        1
-    ].split("measure 'Current Observation Kind' =", 1)[0]
-    assert "VAR DecisionId = [Current Decision ID]" in action_status_body
-    assert "REMOVEFILTERS(ActionOutcomes)" in action_status_body
-    assert 'ActionOutcomes[record_type] = "action"' in action_status_body
-    assert "ActionOutcomes[action_kind] = ActionKind" in action_status_body
-
-    observation_body = action_text.split("measure 'Current Observation Kind' =", 1)[
-        1
-    ].split("measure 'Observed Variance' =", 1)[0]
-    assert "VAR DecisionId = [Current Decision ID]" in observation_body
-    assert "REMOVEFILTERS(ActionOutcomes)" in observation_body
-    assert 'ActionOutcomes[record_type] = "observation"' in observation_body
+def test_current_context_measures_are_scoped_to_explicit_case_and_decision() -> None:
+    definitions = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"]
+    for name in (
+        "Action Row Visible",
+        "Observation Row Visible",
+        "Current Actions Count",
+        "Current Observations Count",
+    ):
+        text = definitions[name]["expression"]
+        assert "[Selected Case Key]" in text and "[Current Decision Key]" in text
+        assert "KEEPFILTERS(TREATAS" in text
+        assert "ISBLANK" in text
 
 
 def test_tmdl_folder_has_strong_structural_contract() -> None:
-    model = (SEMANTIC_MODEL / "model.tmdl").read_text(encoding="utf-8")
-    assert model.startswith("model Model\n")
-    assert "\tculture:" not in model
-    assert "  culture: en-US\n" in model
-    assert "  defaultPowerBIDataSourceVersion: powerBI_V3\n" in model
-    assert re.findall(r"^ref table (\w+)$", model, re.MULTILINE) == [
-        "CaseCommandCenter",
-        "ActionOutcomes",
+    from fabric import deploy
+
+    deploy._validate_generated_model(SEMANTIC_MODEL)
+    assert len(report_model.manifest()["tables"]) == 5
+    definitions = report_model.manifest()["tables"]
+    expression = definitions["ActionOutcomes"]["measures"]["Observed Variance"][
+        "expression"
     ]
-
-    expected = {
-        "CaseCommandCenter": {
-            "columns": {
-                "case_id",
-                "purpose",
-                "status",
-                "runtime_mode",
-                "scenario_effective_time",
-                "recommended_option_id",
-                "revenue_at_risk",
-                "otif_loss_percentage",
-                "decision_id",
-                "decision_kind",
-                "decided_at",
-            },
-            "view": "analytics.case_command_center",
-        },
-        "ActionOutcomes": {
-            "columns": {
-                "case_id",
-                "decision_id",
-                "selected_option_id",
-                "record_type",
-                "action_id",
-                "action_kind",
-                "action_status",
-                "metric",
-                "predicted_value",
-                "observed_value",
-                "unit",
-                "observation_kind",
-                "scenario_effective_time",
-                "projection_updated_at",
-            },
-            "view": "analytics.action_outcomes",
-        },
-    }
-    for table_name, contract in expected.items():
-        text = (SEMANTIC_MODEL / "tables" / f"{table_name}.tmdl").read_text()
-        assert text.startswith(f"table {table_name}\n")
-        assert "\t" not in text
-        assert (
-            set(re.findall(r"^  column ([a-z_]+)$", text, re.MULTILINE))
-            == contract["columns"]
-        )
-        assert re.findall(rf"^  partition ({table_name}) = m$", text, re.MULTILINE) == [
-            table_name
-        ]
-        assert "    mode: directQuery\n" in text
-        assert f"SELECT * FROM {contract['view']}" in text
-        assert text.count("Sql.Database(") == 1
-
-    case_text = (SEMANTIC_MODEL / "tables" / "CaseCommandCenter.tmdl").read_text()
-    action_text = (SEMANTIC_MODEL / "tables" / "ActionOutcomes.tmdl").read_text()
-    assert 'CaseCommandCenter[purpose] = "showcase"' in case_text
-    assert "CaseCommandCenter[decided_at], DESC" in case_text
-    assert "CaseCommandCenter[case_id], DESC" in case_text
-    assert "MAXX(LatestRow, CaseCommandCenter[case_id])" in case_text
-    assert "  column observation_kind\n" in action_text
-    assert "    sourceColumn: observation_kind\n" in action_text
-    assert "ActionOutcomes[projection_updated_at]" in action_text
-    assert "ActionOutcomes[observed_value]" in action_text
-    assert "ActionOutcomes[predicted_value]" in action_text
-    assert "measure 'Action Scenario Effective Time'" in action_text
-    assert "ActionOutcomes[scenario_effective_time]" in action_text
-
-    variance = re.search(
-        r"  measure 'Observed Variance' =\n(?P<body>.*?)(?=\n  measure |\n  partition )",
-        action_text,
-        re.DOTALL,
-    )
-    assert variance is not None
-    variance_body = variance.group("body")
-    assert "ALL(ActionOutcomes)" not in variance_body
-    assert "AVERAGEX" not in variance_body
-    assert "SELECTEDVALUE(ActionOutcomes[metric])" in variance_body
-    assert "SELECTEDVALUE(ActionOutcomes[record_type])" in variance_body
-    assert "VAR DecisionId = [Current Decision ID]" in variance_body
-    assert (
-        "CALCULATE(SELECTEDVALUE(ActionOutcomes[predicted_value]), "
-        "ActionOutcomes[decision_id] = DecisionId)"
-    ) in variance_body
-    assert (
-        "CALCULATE(SELECTEDVALUE(ActionOutcomes[observed_value]), "
-        "ActionOutcomes[decision_id] = DecisionId)"
-    ) in variance_body
-    assert "REMOVEFILTERS" not in variance_body
-    assert "IFERROR(VALUE(PredictedText), BLANK())" in variance_body
-    assert "IFERROR(VALUE(ObservedText), BLANK())" in variance_body
-    assert "ABS(Predicted)" in variance_body
-    assert '"remaining_alpha_recovery_date"' not in variance_body
+    assert "[Observation Row Visible] == 1" in expression
+    assert "IFERROR(VALUE(PredictedText), BLANK())" in expression
+    assert "IFERROR(VALUE(ObservedText), BLANK())" in expression
+    assert "ABS(Predicted)" in expression and "Predicted == 0" in expression
+    assert "AVERAGEX" not in expression and "ALL(ActionOutcomes)" not in expression
+    assert '"remaining_alpha_recovery_date"' not in expression
 
 
 FROZEN_OBSERVATIONS = (
@@ -1080,10 +936,13 @@ def _relative_variance_oracle(
 ) -> Decimal | None:
     if metric not in SUPPORTED_VARIANCE_METRICS:
         return None
-    predicted_number = Decimal(predicted)
-    if predicted_number == 0:
+    try:
+        baseline, actual = Decimal(predicted), Decimal(observed)
+    except (InvalidOperation, TypeError, ValueError):
         return None
-    return (Decimal(observed) - predicted_number) / abs(predicted_number)
+    if not baseline.is_finite() or not actual.is_finite() or baseline == 0:
+        return None
+    return (actual - baseline) / abs(baseline)
 
 
 @pytest.mark.parametrize(
@@ -1107,39 +966,100 @@ def test_observed_variance_oracle_returns_blank_for_unknown_and_zero_baseline() 
     assert _relative_variance_oracle("response_cost", "0", "1") is None
 
 
-def test_model_links_actions_to_the_selected_decision() -> None:
-    relationship_file = SEMANTIC_MODEL / "relationships.tmdl"
-    relationship = relationship_file.read_text(encoding="utf-8")
-    assert re.search(r"^relationship DecisionLink$", relationship, re.MULTILINE)
-    assert "  fromColumn: ActionOutcomes.decision_id\n" in relationship
-    assert "  toColumn: CaseCommandCenter.decision_id\n" in relationship
+@pytest.mark.parametrize(
+    ("predicted", "observed"),
+    [
+        ("unknown", "10"),
+        ("10", "unknown"),
+        ("NaN", "1"),
+        ("1", "Infinity"),
+        ("", "1"),
+    ],
+)
+def test_variance_oracle_rejects_non_numeric_and_non_finite_values(predicted, observed):
+    assert _relative_variance_oracle("response_cost", predicted, observed) is None
+
+
+def test_variance_oracle_preserves_observed_zero_and_negative_baseline():
+    assert _relative_variance_oracle("response_cost", "10", "0") == Decimal(-1)
+    assert _relative_variance_oracle("response_cost", "-10", "-5") == Decimal("0.5")
+
+
+def test_model_has_no_relationships_and_uses_guarded_decision_scope() -> None:
+    assert (SEMANTIC_MODEL / "relationships.tmdl").read_text() == ""
+    assert report_model.manifest()["relationships"] == []
+    test_current_context_measures_are_scoped_to_explicit_case_and_decision()
+
+
+@pytest.mark.parametrize(
+    "attack",
+    [
+        "column-type",
+        "column-source",
+        "measure-expression",
+        "measure-format",
+        "measure-hidden",
+        "partition-query",
+        "relationship",
+        "extra-table",
+        "expression",
+        "symlink",
+    ],
+)
+def test_model_mutations_fail_before_sdk_or_auth(tmp_path, monkeypatch, attack):
+    from fabric import deploy
+
+    repository = _staged_visual_mutation_repository(tmp_path, attack)
+    definition = repository / "SupplyResponse.SemanticModel/definition"
+    path = definition / "tables/ActionOutcomes.tmdl"
+    text = path.read_text()
+    replacements = {
+        "column-type": ("dataType: string", "dataType: int64"),
+        "column-source": ("sourceColumn: case_id", "sourceColumn: decision_id"),
+        "measure-expression": ("ABS(Predicted)", "Predicted"),
+        "measure-format": ("0.00%;-0.00%;0.00%", "0.00"),
+        "measure-hidden": ("    formatString:", "    isHidden\n    formatString:"),
+        "partition-query": ("Sql.Database(", "Sql.Databases("),
+    }
+    if attack in replacements:
+        old, new = replacements[attack]
+        assert old in text
+        path.write_text(text.replace(old, new, 1))
+    elif attack == "relationship":
+        (definition / "relationships.tmdl").write_text(
+            "relationship Unexpected\n"
+            "  fromColumn: ActionOutcomes.case_key\n"
+            "  toColumn: CaseCommandCenter.case_key\n"
+        )
+    elif attack == "extra-table":
+        (definition / "tables/Extra.tmdl").write_text("table Extra\n")
+    elif attack == "expression":
+        (definition / "expressions.tmdl").write_text(
+            deploy.EXPECTED_EXPRESSIONS + '\nexpression Extra = "unexpected"\n'
+        )
+    else:
+        outside = tmp_path / "external.tmdl"
+        outside.write_text(text)
+        path.unlink()
+        path.symlink_to(outside)
+    monkeypatch.setattr(
+        deploy,
+        "_discover_publish_items",
+        lambda _: pytest.fail("SDK discovery reached"),
+    )
+    monkeypatch.setattr(
+        deploy,
+        "_validate_tmdl",
+        lambda _: pytest.fail("parser reached before generated contract"),
+    )
+    with pytest.raises(deploy.PreflightError, match="semantic model contract"):
+        deploy._validate_staged_repository(repository, VISUAL_PREFLIGHT_VALUES)
 
 
 def test_tmdl_deserializes_with_microsoft_tom_parser() -> None:
-    if shutil.which("dotnet") is None:
-        raise AssertionError(
-            "dotnet is required for the official Microsoft TMDL parser"
-        )
-    environment = os.environ.copy()
-    environment["DOTNET_CLI_HOME"] = "/tmp/supply-response-dotnet-home"
-    environment["NUGET_PACKAGES"] = "/tmp/supply-response-nuget-packages"
-    result = subprocess.run(
-        [
-            "dotnet",
-            "run",
-            "--project",
-            "tests/fabric/tmdl-validator/TmdlValidator.csproj",
-            "--",
-            str(SEMANTIC_MODEL),
-        ],
-        cwd=ROOT,
-        env=environment,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "TMDL deserialized successfully" in result.stdout
+    from fabric import deploy
+
+    deploy._validate_tmdl(SEMANTIC_MODEL)
 
 
 def test_tmdl_validator_has_committed_locked_restore_configuration() -> None:
@@ -1395,12 +1315,14 @@ def test_live_contract_queries_required_measures_and_variance_contexts() -> None
     live_test = (ROOT / "tests" / "fabric" / "test_power_bi_live.py").read_text()
     for required in (
         "CaseCommandCenter[Current Decision ID]",
-        "ActionOutcomes[Action Completion %]",
+        "CaseCommandCenter[Current Actions Count]",
         "ActionOutcomes[Observed Variance]",
-        "ActionOutcomes[Action Scenario Effective Time]",
-        "ActionOutcomes[Projection Refresh Time]",
+        "MAX(ActionOutcomes[scenario_effective_time])",
+        "CaseCommandCenter[Projection Refresh Time]",
         'ActionOutcomes[metric] = "response_cost"',
         'ActionOutcomes[metric] = "remaining_alpha_recovery_date"',
+        "TREATAS({{{selected_case}}}, CaseCommandCenter[case_id])",
+        "TREATAS({{{selected_decision}}}, ActionOutcomes[decision_id])",
     ):
         assert required in live_test
     variance_source = live_test.split("variance_dax =", maxsplit=1)[1]

@@ -15,7 +15,14 @@ from typing import Any, NoReturn
 from urllib.parse import urldefrag, urljoin, urlparse
 from uuid import UUID
 
+if __package__ in (None, ""):
+    import report_model
+    import report_pages
+else:
+    from fabric import report_model, report_pages
+
 POWER_BI = Path(__file__).resolve().parent / "power-bi"
+REPORT_QUERIES = Path(__file__).resolve().parent / "reporting" / "queries"
 SCHEMA_CATALOG = Path(__file__).resolve().parent / "schemas" / "microsoft"
 MICROSOFT_SCHEMA_SOURCE = "https://developer.microsoft.com/json-schemas/fabric/"
 MICROSOFT_SCHEMA_ROOTS = (
@@ -42,7 +49,13 @@ REQUIRED_ENVIRONMENT = (
     "FABRIC_SQL_SERVER",
     "FABRIC_SQL_DATABASE",
 )
-EXPECTED_PAGE_ORDER = ("command-center", "actions-outcomes")
+EXPECTED_PAGE_ORDER = report_pages.ORDER
+EXPECTED_EXPRESSIONS = (
+    'expression FABRIC_SQL_SERVER = "__FABRIC_SQL_SERVER__" meta '
+    '[IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]\n\n'
+    'expression FABRIC_SQL_DATABASE = "__FABRIC_SQL_DATABASE__" meta '
+    '[IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]\n'
+)
 EXPECTED_PUBLISH_ITEMS = (
     ("SemanticModel", "SupplyResponse"),
     ("Report", "SupplyResponse"),
@@ -55,388 +68,6 @@ EXPECTED_PLATFORM = {
     "SupplyResponse.Report": {
         "type": "Report",
         "logicalId": "8ff233ca-a127-5ff7-a559-cfbbb6fc8046",
-    },
-}
-EXPECTED_QUERY_REFS = {
-    "command-center": {
-        "CaseCommandCenter.case_id",
-        "CaseCommandCenter.purpose",
-        "CaseCommandCenter.status",
-        "CaseCommandCenter.Latest Showcase Case",
-        "CaseCommandCenter.Current Decision ID",
-        "CaseCommandCenter.Current Decision Status",
-        "CaseCommandCenter.Revenue At Risk",
-        "CaseCommandCenter.OTIF Loss %",
-        "CaseCommandCenter.Scenario Effective Time",
-    },
-    "actions-outcomes": {
-        "CaseCommandCenter.Current Decision ID",
-        "ActionOutcomes.action_kind",
-        "ActionOutcomes.Current Action Status",
-        "ActionOutcomes.metric",
-        "ActionOutcomes.observation_kind",
-        "ActionOutcomes.Current Observation Kind",
-        "ActionOutcomes.Observed Variance",
-        "ActionOutcomes.Projection Refresh Time",
-        "ActionOutcomes.Action Scenario Effective Time",
-    },
-}
-
-
-def _projection_contract(
-    role: str,
-    kind: str,
-    entity: str,
-    property_name: str,
-    query_ref: str,
-    *,
-    aggregation: int | None = None,
-    display_name: str | None = None,
-) -> tuple[str, str, str, str, int | None, str | None, str]:
-    return (
-        role,
-        kind,
-        entity,
-        property_name,
-        aggregation,
-        display_name,
-        query_ref,
-    )
-
-
-def _filter_contract(
-    name: str,
-    filter_type: str,
-    entity: str,
-    property_name: str,
-    alias: str,
-    operator: str,
-    target_kind: str,
-    target: str,
-) -> tuple[
-    str,
-    str,
-    str,
-    bool,
-    bool,
-    str,
-    str,
-    str,
-    str,
-    int,
-    int,
-    str,
-    str,
-    str | None,
-    str | None,
-    str | None,
-]:
-    return (
-        name,
-        filter_type,
-        "User",
-        True,
-        True,
-        "Column",
-        entity,
-        property_name,
-        alias,
-        0,
-        2,
-        operator,
-        target_kind,
-        entity if target_kind == "Measure" else None,
-        target if target_kind == "Measure" else None,
-        target if target_kind == "Literal" else None,
-    )
-
-
-EXPECTED_VISUALS = {
-    "command-center": {
-        "active-cases": (
-            "card",
-            (
-                _projection_contract(
-                    "Data",
-                    "Aggregation",
-                    "CaseCommandCenter",
-                    "case_id",
-                    "CaseCommandCenter.case_id",
-                    aggregation=2,
-                    display_name="Active Cases",
-                ),
-            ),
-            (
-                _filter_contract(
-                    "FilterActiveCases",
-                    "Advanced",
-                    "CaseCommandCenter",
-                    "status",
-                    "c",
-                    "not-in",
-                    "Literal",
-                    "closed",
-                ),
-            ),
-        ),
-        "current-decision": (
-            "multiRowCard",
-            (
-                _projection_contract(
-                    "Values",
-                    "Measure",
-                    "CaseCommandCenter",
-                    "Current Decision ID",
-                    "CaseCommandCenter.Current Decision ID",
-                ),
-                _projection_contract(
-                    "Values",
-                    "Measure",
-                    "CaseCommandCenter",
-                    "Current Decision Status",
-                    "CaseCommandCenter.Current Decision Status",
-                    display_name="Decision Status",
-                ),
-            ),
-            (),
-        ),
-        "otif-loss": (
-            "card",
-            (
-                _projection_contract(
-                    "Data",
-                    "Measure",
-                    "CaseCommandCenter",
-                    "OTIF Loss %",
-                    "CaseCommandCenter.OTIF Loss %",
-                ),
-            ),
-            (),
-        ),
-        "revenue-at-risk": (
-            "card",
-            (
-                _projection_contract(
-                    "Data",
-                    "Measure",
-                    "CaseCommandCenter",
-                    "Revenue At Risk",
-                    "CaseCommandCenter.Revenue At Risk",
-                ),
-            ),
-            (),
-        ),
-        "scenario-effective-time": (
-            "card",
-            (
-                _projection_contract(
-                    "Data",
-                    "Measure",
-                    "CaseCommandCenter",
-                    "Scenario Effective Time",
-                    "CaseCommandCenter.Scenario Effective Time",
-                    display_name="Time Since Signal",
-                ),
-            ),
-            (),
-        ),
-        "showcase-cases": (
-            "tableEx",
-            (
-                _projection_contract(
-                    "Values",
-                    "Column",
-                    "CaseCommandCenter",
-                    "case_id",
-                    "CaseCommandCenter.case_id",
-                    display_name="Case ID",
-                ),
-                _projection_contract(
-                    "Values",
-                    "Column",
-                    "CaseCommandCenter",
-                    "purpose",
-                    "CaseCommandCenter.purpose",
-                    display_name="Purpose",
-                ),
-                _projection_contract(
-                    "Values",
-                    "Measure",
-                    "CaseCommandCenter",
-                    "Latest Showcase Case",
-                    "CaseCommandCenter.Latest Showcase Case",
-                    display_name="Latest Showcase Case",
-                ),
-                _projection_contract(
-                    "Values",
-                    "Column",
-                    "CaseCommandCenter",
-                    "status",
-                    "CaseCommandCenter.status",
-                ),
-            ),
-            (
-                _filter_contract(
-                    "FilterShowcasePurpose",
-                    "Categorical",
-                    "CaseCommandCenter",
-                    "purpose",
-                    "c",
-                    "in",
-                    "Literal",
-                    "showcase",
-                ),
-                _filter_contract(
-                    "FilterLatestShowcaseCase",
-                    "Advanced",
-                    "CaseCommandCenter",
-                    "case_id",
-                    "c",
-                    "equals-measure",
-                    "Measure",
-                    "Latest Showcase Case",
-                ),
-            ),
-        ),
-    },
-    "actions-outcomes": {
-        "action-status": (
-            "tableEx",
-            (
-                _projection_contract(
-                    "Values",
-                    "Column",
-                    "ActionOutcomes",
-                    "action_kind",
-                    "ActionOutcomes.action_kind",
-                ),
-                _projection_contract(
-                    "Values",
-                    "Measure",
-                    "ActionOutcomes",
-                    "Current Action Status",
-                    "ActionOutcomes.Current Action Status",
-                    display_name="Action Status",
-                ),
-            ),
-            (
-                _filter_contract(
-                    "FilterActionStatusRecordType",
-                    "Categorical",
-                    "ActionOutcomes",
-                    "record_type",
-                    "a",
-                    "in",
-                    "Literal",
-                    "action",
-                ),
-            ),
-        ),
-        "decision-id": (
-            "card",
-            (
-                _projection_contract(
-                    "Data",
-                    "Measure",
-                    "CaseCommandCenter",
-                    "Current Decision ID",
-                    "CaseCommandCenter.Current Decision ID",
-                    display_name="Decision ID",
-                ),
-            ),
-            (),
-        ),
-        "observation-kind": (
-            "card",
-            (
-                _projection_contract(
-                    "Data",
-                    "Measure",
-                    "ActionOutcomes",
-                    "Current Observation Kind",
-                    "ActionOutcomes.Current Observation Kind",
-                    display_name="Observation Kind",
-                ),
-            ),
-            (
-                _filter_contract(
-                    "FilterObservationKindRecordType",
-                    "Categorical",
-                    "ActionOutcomes",
-                    "record_type",
-                    "a",
-                    "in",
-                    "Literal",
-                    "observation",
-                ),
-            ),
-        ),
-        "predicted-observed-variance": (
-            "clusteredColumnChart",
-            (
-                _projection_contract(
-                    "Category",
-                    "Column",
-                    "ActionOutcomes",
-                    "metric",
-                    "ActionOutcomes.metric",
-                ),
-                _projection_contract(
-                    "Series",
-                    "Column",
-                    "ActionOutcomes",
-                    "observation_kind",
-                    "ActionOutcomes.observation_kind",
-                ),
-                _projection_contract(
-                    "Y",
-                    "Measure",
-                    "ActionOutcomes",
-                    "Observed Variance",
-                    "ActionOutcomes.Observed Variance",
-                    display_name="Predicted vs Observed Variance",
-                ),
-            ),
-            (
-                _filter_contract(
-                    "FilterPredictedObservedVarianceRecordType",
-                    "Categorical",
-                    "ActionOutcomes",
-                    "record_type",
-                    "a",
-                    "in",
-                    "Literal",
-                    "observation",
-                ),
-            ),
-        ),
-        "projection-refresh": (
-            "card",
-            (
-                _projection_contract(
-                    "Data",
-                    "Measure",
-                    "ActionOutcomes",
-                    "Projection Refresh Time",
-                    "ActionOutcomes.Projection Refresh Time",
-                ),
-            ),
-            (),
-        ),
-        "scenario-effective-time": (
-            "card",
-            (
-                _projection_contract(
-                    "Data",
-                    "Measure",
-                    "ActionOutcomes",
-                    "Action Scenario Effective Time",
-                    "ActionOutcomes.Action Scenario Effective Time",
-                    display_name="Scenario Effective Time",
-                ),
-            ),
-            (),
-        ),
     },
 }
 
@@ -495,6 +126,17 @@ def _query_refs(value: object) -> list[str]:
     if isinstance(value, list):
         return [match for child in value for match in _query_refs(child)]
     return []
+
+
+EXPECTED_QUERY_REFS = {
+    page: {
+        ref
+        for name, value in report_pages.artifacts().items()
+        if name.startswith(f"pages/{page}/visuals/")
+        for ref in _query_refs(value)
+    }
+    for page in EXPECTED_PAGE_ORDER
+}
 
 
 def _schema_references(value: object) -> list[str]:
@@ -978,56 +620,68 @@ def _visual_filter_signatures(
 
 
 def _validate_visual_inventory(report_definition: Path) -> None:
-    for page_name, expected_visuals in EXPECTED_VISUALS.items():
-        visuals_directory = report_definition / "pages" / page_name / "visuals"
-        actual_visuals = {
-            path.name for path in visuals_directory.iterdir() if path.is_dir()
+    try:
+        report_pages.verify(report_definition)
+    except (ValueError, OSError) as error:
+        raise PreflightError(
+            f"visual inventory or visual contract/filter drift: {error}"
+        ) from error
+
+
+def _validate_generated_model(semantic_definition: Path) -> None:
+    try:
+        if semantic_definition.is_symlink():
+            raise ValueError("semantic definition must not be a symbolic link")
+        paths = list(semantic_definition.rglob("*"))
+        if any(path.is_symlink() for path in paths):
+            raise ValueError("semantic artifacts must not contain symbolic links")
+        generated = report_model.artifacts(REPORT_QUERIES)
+        expected_files = set(generated) | {"expressions.tmdl"}
+        actual_files = {
+            path.relative_to(semantic_definition).as_posix()
+            for path in paths
+            if path.is_file()
         }
-        if actual_visuals != set(expected_visuals):
-            raise PreflightError(
-                f"{page_name} visual inventory does not match the approved contract"
-            )
-        if any(
-            not (visuals_directory / visual_id / "visual.json").is_file()
-            for visual_id in expected_visuals
+        if actual_files != expected_files:
+            raise ValueError("unexpected semantic definition file inventory")
+        actual_dirs = {
+            path.relative_to(semantic_definition).as_posix()
+            for path in paths
+            if path.is_dir()
+        }
+        if actual_dirs != {"tables"}:
+            raise ValueError("unexpected semantic definition directory inventory")
+        if (
+            semantic_definition.joinpath("expressions.tmdl").read_text(encoding="utf-8")
+            != EXPECTED_EXPRESSIONS
         ):
-            raise PreflightError(
-                f"{page_name} visual inventory is missing a visual definition"
-            )
-        for visual_id, (
-            visual_type,
-            expected_projections,
-            expected_filters,
-        ) in expected_visuals.items():
-            container = _load_json(visuals_directory / visual_id / "visual.json")
-            visual = container.get("visual")
-            if not isinstance(visual, dict) or container.get("name") != visual_id:
-                raise PreflightError(
-                    f"{page_name}/{visual_id} visual contract is invalid"
-                )
-            query = visual.get("query")
-            query_state = query.get("queryState") if isinstance(query, dict) else None
-            if not isinstance(query_state, dict):
-                raise PreflightError(
-                    f"{page_name}/{visual_id} visual contract is invalid"
-                )
-            try:
-                actual_projections = _visual_projection_signatures(query_state)
-            except PreflightError as error:
-                raise PreflightError(
-                    f"{page_name}/{visual_id} visual projection contract is invalid"
-                ) from error
-            if (
-                visual.get("visualType") != visual_type
-                or actual_projections != expected_projections
-            ):
-                raise PreflightError(
-                    f"{page_name}/{visual_id} visual contract is invalid"
-                )
-            if _visual_filter_signatures(container) != expected_filters:
-                raise PreflightError(
-                    f"{page_name}/{visual_id} visual filter contract is invalid"
-                )
+            raise ValueError("deployment expressions differ from approved parameters")
+        report_model.check_required_fields(report_pages.required_fields())
+        report_model.verify(semantic_definition, REPORT_QUERIES)
+    except (ValueError, OSError) as error:
+        raise PreflightError(f"generated semantic model contract: {error}") from error
+
+
+def _tom_manifest() -> dict[str, Any]:
+    contract = report_model.manifest()
+    for name, table in contract["tables"].items():
+        query = (REPORT_QUERIES / f"{name}.sql").read_text(encoding="utf-8")
+        table["source"] = (
+            "Sql.Database(FABRIC_SQL_SERVER, FABRIC_SQL_DATABASE, [Query="
+            + report_model.m_string(query)
+            + "])"
+        )
+        table["columns"] = {
+            column: {
+                "data_type": kind,
+                "source_column": column,
+                "format_string": report_model.column_format(name, column) or "",
+                "hidden": False,
+                "summarize_by": "none",
+            }
+            for column, kind in table["columns"].items()
+        }
+    return contract
 
 
 def _discover_publish_items(repository: Path) -> tuple[tuple[str, str], ...]:
@@ -1060,6 +714,7 @@ def _discover_publish_items(repository: Path) -> tuple[tuple[str, str], ...]:
 def _validate_tmdl(
     semantic_definition: Path, *, validator_project: Path = TMDL_VALIDATOR
 ) -> None:
+    _validate_generated_model(semantic_definition)
     if shutil.which("dotnet") is None:
         raise PreflightError("dotnet is required for locked TOM/TMDL validation")
     lock_file = validator_project.parent / "packages.lock.json"
@@ -1075,6 +730,10 @@ def _validate_tmdl(
         environment["DOTNET_NOLOGO"] = "1"
         environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1"
         environment["NUGET_XMLDOC_MODE"] = "skip"
+        manifest_path = Path(dotnet_home) / "expected-model.json"
+        manifest_path.write_text(
+            json.dumps(_tom_manifest(), ensure_ascii=False), encoding="utf-8"
+        )
         commands = (
             (
                 "locked restore",
@@ -1113,6 +772,8 @@ def _validate_tmdl(
                     "--no-build",
                     "--",
                     str(semantic_definition),
+                    "--manifest",
+                    str(manifest_path),
                 ],
                 60,
             ),
@@ -1149,8 +810,10 @@ def _validate_project() -> None:
         semantic_definition / "model.tmdl",
         semantic_definition / "expressions.tmdl",
         semantic_definition / "relationships.tmdl",
-        semantic_definition / "tables" / "CaseCommandCenter.tmdl",
-        semantic_definition / "tables" / "ActionOutcomes.tmdl",
+        *(
+            semantic_definition / "tables" / f"{name}.tmdl"
+            for name in report_model.TABLES
+        ),
         POWER_BI / "SupplyResponse.Report" / ".platform",
         POWER_BI / "SupplyResponse.Report" / "definition.pbir",
         report_definition / "version.json",
@@ -1166,7 +829,7 @@ def _validate_project() -> None:
     pages = _load_json(report_definition / "pages" / "pages.json")
     if tuple(pages.get("pageOrder", ())) != EXPECTED_PAGE_ORDER:
         raise PreflightError(
-            "report page order must contain exactly the two approved pages"
+            "report page order must contain exactly the eight approved pages"
         )
     if pages.get("activePageName") != "command-center":
         raise PreflightError("Command Center must be the active landing page")
@@ -1213,20 +876,17 @@ def _validate_project() -> None:
         if actual_refs != expected_refs:
             raise PreflightError(f"{page_name} query references do not match allowlist")
 
-    tmdl = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in sorted(semantic_definition.rglob("*.tmdl"))
-    )
-    if "mode: directQuery" not in tmdl:
-        raise PreflightError("semantic model must use DirectQuery")
-    for view in ("analytics.case_command_center", "analytics.action_outcomes"):
-        if tmdl.count(view) != 1:
-            raise PreflightError(f"semantic model must consume only {view}")
-    if "__FABRIC_SQL_SERVER__" not in tmdl or "__FABRIC_SQL_DATABASE__" not in tmdl:
+    _validate_generated_model(semantic_definition)
+    expressions = (semantic_definition / "expressions.tmdl").read_text(encoding="utf-8")
+    if (
+        "__FABRIC_SQL_SERVER__" not in expressions
+        or "__FABRIC_SQL_DATABASE__" not in expressions
+    ):
         raise PreflightError("semantic model deployment placeholders are missing")
 
 
 def _staged_repository(values: dict[str, str], target: Path) -> Path:
+    target = target.resolve()
     repository = target / "power-bi"
     shutil.copytree(POWER_BI, repository)
     parameter_rules = {
@@ -1258,6 +918,9 @@ def _validate_staged_repository(repository: Path, values: dict[str, str]) -> Non
     _validate_offline_json_schemas(repository)
     _validate_item_references(repository)
     _validate_visual_inventory(repository / "SupplyResponse.Report" / "definition")
+    _validate_generated_model(
+        repository / "SupplyResponse.SemanticModel" / "definition"
+    )
     discovered = _discover_publish_items(repository)
     if discovered != EXPECTED_PUBLISH_ITEMS:
         raise PreflightError(

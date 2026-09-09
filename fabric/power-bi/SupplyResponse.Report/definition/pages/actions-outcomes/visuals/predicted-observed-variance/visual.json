@@ -1,54 +1,345 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
   "name": "predicted-observed-variance",
-  "position": {"x": 632, "y": 184, "z": 4, "width": 624, "height": 504, "tabOrder": 4},
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "FilterPredictedObservedVarianceRecordType",
-        "field": {"Column": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "record_type"}},
-        "type": "Categorical",
-        "filter": {
-          "Version": 2,
-          "From": [{"Name": "a", "Entity": "ActionOutcomes", "Type": 0}],
-          "Where": [{"Condition": {"In": {"Expressions": [{"Column": {"Expression": {"SourceRef": {"Source": "a"}}, "Property": "record_type"}}], "Values": [[{"Literal": {"Value": "'observation'"}}]]}}}]
-        },
-        "howCreated": "User",
-        "isHiddenInViewMode": true,
-        "isLockedInViewMode": true
-      }
-    ]
+  "position": {
+    "x": 644,
+    "y": 386,
+    "width": 612,
+    "height": 284,
+    "z": 9,
+    "tabOrder": 9
   },
   "visual": {
     "visualType": "clusteredColumnChart",
+    "visualContainerObjects": {
+      "background": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "color": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#FFFFFF'"
+                    }
+                  }
+                }
+              }
+            },
+            "transparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "border": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "padding": [
+        {
+          "properties": {
+            "top": {
+              "expr": {
+                "Literal": {
+                  "Value": "4D"
+                }
+              }
+            },
+            "bottom": {
+              "expr": {
+                "Literal": {
+                  "Value": "4D"
+                }
+              }
+            },
+            "left": {
+              "expr": {
+                "Literal": {
+                  "Value": "4D"
+                }
+              }
+            },
+            "right": {
+              "expr": {
+                "Literal": {
+                  "Value": "4D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Observed variance — recorded metrics only'"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#183E35'"
+                    }
+                  }
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "12D"
+                }
+              }
+            },
+            "fontFamily": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Segoe UI'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
     "query": {
       "queryState": {
         "Category": {
           "projections": [
             {
-              "field": {"Column": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "metric"}},
-              "queryRef": "ActionOutcomes.metric"
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "ActionOutcomes"
+                    }
+                  },
+                  "Property": "metric"
+                }
+              },
+              "queryRef": "ActionOutcomes.metric",
+              "displayName": "Metric"
             }
           ]
         },
         "Series": {
           "projections": [
             {
-              "field": {"Column": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "observation_kind"}},
-              "queryRef": "ActionOutcomes.observation_kind"
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "ActionOutcomes"
+                    }
+                  },
+                  "Property": "observation_kind"
+                }
+              },
+              "queryRef": "ActionOutcomes.observation_kind",
+              "displayName": "Observation kind"
             }
           ]
         },
         "Y": {
           "projections": [
             {
-              "field": {"Measure": {"Expression": {"SourceRef": {"Entity": "ActionOutcomes"}}, "Property": "Observed Variance"}},
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "ActionOutcomes"
+                    }
+                  },
+                  "Property": "Observed Variance"
+                }
+              },
               "queryRef": "ActionOutcomes.Observed Variance",
-              "displayName": "Predicted vs Observed Variance"
+              "displayName": "Variance"
             }
           ]
         }
       }
+    },
+    "objects": {
+      "labels": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "11D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "dataPoint": [
+        {
+          "properties": {
+            "defaultColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#187D78'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "legend": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "11D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "categoryAxis": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "11D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "valueAxis": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "11D"
+                }
+              }
+            }
+          }
+        }
+      ]
     }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "LockedObservationRowVisible",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "CaseCommandCenter"
+              }
+            },
+            "Property": "Observation Row Visible"
+          }
+        },
+        "type": "Advanced",
+        "howCreated": "User",
+        "isHiddenInViewMode": true,
+        "isLockedInViewMode": true,
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "c",
+              "Entity": "CaseCommandCenter",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "Comparison": {
+                  "ComparisonKind": 0,
+                  "Left": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Source": "c"
+                        }
+                      },
+                      "Property": "Observation Row Visible"
+                    }
+                  },
+                  "Right": {
+                    "Literal": {
+                      "Value": "1L"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
   }
 }

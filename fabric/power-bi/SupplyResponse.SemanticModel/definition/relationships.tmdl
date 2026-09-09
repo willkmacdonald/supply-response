@@ -1,3 +1,0 @@
-relationship DecisionLink
-  fromColumn: ActionOutcomes.decision_id
-  toColumn: CaseCommandCenter.decision_id

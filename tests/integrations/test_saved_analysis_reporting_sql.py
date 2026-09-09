@@ -1225,3 +1225,45 @@ def test_partition_completeness_isolated_for_reused_ids(engine, member):
     assert completeness_flags(engine, good)[flag] is True
     assert completeness_flags(engine, bad)[flag] is False
     assert completeness_flags(engine, good)[flag] is True
+
+
+@pytest.mark.parametrize(
+    "table_name",
+    [
+        "CaseCommandCenter",
+        "ActionOutcomes",
+        "SavedAnalyses",
+        "SavedRecords",
+        "SavedOptions",
+    ],
+)
+def test_report_partition_matches_declared_model_columns_and_types(engine, table_name):
+    from pathlib import Path
+
+    from fabric.report_model import TYPES
+
+    query = (
+        Path(__file__).resolve().parents[2]
+        / "fabric/reporting/queries"
+        / f"{table_name}.sql"
+    ).read_text(encoding="utf-8")
+    metadata = rows(
+        engine,
+        "SELECT name, system_type_name, error_number, error_message "
+        "FROM sys.dm_exec_describe_first_result_set(:sql_text, NULL, 0) "
+        "WHERE is_hidden=0 OR error_number IS NOT NULL ORDER BY column_ordinal",
+        sql_text=query,
+    )
+    assert metadata and all(row["error_number"] is None for row in metadata), metadata
+    assert [row["name"] for row in metadata] == list(TYPES[table_name])
+    allowed = {
+        "string": {"nvarchar", "varchar", "nchar", "char"},
+        "int64": {"bigint", "int", "smallint", "tinyint"},
+        "decimal": {"decimal", "numeric", "money", "smallmoney"},
+        "boolean": {"bit"},
+        "dateTime": {"date", "datetime", "datetime2", "smalldatetime"},
+        "double": {"float", "real"},
+    }
+    for row in metadata:
+        sql_type = row["system_type_name"].split("(", 1)[0]
+        assert sql_type in allowed[TYPES[table_name][row["name"]]], dict(row)

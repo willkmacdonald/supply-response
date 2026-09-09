@@ -21,8 +21,29 @@ table CaseCommandCenter
 
   column scenario_effective_time
     dataType: dateTime
-    formatString: General Date
     sourceColumn: scenario_effective_time
+    summarizeBy: none
+    formatString: MMM d, yyyy HH:mm "UTC"
+
+  column current_analysis_id
+    dataType: string
+    sourceColumn: current_analysis_id
+    summarizeBy: none
+
+  column current_decision_id
+    dataType: string
+    sourceColumn: current_decision_id
+    summarizeBy: none
+
+  column analysis_created_at
+    dataType: dateTime
+    sourceColumn: analysis_created_at
+    summarizeBy: none
+    formatString: MMM d, yyyy HH:mm "UTC"
+
+  column snapshot_state
+    dataType: string
+    sourceColumn: snapshot_state
     summarizeBy: none
 
   column recommended_option_id
@@ -30,21 +51,9 @@ table CaseCommandCenter
     sourceColumn: recommended_option_id
     summarizeBy: none
 
-  column revenue_at_risk
-    dataType: decimal
-    formatString: \$#,0.00;(\$#,0.00);\$#,0.00
-    sourceColumn: revenue_at_risk
-    summarizeBy: sum
-
-  column otif_loss_percentage
-    dataType: int64
-    formatString: 0
-    sourceColumn: otif_loss_percentage
-    summarizeBy: sum
-
-  column decision_id
+  column baseline_option_id
     dataType: string
-    sourceColumn: decision_id
+    sourceColumn: baseline_option_id
     summarizeBy: none
 
   column decision_kind
@@ -52,44 +61,1104 @@ table CaseCommandCenter
     sourceColumn: decision_kind
     summarizeBy: none
 
-  column decided_at
-    dataType: dateTime
-    formatString: General Date
-    sourceColumn: decided_at
+  column decision_analysis_id
+    dataType: string
+    sourceColumn: decision_analysis_id
     summarizeBy: none
 
-  measure 'Latest Showcase Case' =
-      VAR LatestRow = TOPN(1, FILTER(ALL(CaseCommandCenter), CaseCommandCenter[purpose] = "showcase"), CaseCommandCenter[decided_at], DESC, CaseCommandCenter[case_id], DESC)
-      RETURN MAXX(LatestRow, CaseCommandCenter[case_id])
+  column decided_at
+    dataType: dateTime
+    sourceColumn: decided_at
+    summarizeBy: none
+    formatString: MMM d, yyyy HH:mm "UTC"
+
+  column approved_option_id
+    dataType: string
+    sourceColumn: approved_option_id
+    summarizeBy: none
+
+  column baseline_revenue_at_risk
+    dataType: decimal
+    sourceColumn: baseline_revenue_at_risk
+    summarizeBy: none
+    formatString: #,0.00
+
+  column baseline_otif_loss_percentage
+    dataType: int64
+    sourceColumn: baseline_otif_loss_percentage
+    summarizeBy: none
+    formatString: 0"%"
+
+  column baseline_uncovered_part_demand
+    dataType: int64
+    sourceColumn: baseline_uncovered_part_demand
+    summarizeBy: none
+    formatString: #,0
+
+  column baseline_response_cost
+    dataType: decimal
+    sourceColumn: baseline_response_cost
+    summarizeBy: none
+    formatString: #,0.00
+
+  column recommended_revenue_at_risk
+    dataType: decimal
+    sourceColumn: recommended_revenue_at_risk
+    summarizeBy: none
+    formatString: #,0.00
+
+  column recommended_otif_loss_percentage
+    dataType: int64
+    sourceColumn: recommended_otif_loss_percentage
+    summarizeBy: none
+    formatString: 0"%"
+
+  column recommended_uncovered_part_demand
+    dataType: int64
+    sourceColumn: recommended_uncovered_part_demand
+    summarizeBy: none
+    formatString: #,0
+
+  column recommended_response_cost
+    dataType: decimal
+    sourceColumn: recommended_response_cost
+    summarizeBy: none
+    formatString: #,0.00
+
+  column approved_revenue_at_risk
+    dataType: decimal
+    sourceColumn: approved_revenue_at_risk
+    summarizeBy: none
+    formatString: #,0.00
+
+  column approved_otif_loss_percentage
+    dataType: int64
+    sourceColumn: approved_otif_loss_percentage
+    summarizeBy: none
+    formatString: 0"%"
+
+  column approved_uncovered_part_demand
+    dataType: int64
+    sourceColumn: approved_uncovered_part_demand
+    summarizeBy: none
+    formatString: #,0
+
+  column approved_response_cost
+    dataType: decimal
+    sourceColumn: approved_response_cost
+    summarizeBy: none
+    formatString: #,0.00
+
+  column case_key
+    dataType: string
+    sourceColumn: case_key
+    summarizeBy: none
+
+  column current_analysis_key
+    dataType: string
+    sourceColumn: current_analysis_key
+    summarizeBy: none
+
+  column current_decision_key
+    dataType: string
+    sourceColumn: current_decision_key
+    summarizeBy: none
+
+  column decision_analysis_key
+    dataType: string
+    sourceColumn: decision_analysis_key
+    summarizeBy: none
+
+  column approved_option_key
+    dataType: string
+    sourceColumn: approved_option_key
+    summarizeBy: none
+
+  measure 'External Case Requested' =
+      INT(ISFILTERED(CaseCommandCenter[case_key]) || ISFILTERED(CaseCommandCenter[case_id]))
+    isHidden
+
+  measure 'Case Requested' =
+      CALCULATE([External Case Requested], ALLSELECTED(CaseCommandCenter))
+    isHidden
+
+  measure 'External Selected Case Key' =
+      IF(
+              (ISFILTERED(CaseCommandCenter[case_key]) || ISFILTERED(CaseCommandCenter[case_id]))
+              && (NOT ISFILTERED(CaseCommandCenter[case_key]) || HASONEFILTER(CaseCommandCenter[case_key]))
+              && (NOT ISFILTERED(CaseCommandCenter[case_id]) || HASONEFILTER(CaseCommandCenter[case_id]))
+              && COUNTROWS(CaseCommandCenter) == 1,
+              SELECTEDVALUE(CaseCommandCenter[case_key]))
+    isHidden
+
+  measure 'Selected Case Key' =
+      CALCULATE([External Selected Case Key], ALLSELECTED(CaseCommandCenter))
+    isHidden
+
+  measure 'External Analysis Requested' =
+      INT(ISFILTERED(SavedAnalyses[analysis_key]))
+    isHidden
+
+  measure 'Analysis Requested' =
+      CALCULATE([External Analysis Requested], ALLSELECTED(SavedAnalyses))
+    isHidden
+
+  measure 'External Selected Analysis Key' =
+      VAR ScopeCase = [Selected Case Key]
+              VAR N = CALCULATE(COUNTROWS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase},SavedAnalyses[case_key])),
+                  KEEPFILTERS(SavedAnalyses[payload_state] == "available"),
+                  KEEPFILTERS(SavedAnalyses[snapshot_state] == "available"))
+              RETURN IF(NOT ISBLANK(ScopeCase) && ISFILTERED(SavedAnalyses[analysis_key])
+              && HASONEFILTER(SavedAnalyses[analysis_key]) && N == 1,
+              SELECTEDVALUE(SavedAnalyses[analysis_key]))
+    isHidden
+
+  measure 'Selected Analysis Key' =
+      CALCULATE([External Selected Analysis Key], ALLSELECTED(SavedAnalyses))
+    isHidden
+
+  measure 'Case Current Analysis Key' =
+      IF(NOT ISBLANK([Selected Case Key]), CALCULATE(SELECTEDVALUE(CaseCommandCenter[current_analysis_key]), ALLSELECTED(CaseCommandCenter)))
+    isHidden
+
+  measure 'Current Decision Key' =
+      IF(NOT ISBLANK([Selected Case Key]), CALCULATE(SELECTEDVALUE(CaseCommandCenter[current_decision_key]), ALLSELECTED(CaseCommandCenter)))
+    isHidden
+
+  measure 'Decision Analysis Key' =
+      IF(NOT ISBLANK([Selected Case Key]), CALCULATE(SELECTEDVALUE(CaseCommandCenter[decision_analysis_key]), ALLSELECTED(CaseCommandCenter)))
+    isHidden
+
+  measure 'Approved Option Key' =
+      IF(NOT ISBLANK([Selected Case Key]), CALCULATE(SELECTEDVALUE(CaseCommandCenter[approved_option_key]), ALLSELECTED(CaseCommandCenter)))
+    isHidden
 
   measure 'Current Decision ID' =
-      VAR LatestCase = [Latest Showcase Case]
-      RETURN CALCULATE(SELECTEDVALUE(CaseCommandCenter[decision_id]), REMOVEFILTERS(CaseCommandCenter), CaseCommandCenter[case_id] = LatestCase)
+      IF(NOT ISBLANK([Selected Case Key]), CALCULATE(SELECTEDVALUE(CaseCommandCenter[current_decision_id]), ALLSELECTED(CaseCommandCenter)))
+    isHidden
 
-  measure 'Current Decision Status' =
-      VAR LatestCase = [Latest Showcase Case]
-      RETURN CALCULATE(SELECTEDVALUE(CaseCommandCenter[status]), REMOVEFILTERS(CaseCommandCenter), CaseCommandCenter[case_id] = LatestCase)
+  measure 'Case Status' =
+      IF(NOT ISBLANK([Selected Case Key]), CALCULATE(SELECTEDVALUE(CaseCommandCenter[status]), ALLSELECTED(CaseCommandCenter)))
+    isHidden
 
-  measure 'Revenue At Risk' =
-      VAR LatestCase = [Latest Showcase Case]
-      RETURN CALCULATE(MAX(CaseCommandCenter[revenue_at_risk]), REMOVEFILTERS(CaseCommandCenter), CaseCommandCenter[case_id] = LatestCase)
-    formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+  measure 'Decision Kind' =
+      IF(NOT ISBLANK([Selected Case Key]), CALCULATE(SELECTEDVALUE(CaseCommandCenter[decision_kind]), ALLSELECTED(CaseCommandCenter)))
+    isHidden
 
-  measure 'OTIF Loss %' =
-      VAR LatestCase = [Latest Showcase Case]
-      RETURN CALCULATE(MAX(CaseCommandCenter[otif_loss_percentage]), REMOVEFILTERS(CaseCommandCenter), CaseCommandCenter[case_id] = LatestCase) / 100
-    formatString: 0.0%;-0.0%;0.0%
+  measure 'Case Runtime' =
+      IF(NOT ISBLANK([Selected Case Key]), CALCULATE(SELECTEDVALUE(CaseCommandCenter[runtime_mode]), ALLSELECTED(CaseCommandCenter)))
+    isHidden
 
-  measure 'Scenario Effective Time' =
-      VAR LatestCase = [Latest Showcase Case]
-      RETURN CALCULATE(MAX(CaseCommandCenter[scenario_effective_time]), REMOVEFILTERS(CaseCommandCenter), CaseCommandCenter[case_id] = LatestCase)
-    formatString: General Date
+  measure 'Case Display ID' =
+      IF(NOT ISBLANK([Selected Case Key]), CALCULATE(SELECTEDVALUE(CaseCommandCenter[case_id]), ALLSELECTED(CaseCommandCenter)))
+    isHidden
+
+  measure 'Overview Analysis Key' =
+      VAR ScopeCase = [Selected Case Key]
+              VAR ScopeAnalysis = [Case Current Analysis Key]
+              VAR N = CALCULATE(COUNTROWS(SavedAnalyses), REMOVEFILTERS(SavedAnalyses),
+                  TREATAS({ScopeCase},SavedAnalyses[case_key]),TREATAS({ScopeAnalysis},SavedAnalyses[analysis_key]),
+                  SavedAnalyses[payload_state] == "available",SavedAnalyses[snapshot_state] == "available")
+              RETURN IF([Analysis Requested] == 1, [Selected Analysis Key],
+                  IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis) && N == 1,ScopeAnalysis))
+    isHidden
+
+  measure 'Selected analysis_id' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[analysis_id]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Selected analysis_created_at' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[analysis_created_at]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Selected scenario_effective_time' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[scenario_effective_time]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Selected snapshot_state' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[snapshot_state]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Selected payload_state' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[payload_state]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Selected runtime_mode' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[runtime_mode]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Selected inventory_complete' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[inventory_complete]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Selected production_orders_complete' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[production_orders_complete]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Selected customer_orders_complete' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[customer_orders_complete]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Overview analysis_id' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[analysis_id]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Overview analysis_created_at' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[analysis_created_at]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Overview scenario_effective_time' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[scenario_effective_time]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Overview snapshot_state' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[snapshot_state]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Overview payload_state' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[payload_state]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Overview runtime_mode' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[runtime_mode]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Overview inventory_complete' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[inventory_complete]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Overview production_orders_complete' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[production_orders_complete]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Overview customer_orders_complete' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedAnalyses[customer_orders_complete]), REMOVEFILTERS(SavedAnalyses), KEEPFILTERS(TREATAS({ScopeCase}, SavedAnalyses[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedAnalyses[analysis_key]))))
+    isHidden
+
+  measure 'Case Selection State' =
+      IF([Case Requested] == 0,"Select a case",IF(ISBLANK([Selected Case Key]),"Case selection unavailable — unknown, multiple or conflicting selections","Case " & [Case Display ID]))
+
+  measure 'Overview State' =
+      SWITCH(TRUE(),ISBLANK([Selected Case Key]),[Case Selection State],
+              [Analysis Requested] == 1 && ISBLANK([Selected Analysis Key]),"This analysis is unavailable in the report",
+              ISBLANK([Case Current Analysis Key]) && [Analysis Requested] == 0,"Not analyzed yet",
+              ISBLANK([Overview Analysis Key]),"Saved analysis or operational snapshot unavailable",
+              [Overview payload_state] <> "available","Saved analysis unavailable",
+              "Case " & [Case Display ID] & " · Analysis " & [Overview analysis_id] & " · " & [Overview Provenance])
+
+  measure 'Selected Provenance' =
+      VAR V = [Selected runtime_mode] RETURN IF(ISBLANK([Selected analysis_id]),BLANK(),SWITCH(V,"fallback","Saved demo fixture · fictional","live","Saved analysis from live-service mode · fictional scenario · no new retrieval","Saved analysis · source mode unavailable"))
+    isHidden
+
+  measure 'Overview Provenance' =
+      VAR V = [Overview runtime_mode] RETURN IF(ISBLANK([Overview analysis_id]),BLANK(),SWITCH(V,"fallback","Saved demo fixture · fictional","live","Saved analysis from live-service mode · fictional scenario · no new retrieval","Saved analysis · source mode unavailable"))
+    isHidden
+
+  measure 'Scenario Context' =
+      VAR V = [Overview scenario_effective_time]
+              RETURN IF(NOT ISBLANK([Selected Case Key]),IF(ISBLANK(V),"Scenario time unavailable",
+              "In this scenario, as of " & FORMAT(V,"MMM d, yyyy HH:mm") & " UTC"))
+
+  measure 'Snapshot Context' =
+      VAR V = [Selected analysis_created_at]
+              RETURN IF(NOT ISBLANK([Selected Analysis Key]),
+              "Snapshot used for this analysis · " & IF(ISBLANK(V),"Analysis time unavailable",
+              FORMAT(V,"MMM d, yyyy HH:mm") & " UTC") & " · " & [Selected Provenance])
+
+  measure 'External Selected Record Key' =
+      VAR ScopeCase = [Selected Case Key] VAR ScopeAnalysis = [Selected Analysis Key]
+              VAR N = CALCULATE(COUNTROWS(SavedRecords),
+                  KEEPFILTERS(TREATAS({ScopeCase},SavedRecords[case_key])),
+                  KEEPFILTERS(TREATAS({ScopeAnalysis},SavedRecords[analysis_key])),
+                  KEEPFILTERS(SavedRecords[record_state] == "available"),
+                  KEEPFILTERS(SavedRecords[evidence_state] == "available"))
+              RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis)
+                  && ISFILTERED(SavedRecords[record_key]) && HASONEFILTER(SavedRecords[record_key])
+                  && ISFILTERED(SavedRecords[record_family]) && HASONEFILTER(SavedRecords[record_family])
+                  && SELECTEDVALUE(SavedRecords[record_family]) IN {"shipment","transfer","qualification"}
+                  && N == 1,SELECTEDVALUE(SavedRecords[record_key]))
+    isHidden
+
+  measure 'Selected Record Key' =
+      CALCULATE([External Selected Record Key], ALLSELECTED(SavedRecords))
+    isHidden
+
+  measure 'External Selected Record Family' =
+      IF(NOT ISBLANK([Selected Record Key]), SELECTEDVALUE(SavedRecords[record_family]))
+    isHidden
+
+  measure 'Selected Record Family' =
+      CALCULATE([External Selected Record Family], ALLSELECTED(SavedRecords))
+    isHidden
+
+  measure 'Record quantity' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[quantity]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record due_date' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[due_date]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record arrival_date' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[arrival_date]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record incremental_cost_per_unit' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[incremental_cost_per_unit]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record status' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[status]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record audit_complete' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[audit_complete]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record first_article_complete' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[first_article_complete]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record expected_decision_date' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[expected_decision_date]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record supplier_id' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[supplier_id]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record source_plant_id' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[source_plant_id]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record destination_plant_id' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[destination_plant_id]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record part_id' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[part_id]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record retrieved_at' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[retrieved_at]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record provenance' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[provenance]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record runtime_mode' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[runtime_mode]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record source_system' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[source_system]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record source_timestamp' =
+      IF(NOT ISBLANK([Selected Record Key]), (VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedRecords[source_timestamp]), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))))
+    isHidden
+
+  measure 'Record Row Visible' =
+      IF(NOT ISBLANK([Selected Record Key]), INT((VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(COUNTROWS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(TREATAS({[Selected Record Key]}, SavedRecords[record_key])), KEEPFILTERS(TREATAS({[Selected Record Family]}, SavedRecords[record_family])), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))) > 0),0)
+    isHidden
+
+  measure 'Record Supplier' =
+      VAR V = [Record supplier_id] RETURN IF(ISBLANK(V),"Supplier unavailable",SWITCH(TRUE(),EXACT(V,"RL-SUP-ALPHA"),"RL-Supplier Alpha — Current supplier",EXACT(V,"RL-SUP-BETA"),"RL-Supplier Beta — Alternate supplier","Supplier " & V))
+    isHidden
+
+  measure 'Record Source Plant' =
+      VAR V = [Record source_plant_id] RETURN IF(ISBLANK(V),"Plant unavailable",SWITCH(TRUE(),EXACT(V,"RL-PLANT-DAL"),"Dallas plant",EXACT(V,"RL-PLANT-CHI"),"Chicago plant","Plant " & V))
+    isHidden
+
+  measure 'Record Destination Plant' =
+      VAR V = [Record destination_plant_id] RETURN IF(ISBLANK(V),"Plant unavailable",SWITCH(TRUE(),EXACT(V,"RL-PLANT-DAL"),"Dallas plant",EXACT(V,"RL-PLANT-CHI"),"Chicago plant","Plant " & V))
+    isHidden
+
+  measure 'Record Qualification' =
+      VAR V = [Record status] RETURN SWITCH(TRUE(),ISBLANK(V),"Qualification unavailable",EXACT(V,"approved"),"Qualification approved",EXACT(V,"pending"),"Not yet qualified — review pending",EXACT(V,"not_approved"),"Qualification not approved",EXACT(V,"conditional"),"Conditional qualification — requirements remain","Qualification status unresolved (" & V & ")")
+    isHidden
+
+  measure 'Record Provenance Display' =
+      IF(NOT ISBLANK([Selected Record Key]),SWITCH([Record provenance],
+              "saved_fabric","Saved Microsoft Fabric record · fictional scenario",
+              "demo_fixture","Saved demo fixture · fictional",
+              "Saved record · provenance unavailable") & " · Retrieved for this analysis: "
+              & IF(ISBLANK([Record retrieved_at]),"Unavailable",FORMAT([Record retrieved_at],"MMM d, yyyy HH:mm") & " UTC"))
+    isHidden
+
+  measure 'Record State' =
+      IF(ISBLANK([Selected Record Key]),"Supporting record unavailable — select the exact case, analysis and record",
+              SWITCH([Selected Record Family],"shipment",[Record Supplier] & " · Partial shipment",
+              "qualification",[Record Supplier] & " · Qualification",
+              "transfer",[Record Source Plant] & " to " & [Record Destination Plant])
+              & " · " & [Record Provenance Display])
+
+  measure 'Record Quantity Display' =
+      VAR V = [Record quantity] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "#,0") & " component units")
+
+  measure 'Record Due Date Display' =
+      VAR V = [Record due_date] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "MMM d, yyyy") & "")
+
+  measure 'Record Arrival Date Display' =
+      VAR V = [Record arrival_date] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "MMM d, yyyy") & "")
+
+  measure 'Record Unit Cost Display' =
+      VAR V = [Record incremental_cost_per_unit] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "#,0.00") & " per unit; currency not specified")
+
+  measure 'Record Status Display' =
+      VAR V = [Record Qualification] RETURN IF(ISBLANK(V), "Unavailable", V)
+
+  measure 'Record Audit Display' =
+      VAR V = [Record audit_complete] RETURN IF(ISBLANK(V),"Unavailable",IF(V,"Complete","Outstanding"))
+
+  measure 'Record First Article Display' =
+      VAR V = [Record first_article_complete] RETURN IF(ISBLANK(V),"Unavailable",IF(V,"Complete","Outstanding"))
+
+  measure 'Record Explanation' =
+      IF(NOT ISBLANK([Selected Record Key]),SWITCH([Selected Record Family],
+              "shipment","Scheduled receipt from the saved shipment record. Supplier statements remain in the original supplier email. This is not approval or execution.",
+              "transfer","Saved dispatch and arrival dates describe the planned plant transfer. Approval and execution are separate.",
+              "qualification","Audit: " & [Record Audit Display] & "; first article: " & [Record First Article Display]
+                  & ". Review date: " & IF(ISBLANK([Record expected_decision_date]),"Unavailable",FORMAT([Record expected_decision_date],"MMM d, yyyy"))
+                  & ". A review date is not an approval or delivery date."))
+
+  measure 'Stock Rows Valid' =
+      IF([Selected inventory_complete] == TRUE(),(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTROWS(FILTER(SavedRecords,SavedRecords[record_state] <> "available")) == 0,1,0), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory")))),0)
+    isHidden
+
+  measure 'Stock Row Visible' =
+      IF([Stock Rows Valid] == 1,INT((VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(COUNTROWS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))) > 0),0)
+    isHidden
+
+  measure 'Stock Count' =
+      IF([Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(COUNTROWS(SavedRecords), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+    isHidden
+
+  measure 'Stock State' =
+      IF(ISBLANK([Selected Case Key]),[Case Selection State],IF(ISBLANK([Selected Analysis Key]),"Select an available saved analysis",IF(ISBLANK([Stock Count]) || [Stock Count] == 0,"Supporting records unavailable",[Snapshot Context])))
+
+  measure 'Orders Rows Valid' =
+      IF([Selected production_orders_complete] == TRUE() && [Selected customer_orders_complete] == TRUE(),(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTROWS(FILTER(SavedRecords,SavedRecords[record_state] <> "available")) == 0,1,0), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "customer_order_line")))),0)
+    isHidden
+
+  measure 'Order Row Visible' =
+      IF([Orders Rows Valid] == 1,INT((VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(COUNTROWS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "customer_order_line"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))) > 0),0)
+    isHidden
+
+  measure 'Orders Count' =
+      IF([Orders Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(COUNTROWS(SavedRecords), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "customer_order_line"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+    isHidden
+
+  measure 'Orders State' =
+      IF(ISBLANK([Selected Case Key]),[Case Selection State],IF(ISBLANK([Selected Analysis Key]),"Select an available saved analysis",IF(ISBLANK([Orders Count]) || [Orders Count] == 0,"Supporting records unavailable",[Snapshot Context])))
+
+  measure 'Stock Usable' =
+      IF([Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) > 0 && COUNTBLANK(SavedRecords[usable_inventory]) == 0, SUM(SavedRecords[usable_inventory])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+    isHidden
+
+  measure 'Stock Usable Display' =
+      VAR V = [Stock Usable] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "#,0.##") & " component units")
+
+  measure 'Stock Held' =
+      IF([Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) > 0 && COUNTBLANK(SavedRecords[quality_hold]) == 0, SUM(SavedRecords[quality_hold])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+    isHidden
+
+  measure 'Stock Held Display' =
+      VAR V = [Stock Held] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "#,0.##") & " component units")
+
+  measure 'Stock Protected' =
+      IF([Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) > 0 && COUNTBLANK(SavedRecords[protected_allocation]) == 0, SUM(SavedRecords[protected_allocation])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+    isHidden
+
+  measure 'Stock Protected Display' =
+      VAR V = [Stock Protected] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "#,0.##") & " component units")
+
+  measure 'Affected Revenue' =
+      IF([Orders Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) > 0 && COUNTBLANK(SavedRecords[line_revenue]) == 0, SUM(SavedRecords[line_revenue])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "customer_order_line"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+    isHidden
+
+  measure 'Affected Revenue Display' =
+      VAR V = [Affected Revenue] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "#,0.##") & "; currency not specified")
+
+  measure 'Affected Lines Display' =
+      VAR V = [Orders Count] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "#,0") & " saved customer order lines")
+
+  measure 'Stock On Hand Row' =
+      IF([Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK(SavedRecords[on_hand]) == 0,SUM(SavedRecords[on_hand])), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+    formatString: #,0
+
+  measure 'Stock Held Row' =
+      IF([Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK(SavedRecords[quality_hold]) == 0,SUM(SavedRecords[quality_hold])), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+    formatString: #,0
+
+  measure 'Stock Protected Row' =
+      IF([Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK(SavedRecords[protected_allocation]) == 0,SUM(SavedRecords[protected_allocation])), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+    formatString: #,0
+
+  measure 'Stock Usable Row' =
+      IF([Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK(SavedRecords[usable_inventory]) == 0,SUM(SavedRecords[usable_inventory])), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+    formatString: #,0
+
+  measure 'Stock Explanation' =
+      IF(NOT ISBLANK([Selected Analysis Key]),"Usable component stock = on hand − quality holds − protected allocations, for the disruption’s exact part and plant.")
+
+  measure 'Orders Basis Display' =
+      IF(NOT ISBLANK([Selected Analysis Key]),"Customer lines participating in this saved plan")
+
+  measure 'Orders Baseline Revenue' =
+      IF(NOT ISBLANK([Selected Analysis Key]),[Baseline revenue_at_risk])
+    isHidden
+
+  measure 'Orders Baseline OTIF' =
+      IF(NOT ISBLANK([Selected Analysis Key]),[Baseline otif_loss_percentage])
+    isHidden
+
+  measure 'Orders Baseline Revenue Display' =
+      VAR V = [Orders Baseline Revenue] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "#,0.##") & "; currency not specified")
+
+  measure 'Orders Baseline OTIF Display' =
+      VAR V = [Orders Baseline OTIF] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "0") & "%")
+
+  measure 'Orders Explanation' =
+      IF(NOT ISBLANK([Selected Analysis Key]),"Without a response: saved baseline predictions from the same calculation as the card. The supporting rows are customer lines included in this plan; their line values are not predicted revenue at risk, and these rows do not identify individual missed service targets.")
+
+  measure 'External Option Requested' =
+      INT(ISFILTERED(SavedOptions[option_key]))
+    isHidden
+
+  measure 'Option Requested' =
+      CALCULATE([External Option Requested], ALLSELECTED(SavedOptions))
+    isHidden
+
+  measure 'External Selected Option Key' =
+      VAR ScopeCase = [Selected Case Key] VAR ScopeAnalysis = [Selected Analysis Key]
+              VAR N = CALCULATE(COUNTROWS(SavedOptions),KEEPFILTERS(TREATAS({ScopeCase},SavedOptions[case_key])),
+                  KEEPFILTERS(TREATAS({ScopeAnalysis},SavedOptions[analysis_key])))
+              RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis) && ISFILTERED(SavedOptions[option_key])
+                  && HASONEFILTER(SavedOptions[option_key]) && N == 1,SELECTEDVALUE(SavedOptions[option_key]))
+    isHidden
+
+  measure 'Selected Option Key' =
+      CALCULATE([External Selected Option Key], ALLSELECTED(SavedOptions))
+    isHidden
+
+  measure 'Option Row Visible' =
+      IF([Option Requested] == 0 || NOT ISBLANK([Selected Option Key]),INT((VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(COUNTROWS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key]))))) > 0),0)
+    isHidden
+
+  measure 'Option Revenue' =
+      IF([Option Row Visible] == 1,(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[revenue_at_risk])), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key]))))))
+    formatString: #,0.00
+
+  measure 'Option Response Cost' =
+      IF([Option Row Visible] == 1,(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[response_cost])), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key]))))))
+    formatString: #,0.00
+
+  measure 'Selected Option option_name' =
+      IF(NOT ISBLANK([Selected Option Key]),(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedOptions[option_name]), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(TREATAS({[Selected Option Key]}, SavedOptions[option_key]))))))
+    isHidden
+
+  measure 'Selected Option revenue_at_risk' =
+      IF(NOT ISBLANK([Selected Option Key]),(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedOptions[revenue_at_risk]), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(TREATAS({[Selected Option Key]}, SavedOptions[option_key]))))))
+    isHidden
+
+  measure 'Selected Option response_cost' =
+      IF(NOT ISBLANK([Selected Option Key]),(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedOptions[response_cost]), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(TREATAS({[Selected Option Key]}, SavedOptions[option_key]))))))
+    isHidden
+
+  measure 'Selected Option blockers_text' =
+      IF(NOT ISBLANK([Selected Option Key]),(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedOptions[blockers_text]), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(TREATAS({[Selected Option Key]}, SavedOptions[option_key]))))))
+    isHidden
+
+  measure 'Selected Option required_roles_text' =
+      IF(NOT ISBLANK([Selected Option Key]),(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedOptions[required_roles_text]), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(TREATAS({[Selected Option Key]}, SavedOptions[option_key]))))))
+    isHidden
+
+  measure 'Selected Option assumptions_text' =
+      IF(NOT ISBLANK([Selected Option Key]),(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedOptions[assumptions_text]), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(TREATAS({[Selected Option Key]}, SavedOptions[option_key]))))))
+    isHidden
+
+  measure 'Options State' =
+      IF(ISBLANK([Selected Case Key]),[Case Selection State],IF(ISBLANK([Selected Analysis Key]),"Saved analysis or operational snapshot unavailable",IF([Option Requested] == 1 && ISBLANK([Selected Option Key]),"Selected option unavailable",[Snapshot Context])))
+
+  measure 'Selected Option Display' =
+      IF([Option Requested] == 0,"Compare the saved options",IF(ISBLANK([Selected Option Key]),"Selected option unavailable",[Selected Option option_name]))
+
+  measure 'Option Revenue Display' =
+      VAR V = [Selected Option revenue_at_risk] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "#,0.##") & "; currency not specified")
+
+  measure 'Option Cost Display' =
+      VAR V = [Selected Option response_cost] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "#,0.##") & "; currency not specified")
+
+  measure 'Options Explanation' =
+      IF(NOT ISBLANK([Selected Analysis Key]),IF([Option Requested] == 0,"Expected results from the shared saved calculation engine. Meeting planning requirements is separate from approval.",IF(NOT ISBLANK([Selected Option Key]),COALESCE([Selected Option blockers_text],"Planning blockers unavailable") & ". " & COALESCE([Selected Option required_roles_text],"Required roles unavailable"))))
+
+  measure 'Baseline option_name' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[option_name])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_baseline] == TRUE())))
+    isHidden
+
+  measure 'Baseline revenue_at_risk' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[revenue_at_risk])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_baseline] == TRUE())))
+    isHidden
+
+  measure 'Baseline response_cost' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[response_cost])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_baseline] == TRUE())))
+    isHidden
+
+  measure 'Baseline otif_loss_percentage' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[otif_loss_percentage])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_baseline] == TRUE())))
+    isHidden
+
+  measure 'Baseline uncovered_part_demand' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[uncovered_part_demand])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_baseline] == TRUE())))
+    isHidden
+
+  measure 'Baseline blockers_text' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[blockers_text])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_baseline] == TRUE())))
+    isHidden
+
+  measure 'Recommended option_name' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[option_name])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_recommended] == TRUE())))
+    isHidden
+
+  measure 'Recommended revenue_at_risk' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[revenue_at_risk])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_recommended] == TRUE())))
+    isHidden
+
+  measure 'Recommended response_cost' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[response_cost])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_recommended] == TRUE())))
+    isHidden
+
+  measure 'Recommended otif_loss_percentage' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[otif_loss_percentage])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_recommended] == TRUE())))
+    isHidden
+
+  measure 'Recommended uncovered_part_demand' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[uncovered_part_demand])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_recommended] == TRUE())))
+    isHidden
+
+  measure 'Recommended blockers_text' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[blockers_text])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_recommended] == TRUE())))
+    isHidden
+
+  measure 'Approved option_name' =
+      IF([Decision Kind] == "approved" && NOT ISBLANK([Approved Option Key]),(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Decision Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[option_name])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(TREATAS({[Approved Option Key]}, SavedOptions[option_key]))))))
+    isHidden
+
+  measure 'Approved revenue_at_risk' =
+      IF([Decision Kind] == "approved" && NOT ISBLANK([Approved Option Key]),(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Decision Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[revenue_at_risk])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(TREATAS({[Approved Option Key]}, SavedOptions[option_key]))))))
+    isHidden
+
+  measure 'Approved response_cost' =
+      IF([Decision Kind] == "approved" && NOT ISBLANK([Approved Option Key]),(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Decision Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[response_cost])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(TREATAS({[Approved Option Key]}, SavedOptions[option_key]))))))
+    isHidden
+
+  measure 'Approved otif_loss_percentage' =
+      IF([Decision Kind] == "approved" && NOT ISBLANK([Approved Option Key]),(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Decision Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[otif_loss_percentage])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(TREATAS({[Approved Option Key]}, SavedOptions[option_key]))))))
+    isHidden
+
+  measure 'Approved uncovered_part_demand' =
+      IF([Decision Kind] == "approved" && NOT ISBLANK([Approved Option Key]),(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Decision Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[uncovered_part_demand])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(TREATAS({[Approved Option Key]}, SavedOptions[option_key]))))))
+    isHidden
+
+  measure 'Overview disruption original_quantity' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[original_quantity])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "disruption"), KEEPFILTERS(SavedRecords[record_state] == "available")))
+    isHidden
+
+  measure 'Overview disruption partial_quantity' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[partial_quantity])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "disruption"), KEEPFILTERS(SavedRecords[record_state] == "available")))
+    isHidden
+
+  measure 'Overview disruption original_due_date' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[original_due_date])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "disruption"), KEEPFILTERS(SavedRecords[record_state] == "available")))
+    isHidden
+
+  measure 'Overview disruption partial_due_date' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[partial_due_date])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "disruption"), KEEPFILTERS(SavedRecords[record_state] == "available")))
+    isHidden
+
+  measure 'Overview disruption supplier_id' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[supplier_id])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "disruption"), KEEPFILTERS(SavedRecords[record_state] == "available")))
+    isHidden
+
+  measure 'Overview disruption part_id' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[part_id])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "disruption"), KEEPFILTERS(SavedRecords[record_state] == "available")))
+    isHidden
+
+  measure 'Overview disruption plant_id' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[plant_id])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "disruption"), KEEPFILTERS(SavedRecords[record_state] == "available")))
+    isHidden
+
+  measure 'Overview shipment quantity' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[quantity])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "shipment"), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))
+    isHidden
+
+  measure 'Overview shipment due_date' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[due_date])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "shipment"), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))
+    isHidden
+
+  measure 'Overview shipment supplier_id' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[supplier_id])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "shipment"), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))
+    isHidden
+
+  measure 'Overview transfer quantity' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[quantity])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "transfer"), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))
+    isHidden
+
+  measure 'Overview transfer arrival_date' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[arrival_date])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "transfer"), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))
+    isHidden
+
+  measure 'Overview transfer source_plant_id' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[source_plant_id])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "transfer"), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))
+    isHidden
+
+  measure 'Overview transfer destination_plant_id' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[destination_plant_id])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "transfer"), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))
+    isHidden
+
+  measure 'Overview qualification status' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[status])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "qualification"), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))
+    isHidden
+
+  measure 'Overview qualification supplier_id' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[supplier_id])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "qualification"), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))
+    isHidden
+
+  measure 'Overview Stock Rows Valid' =
+      IF([Overview inventory_complete] == TRUE(),(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTROWS(FILTER(SavedRecords,SavedRecords[record_state] <> "available")) == 0,1,0), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory")))),0)
+    isHidden
+
+  measure 'Overview Stock' =
+      IF([Overview Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK(SavedRecords[usable_inventory]) == 0,SUM(SavedRecords[usable_inventory])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+    isHidden
+
+  measure 'Overview disruption Supplier' =
+      VAR V = [Overview disruption supplier_id] RETURN IF(ISBLANK(V),"Supplier unavailable",SWITCH(TRUE(),EXACT(V,"RL-SUP-ALPHA"),"RL-Supplier Alpha — Current supplier",EXACT(V,"RL-SUP-BETA"),"RL-Supplier Beta — Alternate supplier","Supplier " & V))
+    isHidden
+
+  measure 'Overview shipment Supplier' =
+      VAR V = [Overview shipment supplier_id] RETURN IF(ISBLANK(V),"Supplier unavailable",SWITCH(TRUE(),EXACT(V,"RL-SUP-ALPHA"),"RL-Supplier Alpha — Current supplier",EXACT(V,"RL-SUP-BETA"),"RL-Supplier Beta — Alternate supplier","Supplier " & V))
+    isHidden
+
+  measure 'Overview qualification Supplier' =
+      VAR V = [Overview qualification supplier_id] RETURN IF(ISBLANK(V),"Supplier unavailable",SWITCH(TRUE(),EXACT(V,"RL-SUP-ALPHA"),"RL-Supplier Alpha — Current supplier",EXACT(V,"RL-SUP-BETA"),"RL-Supplier Beta — Alternate supplier","Supplier " & V))
+    isHidden
+
+  measure 'Overview Transfer Source' =
+      VAR V = [Overview transfer source_plant_id] RETURN IF(ISBLANK(V),"Plant unavailable",SWITCH(TRUE(),EXACT(V,"RL-PLANT-DAL"),"Dallas plant",EXACT(V,"RL-PLANT-CHI"),"Chicago plant","Plant " & V))
+    isHidden
+
+  measure 'Overview Transfer Destination' =
+      VAR V = [Overview transfer destination_plant_id] RETURN IF(ISBLANK(V),"Plant unavailable",SWITCH(TRUE(),EXACT(V,"RL-PLANT-DAL"),"Dallas plant",EXACT(V,"RL-PLANT-CHI"),"Chicago plant","Plant " & V))
+    isHidden
+
+  measure 'Overview Disruption Plant' =
+      VAR V = [Overview disruption plant_id] RETURN IF(ISBLANK(V),"Plant unavailable",SWITCH(TRUE(),EXACT(V,"RL-PLANT-DAL"),"Dallas plant",EXACT(V,"RL-PLANT-CHI"),"Chicago plant","Plant " & V))
+    isHidden
+
+  measure 'Overview Qualification Status Display' =
+      VAR V = [Overview qualification status] RETURN SWITCH(TRUE(),ISBLANK(V),"Qualification unavailable",EXACT(V,"approved"),"Qualification approved",EXACT(V,"pending"),"Not yet qualified — review pending",EXACT(V,"not_approved"),"Qualification not approved",EXACT(V,"conditional"),"Conditional qualification — requirements remain","Qualification status unresolved (" & V & ")")
+    isHidden
+
+  measure 'Disruption Answer' =
+      VAR Q = [Overview disruption original_quantity] VAR P = [Overview disruption partial_quantity]
+              RETURN IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK(Q)||ISBLANK(P),"Disruption details unavailable",
+              [Overview disruption Supplier] & "; part " & COALESCE([Overview disruption part_id],"unavailable")
+              & " at " & [Overview Disruption Plant] & ": " & FORMAT(Q,"#,0") & " component units originally due "
+              & IF(ISBLANK([Overview disruption original_due_date]),"date unavailable",FORMAT([Overview disruption original_due_date],"MMM d"))
+              & "; " & FORMAT(P,"#,0") & " in the partial response."))
+
+  measure 'Availability Answer' =
+      IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK([Overview Stock]),"Available stock unavailable",FORMAT([Overview Stock],"#,0") & " usable component units after holds and protected allocations"))
+
+  measure 'Exposure Answer' =
+      VAR V = [Baseline revenue_at_risk] VAR P = [Baseline otif_loss_percentage]
+              RETURN IF(NOT ISBLANK([Overview Analysis Key]),"Without a response: "
+              & IF(ISBLANK(V),"revenue exposure unavailable",FORMAT(V,"#,0.00") & " revenue at risk; currency not specified")
+              & ". Service-target exposure: " & IF(ISBLANK(P),"Unavailable",FORMAT(P,"0") & "%"))
+
+  measure 'Shipment Answer' =
+      VAR Q = [Overview shipment quantity] VAR D = [Overview shipment due_date] RETURN IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK(Q),"Supporting record unavailable",([Overview shipment Supplier]) & ": " & FORMAT(Q,"#,0") & " component units; " & IF(ISBLANK(D),"date unavailable",FORMAT(D,"MMM d, yyyy"))))
+
+  measure 'Transfer Answer' =
+      VAR Q = [Overview transfer quantity] VAR D = [Overview transfer arrival_date] RETURN IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK(Q),"Supporting record unavailable",([Overview Transfer Source] & " to " & [Overview Transfer Destination]) & ": " & FORMAT(Q,"#,0") & " component units; " & IF(ISBLANK(D),"date unavailable",FORMAT(D,"MMM d, yyyy"))))
+
+  measure 'Qualification Answer' =
+      IF(NOT ISBLANK([Overview Analysis Key]),[Overview qualification Supplier] & ": " & [Overview Qualification Status Display])
+
+  measure 'Options Answer' =
+      IF(NOT ISBLANK([Overview Analysis Key]),"Compare saved baseline and response options by cost, service exposure, and parts still needed. Predictions are not observed results.")
+
+  measure 'Recommendation Answer' =
+      IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK([Recommended option_name]),"Recommendation unavailable",
+              [Recommended option_name] & "; " & IF(ISBLANK([Recommended uncovered_part_demand]),"parts still needed unavailable",
+              FORMAT([Recommended uncovered_part_demand],"#,0") & " component units still needed")
+              & "; revenue at risk " & IF(ISBLANK([Recommended revenue_at_risk]),"unavailable",FORMAT([Recommended revenue_at_risk],"#,0.00"))
+              & "; response cost " & IF(ISBLANK([Recommended response_cost]),"unavailable",FORMAT([Recommended response_cost],"#,0.00"))
+              & " (currency not specified)"
+              & ". Saved recommendation. Current decision is shown separately."))
+
+  measure 'Decision Answer' =
+      IF(NOT ISBLANK([Selected Case Key]),IF(ISBLANK([Current Decision Key]),
+              IF([Case Status] == "awaiting_decision","Awaiting approval","No current decision recorded · " & [Case Status]),
+              IF([Decision Kind] == "approved","Approved option: " & COALESCE([Approved option_name],"Unavailable"),
+              "Recorded decision: " & COALESCE([Decision Kind],"Unavailable"))) & ". Approval remains an explicit action in the demo.")
+
+  measure 'Action Row Visible' =
+      INT((VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Current Decision Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(COUNTROWS(ActionOutcomes), KEEPFILTERS(TREATAS({ScopeCase}, ActionOutcomes[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, ActionOutcomes[decision_key])), KEEPFILTERS(ActionOutcomes[record_type] == "action")))) > 0)
+    isHidden
+
+  measure 'Observation Row Visible' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Current Decision Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(VAR M = SELECTEDVALUE(ActionOutcomes[metric]) VAR U = SELECTEDVALUE(ActionOutcomes[unit])
+              VAR K = SELECTEDVALUE(ActionOutcomes[observation_kind])
+              VAR E = SWITCH(M,"alpha_expedited_quantity","units","dallas_transfer_quantity","units","total_response_arranged_supply","units","uncovered_part_demand","units","response_cost","USD","protected_customer_orders","orders","revenue_protected","USD","margin_protected","USD","otif_loss_percentage","percent",BLANK())
+              RETURN IF(COUNTROWS(ActionOutcomes)>0 && NOT ISBLANK(M) && NOT ISBLANK(U)
+              && NOT ISBLANK(K) && NOT ISBLANK(E) && U == E,1,0), KEEPFILTERS(TREATAS({ScopeCase}, ActionOutcomes[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, ActionOutcomes[decision_key])), KEEPFILTERS(ActionOutcomes[record_type] == "observation")))
+    isHidden
+
+  measure 'Current Actions Count' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Current Decision Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(COUNTROWS(ActionOutcomes), REMOVEFILTERS(ActionOutcomes), KEEPFILTERS(TREATAS({ScopeCase}, ActionOutcomes[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, ActionOutcomes[decision_key])), KEEPFILTERS(ActionOutcomes[record_type] == "action")))
+    isHidden
+
+  measure 'Current Observations Count' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Current Decision Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(COUNTROWS(ActionOutcomes), REMOVEFILTERS(ActionOutcomes), KEEPFILTERS(TREATAS({ScopeCase}, ActionOutcomes[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, ActionOutcomes[decision_key])), KEEPFILTERS(ActionOutcomes[record_type] == "observation")))
+    isHidden
+
+  measure 'Current Action Status' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Current Decision Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(ActionOutcomes[action_status]), REMOVEFILTERS(ActionOutcomes), KEEPFILTERS(TREATAS({ScopeCase}, ActionOutcomes[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, ActionOutcomes[decision_key])), KEEPFILTERS(ActionOutcomes[record_type] == "action")))
+    isHidden
+
+  measure 'Current Observation Kind' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Current Decision Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(ActionOutcomes[observation_kind]), REMOVEFILTERS(ActionOutcomes), KEEPFILTERS(TREATAS({ScopeCase}, ActionOutcomes[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, ActionOutcomes[decision_key])), KEEPFILTERS(ActionOutcomes[record_type] == "observation")))
+    isHidden
+
+  measure 'Projection Refresh Time' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Current Decision Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(MAX(ActionOutcomes[projection_updated_at]), REMOVEFILTERS(ActionOutcomes), KEEPFILTERS(TREATAS({ScopeCase}, ActionOutcomes[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, ActionOutcomes[decision_key]))))
+    isHidden
+
+  measure 'Current Decision Display' =
+      IF(ISBLANK([Selected Case Key]),[Case Selection State],IF(ISBLANK([Current Decision Key]),"No current decision recorded",COALESCE([Decision Kind],"Decision kind unavailable")))
+
+  measure 'Current Action Status Display' =
+      IF(ISBLANK([Current Actions Count]) || [Current Actions Count] == 0,"No actions recorded",COALESCE([Current Action Status],"Multiple action states — see current actions"))
+
+  measure 'Current Observation Display' =
+      IF(ISBLANK([Current Observations Count]) || [Current Observations Count] == 0,"No outcomes recorded",IF([Current Observation Kind] == "simulated","Simulated",COALESCE([Current Observation Kind],"Mixed observation kinds — see each series")))
+
+  measure 'Projection Updated Display' =
+      VAR V = [Projection Refresh Time] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "MMM d, yyyy HH:mm") & " UTC")
+
+  measure 'Actions State' =
+      IF(ISBLANK([Selected Case Key]),[Case Selection State],IF(ISBLANK([Current Decision Key]),"No current decision recorded","Current governing decision" & IF([Analysis Requested] == 1 && ISBLANK([Selected Analysis Key])," · Requested analysis unavailable; these are current-decision records",IF(NOT ISBLANK([Selected Analysis Key]) && [Selected Analysis Key] <> [Decision Analysis Key]," · Decision belongs to a different saved analysis from the one being viewed",""))))
+
+  measure 'Action Explanation' =
+      IF(NOT ISBLANK([Selected Case Key]),[Current Action Status Display] & ". " & [Current Observation Display] & ". Predictions and observations remain separate. Simulated observations are not real-world outcomes.")
 
   partition CaseCommandCenter = m
     mode: directQuery
     source =
-        Sql.Database(
-          FABRIC_SQL_SERVER,
-          FABRIC_SQL_DATABASE,
-          [Query="SELECT * FROM analytics.case_command_center"]
-        )
+        Sql.Database(FABRIC_SQL_SERVER, FABRIC_SQL_DATABASE, [Query="SELECT c.case_id,c.purpose,c.status,c.runtime_mode,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(c.scenario_effective_time,'+00:00')) AS scenario_effective_time,#(lf) c.current_analysis_id,c.current_decision_id,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(c.analysis_created_at,'+00:00')) AS analysis_created_at,c.snapshot_state,#(lf) c.recommended_option_id,c.baseline_option_id,c.decision_kind,c.decision_analysis_id,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(c.decided_at,'+00:00')) AS decided_at,c.approved_option_id,#(lf) c.baseline_revenue_at_risk,c.baseline_otif_loss_percentage,#(lf) c.baseline_uncovered_part_demand,c.baseline_response_cost,#(lf) c.recommended_revenue_at_risk,c.recommended_otif_loss_percentage,#(lf) c.recommended_uncovered_part_demand,c.recommended_response_cost,#(lf) c.approved_revenue_at_risk,c.approved_otif_loss_percentage,#(lf) c.approved_uncovered_part_demand,c.approved_response_cost,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.case_id)),2) AS case_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.current_analysis_id)),2) AS current_analysis_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.current_decision_id)),2) AS current_decision_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.decision_analysis_id)),2) AS decision_analysis_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.approved_option_id)),2) AS approved_option_key#(lf)FROM analytics.case_reporting c#(lf)"])

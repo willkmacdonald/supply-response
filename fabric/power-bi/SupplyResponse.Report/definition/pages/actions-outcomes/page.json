@@ -1,11 +1,35 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.0.0/schema.json",
   "name": "actions-outcomes",
-  "displayName": "Actions and Outcomes",
+  "displayName": "Actions and outcomes",
   "displayOption": "FitToPage",
   "width": 1280,
   "height": 720,
   "objects": {
+    "background": [
+      {
+        "properties": {
+          "color": {
+            "solid": {
+              "color": {
+                "expr": {
+                  "Literal": {
+                    "Value": "'#F5F3EA'"
+                  }
+                }
+              }
+            }
+          },
+          "transparency": {
+            "expr": {
+              "Literal": {
+                "Value": "0D"
+              }
+            }
+          }
+        }
+      }
+    ],
     "pageRefresh": [
       {
         "properties": {

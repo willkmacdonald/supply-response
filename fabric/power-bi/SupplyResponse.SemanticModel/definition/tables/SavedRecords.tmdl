@@ -1,0 +1,352 @@
+table SavedRecords
+  column case_id
+    dataType: string
+    sourceColumn: case_id
+    summarizeBy: none
+
+  column analysis_id
+    dataType: string
+    sourceColumn: analysis_id
+    summarizeBy: none
+
+  column record_family
+    dataType: string
+    sourceColumn: record_family
+    summarizeBy: none
+
+  column source_record_id
+    dataType: string
+    sourceColumn: source_record_id
+    summarizeBy: none
+
+  column runtime_mode
+    dataType: string
+    sourceColumn: runtime_mode
+    summarizeBy: none
+
+  column analysis_created_at
+    dataType: dateTime
+    sourceColumn: analysis_created_at
+    summarizeBy: none
+    formatString: MMM d, yyyy HH:mm "UTC"
+
+  column scenario_effective_time
+    dataType: dateTime
+    sourceColumn: scenario_effective_time
+    summarizeBy: none
+    formatString: MMM d, yyyy HH:mm "UTC"
+
+  column record_state
+    dataType: string
+    sourceColumn: record_state
+    summarizeBy: none
+
+  column supplier_id
+    dataType: string
+    sourceColumn: supplier_id
+    summarizeBy: none
+
+  column part_id
+    dataType: string
+    sourceColumn: part_id
+    summarizeBy: none
+
+  column plant_id
+    dataType: string
+    sourceColumn: plant_id
+    summarizeBy: none
+
+  column source_plant_id
+    dataType: string
+    sourceColumn: source_plant_id
+    summarizeBy: none
+
+  column destination_plant_id
+    dataType: string
+    sourceColumn: destination_plant_id
+    summarizeBy: none
+
+  column product_id
+    dataType: string
+    sourceColumn: product_id
+    summarizeBy: none
+
+  column customer_id
+    dataType: string
+    sourceColumn: customer_id
+    summarizeBy: none
+
+  column production_order_id
+    dataType: string
+    sourceColumn: production_order_id
+    summarizeBy: none
+
+  column customer_order_id
+    dataType: string
+    sourceColumn: customer_order_id
+    summarizeBy: none
+
+  column po_line_id
+    dataType: string
+    sourceColumn: po_line_id
+    summarizeBy: none
+
+  column quantity
+    dataType: int64
+    sourceColumn: quantity
+    summarizeBy: none
+    formatString: #,0
+
+  column due_date
+    dataType: dateTime
+    sourceColumn: due_date
+    summarizeBy: none
+    formatString: MMM d, yyyy
+
+  column dispatch_date
+    dataType: dateTime
+    sourceColumn: dispatch_date
+    summarizeBy: none
+    formatString: MMM d, yyyy
+
+  column arrival_date
+    dataType: dateTime
+    sourceColumn: arrival_date
+    summarizeBy: none
+    formatString: MMM d, yyyy
+
+  column incremental_cost_per_unit
+    dataType: decimal
+    sourceColumn: incremental_cost_per_unit
+    summarizeBy: none
+    formatString: #,0.00
+
+  column status
+    dataType: string
+    sourceColumn: status
+    summarizeBy: none
+
+  column evidence_ref
+    dataType: string
+    sourceColumn: evidence_ref
+    summarizeBy: none
+
+  column audit_complete
+    dataType: boolean
+    sourceColumn: audit_complete
+    summarizeBy: none
+
+  column first_article_complete
+    dataType: boolean
+    sourceColumn: first_article_complete
+    summarizeBy: none
+
+  column effective_date
+    dataType: dateTime
+    sourceColumn: effective_date
+    summarizeBy: none
+    formatString: MMM d, yyyy
+
+  column expected_decision_date
+    dataType: dateTime
+    sourceColumn: expected_decision_date
+    summarizeBy: none
+    formatString: MMM d, yyyy
+
+  column on_hand
+    dataType: int64
+    sourceColumn: on_hand
+    summarizeBy: none
+    formatString: #,0
+
+  column quality_hold
+    dataType: int64
+    sourceColumn: quality_hold
+    summarizeBy: none
+    formatString: #,0
+
+  column protected_allocation
+    dataType: int64
+    sourceColumn: protected_allocation
+    summarizeBy: none
+    formatString: #,0
+
+  column usable_inventory
+    dataType: int64
+    sourceColumn: usable_inventory
+    summarizeBy: none
+    formatString: #,0
+
+  column component_demand
+    dataType: int64
+    sourceColumn: component_demand
+    summarizeBy: none
+    formatString: #,0
+
+  column customer_priority
+    dataType: int64
+    sourceColumn: customer_priority
+    summarizeBy: none
+    formatString: #,0
+
+  column customer_revenue
+    dataType: decimal
+    sourceColumn: customer_revenue
+    summarizeBy: none
+    formatString: #,0.00
+
+  column customer_margin
+    dataType: decimal
+    sourceColumn: customer_margin
+    summarizeBy: none
+    formatString: #,0.00
+
+  column unit_revenue
+    dataType: decimal
+    sourceColumn: unit_revenue
+    summarizeBy: none
+    formatString: #,0.00
+
+  column unit_margin
+    dataType: decimal
+    sourceColumn: unit_margin
+    summarizeBy: none
+    formatString: #,0.00
+
+  column line_revenue
+    dataType: decimal
+    sourceColumn: line_revenue
+    summarizeBy: none
+    formatString: #,0.00
+
+  column original_quantity
+    dataType: int64
+    sourceColumn: original_quantity
+    summarizeBy: none
+    formatString: #,0
+
+  column partial_quantity
+    dataType: int64
+    sourceColumn: partial_quantity
+    summarizeBy: none
+    formatString: #,0
+
+  column original_due_date
+    dataType: dateTime
+    sourceColumn: original_due_date
+    summarizeBy: none
+    formatString: MMM d, yyyy
+
+  column partial_due_date
+    dataType: dateTime
+    sourceColumn: partial_due_date
+    summarizeBy: none
+    formatString: MMM d, yyyy
+
+  column recovery_date
+    dataType: dateTime
+    sourceColumn: recovery_date
+    summarizeBy: none
+    formatString: MMM d, yyyy
+
+  column source_ref
+    dataType: string
+    sourceColumn: source_ref
+    summarizeBy: none
+
+  column evidence_state
+    dataType: string
+    sourceColumn: evidence_state
+    summarizeBy: none
+
+  column provenance
+    dataType: string
+    sourceColumn: provenance
+    summarizeBy: none
+
+  column evidence_id
+    dataType: string
+    sourceColumn: evidence_id
+    summarizeBy: none
+
+  column source_id
+    dataType: string
+    sourceColumn: source_id
+    summarizeBy: none
+
+  column source_system
+    dataType: string
+    sourceColumn: source_system
+    summarizeBy: none
+
+  column synthetic
+    dataType: boolean
+    sourceColumn: synthetic
+    summarizeBy: none
+
+  column source_timestamp
+    dataType: dateTime
+    sourceColumn: source_timestamp
+    summarizeBy: none
+    formatString: MMM d, yyyy HH:mm "UTC"
+
+  column retrieved_at
+    dataType: dateTime
+    sourceColumn: retrieved_at
+    summarizeBy: none
+    formatString: MMM d, yyyy HH:mm "UTC"
+
+  column case_key
+    dataType: string
+    sourceColumn: case_key
+    summarizeBy: none
+
+  column analysis_key
+    dataType: string
+    sourceColumn: analysis_key
+    summarizeBy: none
+
+  column record_key
+    dataType: string
+    sourceColumn: record_key
+    summarizeBy: none
+
+  column part_key
+    dataType: string
+    sourceColumn: part_key
+    summarizeBy: none
+
+  column plant_key
+    dataType: string
+    sourceColumn: plant_key
+    summarizeBy: none
+
+  column product_key
+    dataType: string
+    sourceColumn: product_key
+    summarizeBy: none
+
+  column source_plant_key
+    dataType: string
+    sourceColumn: source_plant_key
+    summarizeBy: none
+
+  column destination_plant_key
+    dataType: string
+    sourceColumn: destination_plant_key
+    summarizeBy: none
+
+  column production_order_key
+    dataType: string
+    sourceColumn: production_order_key
+    summarizeBy: none
+
+  column in_disruption_scope
+    dataType: boolean
+    sourceColumn: in_disruption_scope
+    summarizeBy: none
+
+  partition SavedRecords = m
+    mode: directQuery
+    source =
+        Sql.Database(FABRIC_SQL_SERVER, FABRIC_SQL_DATABASE, [Query="SELECT r.case_id,r.analysis_id,r.record_family,r.source_record_id,r.runtime_mode,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(r.analysis_created_at,'+00:00')) AS analysis_created_at,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(r.scenario_effective_time,'+00:00')) AS scenario_effective_time,r.record_state,#(lf) r.supplier_id,r.part_id,r.plant_id,r.source_plant_id,r.destination_plant_id,#(lf) r.product_id,r.customer_id,r.production_order_id,r.customer_order_id,r.po_line_id,#(lf) r.quantity,r.due_date,r.dispatch_date,r.arrival_date,r.incremental_cost_per_unit,#(lf) r.status,r.evidence_ref,r.audit_complete,r.first_article_complete,#(lf) r.effective_date,r.expected_decision_date,r.on_hand,r.quality_hold,#(lf) r.protected_allocation,r.usable_inventory,r.component_demand,r.customer_priority,#(lf) r.customer_revenue,r.customer_margin,r.unit_revenue,r.unit_margin,r.line_revenue,#(lf) r.original_quantity,r.partial_quantity,r.original_due_date,r.partial_due_date,#(lf) r.recovery_date,r.source_ref,#(lf) e.evidence_state,e.provenance,e.evidence_id,e.source_id,e.source_system,#(lf) e.synthetic,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(e.source_timestamp,'+00:00')) AS source_timestamp,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(e.retrieved_at,'+00:00')) AS retrieved_at,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),r.case_id)),2) AS case_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),r.analysis_id)),2) AS analysis_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),r.source_record_id)),2) AS record_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),r.part_id)),2) AS part_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),r.plant_id)),2) AS plant_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),r.product_id)),2) AS product_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),r.source_plant_id)),2) AS source_plant_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),r.destination_plant_id)),2) AS destination_plant_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),r.production_order_id)),2) AS production_order_key,#(lf) CAST(CASE WHEN r.record_state=N'available' AND d.disruption_count=1#(lf)   AND d.disruption_state=N'available' THEN#(lf)   CASE#(lf)     WHEN r.record_family=N'inventory'#(lf)       AND r.part_id COLLATE Latin1_General_100_BIN2=d.part_id COLLATE Latin1_General_100_BIN2#(lf)       AND r.plant_id COLLATE Latin1_General_100_BIN2=d.plant_id COLLATE Latin1_General_100_BIN2 THEN 1#(lf)     WHEN r.record_family=N'production_order' THEN 1#(lf)     WHEN r.record_family=N'customer_order_line' AND EXISTS (#(lf)       SELECT 1 FROM analytics.saved_records p#(lf)       WHERE p.case_id COLLATE Latin1_General_100_BIN2=r.case_id COLLATE Latin1_General_100_BIN2#(lf)         AND p.analysis_id COLLATE Latin1_General_100_BIN2=r.analysis_id COLLATE Latin1_General_100_BIN2#(lf)         AND p.record_family=N'production_order' AND p.record_state=N'available'#(lf)         AND p.source_record_id COLLATE Latin1_General_100_BIN2=r.production_order_id COLLATE Latin1_General_100_BIN2#(lf)     ) THEN 1#(lf)     ELSE 0#(lf)   END ELSE 0 END AS bit) AS in_disruption_scope#(lf)FROM analytics.saved_records r#(lf)LEFT JOIN analytics.saved_record_evidence e#(lf) ON e.case_id COLLATE Latin1_General_100_BIN2=r.case_id COLLATE Latin1_General_100_BIN2#(lf) AND e.analysis_id COLLATE Latin1_General_100_BIN2=r.analysis_id COLLATE Latin1_General_100_BIN2#(lf) AND e.record_family COLLATE Latin1_General_100_BIN2=r.record_family COLLATE Latin1_General_100_BIN2#(lf) AND e.source_record_id COLLATE Latin1_General_100_BIN2=r.source_record_id COLLATE Latin1_General_100_BIN2#(lf)OUTER APPLY (#(lf) SELECT COUNT(*) AS disruption_count,MAX(x.record_state) AS disruption_state,#(lf)   MAX(x.part_id) AS part_id,MAX(x.plant_id) AS plant_id#(lf) FROM analytics.saved_records x#(lf) WHERE x.case_id COLLATE Latin1_General_100_BIN2=r.case_id COLLATE Latin1_General_100_BIN2#(lf)   AND x.analysis_id COLLATE Latin1_General_100_BIN2=r.analysis_id COLLATE Latin1_General_100_BIN2#(lf)   AND x.record_family=N'disruption'#(lf)) d#(lf)"])

@@ -1,0 +1,94 @@
+table SavedAnalyses
+  column case_id
+    dataType: string
+    sourceColumn: case_id
+    summarizeBy: none
+
+  column analysis_id
+    dataType: string
+    sourceColumn: analysis_id
+    summarizeBy: none
+
+  column runtime_mode
+    dataType: string
+    sourceColumn: runtime_mode
+    summarizeBy: none
+
+  column analysis_started_at
+    dataType: dateTime
+    sourceColumn: analysis_started_at
+    summarizeBy: none
+    formatString: MMM d, yyyy HH:mm "UTC"
+
+  column retrieval_window_ends_at
+    dataType: dateTime
+    sourceColumn: retrieval_window_ends_at
+    summarizeBy: none
+    formatString: MMM d, yyyy HH:mm "UTC"
+
+  column analysis_created_at
+    dataType: dateTime
+    sourceColumn: analysis_created_at
+    summarizeBy: none
+    formatString: MMM d, yyyy HH:mm "UTC"
+
+  column scenario_effective_time
+    dataType: dateTime
+    sourceColumn: scenario_effective_time
+    summarizeBy: none
+    formatString: MMM d, yyyy HH:mm "UTC"
+
+  column calculation_version
+    dataType: string
+    sourceColumn: calculation_version
+    summarizeBy: none
+
+  column recommended_option_id
+    dataType: string
+    sourceColumn: recommended_option_id
+    summarizeBy: none
+
+  column payload_state
+    dataType: string
+    sourceColumn: payload_state
+    summarizeBy: none
+
+  column snapshot_state
+    dataType: string
+    sourceColumn: snapshot_state
+    summarizeBy: none
+
+  column inventory_complete
+    dataType: boolean
+    sourceColumn: inventory_complete
+    summarizeBy: none
+
+  column production_orders_complete
+    dataType: boolean
+    sourceColumn: production_orders_complete
+    summarizeBy: none
+
+  column customer_orders_complete
+    dataType: boolean
+    sourceColumn: customer_orders_complete
+    summarizeBy: none
+
+  column case_key
+    dataType: string
+    sourceColumn: case_key
+    summarizeBy: none
+
+  column analysis_key
+    dataType: string
+    sourceColumn: analysis_key
+    summarizeBy: none
+
+  column recommended_option_key
+    dataType: string
+    sourceColumn: recommended_option_key
+    summarizeBy: none
+
+  partition SavedAnalyses = m
+    mode: directQuery
+    source =
+        Sql.Database(FABRIC_SQL_SERVER, FABRIC_SQL_DATABASE, [Query="SELECT a.case_id,a.analysis_id,a.runtime_mode,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(a.analysis_started_at,'+00:00')) AS analysis_started_at,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(a.retrieval_window_ends_at,'+00:00')) AS retrieval_window_ends_at,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(a.analysis_created_at,'+00:00')) AS analysis_created_at,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(a.scenario_effective_time,'+00:00')) AS scenario_effective_time,#(lf) a.calculation_version,a.recommended_option_id,a.payload_state,a.snapshot_state,#(lf) completeness.inventory_complete,completeness.production_orders_complete,completeness.customer_orders_complete,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),a.case_id)),2) AS case_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),a.analysis_id)),2) AS analysis_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),a.recommended_option_id)),2) AS recommended_option_key#(lf)FROM analytics.saved_analyses a#(lf)OUTER APPLY (#(lf) SELECT CAST(MAX(CASE WHEN f.family=N'inventory' THEN verdict.complete END) AS bit) AS inventory_complete,#(lf)        CAST(MAX(CASE WHEN f.family=N'production_order' THEN verdict.complete END) AS bit) AS production_orders_complete,#(lf)        CAST(MAX(CASE WHEN f.family=N'customer_order_line' THEN verdict.complete END) AS bit) AS customer_orders_complete#(lf) FROM (VALUES (N'inventory_positions',N'inventory'),#(lf)              (N'production_orders',N'production_order'),#(lf)              (N'customer_orders',N'customer_order_line')) f(property_name,family)#(lf) CROSS APPLY (#(lf)   SELECT COUNT(*) AS property_count,MAX(j.[type]) AS property_type,MAX(j.[value]) AS array_json#(lf)   FROM OPENJSON(CASE WHEN ISJSON(a.snapshot_json)=1 AND LEFT(LTRIM(a.snapshot_json),1)=N'{'#(lf)                     THEN a.snapshot_json ELSE N'{}' END) j#(lf)   WHERE j.[key] COLLATE Latin1_General_100_BIN2=f.property_name COLLATE Latin1_General_100_BIN2#(lf) ) property#(lf) CROSS APPLY (#(lf)   SELECT COUNT(*) AS raw_count,COALESCE(SUM(CASE WHEN j.[type]=5 THEN 0 ELSE 1 END),0) AS nonobject_count#(lf)   FROM OPENJSON(CASE WHEN property.property_count=1 AND property.property_type=4#(lf)                     THEN property.array_json ELSE N'[]' END) j#(lf) ) raw_members#(lf) CROSS APPLY (#(lf)   SELECT COUNT(*) AS projected_count,#(lf)          COALESCE(SUM(CASE WHEN r.record_state=N'available' THEN 0 ELSE 1 END),0) AS unavailable_count#(lf)   FROM analytics.saved_records r#(lf)   WHERE r.case_id COLLATE Latin1_General_100_BIN2=a.case_id COLLATE Latin1_General_100_BIN2#(lf)     AND r.analysis_id COLLATE Latin1_General_100_BIN2=a.analysis_id COLLATE Latin1_General_100_BIN2#(lf)     AND r.record_family COLLATE Latin1_General_100_BIN2=f.family COLLATE Latin1_General_100_BIN2#(lf) ) projected#(lf) CROSS APPLY (SELECT CASE WHEN a.snapshot_state=N'available' AND a.payload_state=N'available'#(lf)    AND property.property_count=1 AND property.property_type=4#(lf)    AND raw_members.nonobject_count=0 AND raw_members.raw_count=projected.projected_count#(lf)    AND projected.unavailable_count=0 THEN 1 ELSE 0 END AS complete) verdict#(lf)) completeness#(lf)"])

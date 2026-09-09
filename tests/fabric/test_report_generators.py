@@ -273,6 +273,22 @@ def test_all_dax_bindings_resolve_and_selection_gates_are_explicit():
     assert "AVERAGEX" not in variance and "REMOVEFILTERS" not in variance
 
 
+def test_measure_names_are_globally_casefold_unique_and_displays_use_raw_values():
+    definitions = report_model.measures()
+    names = [name for table in definitions.values() for name in table]
+    assert len({name.casefold() for name in names}) == len(names)
+
+    case_measures = definitions["CaseCommandCenter"]
+    expected_helpers = {
+        "Record Provenance Display": "Record provenance",
+        "Overview Qualification Status Display": "Overview qualification status",
+    }
+    for display_name, raw_name in expected_helpers.items():
+        expression = case_measures[display_name].expression
+        assert f"[{raw_name}]" in expression
+        assert f"[{display_name}]" not in expression
+
+
 @pytest.mark.parametrize(
     "invalid", ["target-directory", "parent-file", "extra-file", "extra-directory"]
 )
