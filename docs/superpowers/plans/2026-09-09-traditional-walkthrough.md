@@ -41,10 +41,16 @@ composed-report-URL bindings. No reporting receipt has been issued or installed.
 Final-review corrections at `605015e` subsequently refreshed the digest; see the
 [activation checkpoint](2026-09-09-report-activation.md#execution-checkpoint)
 for its current value. Those corrections passed 184 focused local checks and
-independent source re-review. Updated real-SQL verification is pending. Adding
-protected customer orders to the comparison remains a user decision because
-the exact column list below conflicts with the approved specification's report
-content requirement; do not treat that omission as an approved scope reduction.
+independent source re-review. The user subsequently approved the four-file
+private-VM upload and adding protected customer orders to the comparison,
+resolving the fixed-column-list conflict in favor of the specification. Updated
+real-SQL verification passed 137 tests in 14.58 seconds; the disposable synthetic
+database was removed. The comparison column is implemented at `5a57e36`, with
+an explicit neutrality test strengthened at `4a365c7`. The focused report/model
+suite passes 185 tests, full non-live Python passes 1,182 tests, and the web suite
+passes 226 tests plus the production build. The final focused test and generated
+page equality rerun passed two tests. Final independent review is in progress.
+No native DAX/rendering or live publication is implied.
 
 Native serialization is now established by Microsoft's authored Power BI Visuals sample, with formatting confirmed by official `@microsoft/powerbi-report-authoring-cli@0.1.4` and its `@microsoft/powerbi-core-visual-schema@0.1.1` dependency. The sample uses `actionButton`, `visualContainerObjects.visualLink`, and literal expressions for `show`, `type='PageNavigation'`, and `navigationSection='<page name>'`. The concrete helper below follows that artifact, not an inferred schema value. Its source artifact uses visualContainer 2.7.0; this project's generator uses pinned 2.9.0 and must validate the resulting structure against that version.
 
@@ -211,7 +217,7 @@ Run the same generator tests. Do not build a Python model that pretends to execu
 File: `fabric/report_pages.py`, generator tests, regenerated native pages.
 
 - [x] In overview's existing recommendation-answer card, keep its visual identity but replace its title/binding with `"Review approach", "Review Approach"`. All recommendation text must be behind the mode branch. Do not put recommended metrics in titles, tooltips, source tables, conditional formats or sorting in traditional mode.
-- [x] Keep response-options projections exactly as they are (option_name, is_baseline, executable, response_cost, revenue_at_risk, otif_loss_percentage, uncovered_part_demand, blockers_text, required_roles_text). No is_recommended column or conditional recommendation color. Set its query's sortDefinition using the already pinned QuerySort schema:
+- [x] Preserve response-options projections and add the user-approved protected-customer-orders field (option_name, is_baseline, executable, response_cost, revenue_at_risk, otif_loss_percentage, uncovered_part_demand, protected_customer_order_count, blockers_text, required_roles_text). Label the added field **Customer orders protected**. This supersedes the original fixed list after final review and user approval. No is_recommended column or conditional recommendation color. Set its query's sortDefinition using the already pinned QuerySort schema:
 
 ```python
 comparison["visual"]["query"]["sortDefinition"] = {

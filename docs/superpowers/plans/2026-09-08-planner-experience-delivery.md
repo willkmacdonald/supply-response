@@ -38,25 +38,24 @@ verification are tracked separately; these checkpoints do not activate any link.
 
 ### Final local regression checkpoint (2026-09-09)
 
-The following results cover the pre-final-review implementation through
-`2fadc42`. Final review found missing report comparison fields and an absent
-explicit no-feasible-response state. The unblocked corrections are implemented
-at `605015e` and accepted on independent source re-review: 184 focused local
-checks pass and offline visual validation reports zero errors/warnings. The
-new SQL behavior still requires a fresh real-SQL run. The
-protected-customer-orders column awaits resolution of the spec versus the later
-fixed-column-list conflict. Whole-branch acceptance remains conditional on
-these two items. During native acceptance, also inspect the longer overview
-copy inside the existing 334×156 cards; geometry checks do not prove text fit.
+Final review found missing report comparison fields and an absent explicit
+no-feasible-response state. Corrections at `605015e` passed independent source
+re-review. The user then approved the **Customer orders protected** column
+(`5a57e36`), resolving the specification versus later fixed-column-list conflict,
+and the exact four-file upload to the existing private SQL test VM. Both approved
+actions are complete; final independent review is in progress.
 
-After `605015e`, the full non-live Python rerun passed **1,181 tests**, with
-125 locally unconfigured SQL skips, 14 deliberately deselected live tests, and
-the same inherited warning (132.71 seconds). The 11 new SQL cases are among
-those skips; this result does not close the updated real-SQL gate.
-
-- Non-live Python suite: **1,179 passed**, 114 skipped for locally unconfigured
-  SQL connections, and 14 live tests deliberately deselected. The actual SQL
-  suite independently passed **126 tests** on the private disposable database.
+- Non-live Python suite after the column change: **1,182 passed** in 133.64
+  seconds, 125 skipped for locally unconfigured SQL connections, and 14 live
+  tests deliberately deselected.
+- Actual SQL: **137 passed** in 14.58 seconds on the existing private VM.
+  The new tests first failed against the previous SQL because the
+  `no_feasible_mitigation` column was absent; the updated SQL passed, including
+  legacy saved-analysis compatibility. All four approved files had matching
+  local/remote SHA256 hashes. The runner removed its disposable synthetic
+  database. No live Fabric database, credentials or VM settings were changed.
+- Focused report/model/schema/activation suite: **185 passed**, including the
+  real Microsoft TOM parser.
 - Web suite: **226 passed**, with the production build passing.
 - Browser layout/navigation checks: **24 desktop/mobile variants passed**.
 - Local end-to-end suite: **6 passed** in 1.8 minutes, covering simulated outcomes,
@@ -70,7 +69,9 @@ those skips; this result does not close the updated real-SQL gate.
 
 These results do not verify native DAX values, published report rendering,
 preserved filters, Alex's access, or live card-to-record navigation. Those checks
-remain mandatory before activating the coordinated release.
+remain mandatory before activating the coordinated release. In particular,
+inspect the longer overview copy inside the existing 334×156 cards and the wider
+option comparison in native Power BI; geometry checks do not prove text fit.
 
 ## Stages and acceptance boundaries
 

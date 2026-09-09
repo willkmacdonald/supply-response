@@ -27,15 +27,15 @@ baseline recorded below.
   private-VM SQL rerun passed 126 tests; the web suite now passes 226 tests plus
   the production build. Twenty-four local desktop/mobile browser variants check
   route navigation and existing card links. Native report acceptance is separate.
-- Final local regression: 1,179 non-live Python tests and all six local browser
+- Final local regression: 1,182 non-live Python tests and all six local browser
   lifecycle tests pass. See the [verification checkpoint](superpowers/plans/2026-09-08-planner-experience-delivery.md#final-local-regression-checkpoint-2026-09-09)
   for deliberate live-test exclusions and the remaining release boundary.
-- Final-review follow-up `605015e` corrects the no-feasible-response state,
-  baseline parts/cost and recommended service exposure. Independent source
-  re-review accepted those corrections; 184 focused checks and a fresh full
-  non-live Python run (1,181 passed) are green. Additional SQL verification and
-  the protected-customer-orders column choice are pending before whole-branch
-  acceptance.
+- Final-review follow-up corrects the no-feasible-response state, baseline
+  parts/cost and recommended service exposure, and adds the user-approved
+  **Customer orders protected** comparison column. The latest private-VM SQL
+  run passes **137 tests**, including the new no-feasible and legacy-analysis
+  cases; its disposable database was removed. The focused report/model suite
+  passes **185 tests**. Final independent review is in progress.
 - Still required: coordinated publication, actual DAX/value parity, native
   layouts/navigation, Alex's access, and every card-to-source journey. No new
   reporting receipt has been issued or installed.

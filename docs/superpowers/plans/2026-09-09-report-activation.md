@@ -16,9 +16,10 @@ refreshed the packaged artifact digest. The generator emits formatter-stable
 Python, preserving exact artifact equality through normal commit hooks. One
 inherited TestClient warning remains.
 
-The final whole-branch report corrections subsequently refreshed the generated
-semantic model and packaged digest to
-`00ed9d955f1e929eefc693a6df57e4ee50ff1261dca38a5be47f1da8c1393eae`.
+The final whole-branch report corrections and user-approved **Customer orders
+protected** comparison column subsequently refreshed the generated artifacts
+and packaged digest to
+`19d0c0a15f889b7fd7639036b179e5279401da82e873d63662082410919200a8`.
 No receipt was issued or installed, and live DAX/render/access acceptance remains
 separate from these local checks.
 
