@@ -15,8 +15,20 @@ passed 58 reporting tests plus 12 deployment-contract tests, with a separate
 full saved-demo-payload acceptance test also passing. See the
 [reporting execution record](2026-09-08-saved-analysis-reporting.md#execution-evidence-and-remaining-release-gate).
 
-These changes have not been deployed. Stage 4 (focused Power BI pages and exact
-card navigation) is next; stages 5–6 and live Fabric equivalence remain open.
+These changes have not been deployed. Stage 4 is in progress: the exact-context
+URL builder and five saved-report SELECT projections are implemented and
+independently reviewed through `ab25ae9`. The expanded actual SQL gate passes
+126 tests, including collection completeness and all five SELECT result-type
+contracts. Native page/model artifacts and preflight are implemented and
+independently reviewed through `f0a0ff7`: 134 report/model/schema checks pass with
+the real Microsoft TOM parser, and the official offline visual validator reports
+zero errors and zero warnings. These do not execute DAX or prove native rendering.
+Report activation and mounted card links are implemented and independently
+reviewed through `cecc1ef`: 204 frontend tests/build and twelve desktop/mobile
+browser variants pass. No reporting receipt is installed. The
+[traditional walkthrough plan](2026-09-09-traditional-walkthrough.md) is now in
+implementation; stages 4–5 will co-release only after stage 6's live acceptance
+checks.
 
 ## Stages and acceptance boundaries
 

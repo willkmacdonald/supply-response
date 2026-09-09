@@ -2,9 +2,11 @@
 
 Supply Response is a decision-support demonstration for managing a fictional supplier disruption from detection through analysis, human approval, bounded execution, and outcome observation.
 
-The project combines a deterministic supply-response core with a FastAPI application, a React decision console, durable SQLite or Fabric SQL persistence, and a two-page Power BI project. Microsoft 365 and Azure integrations are added through explicit adapters so the complete live demonstration can use Work IQ, Microsoft Fabric, Microsoft Foundry, Microsoft Agent Framework, Entra ID, and Power BI without coupling the business logic to those services.
+The project combines a deterministic supply-response core with a FastAPI application, a React decision console, durable SQLite or Fabric SQL persistence, and a Power BI project. Microsoft 365 and Azure integrations are added through explicit adapters so the complete live demonstration can use Work IQ, Microsoft Fabric, Microsoft Foundry, Microsoft Agent Framework, Entra ID, and Power BI without coupling the business logic to those services.
 
 > **Current status (2026-09-08 UTC):** Revision20 deploys clearer **Open supplier email** and **Open Quality Teams post** labels, verified in the published app bundle. Revision19's fresh Alex analysis displayed both citations and enabled approval; the user subsequently confirmed both links open the intended messages. No Decision was approved or actions executed; downstream acceptance remains. See the [deployment result](docs/deployment/workiq-discovery-integration-result.md) and [roadmap](docs/ROADMAP.md).
+
+> **Unreleased planner redesign:** The `codex/planner-experience` branch adds a supplier-delay-first investigation, plain-language cards, bottom-of-card source status, and exact saved-record inspection. Eight focused Power BI pages and their saved-analysis projections are implemented locally; coordinated publication and native report acceptance are still required. The current live report has not been replaced. See the [delivery checkpoints](docs/superpowers/plans/2026-09-08-planner-experience-delivery.md).
 
 ## What the demo shows
 

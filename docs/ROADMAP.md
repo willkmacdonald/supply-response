@@ -1,9 +1,34 @@
 # Supply Response Roadmap
 
-**Last updated:** 2026-09-08 UTC
+**Last updated:** 2026-09-09 (planner branch; published baseline unchanged)
 **Source of truth:** [Frozen demo contract](superpowers/specs/2026-08-30-supply-response-demo-contract-design.md) and [implementation plan](superpowers/plans/2026-08-30-supply-response-demo-implementation.md)
 
 This roadmap reports the durable, reviewed repository baseline. Uncommitted or actively developed work is not counted as complete.
+
+## Unreleased planner-experience branch
+
+The approved redesign is being delivered on `codex/planner-experience`, with
+independent review between delegated tasks. This does not change the published
+baseline recorded below.
+
+- Reviewed: supplier-delay-first card flow, planner terminology, original source
+  links, exact inline supporting records, and bottom-of-card retrieval status.
+- Reviewed: saved-analysis reporting projections, exercised on a dedicated
+  synthetic SQL test database; eight native report pages and an exact generated
+  model/preflight contract. Microsoft TOM and offline visual validation pass,
+  but do not execute DAX or prove native report rendering.
+- Reviewed: mounted card-to-record Power BI links, with 204 web tests/build and
+  twelve desktop/mobile browser checks passing. A release-specific activation
+  check keeps new links unavailable until the matching report is accepted and
+  configured.
+- In progress: the traditional versus AI-assisted walkthrough. Its model slice
+  passes local generator/TOM checks; the updated SQL test upload awaits explicit
+  user authorization. Native navigation, route controls and the guide remain.
+- Still required: coordinated publication, actual DAX/value parity, native
+  layouts/navigation, Alex's access, and every card-to-source journey. No new
+  reporting receipt has been issued or installed.
+
+See the [delivery sequence and verification boundaries](superpowers/plans/2026-09-08-planner-experience-delivery.md).
 
 ## Status summary
 
