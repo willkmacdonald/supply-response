@@ -40,10 +40,15 @@ def test_fabric_cicd_1_3_0_rejects_aliased_repository_report_dependency(
     monkeypatch.setattr(deploy, "_validate_staged_repository", lambda *_args: None)
 
     staged_repository = deploy._staged_repository(values, aliased_root)
+    assert staged_repository == (physical_root / "power-bi").resolve()
+    # Exercise the upstream alias bug independently of staging's normalization.
+    aliased_repository = aliased_root / "power-bi"
+    assert aliased_repository != staged_repository
+    assert aliased_repository.resolve() == staged_repository
     workspace = FabricWorkspace(
         workspace_id=values["SUPPLY_RESPONSE_FABRIC_WORKSPACE_ID"],
         environment="dev",
-        repository_directory=str(staged_repository),
+        repository_directory=str(aliased_repository),
         item_type_in_scope=["SemanticModel", "Report"],
         token_credential=SyntheticTokenCredential(),
     )
