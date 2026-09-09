@@ -414,6 +414,7 @@ def test_model_manifest_binds_every_report_field_without_json_payloads(tmp_path)
     }
     assert manifest["relationships"] == []
     for flag in (
+        "no_feasible_mitigation",
         "inventory_complete",
         "production_orders_complete",
         "customer_orders_complete",
@@ -747,6 +748,32 @@ def test_business_measures_are_implemented_and_use_saved_values():
     assert "DIVIDE(Observed - Predicted, ABS(Predicted))" in variance
     assert "ISBLANK(Predicted) || ISBLANK(Observed) || Predicted == 0" in variance
     assert "[Observation Row Visible] == 1" in variance
+
+
+def test_overview_answers_bind_explicit_saved_prediction_bases():
+    definitions = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"]
+    exposure = definitions["Exposure Answer"]["expression"]
+    assert "[Baseline uncovered_part_demand]" in exposure
+    assert "component units still needed" in exposure
+    assert "[Baseline response_cost]" in exposure
+    assert "currency not specified" in exposure
+    assert "Service-target exposure" in exposure
+
+    recommendation = definitions["Recommendation Answer"]["expression"]
+    assert "[Overview no_feasible_mitigation] == TRUE()" in recommendation
+    assert "No option meets the planning requirements" in recommendation
+    assert "[Recommended otif_loss_percentage]" in recommendation
+    assert "order-line service-target exposure" in recommendation
+    assert "ISBLANK([Recommended option_name])" in recommendation
+
+
+def test_no_feasible_state_is_selected_from_exact_saved_analysis():
+    expression = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"][
+        "Overview no_feasible_mitigation"
+    ]["expression"]
+    assert "SELECTEDVALUE(SavedAnalyses[no_feasible_mitigation])" in expression
+    assert "[Overview Analysis Key]" in expression
+    assert "REMOVEFILTERS(SavedAnalyses)" in expression
 
 
 def test_dax_variable_renaming_preserves_quoted_business_copy():

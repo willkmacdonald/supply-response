@@ -59,6 +59,7 @@ COLUMNS = {
         "scenario_effective_time",
         "calculation_version",
         "recommended_option_id",
+        "no_feasible_mitigation",
         "payload_state",
         "snapshot_state",
         "inventory_complete",
@@ -185,7 +186,7 @@ EXCEPTIONS = {
     },
     SA: {
         "dateTime": "analysis_started_at retrieval_window_ends_at analysis_created_at scenario_effective_time",
-        "boolean": "inventory_complete production_orders_complete customer_orders_complete",
+        "boolean": "no_feasible_mitigation inventory_complete production_orders_complete customer_orders_complete",
     },
     SO: {
         "boolean": "is_baseline is_recommended executable active_mitigation",
@@ -476,6 +477,7 @@ def measures():
             "snapshot_state",
             "payload_state",
             "runtime_mode",
+            "no_feasible_mitigation",
             "inventory_complete",
             "production_orders_complete",
             "customer_orders_complete",
@@ -1081,9 +1083,12 @@ def measures():
     add(
         "Exposure Answer",
         """VAR V = [Baseline revenue_at_risk] VAR P = [Baseline otif_loss_percentage]
+        VAR U = [Baseline uncovered_part_demand] VAR C = [Baseline response_cost]
         RETURN IF(NOT ISBLANK([Overview Analysis Key]),"Without a response: "
         & IF(ISBLANK(V),"revenue exposure unavailable",FORMAT(V,"#,0.00") & " revenue at risk; currency not specified")
-        & ". Service-target exposure: " & IF(ISBLANK(P),"Unavailable",FORMAT(P,"0") & "%"))""",
+        & ". Service-target exposure: " & IF(ISBLANK(P),"unavailable",FORMAT(P,"0") & "% of order lines")
+        & "; parts still needed: " & IF(ISBLANK(U),"unavailable",FORMAT(U,"#,0") & " component units still needed")
+        & "; response cost: " & IF(ISBLANK(C),"unavailable",FORMAT(C,"#,0.00") & "; currency not specified"))""",
     )
     for label, family, datefield, entity_expression in (
         ("Shipment", "shipment", "due_date", "[Overview shipment Supplier]"),
@@ -1118,13 +1123,17 @@ def measures():
     )
     add(
         "Recommendation Answer",
-        """IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK([Recommended option_name]),"Recommendation unavailable",
+        """IF(NOT ISBLANK([Overview Analysis Key]),IF([Overview no_feasible_mitigation] == TRUE(),
+        "No option meets the planning requirements",
+        IF(ISBLANK([Recommended option_name]),"Recommendation unavailable",
         [Recommended option_name] & "; " & IF(ISBLANK([Recommended uncovered_part_demand]),"parts still needed unavailable",
         FORMAT([Recommended uncovered_part_demand],"#,0") & " component units still needed")
+        & "; order-line service-target exposure " & IF(ISBLANK([Recommended otif_loss_percentage]),"unavailable",
+        FORMAT([Recommended otif_loss_percentage],"0") & "%")
         & "; revenue at risk " & IF(ISBLANK([Recommended revenue_at_risk]),"unavailable",FORMAT([Recommended revenue_at_risk],"#,0.00"))
         & "; response cost " & IF(ISBLANK([Recommended response_cost]),"unavailable",FORMAT([Recommended response_cost],"#,0.00"))
         & " (currency not specified)"
-        & ". Saved recommendation. Current decision is shown separately."))""",
+        & ". Saved recommendation. Current decision is shown separately.")))""",
     )
     add(
         "Decision Answer",

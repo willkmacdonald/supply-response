@@ -73,13 +73,33 @@ SELECT a.case_id, a.analysis_id, a.runtime_mode, a.analysis_started_at,
        TRY_CONVERT(datetimeoffset(6), analytics.report_scalar(material.value,
            N'scenario_effective_time',N'instant'),127) AS scenario_effective_time,
        JSON_VALUE(a.payload_json, '$.material.calculation_version') AS calculation_version,
-       CASE WHEN identity_ok.ok=1 THEN JSON_VALUE(a.payload_json, '$.ranking.recommended_option_id') END AS recommended_option_id,
+       CASE WHEN identity_ok.ok=1 AND ranking.count=1 AND ranking.type=5
+          AND (no_feasible.count=0 OR (no_feasible.count=1 AND no_feasible.type=3))
+          AND (no_feasible.count=0 OR no_feasible.value=N'false')
+          THEN analytics.report_scalar(ranking.value,N'recommended_option_id',N'text') END AS recommended_option_id,
+       CASE WHEN identity_ok.ok=1 AND ranking.count=1 AND ranking.type=5
+          AND no_feasible.count=1 AND no_feasible.type=3
+          AND recommended.count=1
+          AND ((no_feasible.value=N'true' AND recommended.type=0)
+            OR (no_feasible.value=N'false' AND recommended.type IN (0,1)
+              AND (recommended.type=0 OR analytics.report_scalar(ranking.value,N'recommended_option_id',N'text') IS NOT NULL)))
+          THEN CASE no_feasible.value WHEN N'true' THEN CAST(1 AS bit) WHEN N'false' THEN CAST(0 AS bit) END END AS no_feasible_mitigation,
        CASE WHEN identity_ok.ok=1 THEN N'available' ELSE N'unavailable' END AS payload_state,
        CASE WHEN identity_ok.ok=1 AND valid.ok=1 THEN N'available' ELSE N'unavailable' END AS snapshot_state,
        CASE WHEN identity_ok.ok=1 AND valid.ok=1 THEN safe.snapshot_json END AS snapshot_json
 FROM app.analysis_versions a
 LEFT JOIN app.case_instances c ON c.case_id=a.case_id
 OUTER APPLY (SELECT JSON_QUERY(a.payload_json,N'$.material') AS value) material
+OUTER APPLY (SELECT COUNT(*) AS count,MAX(j.[type]) AS type,MAX(j.[value]) AS value
+    FROM OPENJSON(CASE WHEN ISJSON(a.payload_json)=1
+        AND LEFT(LTRIM(a.payload_json),1)=N'{' THEN a.payload_json ELSE N'{}' END) j
+    WHERE j.[key] COLLATE Latin1_General_100_BIN2=N'ranking') ranking
+OUTER APPLY (SELECT COUNT(*) AS count,MAX(j.[type]) AS type,MAX(j.[value]) AS value
+    FROM OPENJSON(CASE WHEN ranking.count=1 AND ranking.type=5 THEN ranking.value ELSE N'{}' END) j
+    WHERE j.[key] COLLATE Latin1_General_100_BIN2=N'no_feasible_mitigation') no_feasible
+OUTER APPLY (SELECT COUNT(*) AS count,MAX(j.[type]) AS type
+    FROM OPENJSON(CASE WHEN ranking.count=1 AND ranking.type=5 THEN ranking.value ELSE N'{}' END) j
+    WHERE j.[key] COLLATE Latin1_General_100_BIN2=N'recommended_option_id') recommended
 OUTER APPLY (SELECT COUNT(*) AS root_count, MAX(snapshot_json) AS snapshot_json
     FROM OPENJSON(CASE WHEN ISJSON(a.payload_json)=1
         AND LEFT(LTRIM(a.payload_json),1)=N'{' THEN a.payload_json ELSE N'{}' END)

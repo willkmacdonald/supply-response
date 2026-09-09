@@ -309,6 +309,85 @@ def test_absent_recommendation_and_ambiguous_baselines_do_not_pick_an_option(eng
     assert result["baseline_revenue_at_risk"] is None
 
 
+@pytest.mark.parametrize(
+    ("ranking_json", "expected"),
+    (
+        ('{"recommended_option_id":null,"no_feasible_mitigation":true}', True),
+        ('{"recommended_option_id":"response","no_feasible_mitigation":false}', False),
+        ('{"recommended_option_id":null}', None),
+        ('{"recommended_option_id":null,"no_feasible_mitigation":null}', None),
+        ('{"recommended_option_id":null,"no_feasible_mitigation":"true"}', None),
+        (
+            '{"recommended_option_id":null,"no_feasible_mitigation":true,"no_feasible_mitigation":true}',
+            None,
+        ),
+        ('{"recommended_option_id":"response","no_feasible_mitigation":true}', None),
+        ("null", None),
+        ("[]", None),
+    ),
+)
+def test_no_feasible_mitigation_requires_one_non_conflicting_boolean(
+    engine, ranking_json, expected
+):
+    c, a, payload = seed(engine)
+    payload_text = json.dumps(payload)
+    ranking_start = payload_text.index('"ranking"')
+    object_start = payload_text.index("{", ranking_start)
+    depth = 0
+    object_end = None
+    for index in range(object_start, len(payload_text)):
+        if payload_text[index] == "{":
+            depth += 1
+        elif payload_text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                object_end = index + 1
+                break
+    assert object_end is not None
+    malformed_payload = (
+        payload_text[:object_start] + ranking_json + payload_text[object_end:]
+    )
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE app.analysis_versions SET payload_json=:p WHERE analysis_id=:a"
+            ),
+            {"a": a, "p": malformed_payload},
+        )
+    result = rows(
+        engine,
+        "SELECT no_feasible_mitigation FROM analytics.saved_analyses WHERE case_id=:c AND analysis_id=:a",
+        c=c,
+        a=a,
+    )[0]
+    assert result["no_feasible_mitigation"] is expected
+
+
+def test_duplicate_ranking_objects_do_not_project_no_feasible_state(engine):
+    c, a, payload = seed(engine)
+    payload_text = json.dumps(payload)
+    duplicate = payload_text.replace(
+        '"ranking": {"recommended_option_id": "response"}',
+        '"ranking": {"recommended_option_id": null, "no_feasible_mitigation": true}, '
+        '"ranking": {"recommended_option_id": null, "no_feasible_mitigation": true}',
+    )
+    assert duplicate != payload_text
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE app.analysis_versions SET payload_json=:p WHERE analysis_id=:a"
+            ),
+            {"a": a, "p": duplicate},
+        )
+    result = rows(
+        engine,
+        "SELECT no_feasible_mitigation FROM analytics.saved_analyses WHERE case_id=:c AND analysis_id=:a",
+        c=c,
+        a=a,
+    )[0]
+    assert result["no_feasible_mitigation"] is None
+
+
 def test_options_preserve_zero_null_false_and_reject_duplicate_identity(engine):
     missing = option("missing")
     missing["predicted"] = None
@@ -335,6 +414,20 @@ def test_options_preserve_zero_null_false_and_reject_duplicate_identity(engine):
     assert by_id["response"]["revenue_at_risk"] == 0
     assert by_id["response"]["executable"] is False
     assert by_id["missing"]["revenue_at_risk"] is None
+
+
+def test_legacy_ranking_without_no_feasible_flag_keeps_recommendation(engine):
+    c, a, _ = seed(engine, options=[option("response")])
+    result = rows(
+        engine,
+        "SELECT recommended_option_id,no_feasible_mitigation FROM analytics.saved_analyses WHERE case_id=:c AND analysis_id=:a",
+        c=c,
+        a=a,
+    )[0]
+    assert result == {
+        "recommended_option_id": "response",
+        "no_feasible_mitigation": None,
+    }
 
 
 def test_snapshot_is_full_length_and_identity_checked(engine):

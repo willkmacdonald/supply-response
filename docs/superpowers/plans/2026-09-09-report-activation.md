@@ -10,15 +10,16 @@
 
 ## Execution checkpoint
 
-Implemented and independently reviewed through `7549c3f`. The controller reran
-60 activation/API compatibility tests and the exact generated-digest check;
-all passed. The generator now emits formatter-stable Python, preserving exact
-artifact equality through normal commit hooks. One inherited TestClient warning
-remains. A regression distinguishing raw and composed report URLs is assigned to
-the final Stage 5 digest refresh; production already uses the composed URL.
+Implemented and independently reviewed through `f32969e`. That checkpoint
+completed the regression distinguishing raw and composed report URLs and
+refreshed the packaged artifact digest. The generator emits formatter-stable
+Python, preserving exact artifact equality through normal commit hooks. One
+inherited TestClient warning remains.
 
-No receipt was issued or installed. The digest must be regenerated after the
-traditional walkthrough changes, and live DAX/render/access acceptance remains
+The final whole-branch report corrections subsequently refreshed the generated
+semantic model and packaged digest to
+`00ed9d955f1e929eefc693a6df57e4ee50ff1261dca38a5be47f1da8c1393eae`.
+No receipt was issued or installed, and live DAX/render/access acceptance remains
 separate from these local checks.
 
 ## Preconditions and exact scope

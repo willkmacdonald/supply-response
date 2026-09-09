@@ -66,4 +66,9 @@ not poll Power BI or prove continued availability. Remove it if the report,
 model, SQL bindings or acceptance evidence change. Publication at the same URL
 alone does not validate a replacement report.
 
-This folder does not authorize deployment or new live scenario runs. Use the repository's approval-gated deployment workflow when release is explicitly authorized.
+This checkout has no `.github/workflows` deployment definition. Stage 6 must
+identify and verify the actual approved deployment mechanism before release.
+`scripts/deploy_personal_tenant.sh` and the `.azure` plan are inspection leads;
+their presence is neither permission to execute them nor evidence that they are
+currently release-ready. This folder does not authorize deployment or new live
+scenario runs.
