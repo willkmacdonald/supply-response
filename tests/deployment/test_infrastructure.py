@@ -28,6 +28,75 @@ def _contains_committed_target_id(text: str) -> bool:
     return bool(_COMMITTED_TARGET_ID.search(text))
 
 
+def test_reporting_receipt_has_optional_declarative_wiring():
+    main = _read("infra/main.bicep")
+    params = json.loads(_read("infra/main.parameters.json"))["parameters"]
+    module = _read("infra/modules/container-apps.bicep")
+    script = _read("scripts/deploy_personal_tenant.sh")
+    assert "param powerBiReportingReceipt string = ''" in main
+    assert "powerBiReportingReceipt: powerBiReportingReceipt" in main
+    assert params["powerBiReportingReceipt"]["value"] == (
+        "${SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT}"
+    )
+    assert (
+        "{ name: 'SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT', "
+        "value: runtimeSettings.powerBiReportingReceipt }" in module
+    )
+    assert '"${SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT:-}"' in script
+    required = script.split("required_runtime_settings=(", 1)[1].split(")", 1)[0]
+    assert "SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT" not in required
+
+
+@pytest.mark.parametrize(
+    ("configured_value", "expected"),
+    ((None, ""), ("", ""), ("a" * 64, "a" * 64)),
+)
+def test_reporting_receipt_optional_update_preserves_explicit_value_or_empty(
+    configured_value: str | None, expected: str
+):
+    script = _read("scripts/deploy_personal_tenant.sh")
+    line = next(
+        candidate.strip()
+        for candidate in script.splitlines()
+        if candidate.startswith(
+            "safe_run azd-setting-SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT "
+        )
+    )
+    environment = os.environ.copy()
+    environment.pop("SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT", None)
+    if configured_value is not None:
+        environment["SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT"] = configured_value
+    environment["EXPECTED_REPORTING_RECEIPT"] = expected
+    completed = subprocess.run(
+        [
+            "bash",
+            "-c",
+            textwrap.dedent(
+                """
+                safe_run() {
+                  [[ "$#" -eq 6 &&
+                    "$1" == "azd-setting-SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT" &&
+                    "$2" == "azd" &&
+                    "$3" == "env" &&
+                    "$4" == "set" &&
+                    "$5" == "SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT" &&
+                    "$6" == "$EXPECTED_REPORTING_RECEIPT" ]]
+                }
+                eval "$1"
+                """
+            ),
+            "receipt-update",
+            line,
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
 def test_azd_is_infrastructure_only_and_uses_environment_parameters():
     azure_yaml = _read("azure.yaml")
     parameters = json.loads(_read("infra/main.parameters.json"))

@@ -39,6 +39,7 @@
     "foundryDeploymentReceipt": { "value": "${SUPPLY_RESPONSE_FOUNDRY_DEPLOYMENT_RECEIPT}" },
     "powerBiReportUrl": { "value": "${SUPPLY_RESPONSE_POWER_BI_REPORT_URL}" },
     "powerBiDeploymentReceipt": { "value": "${SUPPLY_RESPONSE_POWER_BI_DEPLOYMENT_RECEIPT}" },
+    "powerBiReportingReceipt": { "value": "${SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT}" },
     "fabricCitationBaseUrl": { "value": "${SUPPLY_RESPONSE_FABRIC_CITATION_BASE_URL}" }
   }
 }

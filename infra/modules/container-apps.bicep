@@ -64,6 +64,7 @@ var finalEnvironment = [
   { name: 'SUPPLY_RESPONSE_FOUNDRY_DEPLOYMENT_RECEIPT', value: runtimeSettings.foundryDeploymentReceipt }
   { name: 'SUPPLY_RESPONSE_POWER_BI_REPORT_URL', value: runtimeSettings.powerBiReportUrl }
   { name: 'SUPPLY_RESPONSE_POWER_BI_DEPLOYMENT_RECEIPT', value: runtimeSettings.powerBiDeploymentReceipt }
+  { name: 'SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT', value: runtimeSettings.powerBiReportingReceipt }
   { name: 'SUPPLY_RESPONSE_FABRIC_CITATION_BASE_URL', value: runtimeSettings.fabricCitationBaseUrl }
   { name: 'SUPPLY_RESPONSE_ENTRA_CLIENT_SECRET', secretRef: 'entra-client-secret' }
   { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: applicationInsightsConnectionString }

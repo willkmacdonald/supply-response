@@ -42,6 +42,7 @@ param foundryDecisionAgentVersion string
 param foundryDeploymentReceipt string
 param powerBiReportUrl string
 param powerBiDeploymentReceipt string
+param powerBiReportingReceipt string = ''
 param fabricCitationBaseUrl string
 
 var tags = {
@@ -123,6 +124,7 @@ module app 'modules/container-apps.bicep' = {
       foundryDeploymentReceipt: foundryDeploymentReceipt
       powerBiReportUrl: powerBiReportUrl
       powerBiDeploymentReceipt: powerBiDeploymentReceipt
+      powerBiReportingReceipt: powerBiReportingReceipt
       fabricCitationBaseUrl: fabricCitationBaseUrl
     }
     tags: union(tags, { 'azd-service-name': 'api' })
