@@ -6,6 +6,18 @@ This is the coverage and sequencing map, not a claim that the redesign is
 implemented. Detailed executable plans are scoped to independently testable
 stages. Keep the current working deployment intact until coordinated release.
 
+## Current checkpoint
+
+Stages 1–2 are implemented and reviewed in the isolated planner-experience branch;
+169 frontend tests and the production build pass. Stage 3 is implemented through
+`255646d`, with independent review between its six tasks. Its dedicated SQL gate
+passed 58 reporting tests plus 12 deployment-contract tests, with a separate
+full saved-demo-payload acceptance test also passing. See the
+[reporting execution record](2026-09-08-saved-analysis-reporting.md#execution-evidence-and-remaining-release-gate).
+
+These changes have not been deployed. Stage 4 (focused Power BI pages and exact
+card navigation) is next; stages 5–6 and live Fabric equivalence remain open.
+
 ## Stages and acceptance boundaries
 
 1. **Visible, truthful evidence status.** Implement the companion

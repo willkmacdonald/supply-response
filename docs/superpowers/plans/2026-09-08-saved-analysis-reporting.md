@@ -8,6 +8,11 @@
 
 **Tech Stack:** Fabric SQL Database T-SQL, SQLAlchemy, pyodbc, pytest, existing `GO` batch runner.
 
+**Execution status:** All six implementation tasks are complete through `255646d`,
+with independent review between tasks. The dedicated SQL runtime gate passed;
+live Fabric equivalence, Power BI pages/navigation, and coordinated deployment
+remain separate later stages. No production database or report was changed.
+
 ## Global Constraints
 
 - Approved specification: `docs/superpowers/specs/2026-09-08-evidence-records-and-case-dashboard-design.md`; delivery stage 3 in `docs/superpowers/plans/2026-09-08-planner-experience-delivery.md`.
@@ -45,7 +50,7 @@ The deployment target is **SQL database in Microsoft Fabric**, through its datab
 
 **Interfaces:** Consume existing `app.analysis_versions` and `apply_fabric_schema(engine)`. Produce `analytics.saved_analyses` and a localhost-only SQL fixture. No query references mutable `app.operational_snapshots`.
 
-- [ ] Add the following complete test module. The selected database must be newly created and dedicated to this suite. The fixture refuses remote hosts and any database name outside `supply_response_projection_test_…`; it does not discover credentials or use Fabric environment variables.
+- [x] Add the following complete test module. The selected database must be newly created and dedicated to this suite. The fixture refuses remote hosts and any database name outside `supply_response_projection_test_…`; it does not discover credentials or use Fabric environment variables.
 
 ```python
 import json
@@ -248,8 +253,8 @@ def test_snapshot_envelope_mismatch_preserves_only_valid_options(engine, field, 
     assert len(rows(engine, "SELECT * FROM analytics.saved_options WHERE analysis_id=:a", a=a)) == 1
 ```
 
-- [ ] Run `uv run --extra dev pytest tests/integrations/test_saved_analysis_reporting_sql.py -rs`. With a local database, the first run must fail on the missing view. Without a database, record SKIPPED, not PASS of SQL semantics; continue authoring and run the later SQL gate before release.
-- [ ] Insert this complete helper after analytics schema creation. Every successful return has checked JSON type, unique property membership, lexical shape and SQL representability. `#null` is an internal sentinel for an explicit JSON null in a nullable field, never a report value; malformed or absent properties return SQL NULL. It avoids treating blanks as numeric zero, accepting flexible calendar-date formats, or silently rounding decimals. Keep the final casts in the views: they consume only checked helper results.
+- [x] Run `uv run --extra dev pytest tests/integrations/test_saved_analysis_reporting_sql.py -rs`. With a local database, the first run must fail on the missing view. Without a database, record SKIPPED, not PASS of SQL semantics; continue authoring and run the later SQL gate before release.
+- [x] Insert this complete helper after analytics schema creation. Every successful return has checked JSON type, unique property membership, lexical shape and SQL representability. `#null` is an internal sentinel for an explicit JSON null in a nullable field, never a report value; malformed or absent properties return SQL NULL. It avoids treating blanks as numeric zero, accepting flexible calendar-date formats, or silently rounding decimals. Keep the final casts in the views: they consume only checked helper results.
 
 ```sql
 CREATE OR ALTER FUNCTION analytics.report_scalar
@@ -317,7 +322,7 @@ END;
 GO
 ```
 
-- [ ] Insert this base view after the helper. Snapshot sections are independently inspectable, but the supporting-record envelope requires the three arrays and disruption object used by the resolver. Payload identity remains separate from snapshot availability. Native SQL row timestamps already have enforced types; scenario equality compares instants rather than displayed timezone strings.
+- [x] Insert this base view after the helper. Snapshot sections are independently inspectable, but the supporting-record envelope requires the three arrays and disruption object used by the resolver. Payload identity remains separate from snapshot availability. Native SQL row timestamps already have enforced types; scenario equality compares instants rather than displayed timezone strings.
 
 ```sql
 CREATE OR ALTER VIEW analytics.saved_analyses AS
@@ -367,7 +372,7 @@ OUTER APPLY (SELECT CASE WHEN
 GO
 ```
 
-- [ ] Run the snapshot test against local SQL, then commit this task's files after review. No runtime claim from string matching. `OPENJSON` requires compatibility level 130 and supports `nvarchar(max)` extraction; `JSON_VALUE` cannot safely extract the long encoded snapshot. See [Microsoft OPENJSON reference](https://learn.microsoft.com/en-us/sql/t-sql/functions/openjson-transact-sql) and [Microsoft JSON troubleshooting](https://learn.microsoft.com/en-us/sql/relational-databases/json/solve-common-issues-with-json-sql-server). These references were consulted using the Microsoft docs skill; Learn MCP was unavailable.
+- [x] Run the snapshot test against local SQL, then commit this task's files after review. No runtime claim from string matching. `OPENJSON` requires compatibility level 130 and supports `nvarchar(max)` extraction; `JSON_VALUE` cannot safely extract the long encoded snapshot. See [Microsoft OPENJSON reference](https://learn.microsoft.com/en-us/sql/t-sql/functions/openjson-transact-sql) and [Microsoft JSON troubleshooting](https://learn.microsoft.com/en-us/sql/relational-databases/json/solve-common-issues-with-json-sql-server). These references were consulted using the Microsoft docs skill; Learn MCP was unavailable.
 
 ## Task 2: Expose saved options without recommendation or baseline ambiguity
 
@@ -375,8 +380,8 @@ GO
 
 **Interfaces:** Consume `analytics.saved_analyses`; produce typed `analytics.saved_options`. Identity comparisons use binary collation. Null predictions retain the option with null metrics; duplicate option IDs yield no option fact for that identity, never `TOP (1)`.
 
-- [ ] Run the existing option test and confirm missing-view failure against local SQL.
-- [ ] Insert the following complete view after `saved_analyses`.
+- [x] Run the existing option test and confirm missing-view failure against local SQL.
+- [x] Insert the following complete view after `saved_analyses`.
 
 ```sql
 CREATE OR ALTER VIEW analytics.saved_options AS
@@ -413,7 +418,7 @@ FROM options WHERE identity_count=1 AND NULLIF(option_id,N'') IS NOT NULL;
 GO
 ```
 
-- [ ] Run both tests against local SQL; run `uv run --extra dev pytest tests/analysis/test_rl001_options.py tests/analysis/test_ranking.py` to confirm baseline/option interpretation against the unchanged calculation contract. Commit the task after checks pass.
+- [x] Run both tests against local SQL; run `uv run --extra dev pytest tests/analysis/test_rl001_options.py tests/analysis/test_ranking.py` to confirm baseline/option interpretation against the unchanged calculation contract. Commit the task after checks pass.
 
 ## Task 3: Project exact supporting records and stock/order breakdowns
 
@@ -421,7 +426,7 @@ GO
 
 **Interfaces:** Consume `saved_analyses.snapshot_json` only. Produce record rows for `disruption`, `shipment`, `transfer`, `qualification`, `inventory`, `production_order`, `customer_order_line`. Preserve source IDs; names/roles belong to the later supported display mapping. Stock availability is `on_hand-quality_hold-protected_allocation`, preserving negative values if persisted rather than inventing a zero floor. Customer line revenue is quantity times unit revenue and is a line value, not automatically projected revenue at risk.
 
-- [ ] Append the following runtime test and run it to observe missing-view failure.
+- [x] Append the following runtime test and run it to observe missing-view failure.
 
 ```python
 def test_stock_order_and_historical_record_grains(engine):
@@ -482,7 +487,7 @@ def test_qualification_status_uses_exact_enum(engine, status, expected):
     assert result["record_state"] == expected
 ```
 
-- [ ] Insert this view. String extraction precedes `TRY_CONVERT` so bad numeric/date fields become unavailable rather than throwing or turning into zero. Raw family JSON remains internal; `record_json` is not a report column.
+- [x] Insert this view. String extraction precedes `TRY_CONVERT` so bad numeric/date fields become unavailable rather than throwing or turning into zero. Raw family JSON remains internal; `record_json` is not a report column.
 
 ```sql
 CREATE OR ALTER VIEW analytics.saved_records AS
@@ -609,7 +614,7 @@ WHERE r.identity_count=1 AND NULLIF(r.source_record_id,N'') IS NOT NULL;
 GO
 ```
 
-- [ ] Execute the runtime tests. Confirm stock/order figures are at record grain and never joined to option totals. Commit the task after review.
+- [x] Execute the runtime tests. Confirm stock/order figures are at record grain and never joined to option totals. Commit the task after review.
 
 ## Task 4: Resolve evidence provenance and availability without guessing
 
@@ -617,7 +622,7 @@ GO
 
 **Interfaces:** Add `analytics.saved_record_evidence`, grain case/analysis/family/record. It is a one-to-one optional companion to `saved_records`. Report detail selection requires exactly one record plus exactly one matching evidence row with state `available` for shipment/transfer/qualification. An external Fabric action additionally requires `provenance=saved_fabric`; fallback fixture rows are explicitly `demo_fixture` and never relabeled as live retrieval. Stock/order/disruption pages identify saved snapshot provenance and do not invent per-record retrieval times.
 
-- [ ] Add this view after `saved_records`. It resolves expected evidence ID, unique membership in both saved evidence arrays, every material identity field, exact source identity, operational-fact kind, and live/fixture provenance. Shipment/transfer evidence IDs equal the record ID; qualification evidence ID equals `evidence_ref`. Duplicate evidence IDs or source IDs remain unavailable even if duplicate rows look identical. Null timestamps are supported with an unavailable-time label; malformed or omitted timestamp fields are rejected. This matches the resolver's saved-evidence inspection contract without introducing a retrieval-window approval rule.
+- [x] Add this view after `saved_records`. It resolves expected evidence ID, unique membership in both saved evidence arrays, every material identity field, exact source identity, operational-fact kind, and live/fixture provenance. Shipment/transfer evidence IDs equal the record ID; qualification evidence ID equals `evidence_ref`. Duplicate evidence IDs or source IDs remain unavailable even if duplicate rows look identical. Null timestamps are supported with an unavailable-time label; malformed or omitted timestamp fields are rejected. This matches the resolver's saved-evidence inspection contract without introducing a retrieval-window approval rule.
 
 ```sql
 CREATE OR ALTER VIEW analytics.saved_record_evidence AS
@@ -702,7 +707,7 @@ OUTER APPLY (SELECT CASE WHEN r.record_state='available' AND r.matching_record_c
 GO
 ```
 
-- [ ] Append and run the complete provenance tests below. An explicit null retrieval time remains null and does not become “now.” Malformed or missing provenance fields prevent resolution. A fallback fixture remains inspectable only with fixture provenance and no external Fabric action.
+- [x] Append and run the complete provenance tests below. An explicit null retrieval time remains null and does not become “now.” Malformed or missing provenance fields prevent resolution. A fallback fixture remains inspectable only with fixture provenance and no external Fabric action.
 
 ```python
 @pytest.mark.parametrize("family,member,key,prefix", [
@@ -780,7 +785,7 @@ def test_exact_evidence_and_duplicate_or_missing_provenance(engine, family, memb
     assert result["retrieved_at"] is None
 ```
 
-- [ ] Commit the task after the actual SQL test passes. This is an inspection projection, not an approval policy change.
+- [x] Commit the task after the actual SQL test passes. This is an inspection projection, not an approval policy change.
 
 ## Task 5: Add case summary with independent governing-decision lineage
 
@@ -788,7 +793,7 @@ def test_exact_evidence_and_duplicate_or_missing_provenance(engine, family, memb
 
 **Interfaces:** Consume `app.case_projection`, `app.decision_projection`, `saved_analyses`, and `saved_options`. Produce `analytics.case_reporting` with separate `current_analysis_id`, `decision_analysis_id`, `approved_option_id`, recommendation and baseline identities, and four metrics for each basis. An approved option is matched only in the decision's saved analysis. Rejected decisions never populate approved metrics.
 
-- [ ] Insert this complete view after the four existing compatibility views and before the final guard. In a fresh database `app.decision_projection` must already exist. Baseline selection requires exactly one baseline option; no arbitrary TOP or latest-created selection is allowed. The existing command-center compatibility projection remains unchanged for the old deployed model until coordinated release.
+- [x] Insert this complete view after the four existing compatibility views and before the final guard. In a fresh database `app.decision_projection` must already exist. Baseline selection requires exactly one baseline option; no arbitrary TOP or latest-created selection is allowed. The existing command-center compatibility projection remains unchanged for the old deployed model until coordinated release.
 
 ```sql
 CREATE OR ALTER VIEW analytics.case_reporting AS
@@ -826,7 +831,7 @@ LEFT JOIN analytics.saved_options approved ON d.kind='approved' AND approved.cas
 GO
 ```
 
-- [ ] Append this lineage test and execute it against local SQL. It creates a second analysis with the same case while leaving a governing decision on the original analysis; all rows remain test-only.
+- [x] Append this lineage test and execute it against local SQL. It creates a second analysis with the same case while leaving a governing decision on the original analysis; all rows remain test-only.
 
 ```python
 def test_new_analysis_does_not_replace_governing_approved_prediction(engine):
@@ -893,7 +898,7 @@ def test_absent_recommendation_and_ambiguous_baselines_do_not_pick_an_option(eng
     assert result["baseline_revenue_at_risk"] is None
 ```
 
-- [ ] Run all local reporting SQL tests, then commit after review.
+- [x] Run all local reporting SQL tests, then commit after review.
 
 ## Task 6: Preserve deployment compatibility and record the report release gate
 
@@ -901,7 +906,7 @@ def test_absent_recommendation_and_ambiguous_baselines_do_not_pick_an_option(eng
 
 **Interfaces:** Existing readiness still means version 12 and the original four views. Reporting deployment separately requires all five added views. No third SQL script or startup migration is introduced.
 
-- [ ] Extend the final SQL existence guard with these six OR terms (one function and five views), before the existing `THROW`, leaving both version statements unchanged:
+- [x] Extend the final SQL existence guard with these six OR terms (one function and five views), before the existing `THROW`, leaving both version statements unchanged:
 
 ```sql
     OR OBJECT_ID(N'analytics.report_scalar', N'FN') IS NULL
@@ -914,7 +919,7 @@ def test_absent_recommendation_and_ambiguous_baselines_do_not_pick_an_option(eng
 
 There are five added views and nine total views, plus one internal scalar function. Use that inventory in tests and release checks; the internal base and companion provenance view are included. Preserve the original four-view health query unchanged.
 
-- [ ] In `test_schemas_views_and_version_publication_are_idempotent`, change only the CREATE OR ALTER VIEW count from 4 to 9. In `test_real_script_sequence_promotes_readiness_only_after_analytics`, append these entries to its expected `engine.views` set:
+- [x] In `test_schemas_views_and_version_publication_are_idempotent`, change only the CREATE OR ALTER VIEW count from 4 to 9. In `test_real_script_sequence_promotes_readiness_only_after_analytics`, append these entries to its expected `engine.views` set:
 
 ```python
         "analytics.saved_analyses",
@@ -926,7 +931,7 @@ There are five added views and nine total views, plus one internal scalar functi
 
 Do not change `_SequencedFabricEngine.execute`'s required four runtime views or `FABRIC_SCHEMA_VERSION`. Its regex model tests application sequencing only, not SQL semantics.
 
-- [ ] Add this complete local deployment test to the runtime module:
+- [x] Add this complete local deployment test to the runtime module:
 
 ```python
 def test_sql_readiness_and_explicit_report_inventory(engine):
@@ -943,7 +948,7 @@ def test_sql_readiness_and_explicit_report_inventory(engine):
         assert columns == []
 ```
 
-- [ ] Append the following documentation to `fabric/sql/README.md`:
+- [x] Append the following documentation to `fabric/sql/README.md`:
 
 ```markdown
 ## Saved-analysis reporting
@@ -991,7 +996,7 @@ the additive views may remain. Do not downgrade the operational version or alter
 saved payloads as part of rollback.
 ```
 
-- [ ] Run `uv run --extra dev pytest tests/integrations/test_fabric_schema.py tests/integrations/test_fabric_sql_scripts.py tests/integrations/test_fabric_health.py tests/integrations/test_saved_analysis_reporting_sql.py -rs` and `uv run ruff check tests/integrations/test_saved_analysis_reporting_sql.py`. Commit this stage after runtime SQL passes; if no engine is available, hand off the outstanding gate explicitly and do not describe projections as runtime-verified.
+- [x] Run `uv run --extra dev pytest tests/integrations/test_fabric_schema.py tests/integrations/test_fabric_sql_scripts.py tests/integrations/test_fabric_health.py tests/integrations/test_saved_analysis_reporting_sql.py -rs` and `uv run ruff check tests/integrations/test_saved_analysis_reporting_sql.py`. Commit this stage after runtime SQL passes; if no engine is available, hand off the outstanding gate explicitly and do not describe projections as runtime-verified.
 
 ## Later semantic-model/report contract (required next stage, no artifacts here)
 
@@ -1001,8 +1006,41 @@ saved payloads as part of rollback.
 - Stock sums require explicit selected case/analysis, disruption part and plant. Sum inventory rows once; never after joining to customer orders or response options. Customer-line values are not additive across options. No unrelated case totals are a valid selected-case result.
 - Source timestamp, retrieval timestamp, scenario time, analysis time, and import refresh time have different meanings. `synthetic` describes evidence, not service health. No currency metadata exists. Preserve snapshot labels, uncertainty, and blocked executable flags.
 
-## Self-review and known execution gate
+## Planning-time self-review
 
 Self-review covers the approved data/report scope, five added views plus the scalar validator, dependency-first creation order, fixture INSERTs and checked-in required columns, exact evidence/material membership, live-versus-fixture flags, strict lexical scalar conversion, binary qualification-enum comparison and regression coverage, and the explicit typed aliases. Microsoft documentation explicitly confirms the individual SQL constructs apply to SQL database in Fabric. The five complete Python blocks parse together, with 19 unique functions. Existing schema runner, script-contract and health tests passed (`23 passed`) before this plan revision; those checks validate the unchanged compatibility contract, not the proposed view results.
 
-The initial sandbox Docker diagnostic denial was resolved by the controller's scoped read-only check: the Docker engine is Linux/aarch64 and has no SQL Server container. No compatible SQL test engine has been provisioned; do not infer supported SQL Server execution on ARM or create/download a container during this plan-only task. No local SQL engine was connected or created, and no live database was contacted. Therefore the proposed T-SQL remains unexecuted. Runtime validation of the complete module on a supported, dedicated SQL test database, followed by the separately authorized Fabric read-only projection comparison at coordinated release, is the precise remaining SQL gate.
+At planning time, the Mac's Docker engine was Linux/aarch64 with no supported SQL
+Server runtime. The proposed SQL had not been executed then. That local-engine
+blocker was subsequently resolved through a separately approved, dedicated x86-64
+test VM; it is not an outstanding implementation blocker.
+
+## Execution evidence and remaining release gate
+
+- The isolated `supply-response-test.exe.xyz` VM ran SQL Server 2022 Developer
+  16.0.4275.2 with ODBC Driver 18 and a localhost-only SQL listener. No MedTech
+  environment, live credentials, or live source data were used.
+- Each reporting run created its own fresh synthetic database and removed that
+  exact database afterward. The production schema runner applied both packaged
+  scripts twice. Final acceptance: **58 reporting SQL tests and 12 script-contract
+  tests passed** (`70 passed in 2.30s`). Version 12 and the original four-view
+  runtime health contract remain unchanged.
+- A separate acceptance test used the complete serialized analysis from a local
+  fallback API run: **1 passed in 0.93s**. It verified 10 saved records across all
+  seven families, six response options, three explicitly labeled fixture evidence
+  rows, and baseline/recommended/approved summary values. This is synthetic fixture
+  verification, not evidence of a live Fabric retrieval.
+- Local schema/script/health checks passed; the non-live Python regression suite
+  passed with the existing `dev` and `fabric-deploy` extras. SQL tests skipped on
+  the Mac were executed on the dedicated VM instead. The pre-existing upstream
+  Starlette/httpx deprecation warning remains. Focused Ruff and whitespace checks
+  passed. The unchanged frontend also passed 169 tests and its production build.
+- Independent reviews approved all six tasks. Qualification audit assertions now
+  select the exact case/analysis/family/record, closing the test-specificity note.
+
+The next stage must implement the semantic model, focused Power BI pages, and
+matching navigation using the consumer contract above. At coordinated release,
+apply the packaged SQL to the explicitly selected Fabric SQL Database through
+the approved process, verify its report inventory and exact saved-analysis
+results, then release the report/model and app links together. That Fabric
+platform-equivalence and end-to-end navigation gate is **not yet complete**.
