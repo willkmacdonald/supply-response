@@ -491,7 +491,7 @@ def common(title, state):
         case_selector(),
         text(
             "fictional-footer",
-            "Snapshot used for this analysis · Demo corpus — fictional · Use page tabs to explore this case · Return to the existing demo tab for original messages and AI assistance.",
+            "Snapshot used for this analysis · Demo corpus — fictional · Return to the existing demo tab for original messages and AI assistance.",
             (24, 770, 1232, 30),
             13,
         ),

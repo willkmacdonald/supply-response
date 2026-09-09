@@ -116,6 +116,20 @@ def test_walkthrough_sequence_uses_all_existing_pages_once():
     assert sequence[-1] == "actions-outcomes"
 
 
+def test_walkthrough_footer_replaces_old_page_tab_instruction():
+    artifacts = report_pages.artifacts()
+    expected = (
+        "Snapshot used for this analysis · Demo corpus — fictional · "
+        "Return to the existing demo tab for original messages and AI assistance."
+    )
+    for page in report_pages.ORDER:
+        footer = artifacts[f"pages/{page}/visuals/fictional-footer/visual.json"]
+        paragraphs = footer["visual"]["objects"]["general"][0]["properties"][
+            "paragraphs"
+        ]
+        assert paragraphs[0]["textRuns"][0]["value"] == expected
+
+
 def test_native_previous_next_match_official_action_shape():
     artifacts = report_pages.artifacts()
     sequence = tuple(page for page, _ in report_pages.WALKTHROUGH)
