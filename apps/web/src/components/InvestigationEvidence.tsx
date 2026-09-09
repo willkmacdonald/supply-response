@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import type { AnalysisVersion, CaseInstance, EvidenceItem } from "../types";
+import type { AnalysisVersion, CaseInstance, EvidenceItem, RuntimeStatus } from "../types";
+import { buildReportUrl } from "../reporting/reportNavigation";
 import { EvidenceSource, EvidenceFooters } from "./EvidenceSource";
 import { evidenceStatus } from "./evidenceStatus";
 import {
@@ -15,6 +16,7 @@ type Props = {
   caseInstance: CaseInstance;
   analysis: AnalysisVersion;
   tenantSharePointHost?: string | null;
+  runtime?: RuntimeStatus | null;
   row: "disruption" | "responses";
 };
 const unavailable: SupportingRecordResult = {
@@ -26,6 +28,7 @@ export function InvestigationEvidence({
   caseInstance,
   analysis,
   tenantSharePointHost,
+  runtime = null,
   row,
 }: Props) {
   const input = { caseInstance, analysis };
@@ -137,6 +140,18 @@ export function InvestigationEvidence({
     const baselines = analysis.response_options.filter(
       (option) => option.option_kind === "no_mitigation",
     );
+    const analysisTarget = {
+      caseId: analysis.case_id, analysisId: analysis.analysis_id,
+      runtimeMode: analysis.runtime_mode,
+    };
+    const stockUrl = runtime && snapshot && d && inventory?.length && safeTotals
+      ? buildReportUrl(runtime, {...analysisTarget, page: "available-stock"}) : null;
+    const hasLinkedOrders = snapshot?.customers?.some(customer =>
+      snapshot.production?.some(production =>
+        customer.production_order_id === production.production_order_id));
+    const ordersUrl = runtime && snapshot && d && hasLinkedOrders
+      && baselines.length === 1
+      ? buildReportUrl(runtime, {...analysisTarget, page: "customer-orders"}) : null;
     return (
       <>
         {card(
@@ -241,6 +256,9 @@ export function InvestigationEvidence({
               Inventory record snapshot used for this analysis; a separate
               record retrieval time is unavailable.
             </p>
+            {stockUrl && <a href={stockUrl} target="_blank" rel="noopener noreferrer">
+              Explore available stock in Power BI
+            </a>}
           </>,
           [],
         )}
@@ -296,6 +314,9 @@ export function InvestigationEvidence({
                 <p>Customer order lines unavailable</p>
               )}
             </details>
+            {ordersUrl && <a href={ordersUrl} target="_blank" rel="noopener noreferrer">
+              Explore affected customer orders in Power BI
+            </a>}
           </>,
           [],
         )}
@@ -380,7 +401,7 @@ export function InvestigationEvidence({
             <p>Supplier email unavailable for this analysis</p>
           )}
           {shipment && sources([shipment.item], "Shipment record")}
-          <SupportingRecordDetails result={shipment?.result ?? unavailable} />
+          <SupportingRecordDetails result={shipment?.result ?? unavailable} runtime={runtime} />
         </>,
         [...supplierItems, ...(shipment ? [shipment.item] : [])],
       )}
@@ -405,7 +426,7 @@ export function InvestigationEvidence({
             <p>Saved plant transfer unavailable</p>
           )}
           {transfer && sources([transfer.item], "Transfer record")}
-          <SupportingRecordDetails result={transfer?.result ?? unavailable} />
+          <SupportingRecordDetails result={transfer?.result ?? unavailable} runtime={runtime} />
         </>,
         transfer ? [transfer.item] : [],
       )}
@@ -452,6 +473,7 @@ export function InvestigationEvidence({
           )}
           <SupportingRecordDetails
             result={qualification?.result ?? unavailable}
+            runtime={runtime}
           />
           {other.map((item, index) => {
             const warning = evidenceStatus(item, {

@@ -6,7 +6,8 @@ import {afterEach, describe, expect, it, vi} from "vitest";
 import {CaseHeader} from "./CaseHeader";
 import {EvidencePanel} from "./EvidencePanel";
 import {OutcomePanel} from "./OutcomePanel";
-import type {AnalysisVersion, EvidenceItem} from "../types";
+import type {AnalysisVersion, CaseInstance, EvidenceItem} from "../types";
+import {reportIdentityKey} from "../reporting/reportNavigation";
 
 function liveAnalysis(overrides: Partial<EvidenceItem>): AnalysisVersion {
   const item: EvidenceItem = {
@@ -90,7 +91,8 @@ describe("live journey safety", () => {
       operational_store: "fabric_sql" as const,
       agent_runtime: "foundry" as const,
       power_bi_available: true,
-      power_bi_url: "https://app.powerbi.com/groups/demo/reports/report",
+      power_bi_url: "https://app.powerbi.com/groups/dc3ac590-d892-40a7-9388-65dec120d67a/reports/e7611c8c-c887-443f-858a-13b1044bb4b9",
+      deployment_contract: {power_bi_reporting_contract: "saved-analysis-v1"},
       capability_health: {
         operational_store: "ready" as const,
         work_iq: "ready" as const,
@@ -98,10 +100,23 @@ describe("live journey safety", () => {
         power_bi: "ready" as const,
       },
     };
-    render(<CaseHeader runtime={runtime} caseInstance={null} createPurpose="showcase" creating={false} analyzing={false} onCreate={vi.fn()} onAnalyze={vi.fn()} />);
-    const link = screen.getByRole("link", {name: "Open Power BI command center"});
+    const caseInstance: CaseInstance = {
+      case_id: "RL-CASE-LIVE", template_id: "RL-001", purpose: "showcase", runtime_mode: "live",
+      scenario_effective_time: "2026-09-08T15:00:00Z", scenario_timezone: "America/Chicago",
+      status: "open", current_analysis_id: null, current_decision_id: null, display_status: null,
+      recorded_at: "2026-09-08T15:00:00Z", projection_updated_at: "2026-09-08T15:00:00Z",
+      controls: {new_analysis: false, decide: false, retry_action_planning: false, start_playback: false},
+    };
+    const view = <CaseHeader runtime={runtime} caseInstance={caseInstance} analysis={null} createPurpose="showcase" creating={false} analyzing={false} onCreate={vi.fn()} onAnalyze={vi.fn()} />;
+    const {rerender} = render(view);
+    const link = screen.getByRole("link", {name: "Open case dashboard"});
+    const url = new URL(link.getAttribute("href")!);
+    expect(url.origin + url.pathname).toBe(`${runtime.power_bi_url}/command-center`);
+    expect(url.searchParams.get("filter")).toBe(`CaseCommandCenter/case_key eq '${reportIdentityKey(caseInstance.case_id)}'`);
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+    rerender(<CaseHeader runtime={runtime} caseInstance={null} analysis={null} createPurpose="showcase" creating={false} analyzing={false} onCreate={vi.fn()} onAnalyze={vi.fn()} />);
+    expect(screen.queryByRole("link", {name: "Open case dashboard"})).not.toBeInTheDocument();
   });
 
   it("exposes missing required live citations instead of rendering an unsafe link", () => {

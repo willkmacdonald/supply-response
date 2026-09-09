@@ -1,4 +1,6 @@
 import type {ReactNode} from "react";
+import type {RuntimeStatus} from "../types";
+import {buildReportUrl} from "../reporting/reportNavigation";
 import type {SupportingRecordResult} from "./supportingRecord";
 
 const calendar = (value: string | null) => value === null ? "Unavailable" : new Intl.DateTimeFormat("en-US", {
@@ -17,9 +19,21 @@ const plant = (id: string) => id === "RL-PLANT-DAL" ? "Dallas plant" : id === "R
 const qualification = {approved: "Supplier qualification approved", pending: "Supplier qualification pending",
   not_approved: "Supplier qualification not approved", conditional: "Supplier qualification conditional"};
 
-export function SupportingRecordDetails({result}: {result: SupportingRecordResult}) {
+export function SupportingRecordDetails({result, runtime = null}: {result: SupportingRecordResult; runtime?: RuntimeStatus | null}) {
   if (result.status === "unavailable") return <p>{result.message}</p>;
   const r = result.record;
+  const page = r.kind === "shipment" ? "supplier-shipment"
+    : r.kind === "transfer" ? "plant-transfer" : "supplier-qualification";
+  const reportUrl = runtime && result.context.runtimeMode === "live"
+    && result.provenance === "Saved Microsoft Fabric record"
+    ? buildReportUrl(runtime, {
+        page,
+        caseId: result.context.caseId,
+        analysisId: result.context.analysisId,
+        recordId: result.context.recordId,
+        runtimeMode: result.context.runtimeMode,
+      })
+    : null;
   const rows: [string, string][] = [["Component part", r.part_id]];
   if (r.kind === "shipment") rows.push(
     ["Supplier", supplier(r.supplier_id)], ["Receiving plant", plant(r.plant_id)],
@@ -48,14 +62,19 @@ export function SupportingRecordDetails({result}: {result: SupportingRecordResul
   ];
   const list = (values: [string, ReactNode][]) => <dl>{values.map(([label, value]) =>
     <div key={label}><dt>{label}</dt><dd style={{overflowWrap: "anywhere"}}>{value}</dd></div>)}</dl>;
-  return <details>
-    <summary>View {r.kind} record</summary>
-    <p>Snapshot used for this analysis</p>
-    <p>Demo corpus — fictional</p>
-    <p>{result.provenance}</p>
-    <p>In this scenario, as of {instant(result.scenarioEffectiveTime)}</p>
-    {list(rows)}
-    {r.kind === "qualification" && <p>A review date is not an approval or delivery date.</p>}
-    <details><summary>Source details</summary>{list(sourceRows)}</details>
-  </details>;
+  return <>
+    <details>
+      <summary>View {r.kind} record</summary>
+      <p>Snapshot used for this analysis</p>
+      <p>Demo corpus — fictional</p>
+      <p>{result.provenance}</p>
+      <p>In this scenario, as of {instant(result.scenarioEffectiveTime)}</p>
+      {list(rows)}
+      {r.kind === "qualification" && <p>A review date is not an approval or delivery date.</p>}
+      <details><summary>Source details</summary>{list(sourceRows)}</details>
+    </details>
+    {reportUrl && <a href={reportUrl} target="_blank" rel="noopener noreferrer">
+      Explore {r.kind} in Power BI
+    </a>}
+  </>;
 }

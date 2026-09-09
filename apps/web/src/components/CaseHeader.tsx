@@ -1,9 +1,11 @@
-import type {CaseInstance, CasePurpose, RuntimeStatus} from "../types";
-import {trustedMicrosoftUrl} from "../security/trustedUrls";
+import type {AnalysisVersion, CaseInstance, CasePurpose, RuntimeStatus} from "../types";
+import {buildReportUrl} from "../reporting/reportNavigation";
+import {parseSnapshotEnvelope} from "./snapshotValidation";
 
 interface CaseHeaderProps {
   runtime: RuntimeStatus | null;
   caseInstance: CaseInstance | null;
+  analysis: AnalysisVersion | null;
   createPurpose: CasePurpose;
   creating: boolean;
   analyzing: boolean;
@@ -26,14 +28,23 @@ function scenarioLabel(value: string): string {
 export function CaseHeader({
   runtime,
   caseInstance,
+  analysis,
   createPurpose,
   creating,
   analyzing,
   onCreate,
   onAnalyze,
 }: CaseHeaderProps) {
-  const powerBiUrl = runtime?.runtime_mode === "live" && runtime.power_bi_available
-    ? trustedMicrosoftUrl(runtime.power_bi_url)
+  const matchingAnalysis = caseInstance && analysis
+    ? parseSnapshotEnvelope({caseInstance, analysis}) !== null
+    : false;
+  const powerBiUrl = runtime && caseInstance && (!analysis || matchingAnalysis)
+    ? buildReportUrl(runtime, {
+        page: "command-center",
+        caseId: caseInstance.case_id,
+        runtimeMode: caseInstance.runtime_mode,
+        ...(analysis ? {analysisId: analysis.analysis_id} : {}),
+      })
     : null;
   return <header className="case-header panel">
     <div>
@@ -46,8 +57,12 @@ export function CaseHeader({
         {runtime.runtime_mode === "live" ? "Live mode" : "Fallback mode"}
       </span>}
       {caseInstance && <span>Scenario time: {scenarioLabel(caseInstance.scenario_effective_time)}</span>}
-      {runtime && !runtime.power_bi_available && <span>Power BI unavailable in fallback</span>}
-      {powerBiUrl && <a href={powerBiUrl} target="_blank" rel="noopener noreferrer">Open Power BI command center</a>}
+      {runtime && !runtime.power_bi_available && <span>
+        {runtime.runtime_mode === "fallback"
+          ? "Power BI unavailable in fallback"
+          : "Power BI report is not available"}
+      </span>}
+      {powerBiUrl && <a href={powerBiUrl} target="_blank" rel="noopener noreferrer">Open case dashboard</a>}
     </div>
     {runtime && !caseInstance && <button type="button" onClick={() => onCreate(createPurpose)} disabled={creating}>
       {creating

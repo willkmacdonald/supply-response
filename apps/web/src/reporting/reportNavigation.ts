@@ -9,6 +9,10 @@ export type ReportTarget = Context & (
   | { page: "available-stock" | "customer-orders"; analysisId: string }
   | { page: "response-options"; analysisId: string; optionId?: string }
 );
+export type ReportAnalysisContext = Pick<
+  Extract<ReportTarget, {page: "response-options"}>,
+  "caseId" | "analysisId" | "runtimeMode"
+>;
 
 const uuid = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 const reportPath = new RegExp(`^/groups/${uuid}/reports/${uuid}$`);

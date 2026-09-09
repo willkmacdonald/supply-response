@@ -24,6 +24,7 @@ function CaseWorkspace() {
     <CaseHeader
       runtime={workspace.runtime}
       caseInstance={workspace.caseInstance}
+      analysis={workspace.analysis}
       createPurpose={createPurpose}
       creating={workspace.operation === "creating"}
       analyzing={workspace.operation === "analyzing"}

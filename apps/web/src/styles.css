@@ -33,6 +33,7 @@ a { color: #075d4b; font-weight: 700; }
   box-shadow: 0 12px 36px rgba(22, 33, 31, 0.06);
 }
 .case-header { display: grid; gap: 1.25rem; background: #102f2a; color: #f5faf6; }
+.case-header a { color: #c8f2e2; }
 .case-header h1 { max-width: 14ch; margin: 0.3rem 0; font-size: clamp(2.1rem, 6vw, 4rem); line-height: 0.98; }
 .case-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; opacity: 0.75; overflow-wrap: anywhere; }
 .eyebrow, .step { margin: 0; color: #c4771d; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; }
