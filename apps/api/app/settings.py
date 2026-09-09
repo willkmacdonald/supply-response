@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     power_bi_report_url: str | None = None
     fabric_citation_base_url: str | None = None
     power_bi_deployment_receipt: str | None = None
+    power_bi_reporting_receipt: str | None = None
     foundry_deployment_receipt: str | None = None
 
     @model_validator(mode="after")

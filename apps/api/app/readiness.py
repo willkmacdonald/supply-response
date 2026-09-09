@@ -1,8 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
+import json
+import re
 from dataclasses import dataclass
 from typing import Literal, Protocol
+
+from apps.api.app._reporting_artifact import (
+    REPORTING_ARTIFACT_SHA256,
+    REPORTING_CONTRACT,
+)
 
 CapabilityState = Literal["configured", "unverified", "ready", "unavailable"]
 
@@ -96,3 +104,43 @@ def verify_binding_receipt(parts: tuple[str, ...], receipt: str | None) -> bool:
         return False
     expected = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
     return receipt == expected
+
+
+_REPORT_UUID = (
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+_REPORT_URL = re.compile(
+    rf"https://app\.powerbi\.com/groups/{_REPORT_UUID}/reports/{_REPORT_UUID}"
+)
+
+
+def verify_power_bi_reporting_receipt(
+    report_url: str | None,
+    fabric_sql_server: str | None,
+    fabric_sql_database: str | None,
+    receipt: str | None,
+) -> bool:
+    """Match trusted release attestation; performs no availability or access check."""
+    if (
+        report_url is None
+        or _REPORT_URL.fullmatch(report_url) is None
+        or fabric_sql_server is None
+        or not fabric_sql_server.strip()
+        or fabric_sql_database is None
+        or not fabric_sql_database.strip()
+        or receipt is None
+        or re.fullmatch(r"[0-9a-f]{64}", receipt) is None
+    ):
+        return False
+    payload = [
+        "supply-response-reporting-receipt-v1",
+        REPORTING_CONTRACT,
+        REPORTING_ARTIFACT_SHA256,
+        report_url,
+        fabric_sql_server,
+        fabric_sql_database,
+    ]
+    expected = hashlib.sha256(
+        json.dumps(payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return hmac.compare_digest(receipt, expected)
