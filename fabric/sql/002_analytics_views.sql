@@ -147,6 +147,129 @@ SELECT case_id,analysis_id,option_id,
 FROM options WHERE identity_count=1 AND NULLIF(option_id,N'') IS NOT NULL;
 GO
 
+CREATE OR ALTER VIEW analytics.saved_records AS
+WITH candidates AS (
+    SELECT a.case_id,a.analysis_id,a.runtime_mode,a.analysis_created_at,
+           a.scenario_effective_time,f.record_family,j.[value] AS record_json,
+           analytics.report_scalar(j.[value],SUBSTRING(f.id_path,3,128),N'text') COLLATE Latin1_General_100_BIN2 AS source_record_id
+    FROM analytics.saved_analyses a
+    CROSS APPLY (VALUES
+       (N'disruption',N'$.disruption',N'$.disruption_id',0),
+       (N'shipment',N'$.alpha_expedite',N'$.receipt_id',0),
+       (N'transfer',N'$.transfer',N'$.transfer_id',0),
+       (N'qualification',N'$.beta_qualification',N'$.qualification_id',0),
+       (N'inventory',N'$.inventory_positions',N'$.inventory_id',1),
+       (N'production_order',N'$.production_orders',N'$.production_order_id',1),
+       (N'customer_order_line',N'$.customer_orders',N'$.customer_order_line_id',1)
+    ) f(record_family,json_path,id_path,is_array)
+    CROSS APPLY (SELECT JSON_QUERY(COALESCE(a.snapshot_json,N'{}'),f.json_path) AS value) raw
+    CROSS APPLY OPENJSON(CASE
+       WHEN f.is_array=1 AND LEFT(LTRIM(raw.value),1)=N'[' THEN raw.value
+       WHEN f.is_array=0 AND LEFT(LTRIM(raw.value),1)=N'{' THEN N'['+raw.value+N']'
+       ELSE N'[]' END) j
+    WHERE j.[type]=5
+), unique_records AS (
+    SELECT *,COUNT(*) OVER (PARTITION BY case_id,analysis_id,record_family,source_record_id) AS identity_count
+    FROM candidates
+)
+SELECT r.case_id,r.analysis_id,r.record_family,r.source_record_id,r.runtime_mode,
+       r.analysis_created_at,r.scenario_effective_time,
+       CASE WHEN
+         (r.record_family='shipment' AND x.supplier_id IS NOT NULL AND x.part_id IS NOT NULL
+          AND x.plant_id IS NOT NULL AND TRY_CONVERT(int,x.quantity)>0
+          AND TRY_CONVERT(date,x.due_date,23) IS NOT NULL AND TRY_CONVERT(decimal(19,4),x.incremental_cost_per_unit)>=0)
+         OR (r.record_family='transfer' AND x.part_id IS NOT NULL AND x.source_plant_id IS NOT NULL
+          AND x.destination_plant_id IS NOT NULL AND TRY_CONVERT(int,x.quantity)>0
+          AND TRY_CONVERT(date,x.dispatch_date,23) IS NOT NULL AND TRY_CONVERT(date,x.arrival_date,23) IS NOT NULL
+          AND TRY_CONVERT(decimal(19,4),x.incremental_cost_per_unit)>=0)
+         OR (r.record_family='qualification' AND x.supplier_id IS NOT NULL AND x.part_id IS NOT NULL
+          AND x.evidence_ref IS NOT NULL AND x.status COLLATE Latin1_General_100_BIN2 IN ('approved','pending','not_approved','conditional')
+          AND x.audit_complete IN ('#null','true','false')
+          AND x.first_article_complete IN ('#null','true','false')
+          AND (x.effective_date='#null' OR TRY_CONVERT(date,x.effective_date,23) IS NOT NULL)
+          AND (x.expected_decision_date='#null' OR TRY_CONVERT(date,x.expected_decision_date,23) IS NOT NULL))
+         OR (r.record_family='inventory' AND x.part_id IS NOT NULL AND x.plant_id IS NOT NULL
+          AND TRY_CONVERT(int,x.on_hand)>=0 AND TRY_CONVERT(int,x.quality_hold)>=0
+          AND TRY_CONVERT(int,x.protected_allocation)>=0)
+         OR (r.record_family IN ('production_order','customer_order_line')
+          AND x.product_id IS NOT NULL AND x.plant_id IS NOT NULL
+          AND TRY_CONVERT(int,x.quantity)>0 AND TRY_CONVERT(date,x.due_date,23) IS NOT NULL)
+         OR (r.record_family='disruption' AND x.supplier_id IS NOT NULL AND x.part_id IS NOT NULL
+          AND x.plant_id IS NOT NULL AND x.po_line_id IS NOT NULL AND x.source_ref IS NOT NULL
+          AND TRY_CONVERT(int,x.original_quantity)>0 AND TRY_CONVERT(int,x.partial_quantity)>=0
+          AND TRY_CONVERT(date,x.original_due_date,23) IS NOT NULL)
+         THEN N'available' ELSE N'unavailable' END AS record_state,
+       x.supplier_id,x.part_id,x.plant_id,x.source_plant_id,x.destination_plant_id,
+       x.product_id,x.customer_id,x.production_order_id,x.customer_order_id,x.po_line_id,
+       TRY_CONVERT(int,x.quantity) AS quantity,
+       TRY_CONVERT(date,x.due_date,23) AS due_date,
+       TRY_CONVERT(date,x.dispatch_date,23) AS dispatch_date,
+       TRY_CONVERT(date,x.arrival_date,23) AS arrival_date,
+       TRY_CONVERT(decimal(19,4),x.incremental_cost_per_unit) AS incremental_cost_per_unit,
+       x.status,x.evidence_ref,
+       CASE x.audit_complete WHEN 'true' THEN CAST(1 AS bit) WHEN 'false' THEN CAST(0 AS bit) END AS audit_complete,
+       CASE x.first_article_complete WHEN 'true' THEN CAST(1 AS bit) WHEN 'false' THEN CAST(0 AS bit) END AS first_article_complete,
+       TRY_CONVERT(date,x.effective_date,23) AS effective_date,
+       TRY_CONVERT(date,x.expected_decision_date,23) AS expected_decision_date,
+       TRY_CONVERT(int,x.on_hand) AS on_hand,
+       TRY_CONVERT(int,x.quality_hold) AS quality_hold,
+       TRY_CONVERT(int,x.protected_allocation) AS protected_allocation,
+       TRY_CONVERT(bigint,x.on_hand)-TRY_CONVERT(bigint,x.quality_hold)-TRY_CONVERT(bigint,x.protected_allocation) AS usable_inventory,
+       TRY_CONVERT(int,x.component_demand) AS component_demand,
+       TRY_CONVERT(int,x.customer_priority) AS customer_priority,
+       TRY_CONVERT(decimal(19,4),x.customer_revenue) AS customer_revenue,
+       TRY_CONVERT(decimal(19,4),x.customer_margin) AS customer_margin,
+       TRY_CONVERT(decimal(19,4),x.unit_revenue) AS unit_revenue,
+       TRY_CONVERT(decimal(19,4),x.unit_margin) AS unit_margin,
+       TRY_CONVERT(int,x.quantity)*TRY_CONVERT(decimal(19,4),x.unit_revenue) AS line_revenue,
+       TRY_CONVERT(int,x.original_quantity) AS original_quantity,
+       TRY_CONVERT(int,x.partial_quantity) AS partial_quantity,
+       TRY_CONVERT(date,x.original_due_date,23) AS original_due_date,
+       TRY_CONVERT(date,x.partial_due_date,23) AS partial_due_date,
+       TRY_CONVERT(date,x.recovery_date,23) AS recovery_date,
+       x.source_ref
+FROM unique_records r
+CROSS APPLY (SELECT
+    analytics.report_scalar(r.record_json,N'supplier_id',N'text') AS supplier_id,
+    analytics.report_scalar(r.record_json,N'part_id',N'text') AS part_id,
+    analytics.report_scalar(r.record_json,N'plant_id',N'text') AS plant_id,
+    analytics.report_scalar(r.record_json,N'source_plant_id',N'text') AS source_plant_id,
+    analytics.report_scalar(r.record_json,N'destination_plant_id',N'text') AS destination_plant_id,
+    analytics.report_scalar(r.record_json,N'product_id',N'text') AS product_id,
+    analytics.report_scalar(r.record_json,N'customer_id',N'text') AS customer_id,
+    analytics.report_scalar(r.record_json,N'production_order_id',N'text') AS production_order_id,
+    analytics.report_scalar(r.record_json,N'customer_order_id',N'text') AS customer_order_id,
+    analytics.report_scalar(r.record_json,N'po_line_id',N'text') AS po_line_id,
+    analytics.report_scalar(r.record_json,N'quantity',N'integer') AS quantity,
+    analytics.report_scalar(r.record_json,N'due_date',N'date') AS due_date,
+    analytics.report_scalar(r.record_json,N'dispatch_date',N'date') AS dispatch_date,
+    analytics.report_scalar(r.record_json,N'arrival_date',N'date') AS arrival_date,
+    analytics.report_scalar(r.record_json,N'incremental_cost_per_unit',N'money') AS incremental_cost_per_unit,
+    analytics.report_scalar(r.record_json,N'status',N'text') AS status,
+    analytics.report_scalar(r.record_json,N'evidence_ref',N'text') AS evidence_ref,
+    analytics.report_scalar(r.record_json,N'audit_complete',N'nullable_flag') AS audit_complete,
+    analytics.report_scalar(r.record_json,N'first_article_complete',N'nullable_flag') AS first_article_complete,
+    analytics.report_scalar(r.record_json,N'effective_date',N'nullable_date') AS effective_date,
+    analytics.report_scalar(r.record_json,N'expected_decision_date',N'nullable_date') AS expected_decision_date,
+    analytics.report_scalar(r.record_json,N'on_hand',N'integer') AS on_hand,
+    analytics.report_scalar(r.record_json,N'quality_hold',N'integer') AS quality_hold,
+    analytics.report_scalar(r.record_json,N'protected_allocation',N'integer') AS protected_allocation,
+    analytics.report_scalar(r.record_json,N'component_demand',N'integer') AS component_demand,
+    analytics.report_scalar(r.record_json,N'customer_priority',N'integer') AS customer_priority,
+    analytics.report_scalar(r.record_json,N'customer_revenue',N'money') AS customer_revenue,
+    analytics.report_scalar(r.record_json,N'customer_margin',N'money') AS customer_margin,
+    analytics.report_scalar(r.record_json,N'unit_revenue',N'money') AS unit_revenue,
+    analytics.report_scalar(r.record_json,N'unit_margin',N'money') AS unit_margin,
+    analytics.report_scalar(r.record_json,N'original_quantity',N'integer') AS original_quantity,
+    analytics.report_scalar(r.record_json,N'partial_quantity',N'integer') AS partial_quantity,
+    analytics.report_scalar(r.record_json,N'original_due_date',N'date') AS original_due_date,
+    analytics.report_scalar(r.record_json,N'partial_due_date',N'nullable_date') AS partial_due_date,
+    analytics.report_scalar(r.record_json,N'recovery_date',N'nullable_date') AS recovery_date,
+    analytics.report_scalar(r.record_json,N'source_ref',N'text') AS source_ref
+) x
+WHERE r.identity_count=1 AND NULLIF(r.source_record_id,N'') IS NOT NULL;
+GO
+
 CREATE OR ALTER VIEW app.analysis_projection AS
 SELECT
     a.analysis_id,

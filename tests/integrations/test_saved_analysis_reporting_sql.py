@@ -276,6 +276,200 @@ def test_snapshot_absence_is_separate_from_payload_identity(engine):
     )
 
 
+def test_stock_order_and_historical_record_grains(engine):
+    stock = {
+        "inventory_id": "shared",
+        "part_id": "P",
+        "plant_id": "CHI",
+        "on_hand": 10,
+        "quality_hold": 2,
+        "protected_allocation": 8,
+    }
+    customer = {
+        "customer_order_line_id": "line",
+        "customer_id": "C",
+        "product_id": "FG",
+        "plant_id": "CHI",
+        "quantity": 2,
+        "unit_revenue": "12.50",
+        "unit_margin": "0.00",
+        "due_date": "2026-09-06",
+        "production_order_id": "production",
+    }
+    c, a, payload = seed(
+        engine,
+        snapshot={"inventory_positions": [stock], "customer_orders": [customer]},
+    )
+    c2, a2, payload2 = seed(
+        engine, snapshot={"inventory_positions": [dict(stock, on_hand=99)]}
+    )
+    result = rows(
+        engine,
+        "SELECT * FROM analytics.saved_records WHERE case_id=:c AND analysis_id=:a",
+        c=c,
+        a=a,
+    )
+    by_family = {row["record_family"]: row for row in result}
+    assert by_family["inventory"]["usable_inventory"] == 0
+    assert by_family["customer_order_line"]["line_revenue"] == 25
+    assert str(by_family["customer_order_line"]["due_date"]) == "2026-09-06"
+    assert (
+        rows(
+            engine,
+            "SELECT * FROM analytics.saved_records WHERE case_id=:c AND analysis_id=:a",
+            c=c2,
+            a=a,
+        )
+        == []
+    )
+    payload2["case_id"] = c
+    payload2["material"]["case_id"] = c
+    snapshot2 = json.loads(payload2["material"]["operational_snapshot_json"])
+    snapshot2["case_id"] = c
+    payload2["material"]["operational_snapshot_json"] = json.dumps(snapshot2)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT app.case_projection "
+                "(case_id,purpose,runtime_mode,status,scenario_effective_time,"
+                "current_analysis_id,current_analysis_hash,current_decision_id,payload_json) "
+                "VALUES (:c,'automated_test','live','open',:at,:old,'hash',NULL,'{}')"
+            ),
+            {"c": c, "at": "2026-09-01T09:00:00-05:00", "old": a},
+        )
+        connection.execute(
+            text(
+                "UPDATE app.analysis_versions SET case_id=:c,payload_json=:p "
+                "WHERE analysis_id=:a"
+            ),
+            {"c": c, "a": a2, "p": json.dumps(payload2)},
+        )
+        connection.execute(
+            text(
+                "UPDATE app.case_projection SET current_analysis_id=:a WHERE case_id=:c"
+            ),
+            {"c": c, "a": a2},
+        )
+    newer = rows(
+        engine,
+        "SELECT on_hand FROM analytics.saved_records "
+        "WHERE case_id=:c AND analysis_id=:a AND record_family='inventory'",
+        c=c,
+        a=a2,
+    )
+    assert newer[0]["on_hand"] == 99
+    historical = rows(
+        engine,
+        "SELECT on_hand FROM analytics.saved_records "
+        "WHERE case_id=:c AND analysis_id=:a AND record_family='inventory'",
+        c=c,
+        a=a,
+    )
+    assert historical[0]["on_hand"] == 10
+    snapshot = json.loads(payload["material"]["operational_snapshot_json"])
+    snapshot["inventory_positions"].append(stock)
+    payload["material"]["operational_snapshot_json"] = json.dumps(snapshot)
+    rewrite_fixture_payload(engine, a, payload)
+    assert (
+        rows(
+            engine,
+            "SELECT * FROM analytics.saved_records WHERE analysis_id=:a AND record_family='inventory'",
+            a=a,
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    "field,value,column",
+    [
+        ("quantity", "", "quantity"),
+        ("quantity", 1.5, "quantity"),
+        ("due_date", "", "due_date"),
+        ("due_date", "09/06/2026", "due_date"),
+        ("incremental_cost_per_unit", "0.001", "incremental_cost_per_unit"),
+    ],
+)
+def test_malformed_required_record_fact_never_becomes_available_zero(
+    engine, field, value, column
+):
+    receipt = {
+        "receipt_id": "receipt",
+        "supplier_id": "supplier",
+        "part_id": "part",
+        "plant_id": "CHI",
+        "quantity": 1,
+        "due_date": "2026-09-06",
+        "incremental_cost_per_unit": "0.00",
+        field: value,
+    }
+    _c, a, _ = seed(
+        engine,
+        snapshot={
+            "alpha_expedite": receipt,
+            "inventory_positions": [
+                {
+                    "inventory_id": "stock",
+                    "part_id": "part",
+                    "plant_id": "CHI",
+                    "on_hand": 0,
+                    "quality_hold": 0,
+                    "protected_allocation": 0,
+                }
+            ],
+        },
+    )
+    result = rows(
+        engine,
+        "SELECT * FROM analytics.saved_records WHERE analysis_id=:a AND record_family='shipment'",
+        a=a,
+    )[0]
+    assert result["record_state"] == "unavailable"
+    assert result[column] is None
+    inventory = rows(
+        engine,
+        "SELECT * FROM analytics.saved_records WHERE analysis_id=:a AND record_family='inventory'",
+        a=a,
+    )[0]
+    assert inventory["record_state"] == "available"
+    assert inventory["usable_inventory"] == 0
+    assert inventory["due_date"] is None
+
+
+@pytest.mark.parametrize(
+    "status,expected",
+    [
+        ("approved", "available"),
+        ("pending", "available"),
+        ("APPROVED", "unavailable"),
+        ("Pending", "unavailable"),
+    ],
+)
+def test_qualification_status_uses_exact_enum(engine, status, expected):
+    _c, a, _ = seed(
+        engine,
+        snapshot={
+            "beta_qualification": {
+                "qualification_id": "qualification",
+                "supplier_id": "supplier",
+                "part_id": "part",
+                "evidence_ref": "proof",
+                "status": status,
+                "audit_complete": False,
+                "first_article_complete": None,
+                "effective_date": None,
+                "expected_decision_date": None,
+            }
+        },
+    )
+    result = rows(
+        engine,
+        "SELECT record_state FROM analytics.saved_records WHERE analysis_id=:a AND record_family='qualification'",
+        a=a,
+    )[0]
+    assert result["record_state"] == expected
+
+
 @pytest.mark.parametrize(
     "field,value",
     [
