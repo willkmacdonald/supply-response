@@ -2,9 +2,10 @@
 
 Approved spec: [Evidence records and case dashboard](../specs/2026-09-08-evidence-records-and-case-dashboard-design.md).
 
-This is the coverage and sequencing map, not a claim that the redesign is
-implemented. Detailed executable plans are scoped to independently testable
-stages. Keep the current working deployment intact until coordinated release.
+This is the coverage and sequencing map; the checkpoint below distinguishes
+local implementation from live acceptance. Detailed executable plans are scoped
+to independently testable stages. Keep the current working deployment intact
+until coordinated release.
 
 ## Current checkpoint
 
@@ -15,7 +16,7 @@ passed 58 reporting tests plus 12 deployment-contract tests, with a separate
 full saved-demo-payload acceptance test also passing. See the
 [reporting execution record](2026-09-08-saved-analysis-reporting.md#execution-evidence-and-remaining-release-gate).
 
-These changes have not been deployed. Stage 4 is in progress: the exact-context
+These changes have not been deployed. Stage 4 is implemented locally: the exact-context
 URL builder and five saved-report SELECT projections are implemented and
 independently reviewed through `ab25ae9`. The expanded actual SQL gate passes
 126 tests, including collection completeness and all five SELECT result-type
@@ -26,9 +27,34 @@ zero errors and zero warnings. These do not execute DAX or prove native renderin
 Report activation and mounted card links are implemented and independently
 reviewed through `cecc1ef`: 204 frontend tests/build and twelve desktop/mobile
 browser variants pass. No reporting receipt is installed. The
-[traditional walkthrough plan](2026-09-09-traditional-walkthrough.md) is now in
-implementation; stages 4–5 will co-release only after stage 6's live acceptance
-checks.
+[traditional walkthrough plan](2026-09-09-traditional-walkthrough.md) is implemented
+and independently reviewed through `f32969e`, including neutral native navigation,
+the two app routes, presenter guide and coordinated artifact marker. The web suite
+now passes 226 tests/build; twelve walkthrough browser variants and twelve
+card-link variants pass at desktop/mobile widths. The updated SQL gate passed
+126 tests on the private disposable database. Stages 4–5 will co-release only
+after stage 6's live acceptance checks. Local end-to-end and whole-branch final
+verification are tracked separately; these checkpoints do not activate any link.
+
+### Final local regression checkpoint (2026-09-09)
+
+- Non-live Python suite: **1,179 passed**, 114 skipped for locally unconfigured
+  SQL connections, and 14 live tests deliberately deselected. The actual SQL
+  suite independently passed **126 tests** on the private disposable database.
+- Web suite: **226 passed**, with the production build passing.
+- Browser layout/navigation checks: **24 desktop/mobile variants passed**.
+- Local end-to-end suite: **6 passed** in 1.8 minutes, covering simulated outcomes,
+  evidence-preserving rejection/reanalysis, stale-analysis protection, planning
+  and child-action retry, and duplicate-playback coalescing. These use disposable
+  local data, not the live demo.
+- Model/page generation, packaged reporting digest, changed-Python lint, and
+  official offline visual validation pass (zero visual errors or warnings).
+- One inherited Starlette/httpx deprecation warning remains a dependency
+  maintenance item; no dependency change was made as part of this redesign.
+
+These results do not verify native DAX values, published report rendering,
+preserved filters, Alex's access, or live card-to-record navigation. Those checks
+remain mandatory before activating the coordinated release.
 
 ## Stages and acceptance boundaries
 
@@ -92,6 +118,6 @@ checks.
 - `tests/fabric/test_power_bi_live.py` mutates the environment. Do not use it for
   the read-only acceptance checks.
 
-The remaining stages require their own concrete implementation plans after the
-preceding interfaces are verified. They are still required scope; completing the
-footer stage is not completion of the redesign.
+Stages 1–5 have concrete implementation plans and reviewed local artifacts.
+Stage 6 remains required scope; passing local checks is not completion of the
+published demo redesign.

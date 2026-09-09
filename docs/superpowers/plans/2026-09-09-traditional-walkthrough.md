@@ -13,17 +13,30 @@
 Local model checkpoint `fad02f4` implements Tasks 1–2 (presentation marker,
 exact-analysis requirement, and explicit-versus-singleton record selection).
 Its post-hook generator/project suite passes 126 tests with Microsoft TOM.
-Independent spec and quality review passed with no findings. The updated actual
-SQL rerun has not run: the
-security reviewer requires explicit authorization to upload `fabric/report_model.py`
-and `fabric/reporting/queries/CaseCommandCenter.sql` to the user's private
-`supply-response-test.exe.xyz` test VM. Ownership and private sharing were checked
-read-only in the signed-in account; both attempted uploads were denied before
-execution. Do not use another transport to bypass that gate.
+Independent spec and quality review passed with no findings. After explicit user
+approval, the controller uploaded only `fabric/report_model.py` and
+`fabric/reporting/queries/CaseCommandCenter.sql` to the existing private
+`supply-response-test.exe.xyz` checkout. The updated SQL integration suite passed
+126 tests in 13.13 seconds and removed its disposable synthetic database. This
+tests SQL Server query behavior, not live Fabric or native Power BI execution.
 
-Tasks 3–5 (native navigation, app route and guide) have not been implemented.
-The packaged API artifact marker is intentionally stale after the model change
-and must be regenerated after all these tasks; no reporting receipt exists.
+Tasks 3 and 5 (native navigation and neutral pages) are implemented through
+`e0387df` and independently reviewed. The page checkpoint passed 130 model/report
+tests; the footer follow-up passed 45 generator tests and the official visual
+validator reported zero errors and warnings. An older upstream alias-reproduction
+test was corrected to keep exercising the raw alias separately from staging's
+normalization; both upstream and application regressions pass.
+
+Task 4 (app routes and guide) is implemented and independently reviewed at
+`0b86a72`: 226 web tests and production build pass. The controller passed twelve
+desktop/mobile route variants plus twelve existing card-link variants and
+inspected both route layouts. These are local browser checks with mocked live
+configuration, not native Power BI acceptance.
+The packaged API artifact marker was regenerated and independently reviewed at
+`f32969e` after the coordinated model/pages/app changes. Its digest is
+`6ad16988dd95593c80f597a0892a251b558f28910f46256fe1f6932bb379d3b6`.
+The activation regression set passes 62 tests, including raw-settings versus
+composed-report-URL bindings. No reporting receipt has been issued or installed.
 
 Native serialization is now established by Microsoft's authored Power BI Visuals sample, with formatting confirmed by official `@microsoft/powerbi-report-authoring-cli@0.1.4` and its `@microsoft/powerbi-core-visual-schema@0.1.1` dependency. The sample uses `actionButton`, `visualContainerObjects.visualLink`, and literal expressions for `show`, `type='PageNavigation'`, and `navigationSection='<page name>'`. The concrete helper below follows that artifact, not an inferred schema value. Its source artifact uses visualContainer 2.7.0; this project's generator uses pinned 2.9.0 and must validate the resulting structure against that version.
 
@@ -45,15 +58,15 @@ There is no remaining serialization blocker to implementation. Read-only actual-
 
 Files: `fabric/reporting/queries/CaseCommandCenter.sql`, `fabric/report_model.py`, `tests/fabric/test_report_generators.py`; regenerated native model after controller integration.
 
-- [ ] Add this SELECT expression to the existing CaseCommandCenter SELECT list; preserve all existing columns and joins:
+- [x] Add this SELECT expression to the existing CaseCommandCenter SELECT list; preserve all existing columns and joins:
 
 ```sql
 CAST(N'traditional' AS nvarchar(16)) AS walkthrough_route,
 ```
 
-- [ ] Add `"walkthrough_route"` to `COLUMNS[CC]` in report_model.py. TYPES already defaults columns to string. Do not add relationships or a sixth table. The generated directQuery partition automatically takes the updated query.
+- [x] Add `"walkthrough_route"` to `COLUMNS[CC]` in report_model.py. TYPES already defaults columns to string. Do not add relationships or a sixth table. The generated directQuery partition automatically takes the updated query.
 
-- [ ] Add these measures inside `measures()` after defining `external`:
+- [x] Add these measures inside `measures()` after defining `external`:
 
 ```python
 external(
@@ -80,7 +93,7 @@ add(
 
 The route has one allowed filter value, traditional. Absence preserves current app-linked report behavior. Unknown or conflicting route values hide the recommendation and produce selection-unavailable; do not interpret them as assisted mode. Filtering a constant column to an unknown value naturally removes all case rows.
 
-- [ ] In `Overview Analysis Key`, replace its final return with:
+- [x] In `Overview Analysis Key`, replace its final return with:
 
 ```dax
 RETURN IF([Walkthrough Requested] == 1 || [Analysis Requested] == 1,
@@ -90,7 +103,7 @@ RETURN IF([Walkthrough Requested] == 1 || [Analysis Requested] == 1,
 
 Use the existing generator's variable-renaming helper as usual. No direct case-only traditional entry can now resolve a current analysis implicitly.
 
-- [ ] Add concrete structural regression tests:
+- [x] Add concrete structural regression tests:
 
 ```python
 def test_traditional_marker_is_a_presentation_column_not_a_new_table():
@@ -118,7 +131,7 @@ Run `uv run --extra dev pytest tests/fabric/test_report_generators.py -q`. These
 
 File: `fabric/report_model.py`; tests in `tests/fabric/test_report_generators.py` plus the later actual-engine acceptance matrix.
 
-- [ ] Rename the current external `Selected Record Key` definition to `Explicit Selected Record Key`, retaining its full existing expression. Add the following definitions immediately after it and before `Selected Record Family`:
+- [x] Rename the current external `Selected Record Key` definition to `Explicit Selected Record Key`, retaining its full existing expression. Add the following definitions immediately after it and before `Selected Record Family`:
 
 ```python
 external(
@@ -165,7 +178,7 @@ add(
 
 The existing page-local family filter supplies family. Stock and customer-order collection pages continue to use their own complete-collection gates; they receive no stale SavedRecords URL filters. The selected family and all downstream row/metric measures continue using existing `Selected Record Key`.
 
-- [ ] Add this regression test; update existing selection-expression tests to inspect `External Explicit Selected Record Key` where their intention is the explicit card branch, retaining all their current assertions:
+- [x] Add this regression test; update existing selection-expression tests to inspect `External Explicit Selected Record Key` where their intention is the explicit card branch, retaining all their current assertions:
 
 ```python
 def test_walkthrough_does_not_replace_explicit_record_identity_validation():
@@ -189,8 +202,8 @@ Run the same generator tests. Do not build a Python model that pretends to execu
 
 File: `fabric/report_pages.py`, generator tests, regenerated native pages.
 
-- [ ] In overview's existing recommendation-answer card, keep its visual identity but replace its title/binding with `"Review approach", "Review Approach"`. All recommendation text must be behind the mode branch. Do not put recommended metrics in titles, tooltips, source tables, conditional formats or sorting in traditional mode.
-- [ ] Keep response-options projections exactly as they are (option_name, is_baseline, executable, response_cost, revenue_at_risk, otif_loss_percentage, uncovered_part_demand, blockers_text, required_roles_text). No is_recommended column or conditional recommendation color. Set its query's sortDefinition using the already pinned QuerySort schema:
+- [x] In overview's existing recommendation-answer card, keep its visual identity but replace its title/binding with `"Review approach", "Review Approach"`. All recommendation text must be behind the mode branch. Do not put recommended metrics in titles, tooltips, source tables, conditional formats or sorting in traditional mode.
+- [x] Keep response-options projections exactly as they are (option_name, is_baseline, executable, response_cost, revenue_at_risk, otif_loss_percentage, uncovered_part_demand, blockers_text, required_roles_text). No is_recommended column or conditional recommendation color. Set its query's sortDefinition using the already pinned QuerySort schema:
 
 ```python
 comparison["visual"]["query"]["sortDefinition"] = {
@@ -201,7 +214,7 @@ comparison["visual"]["query"]["sortDefinition"] = {
 
 Capture the existing comparison table in local variable `comparison` before appending it to `items`; its existing arguments are unchanged. Alphabetical ordering does not imply ranking. The traditional builder never supplies option_key, so selected-option cards stay in comparison state.
 
-- [ ] Define the sequence independently of report tab ORDER (preserve current identities):
+- [x] Define the sequence independently of report tab ORDER (preserve current identities):
 
 ```python
 WALKTHROUGH = (
@@ -224,7 +237,7 @@ The inspected layout ends at y=708 on a 720px page. Allocate a real navigation b
 
 Files: `apps/web/src/reporting/reportNavigation.ts`, its existing tests, new `apps/web/src/components/PlanningRoutes.tsx`, `App.tsx`, `InvestigationFlow.tsx`, component tests. Integrate with the Stage 4 worker's mounted link changes rather than overwriting CaseHeader.
 
-- [ ] Export the following helper alongside buildReportUrl:
+- [x] Export the following helper alongside buildReportUrl:
 
 ```typescript
 export function buildTraditionalReportUrl(
@@ -243,7 +256,7 @@ export function buildTraditionalReportUrl(
 
 Keep the existing exact report release guard. The controller has decided Stage 4 and Stage 5 co-release and the API artifact digest is regenerated after Stage 5; no additional feature flag or receipt is needed. Do not activate a partial Stage 4 report with this route.
 
-- [ ] New component code:
+- [x] New component code:
 
 ```tsx
 import type { AnalysisVersion, CaseInstance, RuntimeStatus } from "../types";
@@ -285,7 +298,7 @@ Controller preflight correction: also own this small addition to `apps/web/src/s
 
 Extend the fallback component test below to assert `screen.getByText(/The Power BI comparison is not available/)` is visible and `screen.queryByText(/Both routes use this saved analysis/)` is absent. Repeat the unavailable-copy assertion in the invalid activation/URL test. Do not promise an available Power BI route when its link is hidden.
 
-- [ ] Add to reportNavigation.test.ts (reuse existing runtime and reportIdentityKey fixture):
+- [x] Add to reportNavigation.test.ts (reuse existing runtime and reportIdentityKey fixture):
 
 ```typescript
 it("launches traditional mode without a record or option preselection", () => {

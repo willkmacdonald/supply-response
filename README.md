@@ -6,7 +6,7 @@ The project combines a deterministic supply-response core with a FastAPI applica
 
 > **Current status (2026-09-08 UTC):** Revision20 deploys clearer **Open supplier email** and **Open Quality Teams post** labels, verified in the published app bundle. Revision19's fresh Alex analysis displayed both citations and enabled approval; the user subsequently confirmed both links open the intended messages. No Decision was approved or actions executed; downstream acceptance remains. See the [deployment result](docs/deployment/workiq-discovery-integration-result.md) and [roadmap](docs/ROADMAP.md).
 
-> **Unreleased planner redesign:** The `codex/planner-experience` branch adds a supplier-delay-first investigation, plain-language cards, bottom-of-card source status, and exact saved-record inspection. Eight focused Power BI pages and their saved-analysis projections are implemented locally; coordinated publication and native report acceptance are still required. The current live report has not been replaced. See the [delivery checkpoints](docs/superpowers/plans/2026-09-08-planner-experience-delivery.md).
+> **Unreleased planner redesign:** The `codex/planner-experience` branch adds a supplier-delay-first investigation, plain-language cards, bottom-of-card source status, and exact saved-record inspection. Eight focused Power BI pages, their saved-analysis projections, and a [traditional-versus-assisted walkthrough](docs/demo/traditional-and-assisted-walkthrough.md) are implemented locally; coordinated publication and native report acceptance are still required. The current live report has not been replaced. See the [delivery checkpoints](docs/superpowers/plans/2026-09-08-planner-experience-delivery.md).
 
 ## What the demo shows
 

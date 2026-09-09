@@ -21,9 +21,15 @@ baseline recorded below.
   twelve desktop/mobile browser checks passing. A release-specific activation
   check keeps new links unavailable until the matching report is accepted and
   configured.
-- In progress: the traditional versus AI-assisted walkthrough. Its model slice
-  passes local generator/TOM checks; the updated SQL test upload awaits explicit
-  user authorization. Native navigation, route controls and the guide remain.
+- Reviewed: the traditional versus AI-assisted walkthrough, including neutral
+  report presentation, eight-page navigation, exact-context route controls and a
+  [presenter guide](demo/traditional-and-assisted-walkthrough.md). The approved
+  private-VM SQL rerun passed 126 tests; the web suite now passes 226 tests plus
+  the production build. Twenty-four local desktop/mobile browser variants check
+  route navigation and existing card links. Native report acceptance is separate.
+- Final local regression: 1,179 non-live Python tests and all six local browser
+  lifecycle tests pass. See the [verification checkpoint](superpowers/plans/2026-09-08-planner-experience-delivery.md#final-local-regression-checkpoint-2026-09-09)
+  for deliberate live-test exclusions and the remaining release boundary.
 - Still required: coordinated publication, actual DAX/value parity, native
   layouts/navigation, Alex's access, and every card-to-source journey. No new
   reporting receipt has been issued or installed.
