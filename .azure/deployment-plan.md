@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Approved planner release — fresh validation in progress. Published revision20 remains unchanged.
+> **Status:** Validated — coordinated planner publication with reporting links inactive. Native acceptance remains pending.
 
 ## Validation Proof — coordinated planner reporting release (2026-09-09)
 
@@ -9,21 +9,23 @@ Fabric SQL/report/model, followed by native data/access/navigation acceptance.
 Use the existing Azure Dev / East US 2 / supply-response-personal targets.
 Preserve report/model IDs, stored payloads, identities, permissions and scaling.
 No Decision approval, playback, source-message edits, new cloud resources or
-Git push is included. A historical acceptance fixture is awaiting separate
-authorization; the Mac must be unlocked for native browser inspection.
+Git push is included. On resumption, the user explicitly approved deploying now
+with the new reporting links disabled, before native browser acceptance.
+No historical acceptance fixture is authorized. Native visual/access/history
+checks remain activation gates, not blockers to this bounded publication.
 
-- [ ] All validation checks pass.
+- [x] All validation checks pass.
   - [x] 1. AZD Installation (1.30.0).
-  - [ ] 2. Schema Validation.
+  - [x] 2. Schema Validation (official Azure/azure-dev JSON schema).
   - [x] 3. Environment Setup (isolated checkout; verified existing bindings).
   - [x] 4. Authentication Check (existing Will interactive account).
   - [x] 5. Subscription/Location Check (same confirmed Azure Dev / East US 2).
   - [x] 6. Aspire Pre-Provisioning Checks (not applicable).
-  - [ ] 7. Provision Preview.
+  - [x] 7. Provision Preview (detailed ARM what-if and resolved configuration).
   - [x] 8. Build Verification (`uv build` passed).
   - [x] 9. Docker Build Context Validation (Dockerfile, ignore rules, lockfiles).
   - [x] 10. Package Validation (`azd package --no-prompt` passed).
-  - [ ] 11. Azure Policy Validation.
+  - [x] 11. Azure Policy Validation (seven assignments reviewed; no preview denial).
   - [x] 12. Aspire Post-Provisioning Checks (not applicable).
   - [x] Static role verification (same app principal; resource-scoped registry,
     vault secret-read and Foundry User assignments, no role changes).
@@ -50,16 +52,26 @@ The first AZD preview used the default bootstrap parameter and was **not
 applied**. Local AZD configuration now explicitly sets bootstrap false and the
 existing immutable image. The corrected preview passed without new resources,
 preserved targetPort8000 and proposed existing app/Insights reconciliation only.
-Its summarized container/secret and provider-default traffic/workload changes
-still need detailed final review before apply. Subscription policy assignment
-inventory was retrieved; no preview policy denial occurred. Dedicated schema
-validation and final policy/detailed-preview review remain open; do not label
-this release Validated or deploy from historical proof below.
+Fresh completion at 2026-09-09 21:45 UTC: official JSON Schema validation passed;
+read-only resource/auth/binding preflight passed; frontend TypeScript/Vite build
+passed. The detailed ARM what-if succeeded. Image/resources and probes (by type)
+match the prior app. Secret identity/name are unchanged; differences for the
+secret URI, frontend origin and Insights connection are unresolved expressions
+over the same verified resources. The only new environment setting is the blank
+reporting receipt. Other deltas are provider-returned defaults/read-only fields
+and existing Insights metadata reconciliation. Three reference-based role entries
+cannot be expanded by what-if; static definitions and live exact-resource role
+IDs independently match (AcrPull, Key Vault Secrets User, Foundry User). The role
+display name is now Foundry User; its unchanged role UUID is authoritative.
+The single API-tagged target was verified by filtering the supported resource
+list response. Seven existing security/Defender policy assignments reviewed;
+preview shows no policy denial or new/deleted resources. Prior same-source Python
+build, package, 98 deployment/activation tests and Fabric/TOM dry run remain valid.
 
-Publication is paused before any cloud mutation pending the user's Mac unlock
-for native acceptance and explicit permission for one fictional acceptance case
-with two analyses. No approval, action execution or source-message edits are
-included. Existing saved records have not been changed. Owner-only rollback
+Publish SQL reporting views, existing model/report, then app with an empty
+reporting receipt. Do not issue/activate a receipt based on publication success.
+No test cases, approvals, action execution or source-message edits are included.
+Existing saved records have not been changed. Owner-only rollback
 snapshot: `/private/tmp/planner-release-baseline-p_55r30z` (report/model definitions,
 association, datasource and access metadata). Retain it until acceptance closes.
 
