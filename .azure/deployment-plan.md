@@ -1,6 +1,67 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated and deployed — revision20 healthy; both descriptive citation labels verified in the public app bundle.
+> **Status:** Approved planner release — fresh validation in progress. Published revision20 remains unchanged.
+
+## Validation Proof — coordinated planner reporting release (2026-09-09)
+
+User approved publication of the reviewed planner application and its matching
+Fabric SQL/report/model, followed by native data/access/navigation acceptance.
+Use the existing Azure Dev / East US 2 / supply-response-personal targets.
+Preserve report/model IDs, stored payloads, identities, permissions and scaling.
+No Decision approval, playback, source-message edits, new cloud resources or
+Git push is included. A historical acceptance fixture is awaiting separate
+authorization; the Mac must be unlocked for native browser inspection.
+
+- [ ] All validation checks pass.
+  - [x] 1. AZD Installation (1.30.0).
+  - [ ] 2. Schema Validation.
+  - [x] 3. Environment Setup (isolated checkout; verified existing bindings).
+  - [x] 4. Authentication Check (existing Will interactive account).
+  - [x] 5. Subscription/Location Check (same confirmed Azure Dev / East US 2).
+  - [x] 6. Aspire Pre-Provisioning Checks (not applicable).
+  - [ ] 7. Provision Preview.
+  - [x] 8. Build Verification (`uv build` passed).
+  - [x] 9. Docker Build Context Validation (Dockerfile, ignore rules, lockfiles).
+  - [x] 10. Package Validation (`azd package --no-prompt` passed).
+  - [ ] 11. Azure Policy Validation.
+  - [x] 12. Aspire Post-Provisioning Checks (not applicable).
+  - [x] Static role verification (same app principal; resource-scoped registry,
+    vault secret-read and Foundry User assignments, no role changes).
+
+Initial read-only inventory confirms revision20 and its immutable image, same
+system identity and scale 0–2. Fabric contains the same report/model and schema12.
+Nine cases contain four analyses across four cases, with no within-case history.
+Existing report/model definitions, association, data-source metadata and workspace
+access were exported to owner-only local rollback files. No cloud mutation yet.
+The missing optional reporting-receipt deployment path was repaired in
+`5ac9ebf` and independently reviewed: spec compliant, quality approved, no
+Critical/Important findings. The focused deployment/activation suite reported
+98 passing tests and the inherited Starlette deprecation warning. Reporting
+artifact digest remains unchanged; no receipt was issued or installed.
+
+Fresh read-only release preflight and `fabric/deploy.py --dry-run` passed. The
+report/model association matches the expected existing IDs; the saved SQL
+binding matches the runtime target (database-name capitalization differs).
+Twenty-four corresponding runtime settings match exactly. Alex is not a direct
+workspace member; report-specific access still requires native verification.
+The current app remains revision20, latest traffic100%, scale0–2.
+
+The first AZD preview used the default bootstrap parameter and was **not
+applied**. Local AZD configuration now explicitly sets bootstrap false and the
+existing immutable image. The corrected preview passed without new resources,
+preserved targetPort8000 and proposed existing app/Insights reconciliation only.
+Its summarized container/secret and provider-default traffic/workload changes
+still need detailed final review before apply. Subscription policy assignment
+inventory was retrieved; no preview policy denial occurred. Dedicated schema
+validation and final policy/detailed-preview review remain open; do not label
+this release Validated or deploy from historical proof below.
+
+Publication is paused before any cloud mutation pending the user's Mac unlock
+for native acceptance and explicit permission for one fictional acceptance case
+with two analyses. No approval, action execution or source-message edits are
+included. Existing saved records have not been changed. Owner-only rollback
+snapshot: `/private/tmp/planner-release-baseline-p_55r30z` (report/model definitions,
+association, datasource and access metadata). Retain it until acceptance closes.
 
 ## Validation Proof — descriptive citation labels (2026-09-08)
 
