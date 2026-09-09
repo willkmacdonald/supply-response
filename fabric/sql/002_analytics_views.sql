@@ -270,6 +270,87 @@ CROSS APPLY (SELECT
 WHERE r.identity_count=1 AND NULLIF(r.source_record_id,N'') IS NOT NULL;
 GO
 
+CREATE OR ALTER VIEW analytics.saved_record_evidence AS
+WITH raw_evidence AS (
+    SELECT a.case_id,a.analysis_id,j.[value] AS evidence_json,
+           analytics.report_scalar(j.[value],N'evidence_id',N'text') COLLATE Latin1_General_100_BIN2 AS evidence_id,
+           analytics.report_scalar(j.[value],N'source_id',N'text') COLLATE Latin1_General_100_BIN2 AS source_id
+    FROM analytics.saved_analyses a
+    CROSS APPLY (SELECT JSON_QUERY(a.payload_json,N'$.evidence_items') AS value) array_json
+    CROSS APPLY OPENJSON(CASE WHEN LEFT(LTRIM(array_json.value),1)=N'[' THEN array_json.value ELSE N'[]' END) j
+    WHERE j.[type]=5 AND a.payload_state=N'available'
+), evidence AS (
+    SELECT *,COUNT(*) OVER (PARTITION BY case_id,analysis_id,evidence_id) AS evidence_id_count,
+             COUNT(*) OVER (PARTITION BY case_id,analysis_id,source_id) AS source_id_count
+    FROM raw_evidence
+), raw_material AS (
+    SELECT a.case_id,a.analysis_id,j.[value] AS material_json,
+           analytics.report_scalar(j.[value],N'evidence_id',N'text') COLLATE Latin1_General_100_BIN2 AS evidence_id
+    FROM analytics.saved_analyses a
+    CROSS APPLY (SELECT JSON_QUERY(a.payload_json,N'$.material.evidence') AS value) array_json
+    CROSS APPLY OPENJSON(CASE WHEN LEFT(LTRIM(array_json.value),1)=N'[' THEN array_json.value ELSE N'[]' END) j
+    WHERE j.[type]=5
+), material AS (
+    SELECT *,COUNT(*) OVER (PARTITION BY case_id,analysis_id,evidence_id) AS material_id_count
+    FROM raw_material
+), expected AS (
+    SELECT r.*,
+      CASE WHEN r.record_family='qualification' THEN r.evidence_ref ELSE r.source_record_id END COLLATE Latin1_General_100_BIN2 AS expected_evidence_id,
+      CASE WHEN r.runtime_mode='fallback' THEN N'RL-SOURCE-'+
+           CASE WHEN r.record_family='qualification' THEN r.evidence_ref ELSE r.source_record_id END
+           ELSE CASE r.record_family WHEN 'shipment' THEN N'fabric.supply_receipt/'
+             WHEN 'transfer' THEN N'fabric.inventory_transfer/'
+             WHEN 'qualification' THEN N'fabric.qualification/' END+r.source_record_id END COLLATE Latin1_General_100_BIN2 AS expected_source_id
+    FROM analytics.saved_records r WHERE r.record_family IN ('shipment','transfer','qualification')
+), records AS (
+    SELECT *,COUNT(*) OVER (PARTITION BY case_id,analysis_id,expected_source_id) AS matching_record_count
+    FROM expected
+)
+SELECT r.case_id,r.analysis_id,r.record_family,r.source_record_id,
+       CASE WHEN valid.ok=1 THEN N'available' ELSE N'unavailable' END AS evidence_state,
+       CASE WHEN valid.ok=1 THEN CASE WHEN r.runtime_mode='live' THEN N'saved_fabric' ELSE N'demo_fixture' END END AS provenance,
+       CASE WHEN valid.ok=1 THEN e.evidence_id END AS evidence_id,
+       CASE WHEN valid.ok=1 THEN e.source_id END AS source_id,
+       CASE WHEN valid.ok=1 THEN f.source_system END AS source_system,
+       CASE WHEN valid.ok=1 THEN CASE f.synthetic WHEN 'true' THEN CAST(1 AS bit) WHEN 'false' THEN CAST(0 AS bit) END END AS synthetic,
+       CASE WHEN valid.ok=1 THEN TRY_CONVERT(datetimeoffset(6),NULLIF(f.source_timestamp,N'#null'),127) END AS source_timestamp,
+       CASE WHEN valid.ok=1 THEN TRY_CONVERT(datetimeoffset(6),NULLIF(f.retrieved_at,N'#null'),127) END AS retrieved_at
+FROM records r
+LEFT JOIN evidence e ON e.case_id=r.case_id AND e.analysis_id=r.analysis_id
+    AND e.evidence_id=r.expected_evidence_id AND e.evidence_id_count=1 AND e.source_id_count=1
+LEFT JOIN material m ON m.case_id=r.case_id AND m.analysis_id=r.analysis_id
+    AND m.evidence_id=r.expected_evidence_id AND m.material_id_count=1
+OUTER APPLY (SELECT
+    analytics.report_scalar(e.evidence_json,N'case_id',N'text') AS evidence_case_id,
+    analytics.report_scalar(e.evidence_json,N'kind',N'text') AS kind,
+    analytics.report_scalar(e.evidence_json,N'source_system',N'text') AS source_system,
+    analytics.report_scalar(e.evidence_json,N'runtime_mode',N'text') AS runtime_mode,
+    analytics.report_scalar(e.evidence_json,N'synthetic',N'flag') AS synthetic,
+    analytics.report_scalar(e.evidence_json,N'source_timestamp',N'nullable_instant') AS source_timestamp,
+    analytics.report_scalar(e.evidence_json,N'retrieved_at',N'nullable_instant') AS retrieved_at,
+    analytics.report_scalar(e.evidence_json,N'retrieved_for_analysis_id',N'text') AS retrieved_for_analysis_id) f
+OUTER APPLY (SELECT CASE WHEN r.record_state='available' AND r.matching_record_count=1
+    AND e.evidence_id=m.evidence_id AND e.source_id=r.expected_source_id
+    AND f.evidence_case_id COLLATE Latin1_General_100_BIN2=r.case_id COLLATE Latin1_General_100_BIN2
+    AND f.kind COLLATE Latin1_General_100_BIN2=N'operational_fact'
+    AND f.runtime_mode COLLATE Latin1_General_100_BIN2=r.runtime_mode COLLATE Latin1_General_100_BIN2
+    AND f.retrieved_for_analysis_id COLLATE Latin1_General_100_BIN2=r.analysis_id COLLATE Latin1_General_100_BIN2
+    AND f.retrieved_at IS NOT NULL
+    AND ((r.runtime_mode='live' AND f.source_system COLLATE Latin1_General_100_BIN2=N'fabric' AND f.synthetic=N'false')
+      OR (r.runtime_mode='fallback' AND f.source_system COLLATE Latin1_General_100_BIN2=N'synthetic_fixture' AND f.synthetic=N'true'))
+    AND NOT EXISTS (
+        SELECT 1 FROM (VALUES
+          (N'case_id',N'text'),(N'kind',N'text'),(N'source_system',N'text'),
+          (N'source_id',N'text'),(N'runtime_mode',N'text'),(N'synthetic',N'flag'),
+          (N'source_timestamp',N'nullable_instant')
+        ) identity_field(name,kind)
+        WHERE analytics.report_scalar(e.evidence_json,identity_field.name,identity_field.kind) IS NULL
+           OR analytics.report_scalar(m.material_json,identity_field.name,identity_field.kind) IS NULL
+           OR analytics.report_scalar(e.evidence_json,identity_field.name,identity_field.kind) COLLATE Latin1_General_100_BIN2
+              <>analytics.report_scalar(m.material_json,identity_field.name,identity_field.kind) COLLATE Latin1_General_100_BIN2
+    ) THEN 1 ELSE 0 END AS ok) valid;
+GO
+
 CREATE OR ALTER VIEW app.analysis_projection AS
 SELECT
     a.analysis_id,

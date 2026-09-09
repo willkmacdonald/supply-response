@@ -161,7 +161,7 @@ def test_schemas_views_and_version_publication_are_idempotent():
         analytics,
         re.IGNORECASE,
     )
-    assert len(re.findall(r"CREATE OR ALTER VIEW", analytics, re.IGNORECASE)) == 7
+    assert len(re.findall(r"CREATE OR ALTER VIEW", analytics, re.IGNORECASE)) == 8
     assert "MERGE app.schema_version WITH (HOLDLOCK)" in operational
     assert "schema_version < 12" in analytics
     assert "@@ROWCOUNT" not in analytics
@@ -260,6 +260,7 @@ def test_real_script_sequence_promotes_readiness_only_after_analytics():
         "analytics.saved_analyses",
         "analytics.saved_options",
         "analytics.saved_records",
+        "analytics.saved_record_evidence",
     }
     health = check_fabric_health(typed_engine)
     assert health.schema_version == FABRIC_SCHEMA_VERSION

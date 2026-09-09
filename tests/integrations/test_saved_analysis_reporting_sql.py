@@ -528,3 +528,165 @@ def test_snapshot_envelope_mismatch_preserves_only_valid_options(engine, field, 
         )
         == 1
     )
+
+
+@pytest.mark.parametrize(
+    "family,member,key,prefix",
+    [
+        ("shipment", "alpha_expedite", "receipt_id", "fabric.supply_receipt/"),
+        ("transfer", "transfer", "transfer_id", "fabric.inventory_transfer/"),
+        (
+            "qualification",
+            "beta_qualification",
+            "qualification_id",
+            "fabric.qualification/",
+        ),
+    ],
+)
+def test_exact_evidence_and_duplicate_or_missing_provenance(
+    engine, family, member, key, prefix
+):
+    expected_id = "proof" if family == "qualification" else "record"
+    record = {
+        key: "record",
+        "evidence_ref": "proof",
+        "audit_complete": False,
+        "first_article_complete": None,
+        "effective_date": None,
+        "expected_decision_date": None,
+        "supplier_id": "supplier",
+        "part_id": "part",
+        "plant_id": "CHI",
+        "source_plant_id": "DAL",
+        "destination_plant_id": "CHI",
+        "quantity": 1,
+        "due_date": "2026-09-06",
+        "dispatch_date": "2026-09-05",
+        "arrival_date": "2026-09-06",
+        "incremental_cost_per_unit": "0.00",
+        "status": "pending",
+    }
+    c, a, payload = seed(engine, snapshot={member: record})
+    times = rows(
+        engine,
+        "SELECT analysis_started_at FROM app.analysis_versions WHERE analysis_id=:a",
+        a=a,
+    )[0]
+    evidence = {
+        "evidence_id": expected_id,
+        "case_id": c,
+        "source_id": prefix + "record",
+        "kind": "operational_fact",
+        "source_system": "fabric",
+        "retrieved_for_analysis_id": a,
+        "runtime_mode": "live",
+        "synthetic": False,
+        "retrieved_at": times["analysis_started_at"].isoformat(),
+        "source_timestamp": None,
+    }
+    query = "SELECT * FROM analytics.saved_record_evidence WHERE case_id=:c AND analysis_id=:a AND record_family=:f"
+    for items, material, expected in [
+        ([evidence], [evidence], "available"),
+        ([evidence, evidence], [evidence], "unavailable"),
+        ([evidence, dict(evidence, source_id="different")], [evidence], "unavailable"),
+        (
+            [evidence, dict(evidence, evidence_id="different")],
+            [evidence],
+            "unavailable",
+        ),
+        ([evidence], [evidence, evidence], "unavailable"),
+        ([evidence], [], "unavailable"),
+        (
+            [dict(evidence, evidence_id="wrong")],
+            [dict(evidence, evidence_id="wrong")],
+            "unavailable",
+        ),
+        (
+            [dict(evidence, kind="source_statement")],
+            [dict(evidence, kind="source_statement")],
+            "unavailable",
+        ),
+        (
+            [dict(evidence, synthetic=True)],
+            [dict(evidence, synthetic=True)],
+            "unavailable",
+        ),
+        (
+            [dict(evidence, synthetic="false")],
+            [dict(evidence, synthetic="false")],
+            "unavailable",
+        ),
+        ([evidence], [dict(evidence, synthetic=True)], "unavailable"),
+        ([evidence], [dict(evidence, source_id="other")], "unavailable"),
+        (
+            [evidence],
+            [dict(evidence, source_timestamp="2026-09-01T00:00:00Z")],
+            "unavailable",
+        ),
+        (
+            [dict(evidence, retrieved_for_analysis_id="other")],
+            [evidence],
+            "unavailable",
+        ),
+        ([dict(evidence, retrieved_at=None)], [evidence], "available"),
+        ([dict(evidence, retrieved_at="")], [evidence], "unavailable"),
+        (
+            [dict(evidence, source_timestamp="")],
+            [dict(evidence, source_timestamp="")],
+            "unavailable",
+        ),
+        (
+            [{k: v for k, v in evidence.items() if k != "source_timestamp"}],
+            [evidence],
+            "unavailable",
+        ),
+        ([dict(evidence, source_id=prefix + "RECORD")], [evidence], "unavailable"),
+        ([], [], "unavailable"),
+    ]:
+        payload["evidence_items"] = items
+        payload["material"]["evidence"] = material
+        rewrite_fixture_payload(engine, a, payload)
+        result = rows(engine, query, c=c, a=a, f=family)[0]
+        assert result["evidence_state"] == expected
+        assert result["source_timestamp"] is None
+        assert result["provenance"] == (
+            "saved_fabric" if expected == "available" else None
+        )
+        if items and items[0].get("retrieved_at") is None:
+            assert result["retrieved_at"] is None
+
+    fixture = dict(
+        evidence,
+        runtime_mode="fallback",
+        source_system="synthetic_fixture",
+        synthetic=True,
+        source_id="RL-SOURCE-" + expected_id,
+        retrieved_at=None,
+    )
+    snapshot = json.loads(payload["material"]["operational_snapshot_json"])
+    snapshot["runtime_mode"] = "fallback"
+    payload["material"].update(
+        runtime_mode="fallback",
+        evidence=[fixture],
+        operational_snapshot_json=json.dumps(snapshot),
+    )
+    payload["evidence_items"] = [fixture]
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE app.case_instances SET runtime_mode='fallback' WHERE case_id=:c"
+            ),
+            {"c": c},
+        )
+        connection.execute(
+            text(
+                "UPDATE app.analysis_versions SET runtime_mode='fallback' WHERE analysis_id=:a"
+            ),
+            {"a": a},
+        )
+    rewrite_fixture_payload(engine, a, payload)
+    result = rows(engine, query, c=c, a=a, f=family)[0]
+    assert result["evidence_state"] == "available"
+    assert result["provenance"] == "demo_fixture"
+    assert result["synthetic"] is True
+    assert result["retrieved_at"] is None
