@@ -144,6 +144,140 @@ def option(identity, kind="expedite", value="0.00"):
     }
 
 
+def test_new_analysis_does_not_replace_governing_approved_prediction(engine):
+    c, old, payload = seed(
+        engine,
+        options=[
+            option("baseline", "no_mitigation", "100"),
+            option("response", value="20"),
+            option("chosen", value="30"),
+        ],
+    )
+    new, decision = str(uuid4()), str(uuid4())
+    new_payload = dict(
+        payload,
+        analysis_id=new,
+        response_options=[
+            option("baseline", "no_mitigation", "200"),
+            option("response", value="5"),
+        ],
+    )
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+            INSERT app.analysis_versions
+            (analysis_id,case_id,material_hash,runtime_mode,analysis_started_at,
+             retrieval_window_ends_at,created_at,payload_json)
+            SELECT :n,case_id,'new','live',analysis_started_at,retrieval_window_ends_at,
+                   DATEADD(second,1,created_at),:p FROM app.analysis_versions WHERE analysis_id=:a
+        """
+            ),
+            {"n": new, "p": json.dumps(new_payload), "a": old},
+        )
+        connection.execute(
+            text(
+                """
+            INSERT app.decisions
+            (decision_id,case_id,analysis_id,idempotency_key,kind,runtime_mode,decided_at,payload_json)
+            VALUES (:d,:c,:a,:d,'approved','live',SYSDATETIMEOFFSET(),:p)
+        """
+            ),
+            {
+                "d": decision,
+                "c": c,
+                "a": old,
+                "p": json.dumps({"selected_option_id": "chosen"}),
+            },
+        )
+        connection.execute(
+            text(
+                """
+            INSERT app.case_projection
+            (case_id,purpose,status,runtime_mode,scenario_effective_time,
+             current_analysis_id,current_decision_id,payload_json)
+            VALUES (:c,'automated_test','open','live',SYSDATETIMEOFFSET(),:n,:d,'{}')
+        """
+            ),
+            {"c": c, "n": new, "d": decision},
+        )
+    result = rows(
+        engine, "SELECT * FROM analytics.case_reporting WHERE case_id=:c", c=c
+    )[0]
+    assert result["current_analysis_id"] == new
+    assert result["decision_analysis_id"] == old
+    assert result["baseline_revenue_at_risk"] == 200
+    assert result["recommended_revenue_at_risk"] == 5
+    assert result["approved_revenue_at_risk"] == 30
+    assert (
+        rows(
+            engine,
+            "SELECT revenue_at_risk FROM analytics.saved_options WHERE case_id=:c AND analysis_id=:a AND option_id='response'",
+            c=c,
+            a=old,
+        )[0]["revenue_at_risk"]
+        == 20
+    )
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE app.decisions SET kind='rejected',payload_json='{}' WHERE decision_id=:d"
+            ),
+            {"d": decision},
+        )
+    assert (
+        rows(
+            engine,
+            "SELECT approved_revenue_at_risk FROM analytics.case_reporting WHERE case_id=:c",
+            c=c,
+        )[0]["approved_revenue_at_risk"]
+        is None
+    )
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE app.case_projection SET current_analysis_id=NULL,current_decision_id=NULL WHERE case_id=:c"
+            ),
+            {"c": c},
+        )
+    result = rows(
+        engine, "SELECT * FROM analytics.case_reporting WHERE case_id=:c", c=c
+    )[0]
+    assert result["recommended_revenue_at_risk"] is None
+    assert result["baseline_revenue_at_risk"] is None
+    assert result["approved_revenue_at_risk"] is None
+
+
+def test_absent_recommendation_and_ambiguous_baselines_do_not_pick_an_option(engine):
+    c, a, _ = seed(
+        engine,
+        recommendation=None,
+        options=[
+            option("baseline-1", "no_mitigation", "10"),
+            option("baseline-2", "no_mitigation", "20"),
+        ],
+    )
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+            INSERT app.case_projection
+            (case_id,purpose,status,runtime_mode,scenario_effective_time,
+             current_analysis_id,payload_json)
+            VALUES (:c,'automated_test','open','live',SYSDATETIMEOFFSET(),:a,'{}')
+        """
+            ),
+            {"c": c, "a": a},
+        )
+    result = rows(
+        engine, "SELECT * FROM analytics.case_reporting WHERE case_id=:c", c=c
+    )[0]
+    assert result["recommended_option_id"] is None
+    assert result["recommended_revenue_at_risk"] is None
+    assert result["baseline_option_id"] is None
+    assert result["baseline_revenue_at_risk"] is None
+
+
 def test_options_preserve_zero_null_false_and_reject_duplicate_identity(engine):
     missing = option("missing")
     missing["predicted"] = None
@@ -654,6 +788,14 @@ def test_exact_evidence_and_duplicate_or_missing_provenance(
         )
         if items and items[0].get("retrieved_at") is None:
             assert result["retrieved_at"] is None
+
+        if family == "qualification":
+            audit = rows(
+                engine,
+                "SELECT audit_complete FROM analytics.saved_records WHERE analysis_id=:a",
+                a=a,
+            )[0]
+            assert audit["audit_complete"] is False
 
     fixture = dict(
         evidence,

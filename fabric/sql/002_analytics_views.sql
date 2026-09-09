@@ -455,6 +455,40 @@ JOIN app.outcome_observations AS o
     ON o.decision_id = d.decision_id;
 GO
 
+CREATE OR ALTER VIEW analytics.case_reporting AS
+SELECT c.case_id,c.purpose,c.status,c.runtime_mode,c.scenario_effective_time,
+       c.current_analysis_id,c.current_decision_id,a.analysis_created_at,a.snapshot_state,
+       a.recommended_option_id,
+       CASE WHEN base.baseline_count=1 THEN base.option_id END AS baseline_option_id,
+       d.kind AS decision_kind,d.analysis_id AS decision_analysis_id,d.decided_at,
+       CASE WHEN d.kind='approved' THEN d.selected_option_id END AS approved_option_id,
+       b.revenue_at_risk AS baseline_revenue_at_risk,
+       b.otif_loss_percentage AS baseline_otif_loss_percentage,
+       b.uncovered_part_demand AS baseline_uncovered_part_demand,
+       b.response_cost AS baseline_response_cost,
+       r.revenue_at_risk AS recommended_revenue_at_risk,
+       r.otif_loss_percentage AS recommended_otif_loss_percentage,
+       r.uncovered_part_demand AS recommended_uncovered_part_demand,
+       r.response_cost AS recommended_response_cost,
+       approved.revenue_at_risk AS approved_revenue_at_risk,
+       approved.otif_loss_percentage AS approved_otif_loss_percentage,
+       approved.uncovered_part_demand AS approved_uncovered_part_demand,
+       approved.response_cost AS approved_response_cost
+FROM app.case_projection c
+LEFT JOIN analytics.saved_analyses a ON a.case_id=c.case_id AND a.analysis_id=c.current_analysis_id
+OUTER APPLY (SELECT COUNT(*) AS baseline_count,MIN(o.option_id) AS option_id
+             FROM analytics.saved_options o WHERE o.case_id=c.case_id
+             AND o.analysis_id=c.current_analysis_id AND o.is_baseline=1) base
+LEFT JOIN analytics.saved_options b ON base.baseline_count=1 AND b.case_id=c.case_id
+    AND b.analysis_id=c.current_analysis_id AND b.option_id=base.option_id
+LEFT JOIN analytics.saved_options r ON r.case_id=c.case_id AND r.analysis_id=c.current_analysis_id
+    AND r.option_id=a.recommended_option_id COLLATE Latin1_General_100_BIN2
+LEFT JOIN app.decision_projection d ON d.case_id=c.case_id AND d.decision_id=c.current_decision_id
+LEFT JOIN analytics.saved_options approved ON d.kind='approved' AND approved.case_id=c.case_id
+    AND approved.analysis_id=d.analysis_id
+    AND approved.option_id=d.selected_option_id COLLATE Latin1_General_100_BIN2;
+GO
+
 IF OBJECT_ID(N'app.analysis_projection', N'V') IS NULL
     OR OBJECT_ID(N'app.decision_projection', N'V') IS NULL
     OR OBJECT_ID(N'analytics.case_command_center', N'V') IS NULL
