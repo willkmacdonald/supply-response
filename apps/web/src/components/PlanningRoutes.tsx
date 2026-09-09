@@ -19,8 +19,8 @@ export function PlanningRoutes({ runtime, caseInstance, analysis }: {
       <a href="#assisted-review">Review with AI assistance</a>
     </div>
     <p>{url
-      ? "Both routes use this saved analysis. Power BI opens in a new tab. Keep this tab open for original email and Teams sources and AI-assisted review."
+      ? "Both routes use the same information from this analysis. Power BI opens in a new tab. Keep this tab open for the original email, Teams sources, and assisted review."
       : "The Power BI comparison is not available for this analysis. You can still review the saved evidence and AI assistance here."}</p>
-    <p>Replay of saved evidence; this is not a new discovery run.</p>
+    <p>Showing saved evidence; no new source retrieval is running.</p>
   </nav>;
 }

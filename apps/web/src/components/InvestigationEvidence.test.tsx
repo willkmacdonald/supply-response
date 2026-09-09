@@ -43,19 +43,28 @@ it("keeps the supplier delay first when snapshot fields are unavailable", () => 
   const first = screen.getAllByRole("article")[0];
   expect(within(first).getByText("Original Alpha words, including $7.50 and unconfirmed timing.")).toBeInTheDocument();
   expect(within(first).getByRole("link", {name: "Open supplier email"})).toHaveAttribute("href", input.analysis.evidence_items[1].citation_url);
-  expect(within(first).getByText("Saved disruption details unavailable")).toBeVisible();
+  expect(within(first).getByText("Disruption details aren't available for this analysis")).toBeVisible();
 });
 it("combines inline shipment inspection and the original supplier email without external Fabric navigation", async () => {
   const input = fixture(); const before = JSON.stringify(input); const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+  editSnapshot(input, s => { s.disruption = {disruption_id: "d", supplier_id: "RL-SUP-ALPHA", po_line_id: "po", part_id: "RL-MAT-10247", plant_id: "RL-PLANT-CHI", original_quantity: 8000, original_due_date: "2026-09-03", partial_quantity: 0, partial_due_date: null, recovery_date: null, source_ref: "RL-001"}; });
+  const edited = JSON.stringify(input);
   render(<InvestigationEvidence {...input} row="responses" />); const alpha = screen.getAllByRole("article")[0];
-  expect(within(alpha).getByText("Scheduled receipt: 3,000 component units on September 6, 2026.")).toBeVisible();
+  expect(within(alpha).getByText(/Proposed response: 3,000 component units.*September 6, 2026/)).toBeVisible();
+  expect(within(alpha).queryByText(/Scheduled receipt:/)).not.toBeInTheDocument();
+  expect(within(alpha).getByText("No date recorded for full recovery")).toBeVisible();
+  expect(within(alpha).getByText("Read original supplier email excerpt")).toBeVisible();
   await userEvent.click(within(alpha).getByText("View shipment record"));
   expect(within(alpha).getByText("Snapshot used for this analysis")).toBeVisible();
   expect(within(alpha).getByRole("link", {name: "Open supplier email"})).toBeVisible();
   expect(screen.queryByRole("link", {name: "Open citation"})).not.toBeInTheDocument();
   expect(screen.getAllByRole("link").every(link => !link.getAttribute("href")?.includes("powerbi"))).toBe(true);
   const footerGroup = alpha.querySelector(".source-footers")!; expect(alpha.lastElementChild).toBe(footerGroup);
-  expect(fetch).not.toHaveBeenCalled(); expect(JSON.stringify(input)).toBe(before);
+  expect(within(footerGroup as HTMLElement).getByText("Supplier email")).toBeVisible();
+  expect(within(footerGroup as HTMLElement).getByText("Shipment record")).toBeVisible();
+  expect(within(footerGroup as HTMLElement).getAllByText(/Work IQ|Microsoft Fabric/)).toHaveLength(2);
+  expect(fetch).not.toHaveBeenCalled(); expect(JSON.stringify(input)).toBe(edited);
+  expect(before).not.toBe(edited);
 });
 it("shows unmatched source warnings rather than hiding failed or unsupported evidence", () => {
   const input = fixture(); input.analysis.evidence_items[1].authority_scope = []; input.analysis.evidence_items[1].retrieval_health = "unhealthy";
@@ -74,18 +83,27 @@ it("shows stock after holds including zero and uses baseline exposure instead of
   input.analysis.response_options = [baseline]; input.analysis.recommendation = {...baseline, option_id: "combined", option_kind: "combined", predicted: {...baseline.predicted!, uncovered_part_demand: 2300}};
   const {rerender} = render(<InvestigationEvidence {...input} row="disruption" />);
   expect(screen.getByText("4,000 component units available after holds and protected allocations.")).toBeVisible();
+  const stockCard = screen.getAllByRole("article")[1];
+  const stockFooter = stockCard.lastElementChild!;
+  expect(stockFooter).toHaveTextContent("Stock amounts come from the snapshot used for this analysis");
+  const stockMainText = Array.from(stockCard.children).filter(node => node !== stockFooter)
+    .map(node => node.textContent).join(" ");
+  expect(stockMainText).not.toMatch(/separate record retrieval time|saved snapshot/i);
   expect(screen.getByText("6,800 p component units")).toBeVisible(); expect(screen.queryByText("2,300 p component units")).not.toBeInTheDocument();
   editSnapshot(input, s => { s.inventory_positions[0].on_hand = 500; }); rerender(<InvestigationEvidence {...input} row="disruption" />);
   expect(screen.getByText("0 component units available after holds and protected allocations.")).toBeVisible();
   editSnapshot(input, s => { s.inventory_positions[0].on_hand = 0; }); rerender(<InvestigationEvidence {...input} row="disruption" />);
   expect(screen.getByText("Holds and protected allocations exceed on-hand stock in this snapshot.")).toBeVisible();
 });
-it("does not subtract a late partial delivery from the original affected delivery", () => {
+it("leads with the original delivery and keeps disruption record fields out of the main story", () => {
   const input = fixture(); editSnapshot(input, s => { s.disruption = {disruption_id: "d", supplier_id: "RL-SUP-ALPHA", po_line_id: "po", part_id: "RL-MAT-10247", plant_id: "RL-PLANT-CHI", original_quantity: 8000, original_due_date: "2026-09-03", partial_quantity: 3000, partial_due_date: "2026-09-06", recovery_date: null, source_ref: "RL-001"}; });
   render(<InvestigationEvidence {...input} row="disruption" />);
-  expect(screen.getByText(/Original delivery affected: 8,000 component units/)).toBeVisible();
-  expect(screen.getByText(/Recorded partial supply: 3,000 units; date: September 6, 2026/)).toBeVisible();
-  expect(screen.queryByText(/Missed quantity.*5,000/)).not.toBeInTheDocument();
+  const firstCard = screen.getAllByRole("article")[0];
+  expect(within(firstCard).queryByText(/Saved disruption:|Recorded partial supply:/)).not.toBeInTheDocument();
+  expect(within(firstCard).getByText(/Original delivery: 8,000 component units of RL-MAT-10247 were due at Chicago plant on September 3, 2026/)).toBeVisible();
+  expect(within(firstCard).getByRole("link", {name: "Open supplier email"})).toBeVisible();
+  expect(within(firstCard).queryByText(/Missed quantity.*5,000/)).not.toBeInTheDocument();
+  expect(within(firstCard).getByText("No date recorded for full recovery")).toBeVisible();
 });
 it("does not place a different supplier's saved shipment under the Supplier Alpha mapping", () => {
   const input = fixture(); editSnapshot(input, s => { s.alpha_expedite.supplier_id = "OTHER-SUPPLIER"; });

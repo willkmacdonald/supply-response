@@ -54,7 +54,7 @@ export function CaseHeader({
     </div>
     <div className="provenance" aria-label="Runtime provenance">
       {runtime && <span className={`badge badge-${runtime.runtime_mode}`}>
-        {runtime.runtime_mode === "live" ? "Live mode" : "Fallback mode"}
+        {runtime.runtime_mode === "live" ? "Live-service mode" : "Fallback mode"}
       </span>}
       {caseInstance && <span>Scenario time: {scenarioLabel(caseInstance.scenario_effective_time)}</span>}
       {runtime && !runtime.power_bi_available && <span>

@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import {cleanup, render, screen, within} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {afterEach, expect, it, vi} from "vitest";
+import type {ResponseOption} from "../types";
 import type {CaseWorkspaceState} from "../hooks/useCaseWorkspace";
 import {InvestigationFlow} from "./InvestigationFlow";
 afterEach(cleanup);
@@ -39,6 +40,16 @@ it("keeps all nine cards in the exact approved row and DOM reading order", () =>
     "Compare the options.", "Recommended response—and why.", "Review and approve.",
   ]);
   expect(screen.getByRole("button", {name: "Approve selected response"})).toBeDisabled();
+  expect(screen.getByText("No option meets the planning requirements")).toBeVisible();
+  expect(screen.getByText("Disruption details aren't available for this analysis")).toBeVisible();
+  expect(screen.getByText("Shipment details aren't available for this analysis")).toBeVisible();
+  expect(screen.getByText("Plant transfer details aren't available for this analysis")).toBeVisible();
+  expect(screen.getByText("Supplier qualification details aren't available for this analysis")).toBeVisible();
+  expect(screen.getByText("Sample data — not a live retrieval")).toBeVisible();
+  const comparison = screen.getByRole("region", {name: "Compare the options."});
+  expect(within(comparison).getByText("Do-nothing comparison unavailable for this analysis")).toBeVisible();
+  expect(within(comparison).getByText("How the options were compared")).toBeVisible();
+  expect(comparison.lastElementChild).toHaveTextContent("Comparison from this analysis; selection is not approval or execution.");
 });
 it("keeps rejection explicit and respects the existing blocked state", async () => {
   const input = state(); render(<InvestigationFlow state={input} />);
@@ -57,4 +68,35 @@ it("reports historical and closed case state without inventing an awaiting decis
   render(<InvestigationFlow state={input} />);
   expect(screen.getByText("Historical saved analysis. Case closed; no decision is shown for this analysis.")).toBeVisible();
   expect(screen.queryByText("Awaiting your explicit decision")).not.toBeInTheDocument();
+});
+it("shows recommended actions and predictions before keeping raw ranking rules in calculation details", () => {
+  const input = state();
+  const option: ResponseOption = {
+    option_id: "combined", option_kind: "combined", name: "Combine expedite, transfer, and resequencing",
+    executable: true, active_mitigation: true,
+    predicted: {uncovered_part_demand: 2300, otif_loss_percentage: 50, revenue_at_risk: "375000.00",
+      margin_at_risk: "125000.00", response_cost: "24750.00", protected_customer_order_ids: []},
+    assumptions: ["Remaining supplier recovery date is unconfirmed."], evidence_ids: [],
+    evidence_requirements: [], blocking_codes: [], prerequisite_roles: ["material_planner"],
+    source_data_lineage: ["source-1"], approval_burden: 1, execution_risk: 2,
+    requested_side_effects: [],
+  };
+  input.analysis!.response_options = [option]; input.analysis!.recommendation = option;
+  input.analysis!.ranking = {...input.analysis!.ranking, recommended_option_id: option.option_id,
+    no_feasible_mitigation: false, stages: [{comparator: "uncovered_part_demand", threshold: "500",
+      lower_is_better: true, input_option_ids: ["combined", "transfer"], values: [],
+      retained_option_ids: ["combined"], eliminated_option_ids: ["transfer"]}]};
+  render(<InvestigationFlow state={input} />);
+  const recommendation = screen.getByRole("region", {name: "Recommended response—and why."});
+  const details = within(recommendation).getByText("How the options were compared").closest("details")!;
+  const mainText = Array.from(recommendation.children)
+    .filter(node => node !== details).map(node => node.textContent).join(" ");
+  expect(mainText).toContain("Recommended actions");
+  expect(mainText).toContain("Expedite the proposed shipment from the current supplier, transfer stock from another plant, and prioritize production for customer needs.");
+  expect(mainText).toContain("Expected if we take this option");
+  expect(mainText).not.toMatch(/threshold|option_id|stable option identifier/i);
+  expect(within(details).getByText(/threshold 500/)).toBeInTheDocument();
+  const prediction = within(recommendation).getByText("Expected if we take this option").closest("div")!;
+  expect(prediction.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(within(recommendation).getByText("Assumptions and unresolved questions")).toBeVisible();
 });

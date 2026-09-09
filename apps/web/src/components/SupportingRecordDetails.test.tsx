@@ -35,6 +35,22 @@ describe("supporting record disclosure", () => {
     expect(fetch).not.toHaveBeenCalled(); expect(JSON.stringify(input)).toBe(before);
   });
 
+  it("describes fallback provenance as sample data without implying live retrieval", async () => {
+    const input = recordFixture();
+    input.caseInstance.runtime_mode = "fallback";
+    input.analysis.runtime_mode = "fallback";
+    input.analysis.material.runtime_mode = "fallback";
+    editSnapshot(input, snapshot => { snapshot.runtime_mode = "fallback"; });
+    const item = input.analysis.evidence_items[0];
+    item.runtime_mode = "fallback"; item.synthetic = true;
+    item.source_system = "synthetic_fixture"; item.source_id = `RL-SOURCE-${item.evidence_id}`;
+    input.analysis.material.evidence = [{...item}];
+    render(<SupportingRecordDetails result={resolveSupportingRecord(input, item.evidence_id)} />);
+    await userEvent.click(screen.getByText("View shipment record"));
+    expect(screen.getByText("Sample data — not a live retrieval")).toBeVisible();
+    expect(screen.queryByText("Demo fixture — not a live retrieval")).not.toBeInTheDocument();
+  });
+
   it("keeps qualification false flags and unknown dates distinct", () => {
     const input = recordFixture(); const id = selectRecord(input, "qualification");
     render(<SupportingRecordDetails result={resolveSupportingRecord(input, id)} />);

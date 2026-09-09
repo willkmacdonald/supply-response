@@ -19,7 +19,7 @@ it("shows persisted zero, absent currency, and the baseline label without invent
 it("labels response predictions and does not invent missing outcomes", () => {
   render(<PredictionSummary predicted={null} snapshot={null} basis="response" />);
   expect(screen.getByText("Expected if we take this option")).toBeVisible();
-  expect(screen.getByText("Saved prediction unavailable")).toBeVisible();
+  expect(screen.getByText("Prediction unavailable for this analysis")).toBeVisible();
   expect(screen.queryByText(/0 component/)).not.toBeInTheDocument();
 });
 it("formats calendar dates without day shifts and keeps unsafe values unavailable", () => {

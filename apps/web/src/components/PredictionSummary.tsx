@@ -16,7 +16,7 @@ export function PredictionSummary({predicted: p, snapshot, basis, compact = fals
   const part = snapshot?.disruption?.part_id;
   return <div className="prediction-summary">
     <p>{basis === "baseline" ? "Expected if we do nothing — baseline" : "Expected if we take this option"}</p>
-    {!valid || !p ? <p>Saved prediction unavailable</p> : <>
+    {!valid || !p ? <p>Prediction unavailable for this analysis</p> : <>
       <dl className="compact-list">
         <div><dt>Parts still needed</dt><dd>{number(p.uncovered_part_demand)} {part ? `${part} component units` : "component units (part unavailable)"}</dd></div>
         <div><dt>{consistent ? "Customer order lines expected to miss the on-time, in-full target"
@@ -25,8 +25,8 @@ export function PredictionSummary({predicted: p, snapshot, basis, compact = fals
           <div><dt>Margin at risk</dt><dd>{money(p.margin_at_risk)}</dd></div></>}
         <div><dt>Response cost</dt><dd>{money(p.response_cost)}</dd></div>
       </dl>
-      {!compact && <p>{consistent ? "Revenue at risk is the saved value of customer order lines expected to miss the service target."
-        : "Customer-order-line interpretation unavailable. Revenue and service exposure retain the saved production-order calculation basis."}</p>}
+      {!compact && <p>{consistent ? "Revenue at risk is the value of customer order lines expected to miss the service target."
+        : "Customer-order-line interpretation unavailable. Revenue and service exposure retain the production-order calculation basis."}</p>}
     </>}
   </div>;
 }

@@ -34,7 +34,7 @@ describe("planning routes", () => {
     ].join(" and "));
     expect(screen.getByRole("link", { name: "Review with AI assistance" }))
       .toHaveAttribute("href", "#assisted-review");
-    expect(screen.getByText(/Replay of saved evidence/)).toBeVisible();
+    expect(screen.getByText("Showing saved evidence; no new source retrieval is running.")).toBeVisible();
     expect(screen.queryByRole("link", { name: "Return to demo" })).not.toBeInTheDocument();
   });
 

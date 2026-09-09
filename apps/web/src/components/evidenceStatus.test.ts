@@ -24,17 +24,24 @@ describe("evidence status", () => {
   it("uses recorded retrieval and policy results, not a confidence promise", () => {
     expect(evidenceStatus(item, context)).toMatchObject({
       platform: "Work IQ", retrieval: "Retrieved for this analysis",
-      recordedAt: item.retrieved_at, validation: "Evidence policy checks passed",
+      recordedAt: item.retrieved_at, validation: "Required checks passed",
       warning: null,
     });
   });
   it("does not infer validation from successful retrieval", () => {
-    expect(evidenceStatus(item, {...context, results: []}).validation)
-      .toBe("Validation result unavailable");
+    const result = evidenceStatus(item, {...context, results: []});
+    expect(result.validation).toBe("Check result unavailable");
+    expect(result.warning).toBe("Check result unavailable for this source");
+  });
+  it("uses plain consequences for identity and retrieval failures", () => {
+    expect(evidenceStatus({...item, case_id: "other"}, context).warning)
+      .toBe("Source does not belong to this analysis");
+    expect(evidenceStatus({...item, retrieval_health: "unhealthy"}, context).warning)
+      .toBe("Source could not be retrieved for this analysis");
   });
   it("does not treat fixture provenance as a live retrieval", () => {
     expect(evidenceStatus({...item, synthetic: true}, context)).toMatchObject({
-      platform: "Synthetic fixture", retrieval: "Demo fixture — not a live retrieval",
+      platform: "Demo data", retrieval: "Sample data — not a live retrieval",
       recordedAt: null,
     });
   });
@@ -57,36 +64,36 @@ describe("evidence status", () => {
     {...validation, blocking_codes: ["EVIDENCE_TIMESTAMP_STALE"]},
   ])("exposes failed checks independently from retrieval", (changed) => {
     const result = evidenceStatus(item, {...context, results: [changed]});
-    expect(result.validation).not.toBe("Evidence policy checks passed");
+    expect(result.validation).not.toBe("Required checks passed");
     expect(result.warning).not.toBeNull();
   });
   it("does not select arbitrarily between duplicate validation results", () => {
     expect(evidenceStatus(item, {...context, results: [validation, validation]}).validation)
-      .toBe("Validation result unavailable");
+      .toBe("Check result unavailable");
   });
   it("warns when a synthetic fixture has invalid policy evidence", () => {
     const result = evidenceStatus({...item, synthetic: true}, {
       ...context,
       results: [{...validation, freshness: "stale"}],
     });
-    expect(result.retrieval).toBe("Demo fixture — not a live retrieval");
+    expect(result.retrieval).toBe("Sample data — not a live retrieval");
     expect(result.warning).not.toBeNull();
-    expect(result.validation).not.toBe("Evidence policy checks passed");
+    expect(result.validation).not.toBe("Required checks passed");
   });
   it("warns for synthetic evidence with the wrong analysis binding", () => {
     const result = evidenceStatus({...item, synthetic: true, case_id: "other"}, context);
-    expect(result.warning).toBe("Source does not match this analysis");
-    expect(result.retrieval).toBe("Demo fixture — not a live retrieval");
+    expect(result.warning).toBe("Source does not belong to this analysis");
+    expect(result.retrieval).toBe("Sample data — not a live retrieval");
   });
   it("warns when synthetic retrieval health is unhealthy", () => {
     const result = evidenceStatus({...item, synthetic: true, retrieval_health: "unhealthy"}, context);
-    expect(result.warning).toBe("Source retrieval failed");
+    expect(result.warning).toBe("Source could not be retrieved for this analysis");
   });
   it("warns for missing or duplicate validation results", () => {
     expect(evidenceStatus({...item, synthetic: true}, {...context, results: []}).warning)
-      .toBe("Validation result unavailable");
+      .toBe("Check result unavailable for this source");
     expect(evidenceStatus({...item, synthetic: true}, {...context, results: [validation, validation]}).warning)
-      .toBe("Validation result unavailable");
+      .toBe("Check result unavailable for this source");
   });
   it("keeps valid fallback server evidence distinct from fixtures", () => {
     const result = evidenceStatus({...item, source_system: "server", runtime_mode: "fallback"}, {
@@ -101,7 +108,7 @@ describe("evidence status", () => {
       ...context,
       results: [{...validation, requirement: "contextual", authoritative: false}],
     });
-    expect(result.validation).toBe("Supporting context — not authoritative evidence");
+    expect(result.validation).toBe("Context only — not authoritative evidence");
     expect(result.warning).toBeNull();
   });
   it("does not accept non-authoritative required evidence", () => {
@@ -109,7 +116,7 @@ describe("evidence status", () => {
       ...context,
       results: [{...validation, authoritative: false}],
     });
-    expect(result.validation).toBe("Not accepted as authoritative evidence");
+    expect(result.validation).toBe("Required checks did not pass");
     expect(result.warning).not.toBeNull();
   });
   it.each([
@@ -134,7 +141,7 @@ describe("evidence status", () => {
       changedContext,
     );
     expect(result.retrieval).not.toBe("Retrieved for this analysis");
-    expect(result.validation).not.toBe("Evidence policy checks passed");
+    expect(result.validation).not.toBe("Required checks passed");
     expect(result.warning).not.toBeNull();
   });
 });

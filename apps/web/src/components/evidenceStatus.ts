@@ -21,7 +21,7 @@ function instant(value: string | null): number {
 
 export function evidenceStatus(item: StatusItem, context: StatusContext): EvidenceStatus {
   const fixture = item.synthetic;
-  const platform = fixture ? "Synthetic fixture" :
+  const platform = fixture ? "Demo data" :
     item.source_system === "work_iq" ? "Work IQ" :
     item.source_system === "fabric" ? "Microsoft Fabric" : "Other source";
   const bound = item.case_id === context.case_id &&
@@ -38,26 +38,27 @@ export function evidenceStatus(item: StatusItem, context: StatusContext): Eviden
     check.freshness === "current" && check.business_validity === "valid" &&
     check.uncertainty_state !== "conflicted" && check.retrieval_health === "healthy" &&
     check.blocking_codes.length === 0;
-  const warning = !bound ? "Source does not match this analysis" :
-    item.retrieval_health !== "healthy" ? "Source retrieval failed" :
-    !inWindow ? "Retrieval time unavailable or outside this analysis" :
-    !check ? "Validation result unavailable" :
-    check.retrieval_health !== "healthy" ? "Evidence validation retrieval failed" :
-    check.uncertainty_state === "conflicted" ? "Conflicting evidence needs review" :
-    check.freshness !== "current" ? "Evidence freshness check failed" :
-    check.business_validity !== "valid" ? "Evidence is not valid for this scenario date" :
+  const warning = !bound ? "Source does not belong to this analysis" :
+    item.retrieval_health !== "healthy" ? "Source could not be retrieved for this analysis" :
+    !inWindow ? "Retrieval time is unavailable or does not match this analysis" :
+    !check ? "Check result unavailable for this source" :
+    check.retrieval_health !== "healthy" ? "Source checks could not be completed" :
+    check.uncertainty_state === "conflicted" ? "Sources conflict and need review" :
+    check.freshness !== "current" ? "Source is not current for this analysis" :
+    check.business_validity !== "valid" ? "Source does not apply to this scenario date" :
     check.requirement === "required_authoritative" && !check.authoritative ?
-      "Evidence authority check failed" :
-    check.blocking_codes.length > 0 ? "Evidence checks need attention" : null;
+      "Source cannot support this analysis requirement" :
+    check.blocking_codes.length > 0 ? "Source checks need attention" : null;
   return {
     platform,
-    retrieval: fixture ? "Demo fixture — not a live retrieval" :
+    retrieval: fixture ? "Sample data — not a live retrieval" :
       retrieved ? (context.runtime_mode === "fallback" ? "Recorded for this analysis (fallback)" :
         "Retrieved for this analysis") : "Retrieval not verified for this analysis",
     recordedAt: retrieved && !fixture ? item.retrieved_at : null,
     validation: passed ? (check?.requirement === "contextual" ?
-      "Supporting context — not authoritative evidence" : "Evidence policy checks passed") :
-      !check ? "Validation result unavailable" : "Not accepted as authoritative evidence",
+      "Context only — not authoritative evidence" : "Required checks passed") :
+      !check ? "Check result unavailable" : check.requirement === "contextual" ?
+        "Context checks did not pass" : "Required checks did not pass",
     warning,
   };
 }

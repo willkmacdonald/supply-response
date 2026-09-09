@@ -109,6 +109,7 @@ describe("live journey safety", () => {
     };
     const view = <CaseHeader runtime={runtime} caseInstance={caseInstance} analysis={null} createPurpose="showcase" creating={false} analyzing={false} onCreate={vi.fn()} onAnalyze={vi.fn()} />;
     const {rerender} = render(view);
+    expect(screen.getByText("Live-service mode")).toBeVisible();
     const link = screen.getByRole("link", {name: "Open case dashboard"});
     const url = new URL(link.getAttribute("href")!);
     expect(url.origin + url.pathname).toBe(`${runtime.power_bi_url}/command-center`);

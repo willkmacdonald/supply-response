@@ -106,7 +106,8 @@ export function InvestigationEvidence({
         label={label}
       />
     ));
-  const card = (title: string, content: ReactNode, items: EvidenceItem[]) => (
+  const card = (title: string, content: ReactNode, items: EvidenceItem[], footerNote =
+    "Snapshot used for this analysis. Separate source retrieval and check details are not recorded.") => (
     <article className="evidence-card">
       <h3>{title}</h3>
       {content}
@@ -114,8 +115,7 @@ export function InvestigationEvidence({
         <EvidenceFooters items={items} analysis={analysis} />
       ) : (
         <footer className="saved-analysis-footer">
-          Saved analysis snapshot. Separate source retrieval and validation
-          details unavailable.
+          {footerNote}
         </footer>
       )}
     </article>
@@ -160,39 +160,36 @@ export function InvestigationEvidence({
             <p>
               {d
                 ? supplier(d.supplier_id)
-                : "Supplier identity unavailable in the saved disruption"}
+                : "Supplier details aren't available for this analysis"}
             </p>
             {d ? (
               <>
                 <p>
-                  Saved disruption: {number(d.original_quantity)} component
-                  units were due {calendar(d.original_due_date)} at{" "}
-                  {plant(d.plant_id)}.
+                  Original delivery: {number(d.original_quantity)} component
+                  units of {d.part_id} were due at {plant(d.plant_id)} on{" "}
+                  {calendar(d.original_due_date)}.
                 </p>
-                <p>
-                  Component: {d.part_id}. Recorded partial supply:{" "}
-                  {number(d.partial_quantity)} units; date:{" "}
-                  {calendar(d.partial_due_date)}.
-                </p>
-                <p>
-                  Original delivery affected: {number(d.original_quantity)}{" "}
-                  component units.
-                </p>
+                <p>The original delivery is at risk in this disruption.</p>
+                <p>{d.recovery_date === null
+                  ? "No date recorded for full recovery"
+                  : `Full recovery date recorded: ${calendar(d.recovery_date)}`}</p>
                 <details>
                   <summary>Disruption source details</summary>
                   <p>
-                    A partial receipt dated after the original due date does not
-                    establish an on-time delivery.
+                    Partial quantity field: {number(d.partial_quantity)} component
+                    units. Partial date field: {calendar(d.partial_due_date)}.
                   </p>
+                  <p>The full original quantity remains affected. These fields do
+                    not establish an on-time receipt and do not replace the
+                    separate proposed expedite response.</p>
                   <p>
                     Source reference: {d.source_ref}. Purchase-order line:{" "}
                     {d.po_line_id}.
                   </p>
                 </details>
-                <p>Saved recovery date: {calendar(d.recovery_date)}.</p>
               </>
             ) : (
-              <p>Saved disruption details unavailable</p>
+              <p>Disruption details aren't available for this analysis</p>
             )}
             {supplierItems.length ? (
               sources(
@@ -250,17 +247,14 @@ export function InvestigationEvidence({
                 </details>
               </>
             ) : (
-              <p>Available stock unavailable in the saved snapshot</p>
+              <p>Stock details aren't available for this analysis</p>
             )}
-            <p>
-              Inventory record snapshot used for this analysis; a separate
-              record retrieval time is unavailable.
-            </p>
             {stockUrl && <a href={stockUrl} target="_blank" rel="noopener noreferrer">
               Explore available stock in Power BI
             </a>}
           </>,
           [],
+          "Stock amounts come from the snapshot used for this analysis. A separate inventory retrieval time is not recorded.",
         )}
         {card(
           "What does that put at risk?",
@@ -369,32 +363,32 @@ export function InvestigationEvidence({
           {s ? (
             <>
               <p>
-                Scheduled receipt: {number(s.quantity)} component units on{" "}
+                Proposed response: {number(s.quantity)} component units of{" "}
+                {s.part_id} could arrive at {plant(s.plant_id)} on{" "}
                 {calendar(s.due_date)}.
               </p>
               <p>
-                {s.part_id} to {plant(s.plant_id)}; incremental cost{" "}
-                {s.incremental_cost_per_unit} per unit (currency not specified).
+                Additional cost: {money(s.incremental_cost_per_unit)} per
+                component unit.
               </p>
             </>
           ) : (
-            <p>Saved partial shipment unavailable</p>
+            <p>Shipment details aren't available for this analysis</p>
           )}
           <p>
-            The scheduled receipt and supplier statement have separate source
-            roles; a receipt is not an approval.
+            This proposed shipment is a response option under review, not an
+            approved action.
           </p>
           {d && (
-            <p>
-              Remaining recovery date in the saved plan:{" "}
-              {calendar(d.recovery_date)}.
-            </p>
+            <p>{d.recovery_date === null
+              ? "No date recorded for full recovery"
+              : `Full recovery date recorded: ${calendar(d.recovery_date)}`}</p>
           )}
           {supplierItems.length ? (
             sources(
               supplierItems,
               s
-                ? "Supplier email — RL-Supplier Alpha — Current supplier (scenario role)"
+                ? "Supplier email — RL-Supplier Alpha — Current supplier"
                 : "Supplier email",
             )
           ) : (
@@ -423,7 +417,7 @@ export function InvestigationEvidence({
               </p>
             </>
           ) : (
-            <p>Saved plant transfer unavailable</p>
+            <p>Plant transfer details aren't available for this analysis</p>
           )}
           {transfer && sources([transfer.item], "Transfer record")}
           <SupportingRecordDetails result={transfer?.result ?? unavailable} runtime={runtime} />
@@ -456,16 +450,13 @@ export function InvestigationEvidence({
               </p>
             </>
           ) : (
-            <p>Saved supplier qualification unavailable</p>
+            <p>Supplier qualification details aren't available for this analysis</p>
           )}
           {qualification &&
             sources([qualification.item], "Qualification record")}
           {qualityItems.length ? (
             <>
-              <p>
-                Scenario role: Jordan Lee — Quality Manager. Author identity is
-                not a separate verified field in this saved payload.
-              </p>
+              <p>Scenario contact: Jordan Lee — Quality Manager.</p>
               {sources(qualityItems, "Quality Teams post")}
             </>
           ) : (

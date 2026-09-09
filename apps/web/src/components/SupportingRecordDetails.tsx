@@ -67,7 +67,9 @@ export function SupportingRecordDetails({result, runtime = null}: {result: Suppo
       <summary>View {r.kind} record</summary>
       <p>Snapshot used for this analysis</p>
       <p>Demo corpus — fictional</p>
-      <p>{result.provenance}</p>
+      <p>{result.provenance === "Demo fixture — not a live retrieval"
+        ? "Sample data — not a live retrieval"
+        : result.provenance}</p>
       <p>In this scenario, as of {instant(result.scenarioEffectiveTime)}</p>
       {list(rows)}
       {r.kind === "qualification" && <p>A review date is not an approval or delivery date.</p>}

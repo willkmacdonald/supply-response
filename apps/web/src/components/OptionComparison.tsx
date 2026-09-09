@@ -18,16 +18,16 @@ export function OptionComparison({analysis, selectedOption, onSelect, snapshot =
       }) : null;
   const options = [...analysis.response_options].sort((a, b) => Number(b.option_kind === "no_mitigation") - Number(a.option_kind === "no_mitigation"));
   return <section className="panel investigation-card" aria-labelledby="options-heading"><h3 id="options-heading">Compare the options.</h3>
-    {!options.some(option => option.option_kind === "no_mitigation") && <p>Do-nothing baseline unavailable in this saved analysis</p>}
+    {!options.some(option => option.option_kind === "no_mitigation") && <p>Do-nothing comparison unavailable for this analysis</p>}
     <div className="planner-options">{options.map(option => { const name = optionDisplayName(option); const baseline = option.option_kind === "no_mitigation"; return <article aria-label={name} className={`option-card ${!option.executable ? "blocked" : ""}`} key={option.option_id}>
       <h4>{name}</h4>{option.option_id === analysis.ranking.recommended_option_id && <span className="badge accent">Recommended for review</span>}
       <p>{baseline ? "Comparison only" : option.executable ? "Meets the planning requirements" : "Does not meet the planning requirements"}</p>
       {option.blocking_codes.length > 0 && <ul>{option.blocking_codes.map(code => <li key={code}>{blocker(code)}</li>)}</ul>}
       <PredictionSummary predicted={option.predicted} snapshot={snapshot} basis={baseline ? "baseline" : "response"} compact />
-      <details><summary>Full option metrics, assumptions, and calculation details</summary><PredictionSummary predicted={option.predicted} snapshot={snapshot} basis={baseline ? "baseline" : "response"} /><ul>{option.assumptions.map((text, index) => <li key={index}>{text}</li>)}</ul><p>Execution risk score: {option.execution_risk}</p><p>Source records: {option.source_data_lineage.join(", ") || "Unavailable"}</p></details>
+      <details><summary>Full option metrics, assumptions, and calculation details</summary><PredictionSummary predicted={option.predicted} snapshot={snapshot} basis={baseline ? "baseline" : "response"} />{option.assumptions.length > 0 && <><h5>Assumptions and unresolved questions</h5><ul>{option.assumptions.map((text, index) => <li key={index}>{text}</li>)}</ul></>}<p>Execution risk score: {option.execution_risk}</p><p>Source records: {option.source_data_lineage.join(", ") || "Unavailable"}</p></details>
       <button type="button" disabled={!option.executable} aria-pressed={selectedOption?.option_id === option.option_id} onClick={() => onSelect(option)}>Select {name}</button>
     </article>;})}</div>
-    <details className="trace"><summary>How the saved analysis ranked the options</summary>{analysis.ranking.stages.length === 0 ? <p>No options were eliminated by ranking stages.</p> : <ol>{analysis.ranking.stages.map((stage, index) => <li key={`${stage.comparator}-${index}`}>{stage.comparator.replaceAll("_", " ")}: threshold {stage.threshold}; eliminated {stage.eliminated_option_ids.join(", ") || "none"}</li>)}</ol>}</details>
+    <details className="trace"><summary>How the options were compared</summary>{analysis.ranking.stages.length === 0 ? <p>No options were eliminated by comparison stages.</p> : <ol>{analysis.ranking.stages.map((stage, index) => <li key={`${stage.comparator}-${index}`}>{stage.comparator.replaceAll("_", " ")}: threshold {stage.threshold}; eliminated {stage.eliminated_option_ids.join(", ") || "none"}</li>)}</ol>}</details>
     {reportUrl && <a href={reportUrl} target="_blank" rel="noopener noreferrer">Explore response options in Power BI</a>}
-    <footer className="saved-analysis-footer">Saved analysis comparison; selection is not approval or execution.</footer></section>;
+    <footer className="saved-analysis-footer">Comparison from this analysis; selection is not approval or execution.</footer></section>;
 }

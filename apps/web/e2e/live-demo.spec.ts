@@ -36,7 +36,7 @@ test("canonical live showcase journey", async ({page, context}) => {
   });
 
   await page.goto("/?purpose=showcase");
-  await expect(page.getByText("Live mode")).toBeVisible();
+  await expect(page.getByText("Live-service mode")).toBeVisible();
   await page.getByRole("button", {name: "Create showcase case"}).click();
   await page.getByRole("button", {name: "Analyze disruption"}).click();
   await expect(page.getByRole("heading", {name: "Evidence items"})).toBeVisible({timeout: 90_000});

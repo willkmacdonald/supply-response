@@ -86,15 +86,15 @@ const analysis: AnalysisVersion = {
 it("shows recorded UTC time without claiming ongoing monitoring", () => {
   const {container, rerender} = render(<EvidenceFooter status={{
     platform: "Work IQ", retrieval: "Retrieved for this analysis",
-    recordedAt: "2026-09-08T15:00:00Z", validation: "Evidence policy checks passed",
+    recordedAt: "2026-09-08T15:00:00Z", validation: "Required checks passed",
     warning: null,
   }} />);
   expect(screen.getByText("Work IQ")).toBeInTheDocument();
   expect(container.querySelector("time")).toHaveAttribute("datetime", "2026-09-08T15:00:00Z");
   expect(container.textContent).toContain("UTC");
   expect(container.textContent).not.toMatch(/Checking now|certain|healthy/);
-  rerender(<EvidenceFooter status={{platform: "Synthetic fixture",
-    retrieval: "Demo fixture — not a live retrieval", recordedAt: null,
+  rerender(<EvidenceFooter status={{platform: "Demo data",
+    retrieval: "Sample data — not a live retrieval", recordedAt: null,
     validation: "Fixture evidence", warning: null}} />);
   expect(container.querySelector("time")).toBeNull();
 });
@@ -102,11 +102,11 @@ it("shows recorded UTC time without claiming ongoing monitoring", () => {
 it("renders fractional UTC timestamps and omits a missing timestamp", () => {
   const {container, rerender} = render(<EvidenceFooter status={{
     platform: "Work IQ", retrieval: "Retrieved for this analysis",
-    recordedAt: "2026-09-08T15:00:00.125Z", validation: "Evidence policy checks passed", warning: null,
+    recordedAt: "2026-09-08T15:00:00.125Z", validation: "Required checks passed", warning: null,
   }} />);
   expect(container.querySelector("time")).toHaveAttribute("datetime", "2026-09-08T15:00:00.125Z");
   expect(container.querySelector("time")).toHaveTextContent("Sep 8, 2026, 3:00 PM UTC");
-  rerender(<EvidenceFooter status={{platform: "Work IQ", retrieval: "Retrieval not verified for this analysis", recordedAt: null, validation: "Validation result unavailable", warning: "Retrieval time unavailable or outside this analysis"}} />);
+  rerender(<EvidenceFooter status={{platform: "Work IQ", retrieval: "Retrieval not verified for this analysis", recordedAt: null, validation: "Check result unavailable", warning: "Retrieval time is unavailable or does not match this analysis"}} />);
   expect(container.querySelector("time")).toBeNull();
 });
 
@@ -121,7 +121,7 @@ it("places the citation before the footer and keeps warnings beside the claim", 
 
   rerender(<EvidencePanel analysis={{...analysis, evidence_items: [{...evidence, retrieved_for_analysis_id: "OLD-ANALYSIS"}]}} tenantSharePointHost="tenant.sharepoint.com" />);
   const warning = screen.getByRole("alert", {name: ""});
-  expect(warning).toHaveTextContent("Source does not match this analysis");
+  expect(warning).toHaveTextContent("Source does not belong to this analysis");
   expect(screen.getByRole("heading", {name: evidence.claim}).nextElementSibling).toContainElement(warning);
   expect(warning).toBeVisible();
   const mismatchFooter = screen.getByRole("contentinfo", {name: "Source and evidence status"});
