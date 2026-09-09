@@ -51,6 +51,36 @@ def rows(engine, query, **parameters):
         return list(connection.execute(text(query), parameters).mappings())
 
 
+def test_sql_readiness_and_explicit_report_inventory(engine):
+    from integrations.fabric.health import check_fabric_health
+
+    assert check_fabric_health(engine).schema_version == 12
+    assert (
+        rows(
+            engine,
+            "SELECT OBJECT_ID(N'analytics.report_scalar',N'FN') AS object_id",
+        )[0]["object_id"]
+        is not None
+    )
+    expected = {
+        "saved_analyses",
+        "saved_options",
+        "saved_records",
+        "saved_record_evidence",
+        "case_reporting",
+    }
+    actual = rows(
+        engine,
+        "SELECT v.name FROM sys.views v JOIN sys.schemas s ON s.schema_id=v.schema_id "
+        "WHERE s.name='analytics'",
+    )
+    assert expected <= {row["name"] for row in actual}
+    for view in sorted(expected):
+        # Names come from a constant allowlist, never user input.
+        columns = rows(engine, f"SELECT TOP (0) * FROM analytics.{view}")
+        assert columns == []
+
+
 def seed(engine, *, snapshot=None, options=None, recommendation="response"):
     case_id, analysis_id = str(uuid4()), str(uuid4())
     snapshot = dict(snapshot or {})
@@ -790,12 +820,18 @@ def test_exact_evidence_and_duplicate_or_missing_provenance(
             assert result["retrieved_at"] is None
 
         if family == "qualification":
-            audit = rows(
+            audit_rows = rows(
                 engine,
-                "SELECT audit_complete FROM analytics.saved_records WHERE analysis_id=:a",
+                "SELECT audit_complete FROM analytics.saved_records "
+                "WHERE case_id=:c AND analysis_id=:a AND record_family=:f "
+                "AND source_record_id=:r",
+                c=c,
                 a=a,
-            )[0]
-            assert audit["audit_complete"] is False
+                f=family,
+                r=record[key],
+            )
+            assert len(audit_rows) == 1
+            assert audit_rows[0]["audit_complete"] is False
 
     fixture = dict(
         evidence,

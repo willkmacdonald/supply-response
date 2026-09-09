@@ -493,6 +493,12 @@ IF OBJECT_ID(N'app.analysis_projection', N'V') IS NULL
     OR OBJECT_ID(N'app.decision_projection', N'V') IS NULL
     OR OBJECT_ID(N'analytics.case_command_center', N'V') IS NULL
     OR OBJECT_ID(N'analytics.action_outcomes', N'V') IS NULL
+    OR OBJECT_ID(N'analytics.report_scalar', N'FN') IS NULL
+    OR OBJECT_ID(N'analytics.saved_analyses', N'V') IS NULL
+    OR OBJECT_ID(N'analytics.saved_options', N'V') IS NULL
+    OR OBJECT_ID(N'analytics.saved_records', N'V') IS NULL
+    OR OBJECT_ID(N'analytics.saved_record_evidence', N'V') IS NULL
+    OR OBJECT_ID(N'analytics.case_reporting', N'V') IS NULL
     THROW 51000, 'Required analytics views are missing.', 1;
 
 UPDATE app.schema_version

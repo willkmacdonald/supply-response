@@ -167,6 +167,26 @@ def test_schemas_views_and_version_publication_are_idempotent():
     assert "@@ROWCOUNT" not in analytics
 
 
+def test_final_guard_requires_scalar_validator_and_saved_reporting_views():
+    analytics = ANALYTICS.read_text(encoding="utf-8")
+    guard_start = analytics.index("IF OBJECT_ID(N'app.analysis_projection'")
+    guard_end = analytics.index(
+        "THROW 51000, 'Required analytics views are missing.'", guard_start
+    )
+    guard = analytics[guard_start:guard_end]
+
+    required = [
+        "OR OBJECT_ID(N'analytics.report_scalar', N'FN') IS NULL",
+        "OR OBJECT_ID(N'analytics.saved_analyses', N'V') IS NULL",
+        "OR OBJECT_ID(N'analytics.saved_options', N'V') IS NULL",
+        "OR OBJECT_ID(N'analytics.saved_records', N'V') IS NULL",
+        "OR OBJECT_ID(N'analytics.saved_record_evidence', N'V') IS NULL",
+        "OR OBJECT_ID(N'analytics.case_reporting', N'V') IS NULL",
+    ]
+    for term in required:
+        assert term in guard
+
+
 def test_operational_version_publication_advances_to_11_without_downgrade():
     version_batch = " ".join(
         split_go_batches(OPERATIONAL.read_text(encoding="utf-8"))[-1].lower().split()
