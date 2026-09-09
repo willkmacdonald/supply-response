@@ -49,8 +49,9 @@ database was removed. The comparison column is implemented at `5a57e36`, with
 an explicit neutrality test strengthened at `4a365c7`. The focused report/model
 suite passes 185 tests, full non-live Python passes 1,182 tests, and the web suite
 passes 226 tests plus the production build. The final focused test and generated
-page equality rerun passed two tests. Final independent review is in progress.
-No native DAX/rendering or live publication is implied.
+page equality rerun passed two tests. Final independent whole-branch re-review
+through `1ef0aaf` approved local readiness with no remaining critical or important
+findings. No native DAX/rendering or live publication is implied.
 
 Native serialization is now established by Microsoft's authored Power BI Visuals sample, with formatting confirmed by official `@microsoft/powerbi-report-authoring-cli@0.1.4` and its `@microsoft/powerbi-core-visual-schema@0.1.1` dependency. The sample uses `actionButton`, `visualContainerObjects.visualLink`, and literal expressions for `show`, `type='PageNavigation'`, and `navigationSection='<page name>'`. The concrete helper below follows that artifact, not an inferred schema value. Its source artifact uses visualContainer 2.7.0; this project's generator uses pinned 2.9.0 and must validate the resulting structure against that version.
 

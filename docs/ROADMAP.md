@@ -35,7 +35,8 @@ baseline recorded below.
   **Customer orders protected** comparison column. The latest private-VM SQL
   run passes **137 tests**, including the new no-feasible and legacy-analysis
   cases; its disposable database was removed. The focused report/model suite
-  passes **185 tests**. Final independent review is in progress.
+  passes **185 tests**. Final independent whole-branch review approved local
+  readiness through `1ef0aaf`, with no remaining critical or important findings.
 - Still required: coordinated publication, actual DAX/value parity, native
   layouts/navigation, Alex's access, and every card-to-source journey. No new
   reporting receipt has been issued or installed.
