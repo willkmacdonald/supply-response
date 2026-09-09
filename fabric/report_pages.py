@@ -728,8 +728,47 @@ def encoded(value):
     return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
 
 
+def check_output_paths(definition, expected):
+    for directory in (definition, *definition.parents):
+        if directory.is_symlink():
+            raise ValueError("Refusing symbolic-link output path")
+        if directory.exists() and not directory.is_dir():
+            raise ValueError("Report parent is not a directory")
+    expected_dirs = {
+        parent.as_posix()
+        for name in expected
+        for parent in Path(name).parents
+        if parent.as_posix() != "."
+    }
+    for relative in expected:
+        target = definition / relative
+        if target.is_symlink():
+            raise ValueError("Refusing symbolic-link output path")
+        if target.exists() and not target.is_file():
+            raise ValueError("Report file target is not a file")
+        for directory in target.parents:
+            if directory.is_symlink():
+                raise ValueError("Refusing symbolic-link output path")
+            if directory.exists() and not directory.is_dir():
+                raise ValueError("Report parent is not a directory")
+            if directory == definition:
+                break
+    pages = definition / "pages"
+    if pages.exists():
+        for path in pages.rglob("*"):
+            relative = path.relative_to(definition).as_posix()
+            if path.is_symlink():
+                raise ValueError("Refusing symbolic-link output path")
+            if path.is_file() and relative in expected:
+                continue
+            if path.is_dir() and relative in expected_dirs:
+                continue
+            raise ValueError("Unexpected existing report page path: " + relative)
+
+
 def verify(definition):
     expected = artifacts()
+    check_output_paths(definition, expected)
     if definition.is_symlink() or (definition / "pages").is_symlink():
         raise ValueError("Report definition and pages roots must not be symbolic links")
     paths = list((definition / "pages").rglob("*"))
@@ -767,14 +806,7 @@ def main():
         verify(args.definition)
         return
     expected = artifacts()
-    # Validate all destinations before writing; never traverse a linked output directory.
-    for relative in expected:
-        target = args.definition / relative
-        for candidate in (target, *target.parents):
-            if candidate.is_symlink():
-                raise ValueError("Refusing symbolic-link output path")
-            if candidate == args.definition:
-                break
+    check_output_paths(args.definition, expected)
     # No deletion: unexpected pre-existing files require explicit reviewed migration.
     for relative, value in expected.items():
         path = args.definition / relative

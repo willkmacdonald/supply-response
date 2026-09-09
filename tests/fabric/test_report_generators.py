@@ -273,6 +273,34 @@ def test_all_dax_bindings_resolve_and_selection_gates_are_explicit():
     assert "AVERAGEX" not in variance and "REMOVEFILTERS" not in variance
 
 
+@pytest.mark.parametrize(
+    "invalid", ["target-directory", "parent-file", "extra-file", "extra-directory"]
+)
+def test_page_cli_rejects_invalid_inventory_before_writes(
+    tmp_path, monkeypatch, invalid
+):
+    import sys
+
+    expected = report_pages.artifacts()
+    first = tmp_path / "pages/pages.json"
+    first.parent.mkdir(parents=True)
+    first.write_text("sentinel", encoding="utf-8")
+    late = tmp_path / list(expected)[-1]
+    if invalid == "target-directory":
+        late.mkdir(parents=True)
+    elif invalid == "parent-file":
+        late.parent.parent.mkdir(parents=True)
+        late.parent.write_text("keep parent", encoding="utf-8")
+    elif invalid == "extra-file":
+        (tmp_path / "pages/unexpected.json").write_text("keep extra", encoding="utf-8")
+    else:
+        (tmp_path / "pages/unexpected").mkdir()
+    monkeypatch.setattr(sys, "argv", ["report_pages", str(tmp_path)])
+    with pytest.raises(ValueError):
+        report_pages.main()
+    assert first.read_text(encoding="utf-8") == "sentinel"
+
+
 def test_formats_preserve_dates_utc_zero_and_literal_m_escapes():
     assert report_model.column_format("SavedRecords", "due_date") == "MMM d, yyyy"
     assert (
@@ -442,3 +470,15 @@ def test_business_measures_are_implemented_and_use_saved_values():
     assert "DIVIDE(Observed - Predicted, ABS(Predicted))" in variance
     assert "ISBLANK(Predicted) || ISBLANK(Observed) || Predicted == 0" in variance
     assert "[Observation Row Visible] == 1" in variance
+
+
+def test_dax_variable_renaming_preserves_quoted_business_copy():
+    expression = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"][
+        "Record Explanation"
+    ]["expression"]
+    assert "A review date is not an approval or delivery date." in expression
+    assert "ScopeAnalysis review date" not in expression
+    source = 'VAR C = 1 VAR A = 2 RETURN "A ""quoted C"" message" & C & A'
+    assert report_model.rename_scope_variables(source) == (
+        'VAR ScopeCase = 1 VAR ScopeAnalysis = 2 RETURN "A ""quoted C"" message" & ScopeCase & ScopeAnalysis'
+    )

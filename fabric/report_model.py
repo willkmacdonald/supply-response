@@ -278,6 +278,21 @@ def scoped(
     )
 
 
+def rename_scope_variables(expression):
+    # DAX string literals escape a quotation mark by doubling it.
+    segments = re.split(r'("(?:[^"]|"")*")', expression)
+    return "".join(
+        segment
+        if index % 2
+        else re.sub(
+            r"\b[CA]\b",
+            lambda match: {"C": "ScopeCase", "A": "ScopeAnalysis"}[match.group()],
+            segment,
+        )
+        for index, segment in enumerate(segments)
+    )
+
+
 @dataclass(frozen=True)
 class Measure:
     expression: str
@@ -292,8 +307,7 @@ def measures():
     def add(name, expression, kind="string", fmt=None, hidden=False, table=CC):
         assert name not in result[table], name
         # Avoid R1C1-reserved single-letter C as a DAX variable name.
-        expression = re.sub(r"\bC\b", "ScopeCase", expression)
-        expression = re.sub(r"\bA\b", "ScopeAnalysis", expression)
+        expression = rename_scope_variables(expression)
         result[table][name] = Measure(expression, kind, fmt, hidden)
 
     def external(name, expression, table, kind="string"):
