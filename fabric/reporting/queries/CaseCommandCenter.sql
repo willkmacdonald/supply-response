@@ -1,0 +1,18 @@
+SELECT c.case_id,c.purpose,c.status,c.runtime_mode,
+ CONVERT(datetime2(6),SWITCHOFFSET(c.scenario_effective_time,'+00:00')) AS scenario_effective_time,
+ c.current_analysis_id,c.current_decision_id,
+ CONVERT(datetime2(6),SWITCHOFFSET(c.analysis_created_at,'+00:00')) AS analysis_created_at,c.snapshot_state,
+ c.recommended_option_id,c.baseline_option_id,c.decision_kind,c.decision_analysis_id,
+ CONVERT(datetime2(6),SWITCHOFFSET(c.decided_at,'+00:00')) AS decided_at,c.approved_option_id,
+ c.baseline_revenue_at_risk,c.baseline_otif_loss_percentage,
+ c.baseline_uncovered_part_demand,c.baseline_response_cost,
+ c.recommended_revenue_at_risk,c.recommended_otif_loss_percentage,
+ c.recommended_uncovered_part_demand,c.recommended_response_cost,
+ c.approved_revenue_at_risk,c.approved_otif_loss_percentage,
+ c.approved_uncovered_part_demand,c.approved_response_cost,
+ CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.case_id)),2) AS case_key,
+ CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.current_analysis_id)),2) AS current_analysis_key,
+ CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.current_decision_id)),2) AS current_decision_key,
+ CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.decision_analysis_id)),2) AS decision_analysis_key,
+ CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.approved_option_id)),2) AS approved_option_key
+FROM analytics.case_reporting c

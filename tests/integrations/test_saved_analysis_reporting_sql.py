@@ -868,3 +868,206 @@ def test_exact_evidence_and_duplicate_or_missing_provenance(
     assert result["provenance"] == "demo_fixture"
     assert result["synthetic"] is True
     assert result["retrieved_at"] is None
+
+
+def partition_rows(engine, table_name, case_id):
+    from pathlib import Path
+
+    assert table_name in {
+        "CaseCommandCenter",
+        "SavedAnalyses",
+        "SavedRecords",
+        "SavedOptions",
+        "ActionOutcomes",
+    }
+    query = (
+        Path(__file__).resolve().parents[2]
+        / "fabric"
+        / "reporting"
+        / "queries"
+        / f"{table_name}.sql"
+    ).read_text()
+    return rows(
+        engine, f"SELECT * FROM ({query}) AS partition_data WHERE case_id=:c", c=case_id
+    )
+
+
+def test_partition_queries_preserve_identity_and_utc_without_exposing_payload(engine):
+    from datetime import datetime
+
+    c, a, _ = seed(engine, options=[option("A'😀"), option("a'😀")])
+    analysis = partition_rows(engine, "SavedAnalyses", c)
+    assert len(analysis) == 1
+    assert analysis[0]["case_key"] == c.encode("utf-16le").hex().upper()
+    assert analysis[0]["analysis_key"] == a.encode("utf-16le").hex().upper()
+    assert analysis[0]["scenario_effective_time"] == datetime(2026, 9, 1, 14)  # noqa: DTZ001
+    assert not any(key.endswith("_json") for key in analysis[0])
+    options = partition_rows(engine, "SavedOptions", c)
+    assert {r["option_key"] for r in options} == {
+        identity.encode("utf-16le").hex().upper() for identity in ("A'😀", "a'😀")
+    }
+    assert all(r["response_cost"] == Decimal(0) for r in options)
+    assert all(r["executable"] is False for r in options)
+    for table in ("CaseCommandCenter", "SavedRecords", "ActionOutcomes"):
+        result = partition_rows(engine, table, c)
+        assert all(r["case_id"] == c for r in result)
+        assert all(not any(key.endswith("_json") for key in r) for r in result)
+
+
+def test_partition_stock_and_customer_membership_follow_saved_planning_scope(engine):
+    from datetime import date
+
+    disruption = {
+        "disruption_id": "signal",
+        "supplier_id": "supplier",
+        "part_id": "Part",
+        "plant_id": "Plant",
+        "po_line_id": "po",
+        "source_ref": "source",
+        "original_quantity": 100,
+        "partial_quantity": 0,
+        "original_due_date": "2026-09-02",
+        "partial_due_date": None,
+        "recovery_date": None,
+    }
+
+    def inventory(identity, part):
+        return {
+            "inventory_id": identity,
+            "part_id": part,
+            "plant_id": "Plant",
+            "on_hand": 10,
+            "quality_hold": 2,
+            "protected_allocation": 3,
+        }
+
+    production = {
+        "production_order_id": "production",
+        "product_id": "product",
+        "plant_id": "OtherPlant",
+        "quantity": 10,
+        "due_date": "2026-09-03",
+        "component_demand": 10,
+        "customer_priority": 1,
+        "customer_revenue": "200.00",
+        "customer_margin": "20.00",
+    }
+
+    def customer(identity, production_id):
+        return {
+            "customer_order_line_id": identity,
+            "customer_order_id": identity,
+            "production_order_id": production_id,
+            "customer_id": "customer",
+            "product_id": "product",
+            "plant_id": "OtherPlant",
+            "quantity": 10,
+            "due_date": "2026-09-03",
+            "unit_revenue": "5.00",
+            "unit_margin": "1.00",
+        }
+
+    c, a, _ = seed(
+        engine,
+        snapshot={
+            "disruption": disruption,
+            "inventory_positions": [
+                inventory("stock", "Part"),
+                inventory("wrong-case", "part"),
+            ],
+            "production_orders": [production],
+            "customer_orders": [
+                customer("linked", "production"),
+                customer("unlinked", "Production"),
+            ],
+        },
+    )
+    records = partition_rows(engine, "SavedRecords", c)
+    by_id = {r["source_record_id"]: r for r in records}
+    assert by_id["stock"]["in_disruption_scope"] is True
+    assert by_id["stock"]["usable_inventory"] == 5
+    assert by_id["wrong-case"]["in_disruption_scope"] is False
+    assert by_id["production"]["in_disruption_scope"] is True
+    assert by_id["linked"]["in_disruption_scope"] is True
+    assert by_id["unlinked"]["in_disruption_scope"] is False
+    assert by_id["linked"]["due_date"] == date(2026, 9, 3)
+    assert by_id["linked"]["line_revenue"] == Decimal(50)
+    assert len(records) == len(
+        {
+            (r["case_key"], r["analysis_key"], r["record_family"], r["record_key"])
+            for r in records
+        }
+    )
+    assert all(r["analysis_key"] == a.encode("utf-16le").hex().upper() for r in records)
+
+
+def test_partition_reused_source_ids_do_not_cross_case_or_analysis(engine):
+    one, a, _ = seed(engine, options=[option("same", value="1")])
+    two, b, _ = seed(engine, options=[option("same", value="2")])
+    first = partition_rows(engine, "SavedOptions", one)
+    second = partition_rows(engine, "SavedOptions", two)
+    assert first[0]["option_key"] == second[0]["option_key"]
+    assert first[0]["analysis_key"] != second[0]["analysis_key"]
+    assert first[0]["analysis_id"] == a and second[0]["analysis_id"] == b
+    assert first[0]["response_cost"] == Decimal(1)
+    assert second[0]["response_cost"] == Decimal(2)
+
+
+@pytest.mark.parametrize(
+    "field,value,output,expected",
+    [
+        (
+            "blocking_codes",
+            ["QUALITY_QUALIFICATION_PENDING"],
+            "blockers_text",
+            "Cannot use Supplier Beta yet: supplier qualification is incomplete",
+        ),
+        ("blocking_codes", [], "blockers_text", "No planning blockers recorded"),
+        ("blocking_codes", None, "blockers_text", None),
+        ("blocking_codes", {"code": "x"}, "blockers_text", None),
+        ("blocking_codes", ["x", 1], "blockers_text", None),
+        ("blocking_codes", [" "], "blockers_text", None),
+        (
+            "prerequisite_roles",
+            ["finance_approver", "quality_approver"],
+            "required_roles_text",
+            "Finance approver\nQuality approver",
+        ),
+        (
+            "assumptions",
+            ["Saved assumption", "<literal text>"],
+            "assumptions_text",
+            "Saved assumption\n<literal text>",
+        ),
+        ("protected_customer_order_ids", [], "protected_customer_order_count", 0),
+        (
+            "protected_customer_order_ids",
+            ["A", "a"],
+            "protected_customer_order_count",
+            2,
+        ),
+        (
+            "protected_customer_order_ids",
+            ["A", "A"],
+            "protected_customer_order_count",
+            None,
+        ),
+        (
+            "protected_customer_order_ids",
+            ["A", None],
+            "protected_customer_order_count",
+            None,
+        ),
+    ],
+)
+def test_partition_lists_are_ordered_validated_and_do_not_multiply_options(
+    engine, field, value, output, expected
+):
+    item = option("one")
+    target = item["predicted"] if field == "protected_customer_order_ids" else item
+    target[field] = value
+    c, _, _ = seed(engine, options=[item])
+    result = partition_rows(engine, "SavedOptions", c)
+    assert len(result) == 1
+    assert result[0][output] == expected
+    assert result[0]["response_cost"] == Decimal(0)
