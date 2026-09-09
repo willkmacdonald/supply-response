@@ -50,12 +50,15 @@ def runtime_payload(
     *,
     receipt=None,
     url=URL,
+    composed_url=None,
     server=SERVER,
     database=DATABASE,
     verified=True,
     health="ready",
     mode=RuntimeMode.LIVE,
 ):
+    if composed_url is None:
+        composed_url = url
     settings = Settings(
         runtime_mode=mode,
         database_url=f"sqlite:///{tmp_path / 'runtime.db'}",
@@ -80,7 +83,7 @@ def runtime_payload(
                 "store": sqlite_store(settings.database_url, runtime_mode=mode),
                 "analysis_service": object(),
                 "auth_service": object(),
-                "power_bi_url": url,
+                "power_bi_url": composed_url,
                 "readiness": Readiness(),
             },
         )
@@ -88,7 +91,7 @@ def runtime_payload(
         services = build_composition(settings)
         # Even an erroneously injected positive readiness cannot enable fallback.
         services.readiness = Readiness()
-        services.power_bi_url = url
+        services.power_bi_url = composed_url
     with TestClient(create_app(services=services)) as client:
         response = client.get("/api/runtime")
         assert response.status_code == 200
@@ -98,6 +101,30 @@ def runtime_payload(
 def test_exact_release_attestation_exposes_contract(tmp_path):
     payload = runtime_payload(tmp_path, receipt=receipt_for())
     assert payload["power_bi_available"] is True
+    assert payload["deployment_contract"][KEY] == CONTRACT
+
+
+def test_raw_settings_url_receipt_does_not_attest_composed_report_url(tmp_path):
+    composed_url = URL.replace("22222222", "33333333")
+    payload = runtime_payload(
+        tmp_path,
+        url=URL,
+        composed_url=composed_url,
+        receipt=receipt_for(url=URL),
+    )
+    assert payload["power_bi_url"] == composed_url
+    assert KEY not in payload["deployment_contract"]
+
+
+def test_composed_report_url_receipt_attests_composed_report_url(tmp_path):
+    composed_url = URL.replace("22222222", "33333333")
+    payload = runtime_payload(
+        tmp_path,
+        url=URL,
+        composed_url=composed_url,
+        receipt=receipt_for(url=composed_url),
+    )
+    assert payload["power_bi_url"] == composed_url
     assert payload["deployment_contract"][KEY] == CONTRACT
 
 
