@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, setAccessTokenProvider } from "./api";
+import { ApiRequestError, api, safeErrorMessage, setAccessTokenProvider } from "./api";
 import type { AnalysisVersion, ResponseOption } from "./types";
 
 afterEach(() => {
@@ -8,6 +8,57 @@ afterEach(() => {
 });
 
 describe("API client", () => {
+  it("maps live source failures to safe display copy without leaking diagnostics", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      detail: {
+        code: "LIVE_SOURCE_UNAVAILABLE",
+        message: "Internal exception: tenant secret failed",
+        traceback: "SensitiveTraceback",
+      },
+    }), {status: 503, headers: {"Content-Type": "application/json"}})));
+
+    await expect(api.runtime()).rejects.toThrow(
+      "The information needed for this analysis could not be retrieved.",
+    );
+
+    await api.runtime().catch((error: unknown) => {
+      expect(String(error)).not.toContain("tenant secret");
+      expect(String(error)).not.toContain("SensitiveTraceback");
+      expect(String(error)).not.toContain("LIVE_SOURCE_UNAVAILABLE");
+    });
+  });
+
+  it("uses a generic safe message for unknown JSON and HTML failures", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        detail: {code: "UNKNOWN_FAILURE", exception: "DatabaseError: password=secret"},
+      }), {status: 500, headers: {"Content-Type": "application/json"}}))
+      .mockResolvedValueOnce(new Response("<html><body>proxy secret traceback</body></html>", {
+        status: 502,
+        headers: {"Content-Type": "text/html"},
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(api.runtime()).rejects.toThrow("The request could not be completed.");
+    await expect(api.runtime()).rejects.toThrow("The request could not be completed.");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["constructor", "toString"])("does not treat inherited key %s as a safe error code", async (code) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({detail: {code}}), {
+      status: 500,
+      headers: {"Content-Type": "application/json"},
+    })));
+
+    await expect(api.runtime()).rejects.toThrow("The request could not be completed.");
+  });
+
+  it("derives display copy from the allowlisted code rather than a mutable error message", () => {
+    const error = new ApiRequestError("untrusted mutable message", 503, "LIVE_SOURCE_UNAVAILABLE");
+    expect(safeErrorMessage(error)).toBe("The information needed for this analysis could not be retrieved.");
+  });
+
   it("attaches fresh bearer tokens dynamically without persistence", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ok: true, json: async () => ({runtime_mode: "fallback"})})

@@ -50,7 +50,7 @@ export function CaseHeader({
     <div>
       <p className="eyebrow">RL-001 · Supply disruption response</p>
       <h1>Progressive Case workspace</h1>
-      {caseInstance && <p className="case-id">{caseInstance.case_id}</p>}
+      {caseInstance && <details><summary>Case details</summary><p>Case {caseInstance.case_id}</p></details>}
     </div>
     <div className="provenance" aria-label="Runtime provenance">
       {runtime && <span className={`badge badge-${runtime.runtime_mode}`}>

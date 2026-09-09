@@ -13,6 +13,30 @@ import type {
 
 export const API_BASE = "";
 
+const SAFE_ERROR_MESSAGES = new Map<string, string>([
+  ["LIVE_SOURCE_UNAVAILABLE", "The information needed for this analysis could not be retrieved."],
+]);
+const GENERIC_ERROR_MESSAGE = "The request could not be completed.";
+
+function messageForCode(code: string | null): string {
+  return code ? SAFE_ERROR_MESSAGES.get(code) ?? GENERIC_ERROR_MESSAGE : GENERIC_ERROR_MESSAGE;
+}
+
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string | null,
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
+export function safeErrorMessage(error: unknown): string {
+  return error instanceof ApiRequestError ? messageForCode(error.code) : GENERIC_ERROR_MESSAGE;
+}
+
 type AccessTokenProvider = () => Promise<string | null>;
 let accessTokenProvider: AccessTokenProvider = async () => null;
 
@@ -23,8 +47,14 @@ export function setAccessTokenProvider(provider: AccessTokenProvider): void {
 async function json<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const errorBody = await response.json().catch(() => null) as {detail?: unknown} | null;
-    const detail = errorBody?.detail ? ` ${JSON.stringify(errorBody.detail)}` : "";
-    throw new Error(`API request failed: ${response.status}${detail}`);
+    const detail = errorBody?.detail;
+    const code = typeof detail === "object" && detail !== null && "code" in detail
+      && typeof detail.code === "string" ? detail.code : null;
+    throw new ApiRequestError(
+      messageForCode(code),
+      response.status,
+      code,
+    );
   }
   return response.json() as Promise<T>;
 }

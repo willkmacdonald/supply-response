@@ -9,10 +9,35 @@ interface ExecutionPanelProps {
   onRetryAction: (actionId: string) => void;
 }
 
+const actionNames = new Map<string, string>([
+  ["prepare_alpha_recovery_draft", "Prepare supplier recovery draft"],
+  ["coordinate_alpha_expedited_partial", "Coordinate expedited partial shipment"],
+  ["transfer_dallas_to_chicago", "Transfer stock from Dallas to Chicago"],
+  ["resequence_priority_production", "Prioritize production for customer needs"],
+  ["update_disruption_status", "Update disruption status"],
+]);
+
+const actionStates = new Map<string, string>([
+  ["planned", "Planned"],
+  ["in_progress", "In progress"],
+  ["completed", "Completed"],
+  ["failed", "Failed"],
+]);
+
+function actionName(kind: string): string {
+  return actionNames.get(kind) ?? "Action type not recognized";
+}
+
+function draftName(kind: string): string {
+  return kind === "alpha_recovery_request" || kind === "supplier_recovery_request"
+    ? "Supplier recovery request draft"
+    : "Draft for review";
+}
+
 export function ExecutionPanel({decision, actions, drafts, retrying, onRetry, onRetryAction}: ExecutionPanelProps) {
   if (!decision || decision.kind !== "approved") return null;
   return <section className="panel" aria-labelledby="execution-heading">
-    <p className="step">05 · Execution</p>
+    <p className="step">4. Carry out approved actions</p>
     <h2 id="execution-heading">Execution plan</h2>
     {decision.action_planning_status === "failed" && <div className="failure-banner">
       <strong>Approved — action planning failed</strong>
@@ -24,19 +49,20 @@ export function ExecutionPanel({decision, actions, drafts, retrying, onRetry, on
     {actions.length > 0 && <ol className="action-list">
       {actions.map((action) => <li data-testid="execution-action" key={action.action_id}>
         <div data-testid={`execution-action-${action.action_id}`}>
-          <div><strong>{action.kind.replaceAll("_", " ")}</strong><span>{action.status}</span></div>
-          <small>{action.action_id}</small>
+          <div><strong>{actionName(action.kind)}</strong><span>{actionStates.get(action.status) ?? "Status not recognized"}</span></div>
+          <details><summary>Action details</summary><p>Action {action.action_id}</p><p>Recorded kind: {action.kind}</p></details>
           {action.status === "failed" && <button type="button" onClick={() => onRetryAction(action.action_id)}>
-            Retry {action.kind.replaceAll("_", " ")}
+            Retry {actionName(action.kind).toLowerCase()}
           </button>}
         </div>
       </li>)}
     </ol>}
     {drafts.map((draft) => <article className="draft" key={draft.artifact_id}>
       <span className="badge danger">Unsent draft</span>
-      <h3>Draft Artifact</h3>
-      <p>{draft.subject ?? "Supplier recovery request will be filled during simulated execution."}</p>
+      <h3>{draftName(draft.artifact_kind)}</h3>
+      <p>{draft.subject ?? "No draft subject recorded."}</p>
       {draft.body && <pre>{draft.body}</pre>}
+      <details><summary>Draft details</summary><p>Draft {draft.artifact_id}</p><p>Recorded kind: {draft.artifact_kind}</p></details>
     </article>)}
   </section>;
 }

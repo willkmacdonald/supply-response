@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {api} from "../api";
+import {api, safeErrorMessage} from "../api";
 import type {
   AnalysisVersion,
   CaseInstance,
@@ -43,10 +43,6 @@ export interface CaseWorkspaceState {
   retryPlanning: () => Promise<void>;
   retryAction: (actionId: string) => Promise<void>;
   startPlayback: () => Promise<void>;
-}
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : "Unknown error";
 }
 
 const POLL_INTERVAL_MS = 250;
@@ -100,7 +96,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
       setPlayback(null);
       setObservations([]);
     } catch (caught) {
-      setError(`Unable to initialize the Case workspace. ${message(caught)}`);
+      setError(`Unable to initialize the Case workspace. ${safeErrorMessage(caught)}`);
     } finally {
       setOperation(null);
     }
@@ -111,7 +107,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     initialized.current = true;
     void api.runtime()
       .then(setRuntime)
-      .catch((caught) => setError(`Unable to initialize the Case workspace. ${message(caught)}`))
+      .catch((caught) => setError(`Unable to initialize the Case workspace. ${safeErrorMessage(caught)}`))
       .finally(() => setOperation(null));
   }, []);
 
@@ -137,7 +133,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
         controls: {...current.controls, new_analysis: false, decide: true, retry_action_planning: false, start_playback: false},
       } : current);
     } catch (caught) {
-      setError(`Analysis failed. ${message(caught)}`);
+      setError(`Analysis failed. ${safeErrorMessage(caught)}`);
     } finally {
       setOperation(null);
     }
@@ -189,7 +185,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
       } : current);
       if (planned.action_planning_status === "complete") await loadExecution(planned.decision_id);
     } catch (caught) {
-      setError(`Decision failed. ${message(caught)}`);
+      setError(`Decision failed. ${safeErrorMessage(caught)}`);
     } finally {
       setOperation(null);
     }
@@ -213,7 +209,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
         controls: {...current.controls, decide: false, new_analysis: true},
       } : current);
     } catch (caught) {
-      setError(`Decision failed. ${message(caught)}`);
+      setError(`Decision failed. ${safeErrorMessage(caught)}`);
     } finally {
       setOperation(null);
     }
@@ -245,7 +241,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
         },
       } : current);
     } catch (caught) {
-      setError(`Action planning retry failed. ${message(caught)}`);
+      setError(`Action planning retry failed. ${safeErrorMessage(caught)}`);
     } finally {
       setOperation(null);
     }
@@ -260,7 +256,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
         action.action_id === retried.action_id ? retried : action
       ));
     } catch (caught) {
-      setError(`Action retry failed. ${message(caught)}`);
+      setError(`Action retry failed. ${safeErrorMessage(caught)}`);
     }
   }, [decision]);
 
@@ -284,7 +280,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
         const nextObservations = await api.observations(decision.decision_id);
         setObservations(nextObservations);
       } catch (caught) {
-        setError(`Simulated execution failed. ${message(caught)}`);
+        setError(`Simulated execution failed. ${safeErrorMessage(caught)}`);
       } finally {
         setOperation(null);
       }

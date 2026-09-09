@@ -342,6 +342,7 @@ function mockFallbackCaseLifecycle(overrides: {
   retryDecision?: unknown;
   actions?: unknown;
   runtimeFailure?: boolean;
+  runtimeError?: Error;
 } = {}) {
   let decisionPolls = 0;
   let playbackPolls = 0;
@@ -350,8 +351,9 @@ function mockFallbackCaseLifecycle(overrides: {
     const path = new URL(url, "http://localhost").pathname;
     const method = init?.method ?? "GET";
     if (path === "/api/runtime" && method === "GET") {
+      if (overrides.runtimeError) throw overrides.runtimeError;
       return overrides.runtimeFailure
-        ? response({detail: "runtime unavailable"}, 503)
+        ? response({detail: {code: "UNKNOWN_FAILURE", exception: "DatabaseError: password=secret"}}, 503)
         : response(runtime);
     }
     if (path === "/api/cases" && method === "POST") return response(caseInstance, 201);
@@ -436,7 +438,7 @@ describe("progressive Case workspace", () => {
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     expect(await screen.findByRole("status")).toHaveTextContent("Creating Case workspace…");
     await act(async () => resolveCase(await response(caseInstance, 201)));
-    expect(await screen.findByText("RL-CASE-1")).toBeVisible();
+    expect(await screen.findByText(/RL-CASE-1/)).toBeInTheDocument();
   });
 
   it("creates only one Case under the app's StrictMode development shell", async () => {
@@ -444,7 +446,7 @@ describe("progressive Case workspace", () => {
     render(<StrictMode><App /></StrictMode>);
     await screen.findByText("Fallback mode");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
-    await screen.findByText("RL-CASE-1");
+    await screen.findByText(/RL-CASE-1/);
     const createCalls = fetchMock.mock.calls.filter(([input, init]) =>
       new URL(String(input), "http://localhost").pathname === "/api/cases" && init?.method === "POST"
     );
@@ -456,17 +458,18 @@ describe("progressive Case workspace", () => {
     render(<App />);
     expect(await screen.findByText("Fallback mode")).toBeVisible();
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
-    await screen.findByText("RL-CASE-1");
+    await screen.findByText(/RL-CASE-1/);
     expect(screen.getByText("Scenario time: Sep 1, 2026, 9:00 AM CDT")).toBeVisible();
     expect(screen.getByText("Power BI unavailable in fallback")).toBeVisible();
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     expect(await screen.findByText("Combined response")).toBeVisible();
     await userEvent.click(screen.getByRole("button", {name: "Approve combined response"}));
-    expect(await screen.findByText(/Decision RL-DECISION-/)).toBeVisible();
+    expect(await screen.findByRole("heading", {name: "Approved response"})).toBeVisible();
+    expect(within(screen.getByTestId("decision-receipt")).getByText("Combined response")).toBeVisible();
     expect(await screen.findAllByTestId("execution-action")).toHaveLength(5);
     expect(screen.getByText("Unsent draft")).toBeVisible();
     await userEvent.click(screen.getByRole("button", {name: "Start simulated execution"}));
-    expect(await screen.findByText("Simulated outcomes")).toBeVisible();
+    expect(await screen.findByText("Simulated results")).toBeVisible();
     expect(await screen.findAllByTestId("outcome-observation")).toHaveLength(10);
     expect(screen.queryByText("Actual outcomes")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", {name: "1. Understand the disruption"})).toBeVisible();
@@ -558,9 +561,9 @@ describe("progressive Case workspace", () => {
     await screen.findByText("Combined response");
     await userEvent.click(screen.getByRole("button", {name: "Approve combined response"}));
     const failedAction = await screen.findByTestId("execution-action-RL-ACTION-1");
-    expect(within(failedAction).getByText("failed")).toBeVisible();
-    await userEvent.click(within(failedAction).getByRole("button", {name: "Retry prepare alpha recovery draft"}));
-    expect(await within(failedAction).findByText("in_progress")).toBeVisible();
+    expect(within(failedAction).getByText("Failed")).toBeVisible();
+    await userEvent.click(within(failedAction).getByRole("button", {name: "Retry prepare supplier recovery draft"}));
+    expect(await within(failedAction).findByText("In progress")).toBeVisible();
     expect(screen.getAllByTestId("execution-action")).toHaveLength(5);
   });
 
@@ -582,7 +585,8 @@ describe("progressive Case workspace", () => {
     await screen.findByText("Combined response");
     await userEvent.type(screen.getByLabelText("Rejection reason"), "Wait for refreshed supplier evidence.");
     await userEvent.click(screen.getByRole("button", {name: "Reject recommendation"}));
-    expect(await screen.findByText("Rejected")).toBeVisible();
+    expect(await screen.findByRole("heading", {name: "Recommendation rejected"})).toBeVisible();
+    expect(screen.getByText("Wait for refreshed supplier evidence.")).toBeVisible();
     expect(screen.getByRole("heading", {name: "1. Understand the disruption"})).toBeVisible();
     expect(screen.queryAllByTestId("execution-action")).toHaveLength(0);
   });
@@ -612,7 +616,18 @@ describe("progressive Case workspace", () => {
   it("shows readable initialization failures", async () => {
     mockFallbackCaseLifecycle({runtimeFailure: true});
     render(<App />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to initialize the Case workspace");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Unable to initialize the Case workspace. The request could not be completed.");
+    expect(alert).not.toHaveTextContent("DatabaseError");
+    expect(alert).not.toHaveTextContent("password=secret");
+  });
+
+  it("does not display arbitrary client exception text", async () => {
+    mockFallbackCaseLifecycle({runtimeError: new Error("token=secret internal fetch exception")});
+    render(<App />);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Unable to initialize the Case workspace. The request could not be completed.");
+    expect(alert).not.toHaveTextContent("token=secret");
   });
 
   it("keeps the loaded analysis when entering assisted review", async () => {
@@ -620,7 +635,7 @@ describe("progressive Case workspace", () => {
     render(<App />);
     await screen.findByText("Fallback mode");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
-    await screen.findByText("RL-CASE-1");
+    await screen.findByText(/RL-CASE-1/);
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     await screen.findByText("Combined response");
     const content = document.getElementById("assisted-review")!;

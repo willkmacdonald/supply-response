@@ -116,6 +116,9 @@ describe("live journey safety", () => {
     expect(url.searchParams.get("filter")).toBe(`CaseCommandCenter/case_key eq '${reportIdentityKey(caseInstance.case_id)}'`);
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+    const caseDetails = screen.getByText("Case details").closest("details");
+    expect(caseDetails).toHaveTextContent("RL-CASE-LIVE");
+    expect(document.querySelector(".case-id")).not.toBeInTheDocument();
     rerender(<CaseHeader runtime={runtime} caseInstance={null} analysis={null} createPurpose="showcase" creating={false} analyzing={false} onCreate={vi.fn()} onAnalyze={vi.fn()} />);
     expect(screen.queryByRole("link", {name: "Open case dashboard"})).not.toBeInTheDocument();
   });
@@ -191,7 +194,54 @@ describe("live journey safety", () => {
       starting={false}
       onStart={vi.fn()}
     />);
-    expect(screen.getByRole("alert")).toHaveTextContent("Simulated playback failed");
+    expect(screen.getByRole("alert")).toHaveTextContent("Simulation failed. Another simulation cannot be started for this Case.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("new Case");
     expect(screen.queryByText(/observations are pending/i)).not.toBeInTheDocument();
+  });
+
+  it("labels supported playback states as simulation without relabeling actual observations", () => {
+    const observation = {
+      observation_id: "OBS-1",
+      metric: "units_recovered",
+      observed_value: "12",
+      predicted_value: "10",
+      unit: "units",
+      source_reference: "source-1",
+      synthetic: false,
+      display_label: "Observed",
+    };
+    const {rerender} = render(<OutcomePanel
+      decision={{kind: "approved"} as never}
+      actionCount={5}
+      playback={{status: "in_progress"} as never}
+      observations={[]}
+      starting={false}
+      onStart={vi.fn()}
+    />);
+    expect(screen.getByRole("heading", {name: "Simulated results"})).toBeVisible();
+    expect(screen.getByText("Simulation in progress")).toBeVisible();
+    expect(screen.getByText("5. Review outcomes")).toBeVisible();
+
+    rerender(<OutcomePanel
+      decision={{kind: "approved"} as never}
+      actionCount={5}
+      playback={null}
+      observations={[observation] as never}
+      starting={false}
+      onStart={vi.fn()}
+    />);
+    expect(screen.getByRole("heading", {name: "Recorded results"})).toBeVisible();
+    expect(screen.getByText("Observed")).toBeVisible();
+    expect(screen.queryByText("Simulated")).not.toBeInTheDocument();
+
+    rerender(<OutcomePanel
+      decision={{kind: "approved"} as never}
+      actionCount={5}
+      playback={null}
+      observations={[{...observation, metric: "toString"}] as never}
+      starting={false}
+      onStart={vi.fn()}
+    />);
+    expect(screen.getByRole("heading", {name: "Result metric not recognized"})).toBeVisible();
   });
 });
