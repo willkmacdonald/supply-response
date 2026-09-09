@@ -114,6 +114,39 @@ OUTER APPLY (SELECT CASE WHEN
     THEN 1 ELSE 0 END AS ok) valid;
 GO
 
+CREATE OR ALTER VIEW analytics.saved_options AS
+WITH options AS (
+    SELECT a.case_id,a.analysis_id,a.recommended_option_id,
+           CASE WHEN j.[type]=5 THEN j.[value] ELSE N'{}' END AS option_json,
+           analytics.report_scalar(j.[value],N'option_id',N'text') COLLATE Latin1_General_100_BIN2 AS option_id,
+           COUNT(*) OVER (PARTITION BY a.case_id,a.analysis_id,
+               analytics.report_scalar(j.[value],N'option_id',N'text') COLLATE Latin1_General_100_BIN2) AS identity_count
+    FROM analytics.saved_analyses a
+    CROSS APPLY (SELECT JSON_QUERY(a.payload_json,N'$.response_options') AS value) array_json
+    CROSS APPLY OPENJSON(CASE WHEN LEFT(LTRIM(array_json.value),1)=N'[' THEN array_json.value ELSE N'[]' END) j
+    WHERE j.[type]=5 AND a.payload_state=N'available'
+)
+SELECT case_id,analysis_id,option_id,
+       JSON_VALUE(option_json,'$.option_kind') AS option_kind,
+       JSON_VALUE(option_json,'$.name') AS option_name,
+       CAST(CASE WHEN JSON_VALUE(option_json,'$.option_kind') COLLATE Latin1_General_100_BIN2='no_mitigation' THEN 1 ELSE 0 END AS bit) AS is_baseline,
+       CAST(CASE WHEN option_id=recommended_option_id COLLATE Latin1_General_100_BIN2 THEN 1 ELSE 0 END AS bit) AS is_recommended,
+       CASE analytics.report_scalar(option_json,N'executable',N'flag') WHEN 'true' THEN CAST(1 AS bit) WHEN 'false' THEN CAST(0 AS bit) END AS executable,
+       CASE analytics.report_scalar(option_json,N'active_mitigation',N'flag') WHEN 'true' THEN CAST(1 AS bit) WHEN 'false' THEN CAST(0 AS bit) END AS active_mitigation,
+       TRY_CONVERT(int,analytics.report_scalar(JSON_QUERY(option_json,'$.predicted'),N'uncovered_part_demand',N'integer')) AS uncovered_part_demand,
+       CASE WHEN TRY_CONVERT(int,analytics.report_scalar(JSON_QUERY(option_json,'$.predicted'),N'otif_loss_percentage',N'integer'))<=100
+         THEN TRY_CONVERT(int,analytics.report_scalar(JSON_QUERY(option_json,'$.predicted'),N'otif_loss_percentage',N'integer')) END AS otif_loss_percentage,
+       TRY_CONVERT(decimal(19,4),analytics.report_scalar(JSON_QUERY(option_json,'$.predicted'),N'revenue_at_risk',N'money')) AS revenue_at_risk,
+       TRY_CONVERT(decimal(19,4),analytics.report_scalar(JSON_QUERY(option_json,'$.predicted'),N'margin_at_risk',N'money')) AS margin_at_risk,
+       TRY_CONVERT(decimal(19,4),analytics.report_scalar(JSON_QUERY(option_json,'$.predicted'),N'response_cost',N'money')) AS response_cost,
+       JSON_QUERY(option_json,'$.predicted.protected_customer_order_ids') AS protected_customer_order_ids_json,
+       JSON_QUERY(option_json,'$.assumptions') AS assumptions_json,
+       JSON_QUERY(option_json,'$.blocking_codes') AS blocking_codes_json,
+       JSON_QUERY(option_json,'$.prerequisite_roles') AS prerequisite_roles_json,
+       JSON_QUERY(option_json,'$.evidence_ids') AS evidence_ids_json
+FROM options WHERE identity_count=1 AND NULLIF(option_id,N'') IS NOT NULL;
+GO
+
 CREATE OR ALTER VIEW app.analysis_projection AS
 SELECT
     a.analysis_id,
