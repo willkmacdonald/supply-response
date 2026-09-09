@@ -36,3 +36,16 @@ The supplied base view used `OPENJSON(a.payload_json) WITH` directly. This imple
 
 - A real SQL Server run remains required before release; the local environment has no SQL URL and the remote source sync was blocked by policy.
 - The future `saved_options` assertions are expected to remain red until Task 2 adds that view.
+
+## Controller real-engine verification (after checkpoint 65502a3)
+
+Controller synced this module first to the unchanged 67ddbb6 remote SQL source,
+then ran `../.venv/bin/python run-reporting-tests.py -q
+tests/integrations/test_saved_analysis_reporting_sql.py -k
+"snapshot_is_full_length or strict_scalar_semantics or missing_duplicate_or_malformed"
+--tb=short`. RED: 30 failed, 12 deselected; missing analytics.saved_analyses and
+analytics.report_scalar, as expected. Synced checkpoint SQL and repeated exactly
+the same command: GREEN, 30 passed, 12 deselected in 0.83s. Both executions used
+fresh dedicated databases, applied packaged scripts twice, and removed only their
+own generated test database afterward. SQL2022 x86_64 dedicated VM; no live calls.
+The preceding remote-policy obstacle is resolved for controller-owned uploads.
