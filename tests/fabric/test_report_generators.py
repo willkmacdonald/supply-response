@@ -1,0 +1,444 @@
+from __future__ import annotations
+
+import json
+import re
+from copy import deepcopy
+from pathlib import Path
+
+import pytest
+
+from fabric import report_model, report_pages
+from fabric.deploy import _validate_offline_json_schemas
+
+ROOT = Path(__file__).resolve().parents[2]
+QUERIES = ROOT / "fabric/reporting/queries"
+
+
+def write_pages(root: Path) -> None:
+    for name, value in report_pages.artifacts().items():
+        target = root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(report_pages.encoded(value), encoding="utf-8")
+
+
+def write_model(root: Path) -> None:
+    for name, value in report_model.artifacts(QUERIES).items():
+        target = root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(value, encoding="utf-8")
+
+
+def test_deterministic_native_pages_match_pinned_schemas(tmp_path):
+    assert report_pages.artifacts() == report_pages.artifacts()
+    write_pages(tmp_path)
+    report_pages.verify(tmp_path)
+    _validate_offline_json_schemas(tmp_path)
+    assert report_pages.ORDER == (
+        "command-center",
+        "actions-outcomes",
+        "supplier-shipment",
+        "plant-transfer",
+        "supplier-qualification",
+        "available-stock",
+        "customer-orders",
+        "response-options",
+    )
+    for path, value in report_pages.artifacts().items():
+        if not path.endswith("visual.json"):
+            continue
+        position = value["position"]
+        assert 0 <= position["x"] < position["x"] + position["width"] <= 1280
+        assert 0 <= position["y"] < position["y"] + position["height"] <= 720
+        visual = value["visual"]
+        if visual["visualType"] == "cardVisual":
+            assert set(visual["query"]["queryState"]) == {"Data"}
+        if visual["visualType"] in {"tableEx", "clusteredColumnChart"}:
+            (gate,) = value["filterConfig"]["filters"]
+            assert gate["isHiddenInViewMode"] and gate["isLockedInViewMode"]
+            condition = gate["filter"]["Where"][0]["Condition"]["Comparison"]
+            assert condition["ComparisonKind"] == 0
+            assert condition["Right"] == {"Literal": {"Value": "1L"}}
+
+
+def test_preserves_existing_visual_identities_and_three_rows():
+    artifacts = report_pages.artifacts()
+    old_ids = {
+        "command-center": (
+            "active-cases",
+            "current-decision",
+            "otif-loss",
+            "revenue-at-risk",
+            "scenario-effective-time",
+            "showcase-cases",
+        ),
+        "actions-outcomes": (
+            "action-status",
+            "decision-id",
+            "observation-kind",
+            "predicted-observed-variance",
+            "projection-refresh",
+            "scenario-effective-time",
+        ),
+    }
+    for page, identities in old_ids.items():
+        for identity in identities:
+            assert f"pages/{page}/visuals/{identity}/visual.json" in artifacts
+    first = artifacts["pages/command-center/visuals/active-cases/visual.json"]
+    assert (
+        first["visual"]["query"]["queryState"]["Data"]["projections"][0]["queryRef"]
+        == "CaseCommandCenter.Disruption Answer"
+    )
+    for row in (1, 2, 3):
+        assert f"pages/command-center/visuals/row-label-{row}/visual.json" in artifacts
+
+
+def test_clearable_case_selector_is_shared_without_a_default():
+    for page in report_pages.ORDER:
+        value = report_pages.artifacts()[
+            f"pages/{page}/visuals/case-selector/visual.json"
+        ]["visual"]
+        assert value["syncGroup"] == {
+            "groupName": "SupplyResponseCase",
+            "fieldChanges": True,
+            "filterChanges": True,
+        }
+        selection = value["objects"]["selection"][0]["properties"]
+        assert selection["singleSelect"] == {"expr": {"Literal": {"Value": "true"}}}
+        assert selection["strictSingleSelect"] == {
+            "expr": {"Literal": {"Value": "false"}}
+        }
+        assert "general" not in value["objects"]
+        assert (
+            value["query"]["queryState"]["Values"]["projections"][0]["queryRef"]
+            == "CaseCommandCenter.case_id"
+        )
+
+
+def test_business_tables_preserve_stock_totals_and_order_line_grain():
+    artifacts = report_pages.artifacts()
+
+    def projections(page):
+        return artifacts[f"pages/{page}/visuals/supporting-records/visual.json"][
+            "visual"
+        ]["query"]["queryState"]["Values"]["projections"]
+
+    stock = projections("available-stock")
+    assert [item["queryRef"] for item in stock] == [
+        "SavedRecords.part_id",
+        "SavedRecords.plant_id",
+        "CaseCommandCenter.Stock On Hand Row",
+        "CaseCommandCenter.Stock Held Row",
+        "CaseCommandCenter.Stock Protected Row",
+        "CaseCommandCenter.Stock Usable Row",
+    ]
+    orders = projections("customer-orders")
+    assert any(
+        item["queryRef"] == "SavedRecords.source_record_id"
+        and item["displayName"] == "Order line"
+        for item in orders
+    )
+
+
+@pytest.mark.parametrize(
+    "change",
+    ["unlock", "remove-gate", "role", "field", "type", "title", "aggregation", "extra"],
+)
+def test_schema_shaped_report_mutations_fail(tmp_path, change):
+    write_pages(tmp_path)
+    path = tmp_path / "pages/supplier-shipment/visuals/supporting-records/visual.json"
+    value = json.loads(path.read_text())
+    visual = value["visual"]
+    if change == "unlock":
+        value["filterConfig"]["filters"][0]["isLockedInViewMode"] = False
+    elif change == "remove-gate":
+        del value["filterConfig"]
+    elif change == "role":
+        visual["query"]["queryState"]["Data"] = visual["query"]["queryState"].pop(
+            "Values"
+        )
+    elif change == "field":
+        visual["query"]["queryState"]["Values"]["projections"][0]["field"]["Column"][
+            "Property"
+        ] = "other"
+    elif change == "type":
+        visual["visualType"] = "card"
+    elif change == "title":
+        visual["visualContainerObjects"]["title"][0]["properties"]["text"]["expr"][
+            "Literal"
+        ]["Value"] = "'Wrong'"
+    elif change == "aggregation":
+        projection = visual["query"]["queryState"]["Values"]["projections"][0]
+        projection["field"] = {
+            "Aggregation": {"Expression": deepcopy(projection["field"]), "Function": 0}
+        }
+    else:
+        (tmp_path / "pages/extra.json").write_text("{}")
+    path.write_text(report_pages.encoded(value), encoding="utf-8")
+    with pytest.raises(ValueError):
+        report_pages.verify(tmp_path)
+
+
+def test_model_manifest_binds_every_report_field_without_json_payloads(tmp_path):
+    report_model.check_required_fields(report_pages.required_fields())
+    manifest = report_model.manifest()
+    assert set(manifest["tables"]) == {
+        "CaseCommandCenter",
+        "ActionOutcomes",
+        "SavedAnalyses",
+        "SavedRecords",
+        "SavedOptions",
+    }
+    assert manifest["relationships"] == []
+    for flag in (
+        "inventory_complete",
+        "production_orders_complete",
+        "customer_orders_complete",
+    ):
+        assert manifest["tables"]["SavedAnalyses"]["columns"][flag] == "boolean"
+    for table, details in manifest["tables"].items():
+        assert details["mode"] == "directQuery"
+        assert details["partition"] == table
+        assert all(not name.endswith("_json") for name in details["columns"])
+    with pytest.raises(ValueError, match="Unknown report binding"):
+        report_model.check_required_fields(
+            [("Measure", "CaseCommandCenter", "Not an approved measure")]
+        )
+    write_model(tmp_path)
+    report_model.verify(tmp_path, QUERIES)
+    assert report_model.artifacts(QUERIES) == report_model.artifacts(QUERIES)
+
+
+def test_all_dax_bindings_resolve_and_selection_gates_are_explicit():
+    manifest = report_model.manifest()["tables"]
+    measures = report_model.measures()
+    names = {name for definitions in measures.values() for name in definitions}
+    for definitions in measures.values():
+        for measure in definitions.values():
+            for table, field in re.findall(r"(\w+)\[([^\]]+)\]", measure.expression):
+                assert table in manifest, (table, field)
+                assert (
+                    field in manifest[table]["columns"]
+                    or field in manifest[table]["measures"]
+                ), (table, field)
+            for name in re.findall(r"(?<![\w'])\[([^\]]+)\]", measure.expression):
+                assert name in names, name
+            assert "NOW()" not in measure.expression.upper()
+    cc = measures["CaseCommandCenter"]
+    assert (
+        "[Selected inventory_complete] == TRUE()" in cc["Stock Rows Valid"].expression
+    )
+    assert (
+        "[Overview inventory_complete] == TRUE()"
+        in cc["Overview Stock Rows Valid"].expression
+    )
+    assert (
+        "[Selected production_orders_complete] == TRUE()"
+        in cc["Orders Rows Valid"].expression
+    )
+    assert (
+        "[Selected customer_orders_complete] == TRUE()"
+        in cc["Orders Rows Valid"].expression
+    )
+    assert "ALLSELECTED(CaseCommandCenter)" in cc["Selected Case Key"].expression
+    assert (
+        "HASONEFILTER(CaseCommandCenter[case_key])"
+        in cc["External Selected Case Key"].expression
+    )
+    assert "[Analysis Requested] == 1" in cc["Overview Analysis Key"].expression
+    for gate in (
+        "Record Row Visible",
+        "Stock Row Visible",
+        "Order Row Visible",
+        "Option Row Visible",
+    ):
+        expression = cc[gate].expression
+        assert (
+            "[Selected Case Key]" in expression
+            and "[Selected Analysis Key]" in expression
+        )
+        assert "KEEPFILTERS" in expression and "TREATAS" in expression
+        assert "REMOVEFILTERS" not in expression
+    for gate in ("Action Row Visible", "Observation Row Visible"):
+        expression = cc[gate].expression
+        assert (
+            "[Selected Case Key]" in expression
+            and "[Current Decision Key]" in expression
+        )
+        assert "ActionOutcomes[decision_key]" in expression
+    variance = measures["ActionOutcomes"]["Observed Variance"].expression
+    assert "[Observation Row Visible] == 1" in variance
+    assert "IFERROR(VALUE(PredictedText), BLANK())" in variance
+    assert "IFERROR(VALUE(ObservedText), BLANK())" in variance
+    assert "Predicted == 0" in variance and "ABS(Predicted)" in variance
+    assert "AVERAGEX" not in variance and "REMOVEFILTERS" not in variance
+
+
+def test_formats_preserve_dates_utc_zero_and_literal_m_escapes():
+    assert report_model.column_format("SavedRecords", "due_date") == "MMM d, yyyy"
+    assert (
+        report_model.column_format("SavedRecords", "retrieved_at")
+        == 'MMM d, yyyy HH:mm "UTC"'
+    )
+    assert report_model.column_format("SavedOptions", "response_cost") == "#,0.00"
+    assert report_model.column_format("SavedOptions", "otif_loss_percentage") == '0"%"'
+    assert report_model.m_string('#(lf)\n"quoted"') == '"#(#)(lf)#(lf)""quoted"""'
+    cc = report_model.measures()["CaseCommandCenter"]
+    for name in (
+        "Record Quantity Display",
+        "Record Unit Cost Display",
+        "Stock Usable Display",
+    ):
+        assert "ISBLANK(V)" in cc[name].expression
+    for name in ("Record Audit Display", "Record First Article Display"):
+        assert (
+            'IF(ISBLANK(V),"Unavailable",IF(V,"Complete","Outstanding"))'
+            in cc[name].expression
+        )
+
+
+@pytest.mark.parametrize(
+    "change", ["measure", "partition", "relationship", "extra-table"]
+)
+def test_model_drift_fails(tmp_path, change):
+    write_model(tmp_path)
+    path = tmp_path / "tables/CaseCommandCenter.tmdl"
+    if change == "measure":
+        path.write_text(path.read_text().replace("HASONEFILTER", "HASONEVALUE", 1))
+    elif change == "partition":
+        path.write_text(
+            path.read_text().replace("mode: directQuery", "mode: import", 1)
+        )
+    elif change == "relationship":
+        (tmp_path / "relationships.tmdl").write_text("relationship NotApproved\n")
+    else:
+        (tmp_path / "tables/Extra.tmdl").write_text("table Extra\n")
+    with pytest.raises(ValueError):
+        report_model.verify(tmp_path, QUERIES)
+
+
+@pytest.mark.parametrize(
+    "kind", ["pages-root", "definition-root", "tables-root", "query-root"]
+)
+def test_symlink_roots_are_rejected(tmp_path, kind):
+    actual = tmp_path / "actual"
+    alias = tmp_path / "alias"
+    actual.mkdir()
+    alias.mkdir()
+    if kind in {"pages-root", "definition-root"}:
+        write_pages(actual)
+        if kind == "pages-root":
+            (alias / "pages").symlink_to(actual / "pages", target_is_directory=True)
+            candidate = alias
+        else:
+            candidate = tmp_path / "definition-link"
+            candidate.symlink_to(actual, target_is_directory=True)
+        with pytest.raises(ValueError):
+            report_pages.verify(candidate)
+    else:
+        write_model(actual)
+        if kind == "tables-root":
+            (alias / "tables").symlink_to(actual / "tables", target_is_directory=True)
+            with pytest.raises(ValueError):
+                report_model.verify(alias, QUERIES)
+        else:
+            query_link = tmp_path / "queries"
+            query_link.symlink_to(QUERIES, target_is_directory=True)
+            with pytest.raises(ValueError):
+                report_model.artifacts(query_link)
+
+
+def test_model_cli_rejects_late_symlink_before_any_write(tmp_path, monkeypatch):
+    import sys
+
+    write_model(tmp_path)
+    first = tmp_path / "tables/CaseCommandCenter.tmdl"
+    first.write_text("preserve sentinel", encoding="utf-8")
+    last = tmp_path / "tables/SavedOptions.tmdl"
+    last.unlink()
+    outside = tmp_path / "unchanged.txt"
+    outside.write_text("outside sentinel", encoding="utf-8")
+    last.symlink_to(outside)
+    monkeypatch.setattr(sys, "argv", ["report_model", str(tmp_path), str(QUERIES)])
+    with pytest.raises(ValueError):
+        report_model.main()
+    assert first.read_text() == "preserve sentinel"
+    assert outside.read_text() == "outside sentinel"
+
+
+def test_page_cli_rejects_late_symlink_before_any_write(tmp_path, monkeypatch):
+    import sys
+
+    write_pages(tmp_path)
+    first = tmp_path / "pages/pages.json"
+    first.write_text("preserve sentinel", encoding="utf-8")
+    final_relative = list(report_pages.artifacts())[-1]
+    last = tmp_path / final_relative
+    last.unlink()
+    outside = tmp_path / "unchanged.txt"
+    outside.write_text("outside sentinel", encoding="utf-8")
+    last.symlink_to(outside)
+    monkeypatch.setattr(sys, "argv", ["report_pages", str(tmp_path)])
+    with pytest.raises(ValueError):
+        report_pages.main()
+    assert first.read_text() == "preserve sentinel"
+    assert outside.read_text() == "outside sentinel"
+
+
+def test_exposure_page_repeats_saved_baseline_with_strict_analysis_scope():
+    pages = report_pages.artifacts()
+
+    def answer(index):
+        return pages[f"pages/customer-orders/visuals/answer-{index}/visual.json"][
+            "visual"
+        ]["query"]["queryState"]["Data"]["projections"][0]["queryRef"]
+
+    assert answer(1) == "CaseCommandCenter.Orders Baseline Revenue Display"
+    assert answer(2) == "CaseCommandCenter.Orders Baseline OTIF Display"
+    assert answer(3) == "CaseCommandCenter.Affected Lines Display"
+    definitions = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"]
+    for name, source in (
+        ("Orders Baseline Revenue", "Baseline revenue_at_risk"),
+        ("Orders Baseline OTIF", "Baseline otif_loss_percentage"),
+    ):
+        expression = definitions[name]["expression"]
+        assert "NOT ISBLANK([Selected Analysis Key])" in expression
+        assert "[" + source + "]" in expression
+    assert '"0"' in definitions["Orders Baseline OTIF Display"]["expression"]
+    assert '"%"' in definitions["Orders Baseline OTIF Display"]["expression"]
+    assert "Without a response" in definitions["Orders Explanation"]["expression"]
+    assert (
+        "do not identify individual missed service targets"
+        in definitions["Orders Explanation"]["expression"]
+    )
+
+
+def test_business_measures_are_implemented_and_use_saved_values():
+    tables = report_model.manifest()["tables"]
+    definitions = tables["CaseCommandCenter"]["measures"]
+    assert not [
+        name
+        for table in tables.values()
+        for name, spec in table["measures"].items()
+        if spec["expression"].strip() == "BLANK()"
+    ]
+    for name in (
+        "Baseline revenue_at_risk",
+        "Recommended revenue_at_risk",
+        "Approved revenue_at_risk",
+    ):
+        text = definitions[name]["expression"]
+        assert "SELECTEDVALUE(SavedOptions[revenue_at_risk])" in text
+        assert "COUNTROWS(SavedOptions) == 1" in text
+        assert "TREATAS" in text
+    assert (
+        "SUM(SavedRecords[usable_inventory])"
+        in definitions["Stock Usable"]["expression"]
+    )
+    assert (
+        "[Overview disruption original_quantity]"
+        in definitions["Disruption Answer"]["expression"]
+    )
+    variance = tables["ActionOutcomes"]["measures"]["Observed Variance"]["expression"]
+    assert "DIVIDE(Observed - Predicted, ABS(Predicted))" in variance
+    assert "ISBLANK(Predicted) || ISBLANK(Observed) || Predicted == 0" in variance
+    assert "[Observation Row Visible] == 1" in variance
