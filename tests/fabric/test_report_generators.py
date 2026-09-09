@@ -391,6 +391,43 @@ def test_all_dax_bindings_resolve_and_selection_gates_are_explicit():
     assert "AVERAGEX" not in variance and "REMOVEFILTERS" not in variance
 
 
+def test_traditional_marker_is_a_presentation_column_not_a_new_table():
+    model = report_model.manifest()
+    assert set(model["tables"]) == set(report_model.TABLES)
+    assert len(model["tables"]) == 5
+    assert (
+        model["tables"]["CaseCommandCenter"]["columns"]["walkthrough_route"] == "string"
+    )
+    sql = (QUERIES / "CaseCommandCenter.sql").read_text()
+    assert "CAST(N'traditional' AS nvarchar(16)) AS walkthrough_route" in sql
+    assert model["relationships"] == []
+
+
+def test_traditional_entry_never_falls_back_to_current_analysis():
+    measures = report_model.measures()[report_model.CC]
+    expression = measures["Overview Analysis Key"].expression
+    assert "[Walkthrough Requested] == 1 || [Analysis Requested] == 1" in expression
+    assert "[Selected Analysis Key]" in expression
+    approach = measures["Review Approach"].expression
+    assert "[Walkthrough Requested] == 1" in approach
+    assert "Walkthrough selection unavailable" in approach
+
+
+def test_walkthrough_does_not_replace_explicit_record_identity_validation():
+    measures = report_model.measures()[report_model.CC]
+    explicit = measures["External Explicit Selected Record Key"].expression
+    assert "HASONEFILTER(SavedRecords[record_key])" in explicit
+    assert '"shipment","transfer","qualification"' in explicit
+    selected = measures["Selected Record Key"].expression
+    assert "[Record Identity Requested] == 1" in selected
+    assert "[Explicit Selected Record Key]" in selected
+    singleton = measures["External Walkthrough Record Key"].expression
+    assert "COUNTROWS(Candidates) == 1 && COUNTROWS(ValidCandidates) == 1" in singleton
+    assert "REMOVEFILTERS(SavedRecords)" in singleton
+    assert "[Record Identity Requested] == 0" in singleton
+    assert 'SavedRecords[provenance] == "saved_fabric"' in singleton
+
+
 def test_measure_names_are_globally_casefold_unique_and_displays_use_raw_values():
     definitions = report_model.measures()
     names = [name for table in definitions.values() for name in table]

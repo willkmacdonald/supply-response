@@ -1,4 +1,5 @@
 SELECT c.case_id,c.purpose,c.status,c.runtime_mode,
+ CAST(N'traditional' AS nvarchar(16)) AS walkthrough_route,
  CONVERT(datetime2(6),SWITCHOFFSET(c.scenario_effective_time,'+00:00')) AS scenario_effective_time,
  c.current_analysis_id,c.current_decision_id,
  CONVERT(datetime2(6),SWITCHOFFSET(c.analysis_created_at,'+00:00')) AS analysis_created_at,c.snapshot_state,

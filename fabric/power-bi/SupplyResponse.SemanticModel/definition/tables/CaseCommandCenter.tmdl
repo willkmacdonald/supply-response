@@ -19,6 +19,11 @@ table CaseCommandCenter
     sourceColumn: runtime_mode
     summarizeBy: none
 
+  column walkthrough_route
+    dataType: string
+    sourceColumn: walkthrough_route
+    summarizeBy: none
+
   column scenario_effective_time
     dataType: dateTime
     sourceColumn: scenario_effective_time
@@ -174,6 +179,31 @@ table CaseCommandCenter
     sourceColumn: approved_option_key
     summarizeBy: none
 
+  measure 'External Walkthrough Requested' =
+      INT(ISFILTERED(CaseCommandCenter[walkthrough_route]))
+    isHidden
+
+  measure 'Walkthrough Requested' =
+      CALCULATE([External Walkthrough Requested], ALLSELECTED(CaseCommandCenter))
+    isHidden
+
+  measure 'External Traditional Mode' =
+      INT(ISFILTERED(CaseCommandCenter[walkthrough_route])
+              && HASONEFILTER(CaseCommandCenter[walkthrough_route])
+              && SELECTEDVALUE(CaseCommandCenter[walkthrough_route]) == "traditional")
+    isHidden
+
+  measure 'Traditional Mode' =
+      CALCULATE([External Traditional Mode], ALLSELECTED(CaseCommandCenter))
+    isHidden
+
+  measure 'Review Approach' =
+      IF([Walkthrough Requested] == 1,
+              IF([Traditional Mode] == 1,
+                  "Compare cost, service exposure, parts still needed and planning blockers. State your proposed response before reviewing AI assistance.",
+                  "Walkthrough selection unavailable"),
+              [Recommendation Answer])
+
   measure 'External Case Requested' =
       INT(ISFILTERED(CaseCommandCenter[case_key]) || ISFILTERED(CaseCommandCenter[case_id]))
     isHidden
@@ -259,7 +289,8 @@ table CaseCommandCenter
               VAR N = CALCULATE(COUNTROWS(SavedAnalyses), REMOVEFILTERS(SavedAnalyses),
                   TREATAS({ScopeCase},SavedAnalyses[case_key]),TREATAS({ScopeAnalysis},SavedAnalyses[analysis_key]),
                   SavedAnalyses[payload_state] == "available",SavedAnalyses[snapshot_state] == "available")
-              RETURN IF([Analysis Requested] == 1, [Selected Analysis Key],
+              RETURN IF([Walkthrough Requested] == 1 || [Analysis Requested] == 1,
+                  [Selected Analysis Key],
                   IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis) && N == 1,ScopeAnalysis))
     isHidden
 
@@ -401,7 +432,7 @@ table CaseCommandCenter
               "Snapshot used for this analysis · " & IF(ISBLANK(V),"Analysis time unavailable",
               FORMAT(V,"MMM d, yyyy HH:mm") & " UTC") & " · " & [Selected Provenance])
 
-  measure 'External Selected Record Key' =
+  measure 'External Explicit Selected Record Key' =
       VAR ScopeCase = [Selected Case Key] VAR ScopeAnalysis = [Selected Analysis Key]
               VAR N = CALCULATE(COUNTROWS(SavedRecords),
                   KEEPFILTERS(TREATAS({ScopeCase},SavedRecords[case_key])),
@@ -415,8 +446,51 @@ table CaseCommandCenter
                   && N == 1,SELECTEDVALUE(SavedRecords[record_key]))
     isHidden
 
+  measure 'Explicit Selected Record Key' =
+      CALCULATE([External Explicit Selected Record Key], ALLSELECTED(SavedRecords))
+    isHidden
+
+  measure 'External Record Identity Requested' =
+      INT(ISFILTERED(SavedRecords[record_key])
+              || ISFILTERED(SavedRecords[source_record_id]))
+    isHidden
+
+  measure 'Record Identity Requested' =
+      CALCULATE([External Record Identity Requested], ALLSELECTED(SavedRecords))
+    isHidden
+
+  measure 'External Walkthrough Record Key' =
+      VAR CaseKey = [Selected Case Key]
+              VAR AnalysisKey = [Selected Analysis Key]
+              VAR Family = SELECTEDVALUE(SavedRecords[record_family])
+              VAR Candidates = CALCULATETABLE(SavedRecords,
+                  REMOVEFILTERS(SavedRecords),
+                  TREATAS({CaseKey}, SavedRecords[case_key]),
+                  TREATAS({AnalysisKey}, SavedRecords[analysis_key]),
+                  TREATAS({Family}, SavedRecords[record_family]))
+              VAR ValidCandidates = FILTER(Candidates,
+                  SavedRecords[record_state] == "available"
+                  && SavedRecords[evidence_state] == "available"
+                  && SavedRecords[runtime_mode] == "live"
+                  && SavedRecords[provenance] == "saved_fabric")
+              RETURN IF([Traditional Mode] == 1
+                  && [Record Identity Requested] == 0
+                  && NOT ISBLANK(CaseKey) && NOT ISBLANK(AnalysisKey)
+                  && ISFILTERED(SavedRecords[record_family])
+                  && HASONEFILTER(SavedRecords[record_family])
+                  && Family IN {"shipment","transfer","qualification"}
+                  && COUNTROWS(Candidates) == 1 && COUNTROWS(ValidCandidates) == 1,
+                  MAXX(ValidCandidates, SavedRecords[record_key]))
+    isHidden
+
+  measure 'Walkthrough Record Key' =
+      CALCULATE([External Walkthrough Record Key], ALLSELECTED(SavedRecords))
+    isHidden
+
   measure 'Selected Record Key' =
-      CALCULATE([External Selected Record Key], ALLSELECTED(SavedRecords))
+      IF([Record Identity Requested] == 1,
+              [Explicit Selected Record Key],
+              [Walkthrough Record Key])
     isHidden
 
   measure 'External Selected Record Family' =
@@ -1161,4 +1235,4 @@ table CaseCommandCenter
   partition CaseCommandCenter = m
     mode: directQuery
     source =
-        Sql.Database(FABRIC_SQL_SERVER, FABRIC_SQL_DATABASE, [Query="SELECT c.case_id,c.purpose,c.status,c.runtime_mode,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(c.scenario_effective_time,'+00:00')) AS scenario_effective_time,#(lf) c.current_analysis_id,c.current_decision_id,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(c.analysis_created_at,'+00:00')) AS analysis_created_at,c.snapshot_state,#(lf) c.recommended_option_id,c.baseline_option_id,c.decision_kind,c.decision_analysis_id,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(c.decided_at,'+00:00')) AS decided_at,c.approved_option_id,#(lf) c.baseline_revenue_at_risk,c.baseline_otif_loss_percentage,#(lf) c.baseline_uncovered_part_demand,c.baseline_response_cost,#(lf) c.recommended_revenue_at_risk,c.recommended_otif_loss_percentage,#(lf) c.recommended_uncovered_part_demand,c.recommended_response_cost,#(lf) c.approved_revenue_at_risk,c.approved_otif_loss_percentage,#(lf) c.approved_uncovered_part_demand,c.approved_response_cost,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.case_id)),2) AS case_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.current_analysis_id)),2) AS current_analysis_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.current_decision_id)),2) AS current_decision_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.decision_analysis_id)),2) AS decision_analysis_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.approved_option_id)),2) AS approved_option_key#(lf)FROM analytics.case_reporting c#(lf)"])
+        Sql.Database(FABRIC_SQL_SERVER, FABRIC_SQL_DATABASE, [Query="SELECT c.case_id,c.purpose,c.status,c.runtime_mode,#(lf) CAST(N'traditional' AS nvarchar(16)) AS walkthrough_route,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(c.scenario_effective_time,'+00:00')) AS scenario_effective_time,#(lf) c.current_analysis_id,c.current_decision_id,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(c.analysis_created_at,'+00:00')) AS analysis_created_at,c.snapshot_state,#(lf) c.recommended_option_id,c.baseline_option_id,c.decision_kind,c.decision_analysis_id,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(c.decided_at,'+00:00')) AS decided_at,c.approved_option_id,#(lf) c.baseline_revenue_at_risk,c.baseline_otif_loss_percentage,#(lf) c.baseline_uncovered_part_demand,c.baseline_response_cost,#(lf) c.recommended_revenue_at_risk,c.recommended_otif_loss_percentage,#(lf) c.recommended_uncovered_part_demand,c.recommended_response_cost,#(lf) c.approved_revenue_at_risk,c.approved_otif_loss_percentage,#(lf) c.approved_uncovered_part_demand,c.approved_response_cost,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.case_id)),2) AS case_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.current_analysis_id)),2) AS current_analysis_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.current_decision_id)),2) AS current_decision_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.decision_analysis_id)),2) AS decision_analysis_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),c.approved_option_id)),2) AS approved_option_key#(lf)FROM analytics.case_reporting c#(lf)"])

@@ -19,6 +19,7 @@ COLUMNS = {
         "purpose",
         "status",
         "runtime_mode",
+        "walkthrough_route",
         "scenario_effective_time",
         "current_analysis_id",
         "current_decision_id",
@@ -324,6 +325,29 @@ def measures():
             hidden=True,
         )
 
+    external(
+        "Walkthrough Requested",
+        "INT(ISFILTERED(CaseCommandCenter[walkthrough_route]))",
+        CC,
+        "int64",
+    )
+    external(
+        "Traditional Mode",
+        """INT(ISFILTERED(CaseCommandCenter[walkthrough_route])
+        && HASONEFILTER(CaseCommandCenter[walkthrough_route])
+        && SELECTEDVALUE(CaseCommandCenter[walkthrough_route]) == "traditional")""",
+        CC,
+        "int64",
+    )
+    add(
+        "Review Approach",
+        """IF([Walkthrough Requested] == 1,
+        IF([Traditional Mode] == 1,
+            "Compare cost, service exposure, parts still needed and planning blockers. State your proposed response before reviewing AI assistance.",
+            "Walkthrough selection unavailable"),
+        [Recommendation Answer])""",
+    )
+
     def display(name, source, suffix="", fmt="#,0.##"):
         add(
             name,
@@ -436,7 +460,8 @@ def measures():
         VAR N = CALCULATE(COUNTROWS(SavedAnalyses), REMOVEFILTERS(SavedAnalyses),
             TREATAS({C},SavedAnalyses[case_key]),TREATAS({A},SavedAnalyses[analysis_key]),
             SavedAnalyses[payload_state] == "available",SavedAnalyses[snapshot_state] == "available")
-        RETURN IF([Analysis Requested] == 1, [Selected Analysis Key],
+        RETURN IF([Walkthrough Requested] == 1 || [Analysis Requested] == 1,
+            [Selected Analysis Key],
             IF(NOT ISBLANK(C) && NOT ISBLANK(A) && N == 1,A))""",
         hidden=True,
     )
@@ -507,7 +532,7 @@ def measures():
     )
 
     external(
-        "Selected Record Key",
+        "Explicit Selected Record Key",
         """VAR C = [Selected Case Key] VAR A = [Selected Analysis Key]
         VAR N = CALCULATE(COUNTROWS(SavedRecords),
             KEEPFILTERS(TREATAS({C},SavedRecords[case_key])),
@@ -520,6 +545,45 @@ def measures():
             && SELECTEDVALUE(SavedRecords[record_family]) IN {"shipment","transfer","qualification"}
             && N == 1,SELECTEDVALUE(SavedRecords[record_key]))""",
         SR,
+    )
+    external(
+        "Record Identity Requested",
+        """INT(ISFILTERED(SavedRecords[record_key])
+        || ISFILTERED(SavedRecords[source_record_id]))""",
+        SR,
+        "int64",
+    )
+    external(
+        "Walkthrough Record Key",
+        """VAR CaseKey = [Selected Case Key]
+        VAR AnalysisKey = [Selected Analysis Key]
+        VAR Family = SELECTEDVALUE(SavedRecords[record_family])
+        VAR Candidates = CALCULATETABLE(SavedRecords,
+            REMOVEFILTERS(SavedRecords),
+            TREATAS({CaseKey}, SavedRecords[case_key]),
+            TREATAS({AnalysisKey}, SavedRecords[analysis_key]),
+            TREATAS({Family}, SavedRecords[record_family]))
+        VAR ValidCandidates = FILTER(Candidates,
+            SavedRecords[record_state] == "available"
+            && SavedRecords[evidence_state] == "available"
+            && SavedRecords[runtime_mode] == "live"
+            && SavedRecords[provenance] == "saved_fabric")
+        RETURN IF([Traditional Mode] == 1
+            && [Record Identity Requested] == 0
+            && NOT ISBLANK(CaseKey) && NOT ISBLANK(AnalysisKey)
+            && ISFILTERED(SavedRecords[record_family])
+            && HASONEFILTER(SavedRecords[record_family])
+            && Family IN {"shipment","transfer","qualification"}
+            && COUNTROWS(Candidates) == 1 && COUNTROWS(ValidCandidates) == 1,
+            MAXX(ValidCandidates, SavedRecords[record_key]))""",
+        SR,
+    )
+    add(
+        "Selected Record Key",
+        """IF([Record Identity Requested] == 1,
+        [Explicit Selected Record Key],
+        [Walkthrough Record Key])""",
+        hidden=True,
     )
     external(
         "Selected Record Family",
