@@ -1054,6 +1054,12 @@ table CaseCommandCenter
       RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[due_date])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "shipment"), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))
     isHidden
 
+  measure 'Overview shipment incremental_cost_per_unit' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[incremental_cost_per_unit])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "shipment"), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))
+    isHidden
+
   measure 'Overview shipment supplier_id' =
       VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Overview Analysis Key]
@@ -1070,6 +1076,12 @@ table CaseCommandCenter
       VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Overview Analysis Key]
       RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[arrival_date])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "transfer"), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))
+    isHidden
+
+  measure 'Overview transfer incremental_cost_per_unit' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Overview Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) == 1,SELECTEDVALUE(SavedRecords[incremental_cost_per_unit])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "transfer"), KEEPFILTERS(SavedRecords[record_state] == "available"), KEEPFILTERS(SavedRecords[evidence_state] == "available")))
     isHidden
 
   measure 'Overview transfer source_plant_id' =
@@ -1153,15 +1165,15 @@ table CaseCommandCenter
               VAR U = [Baseline uncovered_part_demand] VAR ScopeCase = [Baseline response_cost]
               RETURN IF(NOT ISBLANK([Overview Analysis Key]),"Without a response: "
               & IF(ISBLANK(V),"revenue exposure unavailable",FORMAT(V,"#,0.00") & " revenue at risk; currency not specified")
-              & ". Service-target exposure: " & IF(ISBLANK(P),"unavailable",FORMAT(P,"0") & "% of order lines")
+              & ". Service-target exposure: " & IF(ISBLANK(P),"unavailable",FORMAT(P,"0") & "% of production orders")
               & "; parts still needed: " & IF(ISBLANK(U),"unavailable",FORMAT(U,"#,0") & " component units still needed")
               & "; response cost: " & IF(ISBLANK(ScopeCase),"unavailable",FORMAT(ScopeCase,"#,0.00") & "; currency not specified"))
 
   measure 'Shipment Answer' =
-      VAR Q = [Overview shipment quantity] VAR D = [Overview shipment due_date] RETURN IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK(Q),"Supporting record unavailable",("Proposed shipment from " & [Overview shipment Supplier]) & ": " & FORMAT(Q,"#,0") & " component units; " & IF(ISBLANK(D),"date unavailable",FORMAT(D,"MMM d, yyyy"))))
+      VAR Q = [Overview shipment quantity] VAR D = [Overview shipment due_date] VAR Cost = [Overview shipment incremental_cost_per_unit] RETURN IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK(Q),"Supporting record unavailable",("Proposed shipment from " & [Overview shipment Supplier]) & ": " & FORMAT(Q,"#,0") & " component units; " & IF(ISBLANK(D),"date unavailable",FORMAT(D,"MMM d, yyyy")) & "; " & IF(ISBLANK(Cost),"additional cost unavailable","additional cost: " & FORMAT(Cost,"#,0.00") & " per component unit; currency not specified")))
 
   measure 'Transfer Answer' =
-      VAR Q = [Overview transfer quantity] VAR D = [Overview transfer arrival_date] RETURN IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK(Q),"Supporting record unavailable",([Overview Transfer Source] & " to " & [Overview Transfer Destination]) & ": " & FORMAT(Q,"#,0") & " component units; " & IF(ISBLANK(D),"date unavailable",FORMAT(D,"MMM d, yyyy"))))
+      VAR Q = [Overview transfer quantity] VAR D = [Overview transfer arrival_date] VAR Cost = [Overview transfer incremental_cost_per_unit] RETURN IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK(Q),"Supporting record unavailable",([Overview Transfer Source] & " to " & [Overview Transfer Destination]) & ": " & FORMAT(Q,"#,0") & " component units; " & IF(ISBLANK(D),"date unavailable",FORMAT(D,"MMM d, yyyy")) & "; " & IF(ISBLANK(Cost),"additional cost unavailable","additional cost: " & FORMAT(Cost,"#,0.00") & " per component unit; currency not specified")))
 
   measure 'Qualification Answer' =
       IF(NOT ISBLANK([Overview Analysis Key]),[Overview qualification Supplier] & ": " & [Overview Qualification Status Display])

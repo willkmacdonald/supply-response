@@ -991,10 +991,16 @@ def measures():
                 "part_id",
                 "plant_id",
             ),
-            "shipment": ("quantity", "due_date", "supplier_id"),
+            "shipment": (
+                "quantity",
+                "due_date",
+                "incremental_cost_per_unit",
+                "supplier_id",
+            ),
             "transfer": (
                 "quantity",
                 "arrival_date",
+                "incremental_cost_per_unit",
                 "source_plant_id",
                 "destination_plant_id",
             ),
@@ -1087,7 +1093,7 @@ def measures():
         VAR U = [Baseline uncovered_part_demand] VAR C = [Baseline response_cost]
         RETURN IF(NOT ISBLANK([Overview Analysis Key]),"Without a response: "
         & IF(ISBLANK(V),"revenue exposure unavailable",FORMAT(V,"#,0.00") & " revenue at risk; currency not specified")
-        & ". Service-target exposure: " & IF(ISBLANK(P),"unavailable",FORMAT(P,"0") & "% of order lines")
+        & ". Service-target exposure: " & IF(ISBLANK(P),"unavailable",FORMAT(P,"0") & "% of production orders")
         & "; parts still needed: " & IF(ISBLANK(U),"unavailable",FORMAT(U,"#,0") & " component units still needed")
         & "; response cost: " & IF(ISBLANK(C),"unavailable",FORMAT(C,"#,0.00") & "; currency not specified"))""",
     )
@@ -1113,11 +1119,14 @@ def measures():
             + family
             + " "
             + datefield
-            + "] "
+            + "] VAR Cost = [Overview "
+            + family
+            + " incremental_cost_per_unit] "
             'RETURN IF(NOT ISBLANK([Overview Analysis Key]),IF(ISBLANK(Q),"Supporting record unavailable",'
             + "("
             + entity_expression
-            + ') & ": " & FORMAT(Q,"#,0") & " component units; " & IF(ISBLANK(D),"date unavailable",FORMAT(D,"MMM d, yyyy"))))',
+            + ') & ": " & FORMAT(Q,"#,0") & " component units; " & IF(ISBLANK(D),"date unavailable",FORMAT(D,"MMM d, yyyy"))'
+            + ' & "; " & IF(ISBLANK(Cost),"additional cost unavailable","additional cost: " & FORMAT(Cost,"#,0.00") & " per component unit; currency not specified")))',
         )
     add(
         "Qualification Answer",

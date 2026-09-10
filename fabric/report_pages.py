@@ -447,7 +447,7 @@ DETAILS = {
         (
             ("Revenue at risk — without a response", "Orders Baseline Revenue Display"),
             (
-                "Order lines expected to miss on-time, in-full",
+                "Production orders expected to miss on-time, in-full",
                 "Orders Baseline OTIF Display",
             ),
             ("Order lines in this analysis", "Affected Lines Display"),

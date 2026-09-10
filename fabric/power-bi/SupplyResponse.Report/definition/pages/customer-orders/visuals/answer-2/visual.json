@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Order lines expected to miss on-time, in-full'"
+                  "Value": "'Production orders expected to miss on-time, in-full'"
                 }
               }
             },
@@ -153,7 +153,7 @@
               },
               "queryRef": "CaseCommandCenter.Orders Baseline OTIF Display",
               "nativeQueryRef": "Orders Baseline OTIF Display",
-              "displayName": "Order lines expected to miss on-time, in-full"
+              "displayName": "Production orders expected to miss on-time, in-full"
             }
           ]
         }

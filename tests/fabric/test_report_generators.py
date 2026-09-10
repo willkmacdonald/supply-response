@@ -858,6 +858,50 @@ def test_disruption_answer_keeps_original_requirement_separate_from_response():
     assert "Proposed shipment" in shipment
 
 
+def test_response_answers_include_exact_record_per_unit_cost_without_arithmetic():
+    definitions = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"]
+
+    for label, family, date_field in (
+        ("Shipment", "shipment", "due_date"),
+        ("Transfer", "transfer", "arrival_date"),
+    ):
+        cost_name = f"Overview {family} incremental_cost_per_unit"
+        assert cost_name in definitions
+        cost = definitions[cost_name]["expression"]
+        assert "[Overview Analysis Key]" in cost
+        assert "COUNTROWS(SavedRecords) == 1" in cost
+        assert "SELECTEDVALUE(SavedRecords[incremental_cost_per_unit])" in cost
+        assert f'SavedRecords[record_family] == "{family}"' in cost
+        assert 'SavedRecords[record_state] == "available"' in cost
+        assert 'SavedRecords[evidence_state] == "available"' in cost
+
+        answer = definitions[f"{label} Answer"]["expression"]
+        assert f"[Overview {family} quantity]" in answer
+        assert f"[Overview {family} {date_field}]" in answer
+        assert f"[{cost_name}]" in answer
+        assert 'ISBLANK(Cost),"additional cost unavailable"' in answer
+        assert (
+            '"additional cost: " & FORMAT(Cost,"#,0.00")'
+            ' & " per component unit; currency not specified"' in answer
+        )
+        assert "*" not in answer
+
+
+def test_overview_service_target_percentage_names_its_production_order_basis():
+    artifacts = report_pages.artifacts()
+    definitions = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"]
+    exposure = definitions["Exposure Answer"]["expression"]
+    assert "% of production orders" in exposure
+    assert "% of order lines" not in exposure
+
+    title = artifacts["pages/customer-orders/visuals/answer-2/visual.json"]["visual"][
+        "visualContainerObjects"
+    ]["title"][0]["properties"]["text"]
+    assert title == report_pages.literal(
+        "Production orders expected to miss on-time, in-full"
+    )
+
+
 def test_role_qualified_entities_and_scope_guards_remain_in_generated_dax():
     definitions = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"]
     supplier = definitions["Overview shipment Supplier"]["expression"]
