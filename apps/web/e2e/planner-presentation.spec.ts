@@ -124,6 +124,13 @@ for (const viewport of [
     ]) await verifyCard(page, heading);
     await expect(page.getByText("Work IQ", {exact: true}).first()).toBeVisible();
     await expect(page.getByText("Microsoft Fabric", {exact: true}).first()).toBeVisible();
+    const recommendation = page.getByRole("region", {name: "Recommended response—and why.", exact: true});
+    const comparison = recommendation.getByRole("group", {name: "Compared with doing nothing", exact: true});
+    const rankingDetails = recommendation.getByText("How the options were compared", {exact: true}).locator("..");
+    await expect(comparison).toBeVisible();
+    expect(await comparison.evaluate((node, details) => Boolean(
+      node.compareDocumentPosition(details as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ), await rankingDetails.elementHandle())).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     await page.getByRole("region", {name: "1. Understand the disruption", exact: true})
       .screenshot({path: resolve(artifacts, `${viewport.name}-understand-row.png`)});
@@ -132,6 +139,7 @@ for (const viewport of [
       .screenshot({path: resolve(artifacts, `${viewport.name}-recovery-card.png`)});
     await page.locator("article.evidence-card").filter({has: page.getByRole("heading", {name: "Can we use the alternate supplier?", exact: true})})
       .screenshot({path: resolve(artifacts, `${viewport.name}-qualification-card.png`)});
+    await recommendation.screenshot({path: resolve(artifacts, `${viewport.name}-recommendation-card.png`)});
     await page.screenshot({path: resolve(artifacts, `${viewport.name}.png`), fullPage: true});
   });
 }

@@ -81,7 +81,33 @@ it("shows recommended actions and predictions before keeping raw ranking rules i
     source_data_lineage: ["source-1"], approval_burden: 1, execution_risk: 2,
     requested_side_effects: [],
   };
-  input.analysis!.response_options = [option]; input.analysis!.recommendation = option;
+  const baseline: ResponseOption = {
+    ...option, option_id: "baseline", option_kind: "no_mitigation", name: "No-Mitigation Baseline",
+    executable: false, active_mitigation: false,
+    predicted: {uncovered_part_demand: 6800, otif_loss_percentage: 100, revenue_at_risk: "955000.00",
+      margin_at_risk: "328000.00", response_cost: "0.00", protected_customer_order_ids: []},
+  };
+  input.analysis!.material.operational_snapshot_json = JSON.stringify({
+    case_id: "c", runtime_mode: "fallback", scenario_effective_time: "2026-09-01T09:00:00-05:00",
+    scenario_timezone: "America/Chicago", analysis_horizon_start: "2026-09-01T09:00:00-05:00",
+    analysis_horizon_end: "2026-09-30", disruption: {disruption_id: "d", supplier_id: "RL-SUP-ALPHA",
+      po_line_id: "po", part_id: "RL-MAT-10247", plant_id: "RL-PLANT-CHI", original_quantity: 8000,
+      original_due_date: "2026-09-03", partial_quantity: 0, partial_due_date: null, recovery_date: null,
+      source_ref: "source-1"}, inventory_positions: [],
+    production_orders: [
+      {production_order_id: "mo1", product_id: "product", plant_id: "RL-PLANT-CHI", quantity: 1,
+        due_date: "2026-09-03", component_demand: 1, customer_order_id: "co1", customer_revenue: "500000.00"},
+      {production_order_id: "mo2", product_id: "product", plant_id: "RL-PLANT-CHI", quantity: 1,
+        due_date: "2026-09-04", component_demand: 1, customer_order_id: "co2", customer_revenue: "455000.00"},
+    ], customer_orders: [
+      {customer_order_line_id: "co1", production_order_id: "mo1", customer_id: "customer-1", product_id: "product",
+        plant_id: "RL-PLANT-CHI", quantity: 1, due_date: "2026-09-03", unit_revenue: "500000.00"},
+      {customer_order_line_id: "co2", production_order_id: "mo2", customer_id: "customer-2", product_id: "product",
+        plant_id: "RL-PLANT-CHI", quantity: 1, due_date: "2026-09-04", unit_revenue: "455000.00"},
+    ],
+  });
+  option.predicted!.protected_customer_order_ids = ["co2"];
+  input.analysis!.response_options = [baseline, option]; input.analysis!.recommendation = option;
   input.analysis!.ranking = {...input.analysis!.ranking, recommended_option_id: option.option_id,
     no_feasible_mitigation: false, stages: [{comparator: "uncovered_part_demand", threshold: "500",
       lower_is_better: true, input_option_ids: ["combined", "transfer"], values: [],
@@ -93,10 +119,102 @@ it("shows recommended actions and predictions before keeping raw ranking rules i
     .filter(node => node !== details).map(node => node.textContent).join(" ");
   expect(mainText).toContain("Recommended actions");
   expect(mainText).toContain("Expedite the proposed shipment from the current supplier, transfer stock from another plant, and prioritize production for customer needs.");
-  expect(mainText).toContain("Expected if we take this option");
+  const comparisonSummary = within(recommendation).getByRole("group", {name: "Compared with doing nothing"});
+  expect(comparisonSummary).toHaveTextContent("Doing nothing → taking this response. These results are predictions.");
+  expect(comparisonSummary).toHaveTextContent("Parts still needed6,800 → 2,300 RL-MAT-10247 component units");
+  expect(comparisonSummary).toHaveTextContent("Customer order lines expected to miss the on-time, in-full target100% (2 of 2 lines) → 50% (1 of 2 lines)");
+  expect(comparisonSummary).toHaveTextContent("Revenue at risk955,000.00 (currency not specified) → 375,000.00 (currency not specified)");
+  expect(comparisonSummary).toHaveTextContent("Margin at risk328,000.00 (currency not specified) → 125,000.00 (currency not specified)");
+  expect(comparisonSummary).toHaveTextContent("Response cost0.00 (currency not specified) → 24,750.00 (currency not specified)");
+  expect(comparisonSummary).toHaveTextContent("Revenue at risk is the value of customer order lines expected to miss the service target.");
+  expect(within(recommendation).queryByText("Expected if we take this option")).not.toBeInTheDocument();
   expect(mainText).not.toMatch(/threshold|option_id|stable option identifier/i);
+  expect(mainText).not.toMatch(/persisted prediction/i);
   expect(within(details).getByText(/threshold 500/)).toBeInTheDocument();
-  const prediction = within(recommendation).getByText("Expected if we take this option").closest("div")!;
-  expect(prediction.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(comparisonSummary.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(within(recommendation).getByText("Assumptions and unresolved questions")).toBeVisible();
+  const optionCard = within(screen.getByRole("region", {name: "Compare the options."}))
+    .getByRole("article", {name: "Combined response"});
+  expect(optionCard).toHaveTextContent("Execution coordination comparison score: 2");
+  expect(optionCard).toHaveTextContent("Each unconfirmed external commitment counts 2 points");
+  expect(optionCard).toHaveTextContent("Lower scores mean fewer or lower-weighted coordination factors");
+  expect(optionCard).toHaveTextContent("This score is not a probability of failure");
+});
+
+it("explains when the persisted do-nothing comparison is missing or ambiguous", () => {
+  const input = state();
+  const recommendation: ResponseOption = {
+    option_id: "combined", option_kind: "combined", name: "Combined response", executable: true,
+    active_mitigation: true, predicted: {uncovered_part_demand: 2300, otif_loss_percentage: 50,
+      revenue_at_risk: "375000.00", margin_at_risk: "125000.00", response_cost: "24750.00",
+      protected_customer_order_ids: []}, assumptions: [], evidence_ids: [], evidence_requirements: [],
+    blocking_codes: [], prerequisite_roles: [], source_data_lineage: [], approval_burden: 0,
+    execution_risk: 6, requested_side_effects: [],
+  };
+  input.analysis!.response_options = [recommendation]; input.analysis!.recommendation = recommendation;
+  input.analysis!.ranking = {...input.analysis!.ranking, recommended_option_id: recommendation.option_id,
+    no_feasible_mitigation: false};
+  const {rerender} = render(<InvestigationFlow state={input} />);
+  let card = screen.getByRole("region", {name: "Recommended response—and why."});
+  expect(within(card).getByText("Do-nothing comparison unavailable: no baseline option is recorded.")).toBeVisible();
+  expect(within(card).getByText("Expected if we take this option")).toBeVisible();
+  const baseline = {...recommendation, option_id: "baseline-1", option_kind: "no_mitigation" as const,
+    name: "No-Mitigation Baseline", active_mitigation: false};
+  input.analysis!.response_options = [baseline, {...baseline, option_id: "baseline-2"}, recommendation];
+  rerender(<InvestigationFlow state={input} />);
+  card = screen.getByRole("region", {name: "Recommended response—and why."});
+  expect(within(card).getByText("Do-nothing comparison unavailable: more than one baseline option is recorded.")).toBeVisible();
+  expect(within(card).getByText("Expected if we take this option")).toBeVisible();
+});
+
+it("does not compare a missing persisted prediction", () => {
+  const input = state();
+  const predicted = {uncovered_part_demand: 2300, otif_loss_percentage: 50,
+    revenue_at_risk: "375000.00", margin_at_risk: "125000.00", response_cost: "24750.00",
+    protected_customer_order_ids: []};
+  const baseline: ResponseOption = {option_id: "baseline", option_kind: "no_mitigation",
+    name: "No-Mitigation Baseline", executable: false, active_mitigation: false, predicted: null,
+    assumptions: [], evidence_ids: [], evidence_requirements: [], blocking_codes: [], prerequisite_roles: [],
+    source_data_lineage: [], approval_burden: 0, execution_risk: 0, requested_side_effects: []};
+  const recommendation: ResponseOption = {...baseline, option_id: "combined", option_kind: "combined",
+    name: "Combined response", executable: true, active_mitigation: true, predicted};
+  input.analysis!.response_options = [baseline, recommendation]; input.analysis!.recommendation = recommendation;
+  input.analysis!.ranking = {...input.analysis!.ranking, recommended_option_id: recommendation.option_id,
+    no_feasible_mitigation: false};
+  const {rerender} = render(<InvestigationFlow state={input} />);
+  let card = screen.getByRole("region", {name: "Recommended response—and why."});
+  expect(within(card).getByText("Do-nothing comparison unavailable: the baseline prediction is missing or invalid.")).toBeVisible();
+  expect(within(card).getByText("Expected if we take this option")).toBeVisible();
+  baseline.predicted = undefined as unknown as null;
+  rerender(<InvestigationFlow state={input} />);
+  card = screen.getByRole("region", {name: "Recommended response—and why."});
+  expect(within(card).getByText("Do-nothing comparison unavailable: the baseline prediction is missing or invalid.")).toBeVisible();
+  baseline.predicted = predicted; recommendation.predicted = null;
+  rerender(<InvestigationFlow state={input} />);
+  card = screen.getByRole("region", {name: "Recommended response—and why."});
+  expect(within(card).getByText("Comparison unavailable: the recommended prediction is missing or invalid.")).toBeVisible();
+});
+
+it("does not claim a benefit when the persisted recommended and baseline predictions tie", () => {
+  const input = state();
+  const predicted = {uncovered_part_demand: 6800, otif_loss_percentage: 100,
+    revenue_at_risk: "955000.00", margin_at_risk: "328000.00", response_cost: "0.00",
+    protected_customer_order_ids: []};
+  const baseline: ResponseOption = {option_id: "baseline", option_kind: "no_mitigation",
+    name: "No-Mitigation Baseline", executable: false, active_mitigation: false, predicted,
+    assumptions: [], evidence_ids: [], evidence_requirements: [], blocking_codes: [], prerequisite_roles: [],
+    source_data_lineage: [], approval_burden: 0, execution_risk: 0, requested_side_effects: []};
+  const recommendation: ResponseOption = {...baseline, option_id: "combined", option_kind: "combined",
+    name: "Combined response", executable: true, active_mitigation: true};
+  input.analysis!.response_options = [baseline, recommendation]; input.analysis!.recommendation = recommendation;
+  input.analysis!.ranking = {...input.analysis!.ranking, recommended_option_id: recommendation.option_id,
+    no_feasible_mitigation: false};
+  render(<InvestigationFlow state={input} />);
+  const comparison = within(screen.getByRole("region", {name: "Recommended response—and why."}))
+    .getByRole("group", {name: "Compared with doing nothing"});
+  expect(comparison).toHaveTextContent("The values shown here are unchanged from doing nothing; no benefit is shown in these measures.");
+  expect(comparison).toHaveTextContent("6,800 → 6,800 component units (part unavailable) (unchanged)");
+  expect(comparison).toHaveTextContent("Production orders expected to miss the on-time, in-full target100% → 100% (unchanged)");
+  expect(comparison).not.toHaveTextContent("Customer order lines expected");
+  expect(comparison).toHaveTextContent("Customer-order-line interpretation unavailable. Revenue and service exposure retain the production-order calculation basis.");
 });
