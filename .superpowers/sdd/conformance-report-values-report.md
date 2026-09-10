@@ -92,4 +92,21 @@ The TOM check proves static model parsing and grouping references; it does not
 execute DAX. The offline author validates PBIR shape without native Power BI data
 or rendering. Native Power BI-generated-query identity grouping, visual fit/render,
 and exact record navigation acceptance remain unavailable and unclaimed. Actual
-SQL execution on the dedicated VM is also pending and unclaimed.
+SQL execution was subsequently completed by the parent; see the addendum below.
+
+## Parent runtime addendum
+
+User specifically approved transfer of the four files above and synthetic testing
+on private `supply-response-test.exe.xyz`. The first actual run exposed error 8711
+(69 passed, 1 failed) from the paired ordered STRING_AGG calls in SavedOptions.
+A new 12-item readable/raw list regression reproduced the error; separating the
+raw aggregate into its own scalar CROSS APPLY fixed it while preserving the same
+validation and numeric ordering. Final formatted source/test hashes match the
+isolated remote copy. All **139 SQL cases passed in 16.70s** and the runner removed
+its fresh database. All **186 local reporting tests** and all three artifact
+checks also passed. Independent `sql_aggregate_review` approved with no findings.
+Final corrected artifact digest:
+`b723bb1c8dd4daec9bfb500339dace6907729931f39df2f6dd360d49c0050be4`.
+Full evidence: `docs/reviews/2026-09-09-planner-spec-conformance.md`.
+No live data, push, merge, deployment, publication or receipt activation occurred.
+Native Power BI/DAX, fit, access and exact navigation remain unverified.

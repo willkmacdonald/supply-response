@@ -9,8 +9,9 @@
 **Tech Stack:** React/TypeScript, Vitest, local headless Playwright, Python report generators, existing report schema/TMDL checks.
 
 **Local status:** Implemented and independently reviewed through `cb9aee5`.
-Actual SQL execution awaits specific source-transfer approval; native/live
-acceptance and deployment remain separate, unfinished gates.
+The specifically authorized synthetic SQL run exposed error 8711 in the new
+readable/raw list projection. A narrow query correction and regression now pass
+all 139 SQL cases; native/live acceptance and deployment remain separate gates.
 
 ## Global Constraints
 
@@ -140,7 +141,7 @@ grouping remains an explicit release-acceptance gate.
 
 Unfinished validation/release gates (not satisfied by the local checks above):
 
-- [ ] Receive specific approval for the four source/test files and execute the updated SQL tests on the dedicated synthetic test VM. The safety reviewer rejected the attempted upload before any transfer; do not retry or bypass without approval.
+- [x] Receive specific approval for the four source/test files and execute the updated SQL tests on the dedicated synthetic test VM. User approved the exact payload and private destination; all 139 cases pass after correcting SQL error 8711. Each run's fresh synthetic database was removed. See the parent review record for reproduction, correction, hashes and remaining gates.
 - [ ] Verify native Power BI generated-query grouping, DAX results, text/table fit, exact navigation and intended-user access under the separate release acceptance process.
 - [ ] Inspect the user's live pill-placement report and verify the corrected deployed UI after a separately authorized release.
 

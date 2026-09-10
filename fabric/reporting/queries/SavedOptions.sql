@@ -39,9 +39,7 @@ OUTER APPLY (
      COALESCE(SUM(CASE WHEN j.[type]=1 AND LEN(LTRIM(RTRIM(j.[value])))>0
        THEN 0 ELSE 1 END),0) AS invalid_count,
      STRING_AGG(mapped.display_value,NCHAR(10))
-       WITHIN GROUP (ORDER BY CONVERT(int,j.[key])) AS joined_text,
-     STRING_AGG(CONVERT(nvarchar(max),j.[value]),NCHAR(10))
-       WITHIN GROUP (ORDER BY CONVERT(int,j.[key])) AS joined_raw_text
+       WITHIN GROUP (ORDER BY CONVERT(int,j.[key])) AS joined_text
    FROM OPENJSON(CASE WHEN shape.is_array=1 THEN v.json_text ELSE N'[]' END) j
    CROSS APPLY (SELECT CONVERT(nvarchar(max),CASE
        WHEN v.list_kind=N'blockers' THEN CASE j.[value] COLLATE Latin1_General_100_BIN2
@@ -59,6 +57,13 @@ OUTER APPLY (
        ELSE j.[value]
      END) AS display_value) mapped
  ) parsed
+ -- Keep raw and display ordered aggregates in separate scopes: combining them
+ -- here triggers SQL Server error 8711 even with matching JSON-key expressions.
+ CROSS APPLY (
+   SELECT STRING_AGG(CONVERT(nvarchar(max),j.[value]),NCHAR(10))
+     WITHIN GROUP (ORDER BY CONVERT(int,j.[key])) AS joined_raw_text
+   FROM OPENJSON(CASE WHEN shape.is_array=1 THEN v.json_text ELSE N'[]' END) j
+ ) raw_parsed
  CROSS APPLY (SELECT
    CASE WHEN shape.is_array=1 AND parsed.invalid_count=0
      AND (v.list_kind<>N'protected' OR parsed.item_count=parsed.distinct_count)
@@ -76,7 +81,7 @@ OUTER APPLY (
          WHEN N'blockers' THEN N'No blocking codes recorded'
          WHEN N'roles' THEN N'No prerequisite role codes recorded'
          ELSE NULL END
-       ELSE parsed.joined_raw_text END END AS raw_text,
+       ELSE raw_parsed.joined_raw_text END END AS raw_text,
    CASE WHEN shape.is_array=1 AND parsed.invalid_count=0
      AND (v.list_kind<>N'protected' OR parsed.item_count=parsed.distinct_count)
      THEN parsed.item_count END AS item_count

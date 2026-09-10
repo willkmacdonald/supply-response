@@ -1358,6 +1358,27 @@ def test_partition_lists_are_ordered_validated_and_do_not_multiply_options(
     assert result[0]["response_cost"] == Decimal(0)
 
 
+def test_partition_readable_and_raw_lists_share_numeric_source_order(engine):
+    item = option("one")
+    # Cross the 9 -> 10 boundary; lexical key sorting would reorder these items.
+    item["blocking_codes"] = ["QUALITY_QUALIFICATION_PENDING"] + [
+        f"FUTURE_BLOCKER_{index}" for index in range(1, 12)
+    ]
+    item["prerequisite_roles"] = ["quality_approver", "finance_approver"] * 6
+    c, _, _ = seed(engine, options=[item])
+    (result,) = partition_rows(engine, "SavedOptions", c)
+    assert result["blockers_text"].split("\n") == [
+        "Cannot use Supplier Beta yet: supplier qualification is incomplete",
+        *["Planning requirement not recognized — see Source details"] * 11,
+    ]
+    assert result["blocking_codes_text"].split("\n") == item["blocking_codes"]
+    assert (
+        result["required_roles_text"].split("\n")
+        == ["Quality approver", "Finance approver"] * 6
+    )
+    assert result["prerequisite_roles_text"].split("\n") == item["prerequisite_roles"]
+
+
 def test_partition_preserves_validated_raw_blocker_and_role_codes_for_source_details(
     engine,
 ):

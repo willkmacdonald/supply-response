@@ -145,7 +145,7 @@ explicitly did not grant deployment or native/runtime acceptance.
 | 8. Approval language | Authorization and recorded decision are distinct; roles readable; unknown codes and IDs relegated to details. |
 | 9. Raw API errors | Allowlisted plain errors; no raw response bodies or invented recovery instructions. |
 | 10. Execution/outcome language | Explicit unsent drafts, known action names, simulated results and sequential steps; coordination score explained, controls unchanged. |
-| 11. Matching Power BI language | Business labels and display values, costs and accurate service-metric basis; raw details and identity/filter contracts retained. Actual SQL/native validation remains pending. |
+| 11. Matching Power BI language | Business labels and display values, costs and accurate service-metric basis; raw details and identity/filter contracts retained. Actual synthetic SQL validation passed after the runtime correction below; native validation remains pending. |
 | 12. Navigation/walkthrough | Exact approved route names; planner steps separate from presenter disclosures; neutral traditional comparison. |
 
 ## Remaining checkpoints
@@ -157,11 +157,9 @@ explicitly did not grant deployment or native/runtime acceptance.
   Both gaps and the score explanation were corrected and independently re-reviewed
   in `fa2488a` and `cb9aee5`; no code-review findings remain open.
 - Live-tab/native Power BI acceptance and deployment remain separate.
-- Execution of the changed SQL display queries on the dedicated synthetic test
-  VM is blocked pending the user's specific source-transfer authorization. The
-  safety reviewer rejected the attempted transfer before execution; no changed
-  files were uploaded and no new SQL test run occurred. All 138 local SQL cases
-  skipped without an engine; this is not evidence of runtime correctness.
+- The SQL runtime gate is now complete following explicit four-file transfer/run
+  approval and the narrow correction below. The earlier rejected upload and 138
+  local skips were not treated as successful verification.
 - Native reporting acceptance must check that the generated visual queries retain
   distinct option/action identities when friendly labels match, and that each
   card opens its exact analysis-bound supporting record. A metadata-parser pass
@@ -172,3 +170,68 @@ explicitly did not grant deployment or native/runtime acceptance.
 
 No correction in this record has been pushed, merged, deployed or published.
 Report-link activation remains gated on its separate acceptance requirements.
+
+## Authorized synthetic SQL runtime verification
+
+The user's subsequent **Yes** approved uploading `fabric/report_model.py`,
+`fabric/reporting/queries/SavedOptions.sql`,
+`fabric/reporting/queries/ActionOutcomes.sql`, and
+`tests/integrations/test_saved_analysis_reporting_sql.py` to the private
+`supply-response-test.exe.xyz` VM. Only those four files were transferred into
+the existing isolated `/home/exedev/supply-response-tests/conformance-zomyCS`
+copy; the original `src` snapshot was preserved. No secrets or live data were
+transferred. Strict SSH host-key verification was retained.
+
+The first actual engine run stopped at **69 passed, 1 failed** with SQL Server
+error **8711**: the new raw-code `STRING_AGG` conflicted with the readable-list
+ordered aggregate in the same scope. A focused regression exercising both lists
+with 12 items reproduced the same error before the fix. The correction moves the
+raw ordered aggregation into a separate scalar `CROSS APPLY`. Both lists still
+sort by numeric JSON index, and the same array/type/duplicate validation controls
+their output. Original values, identity keys, result column order/types, row
+cardinality and calculations remain unchanged.
+
+[Microsoft's STRING_AGG reference](https://learn.microsoft.com/en-us/sql/t-sql/functions/string-agg-transact-sql)
+documents the ordered-list restriction. The exact failure with this query and the
+successful separate-scope correction were established by execution, not inferred
+from documentation alone. Generated `SavedOptions.tmdl` and the artifact digest
+were regenerated because the embedded partition SQL changed; this does not create
+or activate a deployment receipt.
+
+From the isolated copy, the verified existing runner command was:
+
+```text
+/home/exedev/supply-response-tests/.venv/bin/python run-reporting-tests.py \
+  -q tests/integrations/test_saved_analysis_reporting_sql.py -x --tb=short
+```
+
+Result: **139 passed**, including the new ordered-list regression and actual SQL
+column/type parity checks. The runner checked the test-container purpose and
+localhost-only SQL binding, created one fresh synthetic database per invocation,
+and confirmed removal of that exact database after both failed and successful
+runs. No retained database was removed.
+
+Final local/remote SHA-256 values matched:
+
+| Authorized file | SHA-256 |
+| --- | --- |
+| `fabric/report_model.py` | `75b2883e0b7a199190addbf3dd0b64c42b725d8922ecccae56b4bfcbce61421f` |
+| `fabric/reporting/queries/SavedOptions.sql` | `d34e5d8553840dcac6b23257537eec82a79deb7055b60a4674edc276b9acd057` |
+| `fabric/reporting/queries/ActionOutcomes.sql` | `defee9fffc41690d2917e5123da1b5de5a4c524ccfdc764143b646126d8b7e80` |
+| `tests/integrations/test_saved_analysis_reporting_sql.py` | `759ee90e5a5963f3a9ecf820c78801cd84876468b0ed82fc2184332cbf79b3f9` |
+
+The bounded local reporting suite also passed all 186 tests (generator, project,
+activation), with the existing Starlette/httpx deprecation warning only. All three
+generator/model/digest checks, Ruff and `git diff --check` passed. Artifact digest:
+`b723bb1c8dd4daec9bfb500339dace6907729931f39df2f6dd360d49c0050be4`.
+
+This proves the SQL projections on the dedicated SQL Server test engine, not
+native Fabric/Power BI DAX, visual fit, intended-user access or exact navigation.
+No live resources, permissions, records or deployments changed during this gate.
+
+Independent `sql_aggregate_review` approved the narrow patch with no findings.
+The reviewer verified scalar aggregate cardinality, unchanged validation and
+metadata, numeric list ordering, and byte-for-byte equality between source SQL
+and the generated TMDL partition. The parent confirmed the final formatted test
+hashes on the VM and repeated the complete engine suite: **139 passed in 16.70s**,
+with successful disposable-database cleanup.
