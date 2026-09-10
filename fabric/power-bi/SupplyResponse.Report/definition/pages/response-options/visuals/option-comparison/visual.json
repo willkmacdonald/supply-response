@@ -148,11 +148,11 @@
                       "Entity": "SavedOptions"
                     }
                   },
-                  "Property": "option_name"
+                  "Property": "option_display_name"
                 }
               },
-              "queryRef": "SavedOptions.option_name",
-              "nativeQueryRef": "option_name",
+              "queryRef": "SavedOptions.option_display_name",
+              "nativeQueryRef": "option_display_name",
               "displayName": "Response option"
             },
             {
@@ -303,7 +303,7 @@
                     "Entity": "SavedOptions"
                   }
                 },
-                "Property": "option_name"
+                "Property": "option_display_name"
               }
             },
             "direction": "Ascending"

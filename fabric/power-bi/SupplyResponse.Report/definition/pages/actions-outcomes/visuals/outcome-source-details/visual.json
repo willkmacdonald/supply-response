@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "action-status",
+  "name": "outcome-source-details",
   "position": {
-    "x": 24,
-    "y": 386,
-    "width": 604,
-    "height": 176,
-    "z": 8,
-    "tabOrder": 8
+    "x": 644,
+    "y": 574,
+    "width": 612,
+    "height": 96,
+    "z": 11,
+    "tabOrder": 11
   },
   "visual": {
     "visualType": "tableEx",
@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Current actions'"
+                  "Value": "'Source details — recorded outcome identities'"
                 }
               }
             },
@@ -148,12 +148,12 @@
                       "Entity": "ActionOutcomes"
                     }
                   },
-                  "Property": "action_display_name"
+                  "Property": "metric"
                 }
               },
-              "queryRef": "ActionOutcomes.action_display_name",
-              "nativeQueryRef": "action_display_name",
-              "displayName": "Action"
+              "queryRef": "ActionOutcomes.metric",
+              "nativeQueryRef": "metric",
+              "displayName": "Metric"
             },
             {
               "field": {
@@ -163,12 +163,57 @@
                       "Entity": "ActionOutcomes"
                     }
                   },
-                  "Property": "action_status_display"
+                  "Property": "observation_kind"
                 }
               },
-              "queryRef": "ActionOutcomes.action_status_display",
-              "nativeQueryRef": "action_status_display",
-              "displayName": "Status"
+              "queryRef": "ActionOutcomes.observation_kind",
+              "nativeQueryRef": "observation_kind",
+              "displayName": "Outcome type"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "ActionOutcomes"
+                    }
+                  },
+                  "Property": "case_key"
+                }
+              },
+              "queryRef": "ActionOutcomes.case_key",
+              "nativeQueryRef": "case_key",
+              "displayName": "Case key"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "ActionOutcomes"
+                    }
+                  },
+                  "Property": "decision_key"
+                }
+              },
+              "queryRef": "ActionOutcomes.decision_key",
+              "nativeQueryRef": "decision_key",
+              "displayName": "Decision key"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "ActionOutcomes"
+                    }
+                  },
+                  "Property": "action_key"
+                }
+              },
+              "queryRef": "ActionOutcomes.action_key",
+              "nativeQueryRef": "action_key",
+              "displayName": "Action key"
             }
           ]
         }
@@ -287,7 +332,7 @@
   "filterConfig": {
     "filters": [
       {
-        "name": "actions-outcomes-action-status-LockedActionRowVisible",
+        "name": "actions-outcomes-outcome-source-details-LockedObservationRowVisible",
         "field": {
           "Measure": {
             "Expression": {
@@ -295,7 +340,7 @@
                 "Entity": "CaseCommandCenter"
               }
             },
-            "Property": "Action Row Visible"
+            "Property": "Observation Row Visible"
           }
         },
         "type": "Advanced",
@@ -323,7 +368,7 @@
                           "Source": "c"
                         }
                       },
-                      "Property": "Action Row Visible"
+                      "Property": "Observation Row Visible"
                     }
                   },
                   "Right": {

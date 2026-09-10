@@ -833,8 +833,8 @@ def test_all_business_tables_and_variance_have_locked_scope_gates():
         / "pages/actions-outcomes/visuals/predicted-observed-variance/visual.json"
     )
     assert set(_query_refs(chart)) >= {
-        "ActionOutcomes.metric",
-        "ActionOutcomes.observation_kind",
+        "ActionOutcomes.metric_display_name",
+        "ActionOutcomes.observation_kind_display",
         "ActionOutcomes.Observed Variance",
     }
 

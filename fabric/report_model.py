@@ -75,6 +75,7 @@ COLUMNS = {
         "option_id",
         "option_kind",
         "option_name",
+        "option_display_name",
         "is_baseline",
         "is_recommended",
         "executable",
@@ -87,6 +88,8 @@ COLUMNS = {
         "blockers_text",
         "required_roles_text",
         "assumptions_text",
+        "blocking_codes_text",
+        "prerequisite_roles_text",
         "protected_customer_order_count",
         "case_key",
         "analysis_key",
@@ -99,12 +102,16 @@ COLUMNS = {
         "record_type",
         "action_id",
         "action_kind",
+        "action_display_name",
         "action_status",
+        "action_status_display",
         "metric",
+        "metric_display_name",
         "predicted_value",
         "observed_value",
         "unit",
         "observation_kind",
+        "observation_kind_display",
         "scenario_effective_time",
         "projection_updated_at",
         "case_key",
@@ -178,6 +185,17 @@ COLUMNS = {
         "in_disruption_scope",
     ],
 }
+GROUP_BY_COLUMNS = {
+    (SO, "option_display_name"): ("case_key", "analysis_key", "option_key"),
+    (AO, "action_display_name"): ("case_key", "decision_key", "action_key"),
+    (AO, "action_status_display"): ("case_key", "decision_key", "action_key"),
+    (AO, "metric_display_name"): ("case_key", "decision_key", "metric"),
+    (AO, "observation_kind_display"): (
+        "case_key",
+        "decision_key",
+        "observation_kind",
+    ),
+}
 EXCEPTIONS = {
     CC: {
         "dateTime": "scenario_effective_time analysis_created_at decided_at",
@@ -207,6 +225,9 @@ for _table, _groups in EXCEPTIONS.items():
         for _column in _names.split():
             assert _column in TYPES[_table]
             TYPES[_table][_column] = _type
+for (_table, _column), _group_columns in GROUP_BY_COLUMNS.items():
+    assert _column in TYPES[_table]
+    assert all(_group_column in TYPES[_table] for _group_column in _group_columns)
 DATE_ONLY = {
     "due_date",
     "dispatch_date",
@@ -890,7 +911,7 @@ def measures():
             "#,0.00",
         )
     for field in (
-        "option_name",
+        "option_display_name",
         "revenue_at_risk",
         "response_cost",
         "blockers_text",
@@ -902,7 +923,12 @@ def measures():
             "IF(NOT ISBLANK([Selected Option Key]),("
             + scoped(
                 SO,
-                "SELECTEDVALUE(" + col(SO, field) + ")",
+                (
+                    "IF(COUNTROWS(SavedOptions) == 1,CONCATENATEX("
+                    'SavedOptions,SavedOptions[option_display_name],""))'
+                    if field == "option_display_name"
+                    else "SELECTEDVALUE(" + col(SO, field) + ")"
+                ),
                 extra=[key_filter(SO, "option_key", "[Selected Option Key]")],
                 clear=True,
             )
@@ -916,7 +942,7 @@ def measures():
     )
     add(
         "Selected Option Display",
-        'IF([Option Requested] == 0,"Compare the saved options",IF(ISBLANK([Selected Option Key]),"Selected option unavailable",[Selected Option option_name]))',
+        'IF([Option Requested] == 0,"Compare the saved options",IF(ISBLANK([Selected Option Key]),"Selected option unavailable",[Selected Option option_display_name]))',
     )
     display(
         "Option Revenue Display",
@@ -936,7 +962,7 @@ def measures():
     # Overview basis measures ignore detail/option selection only after exact overview scope is captured.
     for basis, flag in (("Baseline", "is_baseline"), ("Recommended", "is_recommended")):
         for field in (
-            "option_name",
+            "option_display_name",
             "revenue_at_risk",
             "response_cost",
             "otif_loss_percentage",
@@ -947,9 +973,14 @@ def measures():
                 basis + " " + field,
                 scoped(
                     SO,
-                    "IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE("
-                    + col(SO, field)
-                    + "))",
+                    (
+                        "IF(COUNTROWS(SavedOptions) == 1,CONCATENATEX("
+                        'SavedOptions,SavedOptions[option_display_name],""))'
+                        if field == "option_display_name"
+                        else "IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE("
+                        + col(SO, field)
+                        + "))"
+                    ),
                     analysis="[Overview Analysis Key]",
                     extra=[eq(SO, flag, "TRUE()")],
                     clear=True,
@@ -958,7 +989,7 @@ def measures():
                 hidden=True,
             )
     for field in (
-        "option_name",
+        "option_display_name",
         "revenue_at_risk",
         "response_cost",
         "otif_loss_percentage",
@@ -969,9 +1000,14 @@ def measures():
             'IF([Decision Kind] == "approved" && NOT ISBLANK([Approved Option Key]),('
             + scoped(
                 SO,
-                "IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE("
-                + col(SO, field)
-                + "))",
+                (
+                    "IF(COUNTROWS(SavedOptions) == 1,CONCATENATEX("
+                    'SavedOptions,SavedOptions[option_display_name],""))'
+                    if field == "option_display_name"
+                    else "IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE("
+                    + col(SO, field)
+                    + "))"
+                ),
                 analysis="[Decision Analysis Key]",
                 extra=[key_filter(SO, "option_key", "[Approved Option Key]")],
                 clear=True,
@@ -1140,10 +1176,10 @@ def measures():
         "Recommendation Answer",
         """IF(NOT ISBLANK([Overview Analysis Key]),IF([Overview no_feasible_mitigation] == TRUE(),
         "No option meets the planning requirements",
-        IF(ISBLANK([Recommended option_name]),"Recommendation unavailable",
-        [Recommended option_name] & "; " & IF(ISBLANK([Recommended uncovered_part_demand]),"parts still needed unavailable",
+        IF(ISBLANK([Recommended option_display_name]),"Recommendation unavailable",
+        [Recommended option_display_name] & "; " & IF(ISBLANK([Recommended uncovered_part_demand]),"parts still needed unavailable",
         FORMAT([Recommended uncovered_part_demand],"#,0") & " component units still needed")
-        & "; order-line service-target exposure " & IF(ISBLANK([Recommended otif_loss_percentage]),"unavailable",
+        & "; production-order service-target exposure " & IF(ISBLANK([Recommended otif_loss_percentage]),"unavailable",
         FORMAT([Recommended otif_loss_percentage],"0") & "%")
         & "; revenue at risk " & IF(ISBLANK([Recommended revenue_at_risk]),"unavailable",FORMAT([Recommended revenue_at_risk],"#,0.00"))
         & "; response cost " & IF(ISBLANK([Recommended response_cost]),"unavailable",FORMAT([Recommended response_cost],"#,0.00"))
@@ -1154,7 +1190,7 @@ def measures():
         "Decision Answer",
         """IF(NOT ISBLANK([Selected Case Key]),IF(ISBLANK([Current Decision Key]),
         IF([Case Status] == "awaiting_decision","Awaiting approval","No current decision recorded · " & [Case Status]),
-        IF([Decision Kind] == "approved","Approved option: " & COALESCE([Approved option_name],"Unavailable"),
+        IF([Decision Kind] == "approved","Approved option: " & COALESCE([Approved option_display_name],"Unavailable"),
         "Recorded decision: " & COALESCE([Decision Kind],"Unavailable"))) & ". Approval remains an explicit action in the demo.")""",
     )
 
@@ -1247,17 +1283,40 @@ def measures():
             kind,
             hidden=True,
         )
+    for name, field, filters in (
+        ("Current Action Status Label", "action_status_display", action_filters),
+        (
+            "Current Observation Kind Label",
+            "observation_kind_display",
+            observation_filters,
+        ),
+    ):
+        add(
+            name,
+            scoped(
+                AO,
+                "VAR Labels = DISTINCT(SELECTCOLUMNS(ActionOutcomes,"
+                '"DisplayValue",'
+                + col(AO, field)
+                + ")) RETURN IF(COUNTROWS(Labels) == 1,"
+                'CONCATENATEX(Labels,[DisplayValue],""))',
+                extra=filters,
+                decision=True,
+                clear=True,
+            ),
+            hidden=True,
+        )
     add(
         "Current Decision Display",
         'IF(ISBLANK([Selected Case Key]),[Case Selection State],IF(ISBLANK([Current Decision Key]),"No current decision recorded",COALESCE([Decision Kind],"Decision kind unavailable")))',
     )
     add(
         "Current Action Status Display",
-        'IF(ISBLANK([Current Actions Count]) || [Current Actions Count] == 0,"No actions recorded",COALESCE([Current Action Status],"Multiple action states — see current actions"))',
+        'IF(ISBLANK([Current Actions Count]) || [Current Actions Count] == 0,"No actions recorded",COALESCE([Current Action Status Label],"Multiple action states — see current actions"))',
     )
     add(
         "Current Observation Display",
-        'IF(ISBLANK([Current Observations Count]) || [Current Observations Count] == 0,"No outcomes recorded",IF([Current Observation Kind] == "simulated","Simulated",COALESCE([Current Observation Kind],"Mixed observation kinds — see each series")))',
+        'IF(ISBLANK([Current Observations Count]) || [Current Observations Count] == 0,"No outcomes recorded",COALESCE([Current Observation Kind Label],"Mixed observation kinds — see each series"))',
     )
     display(
         "Projection Updated Display",
@@ -1282,6 +1341,11 @@ def manifest():
         "tables": {
             t: {
                 "columns": dict(TYPES[t]),
+                "group_by_columns": {
+                    column: list(groups)
+                    for (table, column), groups in GROUP_BY_COLUMNS.items()
+                    if table == t
+                },
                 "column_formats": {c: column_format(t, c) for c in COLUMNS[t]},
                 "partition": t,
                 "mode": "directQuery",
@@ -1344,6 +1408,13 @@ def artifacts(query_directory):
             ]
             if column_format(table, name):
                 lines += ["    formatString: " + column_format(table, name)]
+            group_columns = GROUP_BY_COLUMNS.get((table, name), ())
+            if group_columns:
+                lines += ["    relatedColumnDetails"]
+                lines += [
+                    "      groupByColumn: " + group_column
+                    for group_column in group_columns
+                ]
             lines += [""]
         for name, measure in definitions[table].items():
             lines += ["  measure '" + name.replace("'", "''") + "' ="]

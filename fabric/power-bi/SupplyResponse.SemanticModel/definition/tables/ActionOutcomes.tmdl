@@ -29,15 +29,42 @@ table ActionOutcomes
     sourceColumn: action_kind
     summarizeBy: none
 
+  column action_display_name
+    dataType: string
+    sourceColumn: action_display_name
+    summarizeBy: none
+    relatedColumnDetails
+      groupByColumn: case_key
+      groupByColumn: decision_key
+      groupByColumn: action_key
+
   column action_status
     dataType: string
     sourceColumn: action_status
     summarizeBy: none
 
+  column action_status_display
+    dataType: string
+    sourceColumn: action_status_display
+    summarizeBy: none
+    relatedColumnDetails
+      groupByColumn: case_key
+      groupByColumn: decision_key
+      groupByColumn: action_key
+
   column metric
     dataType: string
     sourceColumn: metric
     summarizeBy: none
+
+  column metric_display_name
+    dataType: string
+    sourceColumn: metric_display_name
+    summarizeBy: none
+    relatedColumnDetails
+      groupByColumn: case_key
+      groupByColumn: decision_key
+      groupByColumn: metric
 
   column predicted_value
     dataType: string
@@ -58,6 +85,15 @@ table ActionOutcomes
     dataType: string
     sourceColumn: observation_kind
     summarizeBy: none
+
+  column observation_kind_display
+    dataType: string
+    sourceColumn: observation_kind_display
+    summarizeBy: none
+    relatedColumnDetails
+      groupByColumn: case_key
+      groupByColumn: decision_key
+      groupByColumn: observation_kind
 
   column scenario_effective_time
     dataType: dateTime
@@ -100,4 +136,4 @@ table ActionOutcomes
   partition ActionOutcomes = m
     mode: directQuery
     source =
-        Sql.Database(FABRIC_SQL_SERVER, FABRIC_SQL_DATABASE, [Query="SELECT a.case_id,a.decision_id,a.selected_option_id,a.record_type,a.action_id,#(lf) a.action_kind,a.action_status,a.metric,a.predicted_value,a.observed_value,#(lf) a.unit,a.observation_kind,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(a.scenario_effective_time,'+00:00')) AS scenario_effective_time,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(a.projection_updated_at,'+00:00')) AS projection_updated_at,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),a.case_id)),2) AS case_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),a.decision_id)),2) AS decision_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),a.action_id)),2) AS action_key#(lf)FROM analytics.action_outcomes a#(lf)"])
+        Sql.Database(FABRIC_SQL_SERVER, FABRIC_SQL_DATABASE, [Query="SELECT a.case_id,a.decision_id,a.selected_option_id,a.record_type,a.action_id,#(lf) a.action_kind,#(lf) CASE#(lf)   WHEN DATALENGTH(a.action_kind)=DATALENGTH(N'prepare_alpha_recovery_draft') AND a.action_kind COLLATE Latin1_General_100_BIN2=N'prepare_alpha_recovery_draft' THEN N'Prepare supplier recovery draft'#(lf)   WHEN DATALENGTH(a.action_kind)=DATALENGTH(N'coordinate_alpha_expedited_partial') AND a.action_kind COLLATE Latin1_General_100_BIN2=N'coordinate_alpha_expedited_partial' THEN N'Coordinate expedited partial shipment'#(lf)   WHEN DATALENGTH(a.action_kind)=DATALENGTH(N'transfer_dallas_to_chicago') AND a.action_kind COLLATE Latin1_General_100_BIN2=N'transfer_dallas_to_chicago' THEN N'Transfer stock from Dallas to Chicago'#(lf)   WHEN DATALENGTH(a.action_kind)=DATALENGTH(N'resequence_priority_production') AND a.action_kind COLLATE Latin1_General_100_BIN2=N'resequence_priority_production' THEN N'Prioritize production for customer needs'#(lf)   WHEN DATALENGTH(a.action_kind)=DATALENGTH(N'update_disruption_status') AND a.action_kind COLLATE Latin1_General_100_BIN2=N'update_disruption_status' THEN N'Update disruption status'#(lf)   ELSE N'Action type not recognized' END AS action_display_name,#(lf) a.action_status,#(lf) CASE#(lf)   WHEN DATALENGTH(a.action_status)=DATALENGTH(N'planned') AND a.action_status COLLATE Latin1_General_100_BIN2=N'planned' THEN N'Planned'#(lf)   WHEN DATALENGTH(a.action_status)=DATALENGTH(N'in_progress') AND a.action_status COLLATE Latin1_General_100_BIN2=N'in_progress' THEN N'In progress'#(lf)   WHEN DATALENGTH(a.action_status)=DATALENGTH(N'completed') AND a.action_status COLLATE Latin1_General_100_BIN2=N'completed' THEN N'Completed'#(lf)   WHEN DATALENGTH(a.action_status)=DATALENGTH(N'failed') AND a.action_status COLLATE Latin1_General_100_BIN2=N'failed' THEN N'Failed'#(lf)   ELSE N'Status not recognized' END AS action_status_display,#(lf) a.metric,#(lf) CASE#(lf)   WHEN DATALENGTH(a.metric)=DATALENGTH(N'alpha_expedited_quantity') AND a.metric COLLATE Latin1_General_100_BIN2=N'alpha_expedited_quantity' THEN N'Supplier Alpha expedited quantity'#(lf)   WHEN DATALENGTH(a.metric)=DATALENGTH(N'dallas_transfer_quantity') AND a.metric COLLATE Latin1_General_100_BIN2=N'dallas_transfer_quantity' THEN N'Dallas transfer quantity'#(lf)   WHEN DATALENGTH(a.metric)=DATALENGTH(N'total_response_arranged_supply') AND a.metric COLLATE Latin1_General_100_BIN2=N'total_response_arranged_supply' THEN N'Total supply arranged by the response'#(lf)   WHEN DATALENGTH(a.metric)=DATALENGTH(N'uncovered_part_demand') AND a.metric COLLATE Latin1_General_100_BIN2=N'uncovered_part_demand' THEN N'Parts still needed'#(lf)   WHEN DATALENGTH(a.metric)=DATALENGTH(N'response_cost') AND a.metric COLLATE Latin1_General_100_BIN2=N'response_cost' THEN N'Response cost'#(lf)   WHEN DATALENGTH(a.metric)=DATALENGTH(N'protected_customer_orders') AND a.metric COLLATE Latin1_General_100_BIN2=N'protected_customer_orders' THEN N'Protected customer orders'#(lf)   WHEN DATALENGTH(a.metric)=DATALENGTH(N'revenue_protected') AND a.metric COLLATE Latin1_General_100_BIN2=N'revenue_protected' THEN N'Revenue protected'#(lf)   WHEN DATALENGTH(a.metric)=DATALENGTH(N'margin_protected') AND a.metric COLLATE Latin1_General_100_BIN2=N'margin_protected' THEN N'Margin protected'#(lf)   WHEN DATALENGTH(a.metric)=DATALENGTH(N'otif_loss_percentage') AND a.metric COLLATE Latin1_General_100_BIN2=N'otif_loss_percentage' THEN N'Service-target exposure'#(lf)   WHEN DATALENGTH(a.metric)=DATALENGTH(N'remaining_alpha_recovery_date') AND a.metric COLLATE Latin1_General_100_BIN2=N'remaining_alpha_recovery_date' THEN N'Remaining Supplier Alpha recovery date'#(lf)   ELSE N'Result metric not recognized' END AS metric_display_name,#(lf) a.predicted_value,a.observed_value,a.unit,a.observation_kind,#(lf) CASE#(lf)   WHEN DATALENGTH(a.observation_kind)=DATALENGTH(N'actual') AND a.observation_kind COLLATE Latin1_General_100_BIN2=N'actual' THEN N'Actual'#(lf)   WHEN DATALENGTH(a.observation_kind)=DATALENGTH(N'simulated') AND a.observation_kind COLLATE Latin1_General_100_BIN2=N'simulated' THEN N'Simulated'#(lf)   ELSE N'Outcome type not recognized' END AS observation_kind_display,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(a.scenario_effective_time,'+00:00')) AS scenario_effective_time,#(lf) CONVERT(datetime2(6),SWITCHOFFSET(a.projection_updated_at,'+00:00')) AS projection_updated_at,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),a.case_id)),2) AS case_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),a.decision_id)),2) AS decision_key,#(lf) CONVERT(varchar(max),CONVERT(varbinary(max),CONVERT(nvarchar(max),a.action_id)),2) AS action_key#(lf)FROM analytics.action_outcomes a#(lf)"])

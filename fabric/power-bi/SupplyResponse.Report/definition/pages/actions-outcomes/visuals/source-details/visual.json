@@ -163,6 +163,21 @@
                       "Entity": "ActionOutcomes"
                     }
                   },
+                  "Property": "action_status"
+                }
+              },
+              "queryRef": "ActionOutcomes.action_status",
+              "nativeQueryRef": "action_status",
+              "displayName": "Status"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "ActionOutcomes"
+                    }
+                  },
                   "Property": "case_key"
                 }
               },

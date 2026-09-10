@@ -8,7 +8,8 @@ if (args.Length == 3 && args[1] == "--manifest")
         using var document = JsonDocument.Parse(File.ReadAllText(args[2]));
         var root = document.RootElement;
         var expected = root.GetProperty("tables");
-        var model = TmdlSerializer.DeserializeDatabaseFromFolder(args[0]).Model;
+        var parsedDatabase = TmdlSerializer.DeserializeDatabaseFromFolder(args[0]);
+        var model = parsedDatabase.Model;
         static void Require(bool condition, string message)
         {
             if (!condition) throw new InvalidDataException(message);
@@ -28,6 +29,8 @@ if (args.Length == 3 && args[1] == "--manifest")
             _ => throw new InvalidDataException($"unsupported type {value}")
         };
         Require(expected.EnumerateObject().Count() == 5, "manifest must contain five tables");
+        Require(parsedDatabase.CompatibilityLevel >= 1400,
+            $"grouping metadata requires compatibility level 1400+, got {parsedDatabase.CompatibilityLevel}");
         Require(SameNames(model.Tables.Select(t => t.Name),
             expected.EnumerateObject().Select(t => t.Name)), "unexpected TMDL tables");
         Require(root.GetProperty("relationships").GetArrayLength() == 0 && model.Relationships.Count == 0,
@@ -53,6 +56,13 @@ if (args.Length == 3 && args[1] == "--manifest")
                     && column.IsHidden == c.GetProperty("hidden").GetBoolean()
                     && column.SummarizeBy == AggregateFunction.None,
                     $"{table.Name}.{column.Name}: presentation drift");
+                var expectedGroups = c.GetProperty("group_by_columns")
+                    .EnumerateArray().Select(item => item.GetString()!).ToArray();
+                var actualGroups = column.RelatedColumnDetails?.GroupByColumns
+                    .Select(item => item.GroupingColumn.Name).ToArray() ?? Array.Empty<string>();
+                Require(actualGroups.SequenceEqual(expectedGroups),
+                    $"{table.Name}.{column.Name}: grouping metadata drift; expected "
+                    + $"[{string.Join(", ", expectedGroups)}], got [{string.Join(", ", actualGroups)}]");
             }
             Require(spec.GetProperty("mode").GetString() == "directQuery"
                 && table.Partitions.Count == 1, $"{table.Name}: unexpected partitions");
@@ -77,7 +87,9 @@ if (args.Length == 3 && args[1] == "--manifest")
                 _ = ExpectedType(m.GetProperty("result_type").GetString()!);
             }
         }
-        Console.WriteLine("TMDL deserialized successfully with exact generated model contract; DAX was not executed.");
+        Console.WriteLine(
+            $"TMDL deserialized successfully at compatibility level {parsedDatabase.CompatibilityLevel} "
+            + "with exact generated model contract; DAX was not executed.");
         return 0;
     }
     catch (Exception error)

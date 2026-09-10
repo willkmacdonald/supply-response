@@ -1108,6 +1108,185 @@ def test_partition_reused_source_ids_do_not_cross_case_or_analysis(engine):
 
 
 @pytest.mark.parametrize(
+    ("kind", "expected"),
+    (
+        ("no_mitigation", "Do nothing — baseline"),
+        ("expedite", "Expedite the partial shipment"),
+        ("transfer", "Transfer from another plant"),
+        ("resequence", "Prioritize production for customer needs"),
+        ("alternate_source", "Use the alternate supplier"),
+        ("combined", "Combined response"),
+        ("expedite ", "Response option not recognized"),
+        ("future_option", "Response option not recognized"),
+    ),
+)
+def test_partition_option_display_names_are_closed_and_preserve_raw_values(
+    engine, kind, expected
+):
+    item = option("persisted internal option name", kind)
+    c, _, _ = seed(engine, options=[item])
+    (result,) = partition_rows(engine, "SavedOptions", c)
+    assert result["option_display_name"] == expected
+    assert result["option_kind"] == kind
+    assert result["option_name"] == "persisted internal option name"
+
+
+def test_partition_display_name_collisions_do_not_deduplicate_option_rows(engine):
+    c, _, _ = seed(
+        engine,
+        options=[option("first", "future_one"), option("second", "future_two")],
+        recommendation=None,
+    )
+    result = partition_rows(engine, "SavedOptions", c)
+    assert len(result) == 2
+    assert {row["option_id"] for row in result} == {"first", "second"}
+    assert {row["option_display_name"] for row in result} == {
+        "Response option not recognized"
+    }
+
+
+def test_partition_action_and_outcome_display_values_preserve_raw_row_identity(engine):
+    c, a, _ = seed(engine)
+    decision_id = str(uuid4())
+    actions = (
+        (
+            "prepare_alpha_recovery_draft",
+            "planned",
+            "Prepare supplier recovery draft",
+            "Planned",
+        ),
+        (
+            "coordinate_alpha_expedited_partial",
+            "in_progress",
+            "Coordinate expedited partial shipment",
+            "In progress",
+        ),
+        (
+            "transfer_dallas_to_chicago",
+            "completed",
+            "Transfer stock from Dallas to Chicago",
+            "Completed",
+        ),
+        (
+            "resequence_priority_production",
+            "failed",
+            "Prioritize production for customer needs",
+            "Failed",
+        ),
+        ("update_disruption_status", "planned", "Update disruption status", "Planned"),
+        (
+            "update_disruption_status",
+            "planned ",
+            "Update disruption status",
+            "Status not recognized",
+        ),
+        (
+            "future_action_one",
+            "cancelled",
+            "Action type not recognized",
+            "Status not recognized",
+        ),
+        (
+            "future_action_two",
+            "cancelled",
+            "Action type not recognized",
+            "Status not recognized",
+        ),
+    )
+    metrics = {
+        "alpha_expedited_quantity": "Supplier Alpha expedited quantity",
+        "dallas_transfer_quantity": "Dallas transfer quantity",
+        "total_response_arranged_supply": "Total supply arranged by the response",
+        "uncovered_part_demand": "Parts still needed",
+        "response_cost": "Response cost",
+        "protected_customer_orders": "Protected customer orders",
+        "revenue_protected": "Revenue protected",
+        "margin_protected": "Margin protected",
+        "otif_loss_percentage": "Service-target exposure",
+        "remaining_alpha_recovery_date": "Remaining Supplier Alpha recovery date",
+        "future_metric_one": "Result metric not recognized",
+        "future_metric_two": "Result metric not recognized",
+    }
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT app.decisions "
+                "(decision_id,case_id,analysis_id,idempotency_key,kind,runtime_mode,decided_at,payload_json) "
+                "VALUES (:d,:c,:a,:d,'approved','live',SYSDATETIMEOFFSET(),:p)"
+            ),
+            {
+                "d": decision_id,
+                "c": c,
+                "a": a,
+                "p": json.dumps(
+                    {
+                        "selected_option_id": "response",
+                        "scenario_effective_time": "2026-09-01T09:00:00-05:00",
+                    }
+                ),
+            },
+        )
+        for index, (kind, status, _, _) in enumerate(actions):
+            action_id = f"action-{index}-{uuid4()}"
+            connection.execute(
+                text(
+                    "INSERT app.execution_actions "
+                    "(action_id,case_id,decision_id,action_kind,status,created_at,payload_json) "
+                    "VALUES (:i,:c,:d,:k,:s,SYSDATETIMEOFFSET(),'{}'); "
+                    "INSERT app.action_projection "
+                    "(action_id,case_id,decision_id,status,current_attempt,updated_at,payload_json) "
+                    "VALUES (:i,:c,:d,:s,0,SYSDATETIMEOFFSET(),'{}')"
+                ),
+                {"i": action_id, "c": c, "d": decision_id, "k": kind, "s": status},
+            )
+        for index, metric in enumerate(metrics):
+            observation_id = f"observation-{index}-{uuid4()}"
+            observation_kind = "simulated" if index == 0 else "actual"
+            connection.execute(
+                text(
+                    "INSERT app.outcome_observations "
+                    "(observation_id,case_id,decision_id,playback_id,action_id,metric,"
+                    "observed_value,unit,predicted_value,scenario_effective_time,"
+                    "scenario_timezone,recorded_at,source_reference,kind,synthetic,payload_json) "
+                    "VALUES (:i,:c,:d,NULL,NULL,:m,'1','units','1',:at,'America/Chicago',"
+                    "SYSDATETIMEOFFSET(),'test',:k,:s,'{}')"
+                ),
+                {
+                    "i": observation_id,
+                    "c": c,
+                    "d": decision_id,
+                    "m": metric,
+                    "at": "2026-09-01T09:00:00-05:00",
+                    "k": observation_kind,
+                    "s": index == 0,
+                },
+            )
+    result = partition_rows(engine, "ActionOutcomes", c)
+    action_rows = [row for row in result if row["record_type"] == "action"]
+    assert len(action_rows) == len(actions)
+    assert {
+        (
+            row["action_kind"],
+            row["action_status"],
+            row["action_display_name"],
+            row["action_status_display"],
+        )
+        for row in action_rows
+    } == set(actions)
+    assert len({row["action_key"] for row in action_rows}) == len(actions)
+
+    observation_rows = [row for row in result if row["record_type"] == "observation"]
+    assert len(observation_rows) == len(metrics)
+    assert {
+        (row["metric"], row["metric_display_name"]) for row in observation_rows
+    } == set(metrics.items())
+    assert {row["observation_kind_display"] for row in observation_rows} == {
+        "Actual",
+        "Simulated",
+    }
+
+
+@pytest.mark.parametrize(
     "field,value,output,expected",
     [
         (
@@ -1126,6 +1305,18 @@ def test_partition_reused_source_ids_do_not_cross_case_or_analysis(engine):
             ["finance_approver", "quality_approver"],
             "required_roles_text",
             "Finance approver\nQuality approver",
+        ),
+        (
+            "blocking_codes",
+            ["FUTURE_BLOCKER"],
+            "blockers_text",
+            "Planning requirement not recognized — see Source details",
+        ),
+        (
+            "prerequisite_roles",
+            ["future_role"],
+            "required_roles_text",
+            "Required role not recognized — see Source details",
         ),
         (
             "assumptions",
@@ -1165,6 +1356,18 @@ def test_partition_lists_are_ordered_validated_and_do_not_multiply_options(
     assert len(result) == 1
     assert result[0][output] == expected
     assert result[0]["response_cost"] == Decimal(0)
+
+
+def test_partition_preserves_validated_raw_blocker_and_role_codes_for_source_details(
+    engine,
+):
+    item = option("one")
+    item["blocking_codes"] = ["FUTURE_BLOCKER"]
+    item["prerequisite_roles"] = ["future_role"]
+    c, _, _ = seed(engine, options=[item])
+    (result,) = partition_rows(engine, "SavedOptions", c)
+    assert result["blocking_codes_text"] == "FUTURE_BLOCKER"
+    assert result["prerequisite_roles_text"] == "future_role"
 
 
 COMPLETENESS_FIXTURES = {

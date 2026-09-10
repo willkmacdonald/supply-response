@@ -163,6 +163,51 @@
                       "Entity": "SavedOptions"
                     }
                   },
+                  "Property": "option_kind"
+                }
+              },
+              "queryRef": "SavedOptions.option_kind",
+              "nativeQueryRef": "option_kind",
+              "displayName": "Option kind"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "SavedOptions"
+                    }
+                  },
+                  "Property": "blocking_codes_text"
+                }
+              },
+              "queryRef": "SavedOptions.blocking_codes_text",
+              "nativeQueryRef": "blocking_codes_text",
+              "displayName": "Blocking codes text"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "SavedOptions"
+                    }
+                  },
+                  "Property": "prerequisite_roles_text"
+                }
+              },
+              "queryRef": "SavedOptions.prerequisite_roles_text",
+              "nativeQueryRef": "prerequisite_roles_text",
+              "displayName": "Prerequisite roles text"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "SavedOptions"
+                    }
+                  },
                   "Property": "option_id"
                 }
               },

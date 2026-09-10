@@ -192,7 +192,9 @@ def test_traditional_pages_are_neutral_and_options_sort_by_name():
     assert comparison["query"]["sortDefinition"] == {
         "sort": [
             {
-                "field": report_pages.field("Column", report_pages.SO, "option_name"),
+                "field": report_pages.field(
+                    "Column", report_pages.SO, "option_display_name"
+                ),
                 "direction": "Ascending",
             }
         ],
@@ -206,7 +208,7 @@ def test_option_comparison_includes_protected_customer_orders_column():
     ]["visual"]
     projections = visual["query"]["queryState"]["Values"]["projections"]
     assert [projection["queryRef"] for projection in projections] == [
-        "SavedOptions.option_name",
+        "SavedOptions.option_display_name",
         "SavedOptions.is_baseline",
         "SavedOptions.executable",
         "SavedOptions.response_cost",
@@ -235,7 +237,7 @@ def test_option_comparison_includes_protected_customer_orders_column():
     assert visual["visualType"] == "tableEx"
 
 
-def test_option_comparison_uses_planner_labels_without_changing_bindings():
+def test_main_option_comparison_uses_display_value_and_source_details_keep_raw_value():
     visual = report_pages.artifacts()[
         "pages/response-options/visuals/option-comparison/visual.json"
     ]["visual"]
@@ -245,7 +247,7 @@ def test_option_comparison_uses_planner_labels_without_changing_bindings():
         for projection in projections
     }
     expected = {
-        "option_name": "Response option",
+        "option_display_name": "Response option",
         "response_cost": "Response cost",
         "revenue_at_risk": "Revenue at risk",
         "otif_loss_percentage": "Service-target exposure (%)",
@@ -260,6 +262,60 @@ def test_option_comparison_uses_planner_labels_without_changing_bindings():
         assert projection["displayName"] == display_name
         assert projection["queryRef"] == f"SavedOptions.{property_name}"
         assert projection["nativeQueryRef"] == property_name
+
+    details = report_pages.artifacts()[
+        "pages/response-options/visuals/source-details/visual.json"
+    ]["visual"]["query"]["queryState"]["Values"]["projections"]
+    assert [projection["queryRef"] for projection in details] == [
+        "SavedOptions.option_name",
+        "SavedOptions.option_kind",
+        "SavedOptions.blocking_codes_text",
+        "SavedOptions.prerequisite_roles_text",
+        "SavedOptions.option_id",
+        "SavedOptions.case_key",
+        "SavedOptions.analysis_key",
+        "SavedOptions.option_key",
+    ]
+
+
+def test_main_actions_and_outcome_chart_use_display_values_without_losing_raw_details():
+    artifacts = report_pages.artifacts()
+    actions = artifacts["pages/actions-outcomes/visuals/action-status/visual.json"][
+        "visual"
+    ]["query"]["queryState"]["Values"]["projections"]
+    assert [projection["queryRef"] for projection in actions] == [
+        "ActionOutcomes.action_display_name",
+        "ActionOutcomes.action_status_display",
+    ]
+    details = artifacts["pages/actions-outcomes/visuals/source-details/visual.json"][
+        "visual"
+    ]["query"]["queryState"]["Values"]["projections"]
+    assert [projection["queryRef"] for projection in details] == [
+        "ActionOutcomes.action_kind",
+        "ActionOutcomes.action_status",
+        "ActionOutcomes.case_key",
+        "ActionOutcomes.decision_key",
+        "ActionOutcomes.action_key",
+    ]
+    chart = artifacts[
+        "pages/actions-outcomes/visuals/predicted-observed-variance/visual.json"
+    ]["visual"]["query"]["queryState"]
+    assert chart["Category"]["projections"][0]["queryRef"] == (
+        "ActionOutcomes.metric_display_name"
+    )
+    assert chart["Series"]["projections"][0]["queryRef"] == (
+        "ActionOutcomes.observation_kind_display"
+    )
+    outcome_details = artifacts[
+        "pages/actions-outcomes/visuals/outcome-source-details/visual.json"
+    ]["visual"]["query"]["queryState"]["Values"]["projections"]
+    assert [projection["queryRef"] for projection in outcome_details] == [
+        "ActionOutcomes.metric",
+        "ActionOutcomes.observation_kind",
+        "ActionOutcomes.case_key",
+        "ActionOutcomes.decision_key",
+        "ActionOutcomes.action_key",
+    ]
 
 
 def test_report_copy_matches_planner_language_and_preserves_required_context():
@@ -526,6 +582,96 @@ def test_model_manifest_binds_every_report_field_without_json_payloads(tmp_path)
     assert report_model.artifacts(QUERIES) == report_model.artifacts(QUERIES)
 
 
+def test_display_columns_have_collision_safe_grouping_metadata():
+    assert report_model.GROUP_BY_COLUMNS == {
+        ("SavedOptions", "option_display_name"): (
+            "case_key",
+            "analysis_key",
+            "option_key",
+        ),
+        ("ActionOutcomes", "action_display_name"): (
+            "case_key",
+            "decision_key",
+            "action_key",
+        ),
+        ("ActionOutcomes", "action_status_display"): (
+            "case_key",
+            "decision_key",
+            "action_key",
+        ),
+        ("ActionOutcomes", "metric_display_name"): (
+            "case_key",
+            "decision_key",
+            "metric",
+        ),
+        ("ActionOutcomes", "observation_kind_display"): (
+            "case_key",
+            "decision_key",
+            "observation_kind",
+        ),
+    }
+    artifacts = report_model.artifacts(QUERIES)
+    for (table, display_column), group_columns in report_model.GROUP_BY_COLUMNS.items():
+        text = artifacts[f"tables/{table}.tmdl"]
+        block = text.split(f"  column {display_column}\n", 1)[1].split("\n\n", 1)[0]
+        assert "    relatedColumnDetails\n" in block
+        assert (
+            tuple(
+                line.split(": ", 1)[1]
+                for line in block.splitlines()
+                if "groupByColumn: " in line
+            )
+            == group_columns
+        )
+
+
+def test_grouped_option_display_scalars_keep_exact_single_row_guard():
+    definitions = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"]
+    for name in (
+        "Selected Option option_display_name",
+        "Baseline option_display_name",
+        "Recommended option_display_name",
+        "Approved option_display_name",
+    ):
+        expression = definitions[name]["expression"]
+        assert "COUNTROWS(SavedOptions) == 1" in expression
+        assert (
+            'CONCATENATEX(SavedOptions,SavedOptions[option_display_name],"")'
+            in expression
+        )
+        assert "SELECTEDVALUE(SavedOptions[option_display_name])" not in expression
+
+
+def test_action_and_observation_summaries_use_distinct_sql_display_projection():
+    definitions = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"]
+    for name, field in (
+        ("Current Action Status Label", "action_status_display"),
+        ("Current Observation Kind Label", "observation_kind_display"),
+    ):
+        expression = definitions[name]["expression"]
+        assert "DISTINCT(SELECTCOLUMNS(ActionOutcomes" in expression
+        assert f"ActionOutcomes[{field}]" in expression
+        assert "COUNTROWS(Labels) == 1" in expression
+        assert 'CONCATENATEX(Labels,[DisplayValue],"")' in expression
+        assert f"SELECTEDVALUE(ActionOutcomes[{field}])" not in expression
+    assert (
+        "[Current Action Status Label]"
+        in definitions["Current Action Status Display"]["expression"]
+    )
+    assert (
+        "[Current Observation Kind Label]"
+        in definitions["Current Observation Display"]["expression"]
+    )
+    assert (
+        "SELECTEDVALUE(ActionOutcomes[action_status])"
+        in definitions["Current Action Status"]["expression"]
+    )
+    assert (
+        "SELECTEDVALUE(ActionOutcomes[observation_kind])"
+        in definitions["Current Observation Kind"]["expression"]
+    )
+
+
 def test_all_dax_bindings_resolve_and_selection_gates_are_explicit():
     manifest = report_model.manifest()["tables"]
     measures = report_model.measures()
@@ -539,7 +685,7 @@ def test_all_dax_bindings_resolve_and_selection_gates_are_explicit():
                     or field in manifest[table]["measures"]
                 ), (table, field)
             for name in re.findall(r"(?<![\w'])\[([^\]]+)\]", measure.expression):
-                assert name in names, name
+                assert name == "DisplayValue" or name in names, name
             assert "NOW()" not in measure.expression.upper()
     cc = measures["CaseCommandCenter"]
     assert (
@@ -993,8 +1139,9 @@ def test_overview_answers_bind_explicit_saved_prediction_bases():
     assert "[Overview no_feasible_mitigation] == TRUE()" in recommendation
     assert "No option meets the planning requirements" in recommendation
     assert "[Recommended otif_loss_percentage]" in recommendation
-    assert "order-line service-target exposure" in recommendation
-    assert "ISBLANK([Recommended option_name])" in recommendation
+    assert "ISBLANK([Recommended option_display_name])" in recommendation
+    assert "production-order service-target exposure" in recommendation
+    assert "order-line service-target exposure" not in recommendation
 
 
 def test_no_feasible_state_is_selected_from_exact_saved_analysis():

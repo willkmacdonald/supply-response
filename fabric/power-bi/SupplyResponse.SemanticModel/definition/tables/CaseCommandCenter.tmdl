@@ -847,10 +847,10 @@ table CaseCommandCenter
       RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[response_cost])), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key]))))))
     formatString: #,0.00
 
-  measure 'Selected Option option_name' =
+  measure 'Selected Option option_display_name' =
       IF(NOT ISBLANK([Selected Option Key]),(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Selected Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(SELECTEDVALUE(SavedOptions[option_name]), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(TREATAS({[Selected Option Key]}, SavedOptions[option_key]))))))
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,CONCATENATEX(SavedOptions,SavedOptions[option_display_name],"")), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(TREATAS({[Selected Option Key]}, SavedOptions[option_key]))))))
     isHidden
 
   measure 'Selected Option revenue_at_risk' =
@@ -887,7 +887,7 @@ table CaseCommandCenter
       IF(ISBLANK([Selected Case Key]),[Case Selection State],IF(ISBLANK([Selected Analysis Key]),"Saved analysis or operational snapshot unavailable",IF([Option Requested] == 1 && ISBLANK([Selected Option Key]),"Selected option unavailable",[Snapshot Context])))
 
   measure 'Selected Option Display' =
-      IF([Option Requested] == 0,"Compare the saved options",IF(ISBLANK([Selected Option Key]),"Selected option unavailable",[Selected Option option_name]))
+      IF([Option Requested] == 0,"Compare the saved options",IF(ISBLANK([Selected Option Key]),"Selected option unavailable",[Selected Option option_display_name]))
 
   measure 'Option Revenue Display' =
       VAR V = [Selected Option revenue_at_risk] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "#,0.##") & "; currency not specified")
@@ -898,10 +898,10 @@ table CaseCommandCenter
   measure 'Options Explanation' =
       IF(NOT ISBLANK([Selected Analysis Key]),IF([Option Requested] == 0,"Compare expected cost, service exposure, parts still needed, and whether each option meets the planning requirements. These predictions are not approved actions or outcomes.",IF(NOT ISBLANK([Selected Option Key]),COALESCE([Selected Option blockers_text],"Planning blockers unavailable") & ". " & COALESCE([Selected Option required_roles_text],"Required roles unavailable"))))
 
-  measure 'Baseline option_name' =
+  measure 'Baseline option_display_name' =
       VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Overview Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[option_name])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_baseline] == TRUE())))
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,CONCATENATEX(SavedOptions,SavedOptions[option_display_name],"")), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_baseline] == TRUE())))
     isHidden
 
   measure 'Baseline revenue_at_risk' =
@@ -934,10 +934,10 @@ table CaseCommandCenter
       RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[blockers_text])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_baseline] == TRUE())))
     isHidden
 
-  measure 'Recommended option_name' =
+  measure 'Recommended option_display_name' =
       VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Overview Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[option_name])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_recommended] == TRUE())))
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,CONCATENATEX(SavedOptions,SavedOptions[option_display_name],"")), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_recommended] == TRUE())))
     isHidden
 
   measure 'Recommended revenue_at_risk' =
@@ -970,10 +970,10 @@ table CaseCommandCenter
       RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[blockers_text])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(SavedOptions[is_recommended] == TRUE())))
     isHidden
 
-  measure 'Approved option_name' =
+  measure 'Approved option_display_name' =
       IF([Decision Kind] == "approved" && NOT ISBLANK([Approved Option Key]),(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Decision Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[option_name])), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(TREATAS({[Approved Option Key]}, SavedOptions[option_key]))))))
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,CONCATENATEX(SavedOptions,SavedOptions[option_display_name],"")), REMOVEFILTERS(SavedOptions), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key])), KEEPFILTERS(TREATAS({[Approved Option Key]}, SavedOptions[option_key]))))))
     isHidden
 
   measure 'Approved revenue_at_risk' =
@@ -1184,10 +1184,10 @@ table CaseCommandCenter
   measure 'Recommendation Answer' =
       IF(NOT ISBLANK([Overview Analysis Key]),IF([Overview no_feasible_mitigation] == TRUE(),
               "No option meets the planning requirements",
-              IF(ISBLANK([Recommended option_name]),"Recommendation unavailable",
-              [Recommended option_name] & "; " & IF(ISBLANK([Recommended uncovered_part_demand]),"parts still needed unavailable",
+              IF(ISBLANK([Recommended option_display_name]),"Recommendation unavailable",
+              [Recommended option_display_name] & "; " & IF(ISBLANK([Recommended uncovered_part_demand]),"parts still needed unavailable",
               FORMAT([Recommended uncovered_part_demand],"#,0") & " component units still needed")
-              & "; order-line service-target exposure " & IF(ISBLANK([Recommended otif_loss_percentage]),"unavailable",
+              & "; production-order service-target exposure " & IF(ISBLANK([Recommended otif_loss_percentage]),"unavailable",
               FORMAT([Recommended otif_loss_percentage],"0") & "%")
               & "; revenue at risk " & IF(ISBLANK([Recommended revenue_at_risk]),"unavailable",FORMAT([Recommended revenue_at_risk],"#,0.00"))
               & "; response cost " & IF(ISBLANK([Recommended response_cost]),"unavailable",FORMAT([Recommended response_cost],"#,0.00"))
@@ -1197,7 +1197,7 @@ table CaseCommandCenter
   measure 'Decision Answer' =
       IF(NOT ISBLANK([Selected Case Key]),IF(ISBLANK([Current Decision Key]),
               IF([Case Status] == "awaiting_decision","Awaiting approval","No current decision recorded · " & [Case Status]),
-              IF([Decision Kind] == "approved","Approved option: " & COALESCE([Approved option_name],"Unavailable"),
+              IF([Decision Kind] == "approved","Approved option: " & COALESCE([Approved option_display_name],"Unavailable"),
               "Recorded decision: " & COALESCE([Decision Kind],"Unavailable"))) & ". Approval remains an explicit action in the demo.")
 
   measure 'Action Row Visible' =
@@ -1246,14 +1246,26 @@ table CaseCommandCenter
       RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(MAX(ActionOutcomes[projection_updated_at]), REMOVEFILTERS(ActionOutcomes), KEEPFILTERS(TREATAS({ScopeCase}, ActionOutcomes[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, ActionOutcomes[decision_key]))))
     isHidden
 
+  measure 'Current Action Status Label' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Current Decision Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(VAR Labels = DISTINCT(SELECTCOLUMNS(ActionOutcomes,"DisplayValue",ActionOutcomes[action_status_display])) RETURN IF(COUNTROWS(Labels) == 1,CONCATENATEX(Labels,[DisplayValue],"")), REMOVEFILTERS(ActionOutcomes), KEEPFILTERS(TREATAS({ScopeCase}, ActionOutcomes[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, ActionOutcomes[decision_key])), KEEPFILTERS(ActionOutcomes[record_type] == "action")))
+    isHidden
+
+  measure 'Current Observation Kind Label' =
+      VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Current Decision Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(VAR Labels = DISTINCT(SELECTCOLUMNS(ActionOutcomes,"DisplayValue",ActionOutcomes[observation_kind_display])) RETURN IF(COUNTROWS(Labels) == 1,CONCATENATEX(Labels,[DisplayValue],"")), REMOVEFILTERS(ActionOutcomes), KEEPFILTERS(TREATAS({ScopeCase}, ActionOutcomes[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, ActionOutcomes[decision_key])), KEEPFILTERS(ActionOutcomes[record_type] == "observation")))
+    isHidden
+
   measure 'Current Decision Display' =
       IF(ISBLANK([Selected Case Key]),[Case Selection State],IF(ISBLANK([Current Decision Key]),"No current decision recorded",COALESCE([Decision Kind],"Decision kind unavailable")))
 
   measure 'Current Action Status Display' =
-      IF(ISBLANK([Current Actions Count]) || [Current Actions Count] == 0,"No actions recorded",COALESCE([Current Action Status],"Multiple action states — see current actions"))
+      IF(ISBLANK([Current Actions Count]) || [Current Actions Count] == 0,"No actions recorded",COALESCE([Current Action Status Label],"Multiple action states — see current actions"))
 
   measure 'Current Observation Display' =
-      IF(ISBLANK([Current Observations Count]) || [Current Observations Count] == 0,"No outcomes recorded",IF([Current Observation Kind] == "simulated","Simulated",COALESCE([Current Observation Kind],"Mixed observation kinds — see each series")))
+      IF(ISBLANK([Current Observations Count]) || [Current Observations Count] == 0,"No outcomes recorded",COALESCE([Current Observation Kind Label],"Mixed observation kinds — see each series"))
 
   measure 'Projection Updated Display' =
       VAR V = [Projection Refresh Time] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "MMM d, yyyy HH:mm") & " UTC")

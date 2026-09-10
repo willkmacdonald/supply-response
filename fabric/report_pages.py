@@ -82,7 +82,9 @@ def measure(name, label=None, table=CC):
 
 def column(table, name):
     labels = {
+        "action_display_name": "Action",
         "action_kind": "Action",
+        "action_status_display": "Status",
         "action_status": "Status",
         "arrival_date": "Arrival date",
         "audit_complete": "Audit requirement met",
@@ -97,7 +99,10 @@ def column(table, name):
         "incremental_cost_per_unit": "Incremental cost per unit",
         "is_baseline": "Do-nothing comparison",
         "observation_kind": "Outcome type",
+        "observation_kind_display": "Outcome type",
+        "metric_display_name": "Result metric",
         "option_name": "Response option",
+        "option_display_name": "Response option",
         "otif_loss_percentage": "Service-target exposure (%)",
         "required_roles_text": "Required review roles",
         "response_cost": "Response cost",
@@ -725,7 +730,7 @@ def options():
         "Response options — expected results, subject to planning requirements",
         SO,
         (
-            "option_name",
+            "option_display_name",
             "is_baseline",
             "executable",
             "response_cost",
@@ -742,7 +747,7 @@ def options():
     comparison["visual"]["query"]["sortDefinition"] = {
         "sort": [
             {
-                "field": field("Column", SO, "option_name"),
+                "field": field("Column", SO, "option_display_name"),
                 "direction": "Ascending",
             }
         ],
@@ -754,7 +759,14 @@ def options():
             "source-details",
             "Source details — saved option identities",
             SO,
-            ("option_name", "option_id") + OPTION_IDS,
+            (
+                "option_name",
+                "option_kind",
+                "blocking_codes_text",
+                "prerequisite_roles_text",
+                "option_id",
+            )
+            + OPTION_IDS,
             "Option Row Visible",
             (24, 574, 1232, 96),
         )
@@ -787,7 +799,7 @@ def actions():
             "action-status",
             "Current actions",
             AO,
-            ("action_kind", "action_status"),
+            ("action_display_name", "action_status_display"),
             "Action Row Visible",
             (24, 386, 604, 176),
         )
@@ -797,7 +809,13 @@ def actions():
             "source-details",
             "Source details — current action identities",
             AO,
-            ("action_kind", "case_key", "decision_key", "action_key"),
+            (
+                "action_kind",
+                "action_status",
+                "case_key",
+                "decision_key",
+                "action_key",
+            ),
             "Action Row Visible",
             (24, 574, 604, 96),
         )
@@ -805,13 +823,13 @@ def actions():
     chart = base_visual(
         "predicted-observed-variance",
         "clusteredColumnChart",
-        (644, 386, 612, 284),
+        (644, 386, 612, 176),
         "Observed variance — recorded metrics only",
     )
     chart["visual"]["query"] = {
         "queryState": {
-            "Category": {"projections": [column(AO, "metric")]},
-            "Series": {"projections": [column(AO, "observation_kind")]},
+            "Category": {"projections": [column(AO, "metric_display_name")]},
+            "Series": {"projections": [column(AO, "observation_kind_display")]},
             "Y": {"projections": [measure("Observed Variance", "Variance", AO)]},
         }
     }
@@ -824,6 +842,16 @@ def actions():
     }
     chart["filterConfig"] = {"filters": [gate("Observation Row Visible")]}
     items.append(chart)
+    items.append(
+        table(
+            "outcome-source-details",
+            "Source details — recorded outcome identities",
+            AO,
+            ("metric", "observation_kind", "case_key", "decision_key", "action_key"),
+            "Observation Row Visible",
+            (644, 574, 612, 96),
+        )
+    )
     return "Actions and outcomes", items, None
 
 

@@ -5,7 +5,7 @@
     "x": 644,
     "y": 386,
     "width": 612,
-    "height": 284,
+    "height": 176,
     "z": 9,
     "tabOrder": 9
   },
@@ -148,12 +148,12 @@
                       "Entity": "ActionOutcomes"
                     }
                   },
-                  "Property": "metric"
+                  "Property": "metric_display_name"
                 }
               },
-              "queryRef": "ActionOutcomes.metric",
-              "nativeQueryRef": "metric",
-              "displayName": "Metric"
+              "queryRef": "ActionOutcomes.metric_display_name",
+              "nativeQueryRef": "metric_display_name",
+              "displayName": "Result metric"
             }
           ]
         },
@@ -167,11 +167,11 @@
                       "Entity": "ActionOutcomes"
                     }
                   },
-                  "Property": "observation_kind"
+                  "Property": "observation_kind_display"
                 }
               },
-              "queryRef": "ActionOutcomes.observation_kind",
-              "nativeQueryRef": "observation_kind",
+              "queryRef": "ActionOutcomes.observation_kind_display",
+              "nativeQueryRef": "observation_kind_display",
               "displayName": "Outcome type"
             }
           ]

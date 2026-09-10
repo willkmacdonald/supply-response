@@ -678,6 +678,7 @@ def _tom_manifest() -> dict[str, Any]:
                 "format_string": report_model.column_format(name, column) or "",
                 "hidden": False,
                 "summarize_by": "none",
+                "group_by_columns": table["group_by_columns"].get(column, []),
             }
             for column, kind in table["columns"].items()
         }
