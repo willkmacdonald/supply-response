@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — planner conformance correction release; publication approved.
+> **Status:** Deployed — planner conformance corrections published; native acceptance and new reporting-link activation pending.
 
 ## Validation Proof — planner conformance correction release
 
@@ -56,6 +56,56 @@ exported to owner-only rollback files at
 No cloud mutation in this release yet. Native browser inspection is currently
 blocked by the locked Mac; it remains an activation gate, not a publication gate.
 Prior release evidence follows as history.
+
+### Publication and live verification — 2026-09-10
+
+Published the existing `SupplyResponse` semantic model and report successfully
+using `fabric/deploy.py`, then deployed source checkpoint `d6961ab` using the
+validated guarded `scripts/deploy_personal_tenant.sh --apply` workflow. Registry
+build `ch1c` succeeded. No SQL migration, permission change, case/analysis creation,
+action execution, simulation, Git push or merge was performed.
+
+The report remains `e7611c8c-c887-443f-858a-13b1044bb4b9` and its model remains
+`2100a769-d718-47b7-9715-7f4e804f1c8a`, in the same approved workspace. The model
+association and datasource metadata match the pre-release backup. All eight
+native report pages are present with planner-facing names.
+
+Live Azure verification passed:
+
+- Ready revision `ca-sr-demo--0000022`, latest traffic 100%.
+- Immutable image digest
+  `f69648ad7d50418319b160ba16f93f1656a450754cbf4c1fe8ff241e71a9e3d4`.
+- Same system identity and three exact-resource AcrPull, Key Vault Secrets User
+  and Foundry User roles; min/max replicas remain 0–2.
+- `/health`: status ok, live mode, Fabric SQL, schema version 12.
+- `/api/runtime`: operational store, Work IQ, agent runtime and Power BI ready.
+  This is readiness evidence, not a new end-to-end analysis run.
+- New reporting receipt remains empty and reporting activation contract absent.
+- Live bundle `/assets/index-BeBzPXHl.js` contains the corrected original-delivery
+  wording, expandable partial-quantity fields and evidence footer. The obsolete
+  `Saved disruption:` and `Recorded partial supply:` strings are absent. Bundle
+  inspection is not a visual check of pill placement.
+
+Read-only Power BI DAX returned 12 existing cases, seven analyses, 70 saved
+records and 42 response options. All seven case/analysis scope checks passed,
+including corrected original-delivery versus proposed-shipment narratives.
+Unselected scope asks for a case rather than showing unrelated data. These
+checks do not create or refresh business analyses.
+Exact shipment, transfer and qualification measures returned the requested
+record identity and matching quantity. A mismatched case/analysis returned no
+selected analysis or disruption narrative. All bounded checks completed with
+exit code zero. There are no existing cases with multiple analyses, so this run
+cannot prove historical-analysis persistence; no historical fixture was created.
+
+Owner-only live verification evidence is stored in
+`/var/folders/zf/rcq9c9jx42l97zd9fgs115400000gn/T/conformance-live-checks-uw5yb3py`.
+`azd show` was run; this guarded project deliberately has no AZD service entry,
+so the verified endpoint was read directly from the Container App:
+https://ca-sr-demo.orangehill-337f5d48.eastus2.azurecontainerapps.io/.
+
+The Mac remains locked. Native visual fit, Alex access, card-to-record navigation
+and the full artifact-bound acceptance matrix remain unverified. New links stay
+inactive; no release attestation has been issued.
 
 ## Validation Proof — coordinated planner reporting release (2026-09-09)
 

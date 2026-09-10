@@ -1,8 +1,10 @@
 # Planner spec conformance correction
 
-Status: local implementation and independent code review complete through
-`cb9aee5`. Actual SQL and native/live acceptance remain pending. This is not a
-deployment record.
+Status: reviewed corrections through `80410e4` passed the dedicated SQL engine
+gate and were deployed from checkpoint `d6961ab` on 2026-09-10 UTC. Live health,
+published model queries and deployed-bundle checks passed. Native visual/access/
+navigation acceptance remains pending; new reporting links remain inactive.
+See the [deployment record](../../.azure/deployment-plan.md) for release evidence.
 
 Approved design: [Evidence records and case dashboard](../superpowers/specs/2026-09-08-evidence-records-and-case-dashboard-design.md).
 Correction plan: [Planner spec conformance](../superpowers/plans/2026-09-09-planner-spec-conformance.md).
