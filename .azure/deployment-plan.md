@@ -1,6 +1,61 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed — planner revision21 and coordinated reporting published; new report links inactive pending native acceptance.
+> **Status:** Validated — planner conformance correction release; publication approved.
+
+## Validation Proof — planner conformance correction release
+
+User approved releasing reviewed corrections through `80410e4`, then checking the
+deployed cards and Power BI pages. Reuse the confirmed Azure Dev subscription,
+East US 2, `supply-response-personal`, existing app and existing report/model IDs.
+No schema/data migration is needed: database scripts, infrastructure and deployment
+scripts are unchanged from `ae17131`. Publish the corrected existing report/model
+and app; keep the new reporting receipt empty until native acceptance succeeds.
+No new resources, grants, source edits, case creation, analysis, Decision approval,
+action execution, simulation, Git push or merge is included.
+
+- [x] All validation checks pass.
+  - [x] 1. AZD Installation (1.30.0).
+  - [x] 2. Schema Validation (official Azure/azure-dev JSON schema).
+  - [x] 3. Environment Setup (existing named environment selected).
+  - [x] 4. Authentication Check (Will interactive User).
+  - [x] 5. Subscription/Location Check (same Azure Dev / East US 2).
+  - [x] 6. Aspire Pre-Provisioning Checks (not applicable).
+  - [x] 7. Provision Preview (AZD preview and detailed ARM what-if succeeded).
+  - [x] 8. Build Verification (246 frontend tests, production web build, uv build).
+  - [x] 9. Docker Build Context Validation (unchanged locked inputs/exclusions).
+  - [x] 10. Package Validation (azd package --no-prompt passed).
+  - [x] 11. Azure Policy Validation (seven assignments reviewed; no preview denial).
+  - [x] 12. Aspire Post-Provisioning Checks (not applicable).
+  - [x] Static role verification (unchanged exact-resource registry/vault/project roles).
+
+Fresh read-only named-environment preflight passed. Confirmed bootstrap false and
+new reporting receipt empty. The reviewed SQL correction passed 139 tests on the
+dedicated synthetic SQL engine; reporting regression passed 186 tests. These are
+not substitutes for native Power BI DAX, visual/access/navigation acceptance.
+Fresh validation completed 2026-09-10 03:27 UTC. Commands included the named
+environment preflight, official `azure.yaml` JSON Schema validation,
+`npm test -- --run`, production frontend build, `uv build`, `azd package
+--no-prompt`, `fabric/deploy.py --dry-run`, `azd provision --preview --no-prompt`
+and a detailed `az deployment sub what-if`. All passed. Fabric dry run included
+the pinned TOM parser and exact generated artifacts. The 505.86 kB frontend
+bundle warning is non-blocking.
+
+The detailed preview changes existing app and Insights metadata only: no resource
+creation or deletion. Image, CPU/memory and probes (compared by type) match the
+baseline; scale remains 0–2. Secret name/system identity are unchanged. Origin,
+vault URI and Insights connection expressions reference the same verified
+resources; other differences are provider defaults/read-only fields. Three
+reference-based role entries cannot be expanded by what-if; static definitions
+and live assignments confirm the same exact-resource registry, vault and Foundry
+roles. Live baseline is revision `ca-sr-demo--0000021`, latest traffic 100%, image
+digest `b5b6c974ac775e6465b890e56306adf9f35da5d69cfeda1f35c089609a2b26df`.
+Existing report/model IDs and their association match the prior release.
+Fresh report/model definitions, report association and datasource metadata were
+exported to owner-only rollback files at
+`/var/folders/zf/rcq9c9jx42l97zd9fgs115400000gn/T/conformance-release-baseline-k8go4hn4`.
+No cloud mutation in this release yet. Native browser inspection is currently
+blocked by the locked Mac; it remains an activation gate, not a publication gate.
+Prior release evidence follows as history.
 
 ## Validation Proof — coordinated planner reporting release (2026-09-09)
 
