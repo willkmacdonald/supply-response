@@ -66,6 +66,17 @@ dependency because the Python Playwright package is not installed.
 
 ## Release boundary
 
+### USD display follow-up
+
+At the user's request, Revenue at risk now displays as whole USD, rounded half
+up; supplier and transfer per-part prices display USD with two decimal places,
+including supporting-record disclosures. Original source excerpts, stored
+amounts, calculations, and unrelated monetary fields are unchanged. Regression
+tests failed on the previous display and passed after the change. Fresh full
+frontend verification passed 318 tests and the production build. Browser checks
+at 1440px and 390px confirmed `$955,000`, `$955,000 → $375,000`, `$7.50` supplier
+pricing, and `$1.50` transfer pricing. This follow-up is also local only.
+
 Parent verification on `8a6252b`: `npm test` passed all 314 tests in 21 files;
 `npm run build` passed TypeScript and Vite production compilation and emitted
 both local product SVGs. `.tmp/presenter-browser.cjs` passed all four desktop,

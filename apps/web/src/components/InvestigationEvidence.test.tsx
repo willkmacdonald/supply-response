@@ -51,6 +51,7 @@ it("combines inline shipment inspection and the original supplier email without 
   const edited = JSON.stringify(input);
   render(<InvestigationEvidence {...input} row="responses" />); const alpha = screen.getAllByRole("article")[0];
   expect(within(alpha).getByText(/Proposed response: 3,000 component units.*September 6, 2026/)).toBeVisible();
+  expect(within(alpha).getByText("Additional cost: $7.50 per component unit.")).toBeVisible();
   expect(within(alpha).queryByText(/Scheduled receipt:/)).not.toBeInTheDocument();
   expect(within(alpha).getByText("No date recorded for full recovery")).toBeVisible();
   expect(within(alpha).getByText("Read original supplier email excerpt")).toBeVisible();

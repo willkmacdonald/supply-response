@@ -9,7 +9,7 @@ import {
 } from "./supportingRecord";
 import { SupportingRecordDetails } from "./SupportingRecordDetails";
 import { readPlannerSnapshot } from "./plannerSnapshot";
-import { calendar, money, number, plant, supplier } from "./plannerFormatting";
+import { calendar, money, number, plant, supplier, usd } from "./plannerFormatting";
 import { PredictionSummary } from "./PredictionSummary";
 
 type Props = {
@@ -368,7 +368,7 @@ export function InvestigationEvidence({
                 {calendar(s.due_date)}.
               </p>
               <p>
-                Additional cost: {money(s.incremental_cost_per_unit)} per
+                Additional cost: {usd(s.incremental_cost_per_unit)} per
                 component unit.
               </p>
             </>
@@ -413,7 +413,7 @@ export function InvestigationEvidence({
               </p>
               <p>
                 Dispatch {calendar(t.dispatch_date)}; incremental cost{" "}
-                {t.incremental_cost_per_unit} per unit (currency not specified).
+                {usd(t.incremental_cost_per_unit)} per unit.
               </p>
             </>
           ) : (

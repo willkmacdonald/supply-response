@@ -16,6 +16,17 @@ it("shows persisted zero, absent currency, and the baseline label without invent
   expect(screen.getByText("Production orders expected to miss the on-time, in-full target")).toBeVisible();
   expect(screen.getByText(/Customer-order-line interpretation unavailable/)).toBeInTheDocument();
 });
+it.each([
+  ["0.00", "$0"],
+  ["955000.49", "$955,000"],
+  ["955000.50", "$955,001"],
+  ["999999.99", "$1,000,000"],
+])("shows revenue at risk %s as whole USD", (revenue, expected) => {
+  render(<PredictionSummary predicted={{...predicted, revenue_at_risk: revenue}} snapshot={null} basis="baseline" />);
+  expect(screen.getByText("Revenue at risk").nextElementSibling).toHaveTextContent(expected);
+  expect(screen.getByText("Revenue at risk").nextElementSibling?.textContent).toBe(expected);
+  expect(screen.getByText("24,750.00 (currency not specified)")).toBeVisible();
+});
 it("labels response predictions and does not invent missing outcomes", () => {
   render(<PredictionSummary predicted={null} snapshot={null} basis="response" />);
   expect(screen.getByText("Expected if we take this option")).toBeVisible();

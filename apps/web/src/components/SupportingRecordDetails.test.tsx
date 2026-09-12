@@ -24,7 +24,7 @@ describe("supporting record disclosure", () => {
     expect(screen.getByText("Demo corpus — fictional")).toBeVisible();
     expect(screen.getByText("RL-Supplier Alpha — Current supplier")).toBeVisible();
     expect(screen.getByText("September 6, 2026")).toBeVisible();
-    expect(screen.getByText("7.50 per unit (currency not specified)")).toBeVisible();
+    expect(screen.getByText("$7.50 per unit")).toBeVisible();
     const scenarioTime = screen.getByText(/In this scenario, as of/).querySelector("time")!;
     expect(scenarioTime).toHaveAttribute("datetime", "2026-09-01T09:00:00-05:00");
     expect(scenarioTime).toHaveTextContent(/Sep 1, 2026/);

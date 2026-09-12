@@ -2,6 +2,7 @@ import type {ReactNode} from "react";
 import type {RuntimeStatus} from "../types";
 import {buildReportUrl} from "../reporting/reportNavigation";
 import type {SupportingRecordResult} from "./supportingRecord";
+import {usd} from "./plannerFormatting";
 
 const calendar = (value: string | null) => value === null ? "Unavailable" : new Intl.DateTimeFormat("en-US", {
   year: "numeric", month: "long", day: "numeric", timeZone: "UTC",
@@ -39,13 +40,13 @@ export function SupportingRecordDetails({result, runtime = null}: {result: Suppo
     ["Supplier", supplier(r.supplier_id)], ["Receiving plant", plant(r.plant_id)],
     ["Scheduled receipt quantity", `${r.quantity.toLocaleString("en-US")} units`],
     ["Scheduled receipt date", calendar(r.due_date)],
-    ["Incremental cost", `${r.incremental_cost_per_unit} per unit (currency not specified)`],
+    ["Incremental cost", `${usd(r.incremental_cost_per_unit)} per unit`],
   );
   if (r.kind === "transfer") rows.push(
     ["From", plant(r.source_plant_id)], ["To", plant(r.destination_plant_id)],
     ["Transfer quantity", `${r.quantity.toLocaleString("en-US")} units`],
     ["Dispatch date", calendar(r.dispatch_date)], ["Arrival date", calendar(r.arrival_date)],
-    ["Incremental cost", `${r.incremental_cost_per_unit} per unit (currency not specified)`],
+    ["Incremental cost", `${usd(r.incremental_cost_per_unit)} per unit`],
   );
   if (r.kind === "qualification") rows.push(
     ["Supplier", supplier(r.supplier_id)], ["Qualification status", qualification[r.status]],

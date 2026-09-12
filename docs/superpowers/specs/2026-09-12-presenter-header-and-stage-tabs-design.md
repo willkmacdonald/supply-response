@@ -103,6 +103,18 @@ source actions retain accurate text; this scope does not require more logos.
 
 ## Implementation boundaries
 
+### Revenue display amendment — September 12, 2026
+
+At the user's explicit request, display Revenue at risk in USD with a dollar
+sign, thousands separators, and no cents, rounded to the nearest dollar
+(50 cents rounds up). Apply this to the risk summary and both sides of the
+recommended-response comparison. This is display formatting, not currency
+conversion: preserve the exact stored amounts and calculations. Supplier and
+plant-transfer per-component prices, including their supporting-record views,
+also display in USD but retain two decimal places (for example, $7.50 per unit).
+Other monetary fields and raw source/calculation details retain their existing
+presentation; original source-message excerpts are not rewritten.
+
 Expected components: CaseHeader for copy/layout, InvestigationFlow for local tab
 state and panels, EvidenceSource for labeled icons, and scoped styles/tests.
 Any shared icon component should remain small. Audit existing source-detail

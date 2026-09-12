@@ -1,5 +1,5 @@
 import type {PredictedOutcome, ResponseOption} from "../types";
-import {money, number} from "./plannerFormatting";
+import {money, number, wholeUsd} from "./plannerFormatting";
 import {customerLineBasis, type PlannerSnapshot} from "./plannerSnapshot";
 import {PredictionSummary} from "./PredictionSummary";
 import {validMoney} from "./snapshotValidation";
@@ -69,7 +69,7 @@ export function PredictionComparison({recommended, options, snapshot}: {
           {customerLines ? `${prediction.otif_loss_percentage}% (${customerLines.recommended.missed} of ${customerLines.recommended.total} lines)` : `${prediction.otif_loss_percentage}%`}
           {unchanged(baseline.otif_loss_percentage === prediction.otif_loss_percentage)}
         </dd></div>
-        <div><dt>Revenue at risk</dt><dd>{money(baseline.revenue_at_risk)} → {money(prediction.revenue_at_risk)}{unchanged(sameMoney(baseline.revenue_at_risk, prediction.revenue_at_risk))}</dd></div>
+        <div><dt>Revenue at risk</dt><dd>{wholeUsd(baseline.revenue_at_risk)} → {wholeUsd(prediction.revenue_at_risk)}{unchanged(sameMoney(baseline.revenue_at_risk, prediction.revenue_at_risk))}</dd></div>
         <div><dt>Margin at risk</dt><dd>{money(baseline.margin_at_risk)} → {money(prediction.margin_at_risk)}{unchanged(sameMoney(baseline.margin_at_risk, prediction.margin_at_risk))}</dd></div>
         <div><dt>Response cost</dt><dd>{money(baseline.response_cost)} → {money(prediction.response_cost)}{unchanged(sameMoney(baseline.response_cost, prediction.response_cost))}</dd></div>
       </dl>

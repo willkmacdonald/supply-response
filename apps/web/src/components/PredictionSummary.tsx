@@ -1,7 +1,7 @@
 import type {PredictedOutcome} from "../types";
 import {customerLineBasis, type PlannerSnapshot} from "./plannerSnapshot";
 import {validMoney} from "./snapshotValidation";
-import {money, number} from "./plannerFormatting";
+import {money, number, wholeUsd} from "./plannerFormatting";
 
 export function PredictionSummary({predicted: p, snapshot, basis, compact = false}: {
   predicted: PredictedOutcome | null; snapshot: PlannerSnapshot | null; basis: "baseline" | "response"; compact?: boolean;
@@ -21,7 +21,7 @@ export function PredictionSummary({predicted: p, snapshot, basis, compact = fals
         <div><dt>Parts still needed</dt><dd>{number(p.uncovered_part_demand)} {part ? `${part} component units` : "component units (part unavailable)"}</dd></div>
         <div><dt>{consistent ? "Customer order lines expected to miss the on-time, in-full target"
           : "Production orders expected to miss the on-time, in-full target"}</dt><dd>{p.otif_loss_percentage}%{consistent && ` (${consistent.missed} of ${consistent.total} lines)`}</dd></div>
-        {!compact && <><div><dt>Revenue at risk</dt><dd>{money(p.revenue_at_risk)}</dd></div>
+        {!compact && <><div><dt>Revenue at risk</dt><dd>{wholeUsd(p.revenue_at_risk)}</dd></div>
           <div><dt>Margin at risk</dt><dd>{money(p.margin_at_risk)}</dd></div></>}
         <div><dt>Response cost</dt><dd>{money(p.response_cost)}</dd></div>
       </dl>

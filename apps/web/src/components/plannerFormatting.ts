@@ -13,6 +13,16 @@ export function money(value: string) {
   const [whole, cents] = value.split(".");
   return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${cents} (currency not specified)`;
 }
+export function wholeUsd(value: string) {
+  if (!validMoney(value)) return "Unavailable";
+  const cents = BigInt(value.replace(".", ""));
+  return `$${((cents + 50n) / 100n).toLocaleString("en-US")}`;
+}
+export function usd(value: string) {
+  if (!validMoney(value)) return "Unavailable";
+  const [whole, cents] = value.split(".");
+  return `$${BigInt(whole).toLocaleString("en-US")}.${cents}`;
+}
 export const supplier = (id: string) => id === "RL-SUP-ALPHA" ? "RL-Supplier Alpha — Current supplier"
   : id === "RL-SUP-BETA" ? "RL-Supplier Beta — Alternate supplier" : `Supplier ${id}`;
 export const plant = (id: string) => id === "RL-PLANT-DAL" ? "Dallas plant"
