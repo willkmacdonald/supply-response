@@ -3,7 +3,7 @@
 import "@testing-library/jest-dom/vitest";
 import {cleanup, render, screen} from "@testing-library/react";
 import {afterEach, expect, it} from "vitest";
-import type {AnalysisVersion, EvidenceItem} from "../types";
+import type {AnalysisVersion, EvidenceItem, EvidenceItemValidation} from "../types";
 import {EvidenceSource} from "./EvidenceSource";
 
 afterEach(cleanup);
@@ -57,8 +57,26 @@ const analysis: AnalysisVersion = {
   recommendation: null,
 };
 
+function passingValidation(item: EvidenceItem): EvidenceItemValidation {
+  return {
+    evidence_id: item.evidence_id,
+    requirement: item.requirement,
+    validated_authority_scope: item.authority_scope,
+    freshness: "current",
+    business_validity: "valid",
+    uncertainty_state: item.uncertainty_state,
+    retrieval_health: item.retrieval_health,
+    authoritative: true,
+    blocking_codes: [],
+  };
+}
+
 function renderSource(item: EvidenceItem, runtimeMode: AnalysisVersion["runtime_mode"] = "live") {
-  return render(<EvidenceSource item={item} analysis={{...analysis, runtime_mode: runtimeMode, evidence_items: [item]}} label="Supplier email — Current supplier" />);
+  const evidenceValidation = {...analysis.evidence_validation, item_results: [passingValidation(item)]};
+  return render(<EvidenceSource item={item} analysis={{...analysis, runtime_mode: runtimeMode,
+    evidence_items: [item], evidence_validation: evidenceValidation,
+    material: {...analysis.material, runtime_mode: runtimeMode, evidence_validation: evidenceValidation}}}
+  label="Supplier email — Current supplier" />);
 }
 
 it("adds a decorative Outlook icon without changing the trusted supplier-email action", () => {
@@ -71,6 +89,7 @@ it("adds a decorative Outlook icon without changing the trusted supplier-email a
   expect(icon).toHaveAttribute("src", expect.stringContaining("outlook_32x1.svg"));
   expect(icon).toHaveAttribute("alt", "");
   expect(icon).toHaveAttribute("aria-hidden", "true");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(container).toHaveTextContent("Two thousand units are available.");
   expect(screen.getByText("Source details")).toBeInTheDocument();
 });
@@ -82,7 +101,13 @@ it("adds a decorative Teams icon only for a trusted collaboration action", () =>
   renderSource(teams);
   const action = screen.getByRole("link", {name: "Open Quality Teams post"});
   expect(action).toHaveAttribute("href", teams.navigable_citation_url);
-  expect(action.querySelector("img.source-action-icon")).toHaveAttribute("src", expect.stringContaining("teams_32x1.svg"));
+  expect(action).toHaveAttribute("target", "_blank");
+  expect(action).toHaveAttribute("rel", "noopener noreferrer");
+  const icon = action.querySelector("img.source-action-icon");
+  expect(icon).toHaveAttribute("src", expect.stringContaining("teams_32x1.svg"));
+  expect(icon).toHaveAttribute("alt", "");
+  expect(icon).toHaveAttribute("aria-hidden", "true");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
 it("does not render a link or product icon for absent and untrusted destinations", () => {

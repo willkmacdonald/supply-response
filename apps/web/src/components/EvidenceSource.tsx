@@ -10,17 +10,15 @@ function citation(item: EvidenceItem, analysis: AnalysisVersion, host?: string |
   if (analysis.runtime_mode !== "live" || item.source_system !== "work_iq" || item.citation_classification !== "work_iq") return null;
   return trustedServerCitation(item.navigable_citation_url, item.citation_classification, host);
 }
-function citationLabel(item: EvidenceItem, url: string) {
+function citationAction(item: EvidenceItem, url: string): {label: string; product: "outlook" | "teams" | null} {
   const host = new URL(url).hostname;
-  if (["outlook.office.com", "outlook.office365.com"].includes(host) && item.authority_scope.includes("supplier_statement")) return "Open supplier email";
-  if (host === "teams.microsoft.com" && item.authority_scope.includes("collaboration_statement")) return "Open Quality Teams post";
-  return "Open citation";
-}
-function citationProduct(item: EvidenceItem, url: string): "outlook" | "teams" | null {
-  const host = new URL(url).hostname;
-  if (["outlook.office.com", "outlook.office365.com"].includes(host) && item.authority_scope.includes("supplier_statement")) return "outlook";
-  if (host === "teams.microsoft.com" && item.authority_scope.includes("collaboration_statement")) return "teams";
-  return null;
+  if (["outlook.office.com", "outlook.office365.com"].includes(host) && item.authority_scope.includes("supplier_statement")) {
+    return {label: "Open supplier email", product: "outlook"};
+  }
+  if (host === "teams.microsoft.com" && item.authority_scope.includes("collaboration_statement")) {
+    return {label: "Open Quality Teams post", product: "teams"};
+  }
+  return {label: "Open citation", product: null};
 }
 function sourceName(item: EvidenceItem) {
   if (item.authority_scope.includes("supplier_statement")) return "Supplier email";
@@ -41,7 +39,7 @@ export function RequiredCitationWarning({analysis, tenantSharePointHost}: {analy
 }
 export function EvidenceSource({item, analysis, tenantSharePointHost, label = "Source statement"}: SourceProps) {
   const status = statusFor(item, analysis); const url = citation(item, analysis, tenantSharePointHost);
-  const product = url ? citationProduct(item, url) : null;
+  const action = url ? citationAction(item, url) : null;
   return <div className="source-evidence"><p className="source-role">{label}</p>
     {status.warning && <p className="warning" role="alert">{status.warning}</p>}
     {item.excerpt ? <details><summary>Read original {excerptName(label)} excerpt</summary><blockquote>{item.excerpt}</blockquote></details> : <p>Source excerpt unavailable</p>}
@@ -49,8 +47,8 @@ export function EvidenceSource({item, analysis, tenantSharePointHost, label = "S
       <div><dt>Source record ID</dt><dd>{item.source_id?.trim() || "Unavailable"}</dd></div><div><dt>Evidence ID</dt><dd>{item.evidence_id}</dd></div>
       <div><dt>Technical authority scopes</dt><dd>{item.authority_scope.join(", ")}</dd></div><div><dt>Internal evidence classification</dt><dd>{item.uncertainty_state}</dd></div>
     </dl><p>Saved source claim: {item.claim}</p><p>The internal classification is not a probability or a guarantee of supplier performance.</p></details>
-    {url && <a className="source-action" href={url} target="_blank" rel="noopener noreferrer">
-      {product && <SourceActionIcon product={product} />}{citationLabel(item, url)}
+    {url && action && <a className="source-action" href={url} target="_blank" rel="noopener noreferrer">
+      {action.product && <SourceActionIcon product={action.product} />}{action.label}
     </a>}
   </div>;
 }
