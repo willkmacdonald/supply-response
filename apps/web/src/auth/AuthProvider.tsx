@@ -1,4 +1,4 @@
-import {InteractionRequiredAuthError, type AccountInfo, type AuthenticationResult} from "@azure/msal-browser";
+import {type AccountInfo, type AuthenticationResult} from "@azure/msal-browser";
 import {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode} from "react";
 import {setAccessTokenProvider} from "../api";
 import {createMsalClient, defaultEntraConfig, type EntraConfig} from "./msal";
@@ -11,9 +11,9 @@ export interface AuthClient {
   getAllAccounts(): AuthAccount[];
   getActiveAccount(): AuthAccount | null;
   setActiveAccount(account: AuthAccount | null): void;
-  loginRedirect(request: {scopes: string[]}): Promise<void>;
+  loginRedirect(request: {scopes: string[]; redirectStartPage?: string}): Promise<void>;
   acquireTokenSilent(request: {account: AuthAccount; scopes: string[]}): Promise<{accessToken: string}>;
-  acquireTokenRedirect(request: {account: AuthAccount; scopes: string[]}): Promise<void>;
+  acquireTokenRedirect(request: {account: AuthAccount; scopes: string[]; redirectStartPage?: string}): Promise<void>;
 }
 
 interface AuthContextValue {
@@ -31,6 +31,13 @@ const fallbackValue: AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue>(fallbackValue);
+
+export class AuthRecoveryRequiredError extends Error {
+  constructor() {
+    super("Authentication recovery is required");
+    this.name = "AuthRecoveryRequiredError";
+  }
+}
 
 function browserClient(config: EntraConfig): AuthClient {
   const client = createMsalClient(config);
@@ -62,6 +69,9 @@ export function AuthProvider({
   const [account, setAccount] = useState<AuthAccount | null>(null);
   const [ready, setReady] = useState(config === null);
   const [authFailure, setAuthFailure] = useState(false);
+  const [authRecovery, setAuthRecovery] = useState(false);
+  const recoveryRequired = useRef(false);
+  const activeAccount = useRef<AuthAccount | null>(null);
   const interactiveRedirect = useRef<Promise<void> | null>(null);
   const initializationAttempt = useRef(0);
 
@@ -76,7 +86,10 @@ export function AuthProvider({
       const resolved = redirect?.account ?? client.getActiveAccount() ?? client.getAllAccounts()[0] ?? null;
       if (attempt !== initializationAttempt.current) return;
       client.setActiveAccount(resolved);
+      activeAccount.current = resolved;
       setAccount(resolved);
+      recoveryRequired.current = false;
+      setAuthRecovery(false);
       setReady(true);
     } catch {
       if (attempt !== initializationAttempt.current) return;
@@ -96,7 +109,10 @@ export function AuthProvider({
     setAuthFailure(false);
     try {
       if (!interactiveRedirect.current) {
-        interactiveRedirect.current = client.loginRedirect({scopes: [config.apiScope]})
+        interactiveRedirect.current = client.loginRedirect({
+          scopes: [config.apiScope],
+          redirectStartPage: window.location.href,
+        })
           .finally(() => { interactiveRedirect.current = null; });
       }
       await interactiveRedirect.current;
@@ -108,19 +124,41 @@ export function AuthProvider({
 
   const getAccessToken = useCallback(async (): Promise<string | null> => {
     if (!client || !config) return null;
-    const active = account ?? client.getActiveAccount();
-    if (!active) throw new Error("No authenticated Entra account is active");
+    if (recoveryRequired.current) throw new AuthRecoveryRequiredError();
+    const active = activeAccount.current ?? client.getActiveAccount();
+    if (!active) {
+      recoveryRequired.current = true;
+      setAuthRecovery(true);
+      throw new AuthRecoveryRequiredError();
+    }
     const request = {account: active, scopes: [config.apiScope]};
     try {
-      return (await client.acquireTokenSilent(request)).accessToken;
-    } catch (error) {
-      if (!(error instanceof InteractionRequiredAuthError)) throw error;
-      if (!interactiveRedirect.current) {
-        interactiveRedirect.current = client.acquireTokenRedirect(request)
-          .finally(() => { interactiveRedirect.current = null; });
-      }
+      const token = (await client.acquireTokenSilent(request)).accessToken;
+      if (recoveryRequired.current) throw new AuthRecoveryRequiredError();
+      return token;
+    } catch {
+      recoveryRequired.current = true;
+      setAuthRecovery(true);
+      throw new AuthRecoveryRequiredError();
+    }
+  }, [client, config]);
+
+  const recoverSignIn = useCallback(async () => {
+    if (!client || !config) return;
+    if (!interactiveRedirect.current) {
+      const active = account ?? client.getActiveAccount();
+      const redirectStartPage = window.location.href;
+      const request = {scopes: [config.apiScope], redirectStartPage};
+      interactiveRedirect.current = (active
+        ? client.acquireTokenRedirect({...request, account: active})
+        : client.loginRedirect(request)
+      ).finally(() => { interactiveRedirect.current = null; });
+    }
+    try {
       await interactiveRedirect.current;
-      return null;
+    } catch {
+      recoveryRequired.current = true;
+      setAuthRecovery(true);
     }
   }, [account, client, config]);
 
@@ -139,7 +177,13 @@ export function AuthProvider({
   return <AuthContext.Provider value={value}>
     {authFailure
       ? <div role="alert">Secure sign-in failed. <button onClick={() => void initializeAuth()}>Retry sign-in</button></div>
-      : ready ? children : <p role="status">Completing secure sign-in…</p>}
+      : ready ? <>
+        {authRecovery && <div className="auth-recovery" role="alert" aria-label="Sign-in required">
+          We couldn't renew your sign-in. Sign in again to continue.{" "}
+          <button onClick={() => void recoverSignIn()}>Sign in again</button>
+        </div>}
+        <div hidden={authRecovery} inert={authRecovery ? true : undefined} aria-hidden={authRecovery || undefined}>{children}</div>
+      </> : <p role="status">Completing secure sign-in…</p>}
   </AuthContext.Provider>;
 }
 

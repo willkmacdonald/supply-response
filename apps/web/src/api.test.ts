@@ -78,6 +78,19 @@ describe("API client", () => {
     });
   });
 
+  it.each([
+    ["GET", () => api.runtime()],
+    ["POST", () => api.createCase("showcase")],
+  ])("does not send a %s request when token acquisition fails", async (_method, request) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    setAccessTokenProvider(async () => { throw new Error("authentication recovery required"); });
+
+    await expect(request()).rejects.toThrow("authentication recovery required");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("represents the canonical backend response-option contract", () => {
     const option: ResponseOption = {
       option_id: "RL-OPTION-BETA",

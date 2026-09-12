@@ -4,6 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import {BrowserCacheLocation, InteractionRequiredAuthError} from "@azure/msal-browser";
 import {act, cleanup, render, screen, waitFor} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import {useState} from "react";
 import {afterEach, describe, expect, it, vi} from "vitest";
 import {AuthProvider, type AuthClient, useAuth} from "./AuthProvider";
 import {createMsalConfig, readEntraConfig} from "./msal";
@@ -23,8 +24,24 @@ function Consumer() {
     <button onClick={() => void auth.signIn()}>Sign in</button>
     <button onClick={() => void auth.getAccessToken().then((token) => {
       document.body.dataset.token = token ?? "none";
-    })}>Get token</button>
+    }).catch(() => undefined)}>Get token</button>
   </div>;
+}
+
+function StatefulConsumer() {
+  const auth = useAuth();
+  const [draft, setDraft] = useState("");
+  return <div>
+    <label>Planning note <input value={draft} onChange={(event) => setDraft(event.target.value)} /></label>
+    <button onClick={() => void auth.getAccessToken().catch(() => undefined)}>Load protected data</button>
+  </div>;
+}
+
+let exposedGetAccessToken: (() => Promise<string | null>) | null = null;
+
+function TokenConsumer() {
+  exposedGetAccessToken = useAuth().getAccessToken;
+  return <span>Token consumer</span>;
 }
 
 function fakeClient(): AuthClient {
@@ -43,6 +60,8 @@ function fakeClient(): AuthClient {
 afterEach(() => {
   cleanup();
   delete document.body.dataset.token;
+  exposedGetAccessToken = null;
+  window.history.replaceState(null, "", "/");
 });
 
 describe("Entra configuration", () => {
@@ -152,7 +171,10 @@ describe("AuthProvider", () => {
     render(<AuthProvider config={entraConfig} client={client}><Consumer /></AuthProvider>);
     await waitFor(() => expect(screen.getByTestId("mode")).toHaveTextContent("entra"));
     await userEvent.click(screen.getByRole("button", {name: "Sign in"}));
-    expect(client.loginRedirect).toHaveBeenCalledWith({scopes: [entraConfig.apiScope]});
+    expect(client.loginRedirect).toHaveBeenCalledWith({
+      scopes: [entraConfig.apiScope],
+      redirectStartPage: "http://localhost:3000/",
+    });
   });
 
   it("does not mount API-consuming children before redirect initialization", async () => {
@@ -202,24 +224,130 @@ describe("AuthProvider", () => {
     expect(client.loginRedirect).toHaveBeenCalledOnce();
   });
 
-  it("deduplicates concurrent interactive redirects after silent acquisition", async () => {
+  it.each([
+    new InteractionRequiredAuthError("interaction_required", "raw interaction details"),
+    new Error("raw timeout or renewal details"),
+  ])("keeps planning state mounted and offers safe recovery after silent renewal fails", async (failure) => {
     const client = fakeClient();
-    const required = new InteractionRequiredAuthError("interaction_required", "interaction required");
-    client.acquireTokenSilent = vi.fn().mockRejectedValue(required);
+    client.acquireTokenSilent = vi.fn().mockRejectedValue(failure);
+    render(<AuthProvider config={entraConfig} client={client}><StatefulConsumer /></AuthProvider>);
+    await screen.findByLabelText("Planning note");
+    await userEvent.type(screen.getByLabelText("Planning note"), "keep this draft");
+    const planningNote = screen.getByLabelText("Planning note");
+
+    await userEvent.click(screen.getByRole("button", {name: "Load protected data"}));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("We couldn't renew your sign-in. Sign in again to continue.");
+    expect(alert).not.toHaveTextContent("raw interaction details");
+    expect(alert).not.toHaveTextContent("raw timeout or renewal details");
+    expect(screen.getByRole("button", {name: "Sign in again"})).toBeInTheDocument();
+    expect(planningNote).toHaveValue("keep this draft");
+    expect(planningNote).toBeInTheDocument();
+    expect(planningNote.closest("[hidden][inert]")).not.toBeNull();
+    expect(client.acquireTokenRedirect).not.toHaveBeenCalled();
+  });
+
+  it("blocks further token acquisition while recovery is required", async () => {
+    const client = fakeClient();
+    client.acquireTokenSilent = vi.fn().mockRejectedValue(new Error("renewal failed"));
+    render(<AuthProvider config={entraConfig} client={client}><TokenConsumer /></AuthProvider>);
+    await screen.findByText("Token consumer");
+    await act(async () => {
+      await exposedGetAccessToken!().catch(() => undefined);
+    });
+    await screen.findByRole("button", {name: "Sign in again"});
+
+    await expect(exposedGetAccessToken!()).rejects.toThrow("Authentication recovery is required");
+
+    expect(client.acquireTokenSilent).toHaveBeenCalledOnce();
+  });
+
+  it("converges concurrent silent failures on one recovery state", async () => {
+    const client = fakeClient();
+    client.acquireTokenSilent = vi.fn().mockRejectedValue(new Error("renewal failed"));
+    render(<AuthProvider config={entraConfig} client={client}><TokenConsumer /></AuthProvider>);
+    await screen.findByText("Token consumer");
+
+    await act(async () => {
+      await Promise.allSettled([exposedGetAccessToken!(), exposedGetAccessToken!()]);
+    });
+
+    expect(client.acquireTokenSilent).toHaveBeenCalledTimes(2);
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getAllByRole("button", {name: "Sign in again"})).toHaveLength(1);
+    expect(client.acquireTokenRedirect).not.toHaveBeenCalled();
+  });
+
+  it("rejects a late silent success after a concurrent request requires recovery", async () => {
+    let releaseSuccess!: () => void;
+    const client = fakeClient();
+    client.acquireTokenSilent = vi.fn()
+      .mockImplementationOnce(() => new Promise<{accessToken: string}>((resolve) => {
+        releaseSuccess = () => resolve({accessToken: "late-token"});
+      }))
+      .mockRejectedValueOnce(new Error("renewal failed"));
+    render(<AuthProvider config={entraConfig} client={client}><TokenConsumer /></AuthProvider>);
+    await screen.findByText("Token consumer");
+
+    const lateSuccess = exposedGetAccessToken!();
+    await expect(exposedGetAccessToken!()).rejects.toThrow("Authentication recovery is required");
+    releaseSuccess();
+
+    await expect(lateSuccess).rejects.toThrow("Authentication recovery is required");
+  });
+
+  it("deduplicates concurrent recovery clicks and preserves the current case URL", async () => {
+    window.history.replaceState(null, "", "/cases/RL-CASE-7?view=planning");
+    const client = fakeClient();
+    client.acquireTokenSilent = vi.fn().mockRejectedValue(new Error("renewal failed"));
     let releaseRedirect!: () => void;
     client.acquireTokenRedirect = vi.fn(() => new Promise<void>((resolve) => {
       releaseRedirect = resolve;
     }));
     render(<AuthProvider config={entraConfig} client={client}><Consumer /></AuthProvider>);
     await waitFor(() => expect(screen.getByTestId("name")).toHaveTextContent("Alex Morgan"));
-    const auth = screen.getByRole("button", {name: "Get token"});
+    await userEvent.click(screen.getByRole("button", {name: "Get token"}));
+    const recovery = await screen.findByRole("button", {name: "Sign in again"});
     await act(async () => {
-      auth.click();
-      auth.click();
+      recovery.click();
+      recovery.click();
       await Promise.resolve();
     });
-    expect(client.acquireTokenSilent).toHaveBeenCalledTimes(2);
     expect(client.acquireTokenRedirect).toHaveBeenCalledOnce();
+    expect(client.acquireTokenRedirect).toHaveBeenCalledWith({
+      account: expect.objectContaining({homeAccountId: "alex"}),
+      scopes: [entraConfig.apiScope],
+      redirectStartPage: "http://localhost:3000/cases/RL-CASE-7?view=planning",
+    });
     await act(async () => releaseRedirect());
+  });
+
+  it("keeps recovery available when its interactive redirect fails", async () => {
+    const client = fakeClient();
+    client.acquireTokenSilent = vi.fn().mockRejectedValue(new Error("renewal failed"));
+    client.acquireTokenRedirect = vi.fn().mockRejectedValue(new Error("raw redirect failure"));
+    render(<AuthProvider config={entraConfig} client={client}><Consumer /></AuthProvider>);
+    await screen.findByTestId("name");
+    await userEvent.click(screen.getByRole("button", {name: "Get token"}));
+
+    await userEvent.click(await screen.findByRole("button", {name: "Sign in again"}));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("We couldn't renew your sign-in. Sign in again to continue.");
+    expect(alert).not.toHaveTextContent("raw redirect failure");
+    expect(screen.getByRole("button", {name: "Sign in again"})).toBeInTheDocument();
+  });
+
+  it("enters recovery without attempting a token request when no account is active", async () => {
+    const client = fakeClient();
+    client.getAllAccounts = vi.fn().mockReturnValue([]);
+    render(<AuthProvider config={entraConfig} client={client}><Consumer /></AuthProvider>);
+    await screen.findByTestId("mode");
+
+    await userEvent.click(screen.getByRole("button", {name: "Get token"}));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("We couldn't renew your sign-in");
+    expect(client.acquireTokenSilent).not.toHaveBeenCalled();
   });
 });

@@ -75,6 +75,18 @@ h3 { margin: 0.75rem 0 0.45rem; }
 .receipt-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 800; overflow-wrap: anywhere; }
 .failure-banner, .error, .warning { border-radius: 0.75rem; padding: 0.9rem; background: #fff0eb; color: #76280f; }
 .failure-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.7rem; }
+.auth-recovery {
+  width: min(42rem, calc(100% - 2rem));
+  margin: clamp(2rem, 12vh, 7rem) auto;
+  padding: clamp(1.25rem, 4vw, 2rem);
+  border: 1px solid #e5b7a5;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 12px 36px rgba(22, 33, 31, 0.1);
+  color: #76280f;
+  font-size: 1.05rem;
+}
+.auth-recovery button { margin-left: 0.5rem; }
 .action-list { display: grid; gap: 0.6rem; padding: 0; list-style: none; }
 .action-list li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.8rem; border: 1px solid #e0e5df; border-radius: 0.75rem; }
 .action-list li div { display: grid; gap: 0.2rem; }

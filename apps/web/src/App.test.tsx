@@ -758,7 +758,10 @@ describe("progressive Case workspace", () => {
     const signIn = await screen.findByRole("button", {name: "Sign in as Alex"});
     expect(fetchMock).not.toHaveBeenCalled();
     await userEvent.click(signIn);
-    expect(client.loginRedirect).toHaveBeenCalledWith({scopes: [entraConfig.apiScope]});
+    expect(client.loginRedirect).toHaveBeenCalledWith({
+      scopes: [entraConfig.apiScope],
+      redirectStartPage: "http://localhost:3000/",
+    });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -770,7 +773,25 @@ describe("progressive Case workspace", () => {
 
     expect(await screen.findByText("Fallback mode")).toBeVisible();
     expect(screen.queryByRole("button", {name: "Sign in as Alex"})).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith("/api/runtime", undefined);
+    expect(fetchMock).toHaveBeenCalledWith("/api/runtime", {
+      headers: {Authorization: "Bearer test-api-token"},
+    });
+  });
+
+  it("shows session recovery instead of a misleading workspace failure", async () => {
+    const client = authenticatedClient();
+    client.acquireTokenSilent = vi.fn().mockRejectedValue(new Error("raw renewal timeout"));
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AuthProvider config={entraConfig} client={client}><App /></AuthProvider>);
+
+    expect(await screen.findByRole("alert", {name: "Sign-in required"})).toHaveTextContent(
+      "We couldn't renew your sign-in. Sign in again to continue.",
+    );
+    await waitFor(() => expect(screen.getByText(/Unable to initialize the Case workspace/)).not.toBeVisible());
+    expect(screen.queryByText("raw renewal timeout")).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("loads fallback provenance without silently creating a Case", async () => {
