@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — session-recovery correction through 5bbb75b; live Microsoft sign-in acceptance remains separate.
+> **Status:** Deployed — session-recovery correction through 5bbb75b, release be45c4d, revision ca-sr-demo--0000026; real expired Microsoft-session acceptance remains separate.
 
 ## Session recovery release — 2026-09-12 (validation proof)
 
@@ -45,6 +45,21 @@ preserves the URL, makes no API requests, hides generic workspace errors, and
 displays an actionable sign-in notice. Screenshots inspected in
 `.artifacts/session-recovery/recovery-1280.png` and `recovery-390.png`.
 These are synthetic local-browser checks, not live Microsoft sign-in acceptance.
+
+Release completed September 12 using the existing guarded deployment. ACR run
+`ch1g` succeeded; revision `ca-sr-demo--0000026` is Ready/Running with 100% traffic.
+Immutable image digest: `sha256:51d21a6e997e198867af0c8c8e0cef19bb4940cf4390d0f59a81f742507e5af2`.
+Post-release `azd show`, health/runtime reads, and existing three-role verification
+passed. Scale remains 0–2 and the managed identity is unchanged. Health reports
+live/Fabric SQL/schema12; runtime reports all four capabilities ready (not an
+end-to-end source retrieval test).
+
+The same isolated Chromium callback tests also passed against the deployed URL:
+silent broadcast without App/API startup, exact original case/analysis URL return,
+and safe malformed-callback guidance. Public bundle inspection confirmed
+`index-DUUx6KrO.js` and `application-DhINkC1k.js` contain the correction. These
+synthetic checks created no cases and exchanged no Microsoft tokens. A genuine
+expired Microsoft session has not yet been observed completing recovery.
 
 ## Validation Proof — native readability and reopening correction, 2026-09-11
 

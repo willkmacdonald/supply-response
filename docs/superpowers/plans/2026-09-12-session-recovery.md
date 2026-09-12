@@ -51,5 +51,10 @@ approved with no findings. Fresh parent 305 tests/build passed. Chromium checked
 real MSAL bridge in development and production bundles and the full recovery UI
 at 1280px/390px; screenshots inspected. Initial UI browser test exposed the token
 provider registration ordering issue; corrected and retested successfully.
-Azure validation workflow complete for the same existing app. Deployment and
-real Microsoft sign-in return acceptance are still pending.
+Azure validation and deployment complete for the same existing app: release
+`be45c4d`, ready revision `ca-sr-demo--0000026`, 100% traffic. Live health/runtime,
+existing permissions, public bundle inspection, and three deployed callback
+browser checks passed. All Task 1 and verification/release steps above are
+complete; the unchecked planning boxes are superseded by this progress record.
+Real expired Microsoft-session return acceptance remains separate and unobserved.
+Detailed proof: `docs/reviews/2026-09-12-session-recovery.md`.
