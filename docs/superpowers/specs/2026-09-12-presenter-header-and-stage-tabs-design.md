@@ -6,8 +6,9 @@ Will presents this demonstration himself. It is not a visitor-facing tutorial or
 marketing page. The opening should establish the story; the investigation should
 let him reveal one stage at a time without tall, tightly wrapped columns.
 
-The conversational design was approved September 12. This written specification
-is awaiting the user's review before implementation planning.
+The conversational design and this written specification were approved by the
+user September 12, 2026. Implementation proceeds with Codex review between tasks;
+the user will revisit the design after seeing the built product.
 
 This is a focused amendment to
 `2026-09-08-evidence-records-and-case-dashboard-design.md`: it supersedes the
