@@ -69,6 +69,8 @@ it("uses manual keyboard activation with wrapping and stable panel associations"
   expect(screen.getByRole("tabpanel")).toHaveAccessibleName("1. Understand the disruption");
   tabs[0].focus(); await user.keyboard("{ArrowLeft}");
   expect(tabs[2]).toHaveFocus(); expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+  expect(tabs.map(tab => tab.tabIndex)).toEqual([-1, -1, 0]);
+  expect(tabs.filter(tab => tab.tabIndex === 0)).toHaveLength(1);
   await user.keyboard("{Enter}"); expect(tabs[2]).toHaveAttribute("aria-selected", "true");
   await user.keyboard("{Home}"); expect(tabs[0]).toHaveFocus();
   expect(tabs[2]).toHaveAttribute("aria-selected", "true");

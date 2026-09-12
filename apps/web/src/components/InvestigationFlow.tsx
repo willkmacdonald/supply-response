@@ -31,6 +31,7 @@ function StagePanel({index, activeStage, children}: {index: number; activeStage:
 function InvestigationPresentation({state}: {state: CaseWorkspaceState}) {
   const {caseInstance, analysis} = state;
   const [activeStage, setActiveStage] = useState(0);
+  const [focusedStage, setFocusedStage] = useState(0);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   if (!analysis || !caseInstance) return null;
   const props = {caseInstance, analysis, runtime: state.runtime, tenantSharePointHost: state.runtime?.deployment_contract?.tenant_sharepoint_host}; const snapshot = readPlannerSnapshot(props);
@@ -47,6 +48,7 @@ function InvestigationPresentation({state}: {state: CaseWorkspaceState}) {
     if (event.key === "End") next = stages.length - 1;
     if (next === null) return;
     event.preventDefault();
+    setFocusedStage(next);
     tabRefs.current[next]?.focus();
   }
   return <div id="assisted-review" className="investigation-flow"><div className="analysis-context">
@@ -57,9 +59,10 @@ function InvestigationPresentation({state}: {state: CaseWorkspaceState}) {
     <div className="investigation-tabs" role="tablist" aria-label="Investigation stages">
       {stages.map((stage, index) => <button key={stage.id} type="button" role="tab"
         id={`investigation-tab-${stage.id}`} aria-controls={`investigation-panel-${stage.id}`}
-        aria-selected={activeStage === index} tabIndex={activeStage === index ? 0 : -1}
+        aria-selected={activeStage === index} tabIndex={focusedStage === index ? 0 : -1}
         ref={element => { tabRefs.current[index] = element; }}
-        onKeyDown={event => moveFocus(event, index)} onClick={() => setActiveStage(index)}>
+        onFocus={() => setFocusedStage(index)} onKeyDown={event => moveFocus(event, index)}
+        onClick={() => { setFocusedStage(index); setActiveStage(index); }}>
         {stage.label}
       </button>)}
     </div>

@@ -52,3 +52,13 @@ Result: 20 files passed, 310 tests passed; TypeScript and Vite production build 
 ## Follow-up boundary
 
 Independent review and browser proof remain the parent task's next gate. Outlook/Teams icon work belongs to the later task and is intentionally absent here.
+
+## Independent-review correction
+
+The Task 1 reviewer found that keyboard focus moved correctly but the roving `tabIndex=0` remained tied to the selected tab. A new RED assertion demonstrated the mismatch (`[0, -1, -1]` received after ArrowLeft instead of `[-1, -1, 0]`). The implementation now tracks focused and active stages independently: focus-only navigation moves the sole `tabIndex=0` without selecting a panel, while click and native Enter/Space activation update selection.
+
+Covering GREEN verification:
+
+`npx vitest run src/components/InvestigationFlow.test.tsx && npm run build`
+
+Result: 1 file passed, 9 tests passed; TypeScript and Vite production build completed successfully.
