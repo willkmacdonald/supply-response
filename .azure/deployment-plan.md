@@ -1,6 +1,88 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed — planner conformance corrections published; native acceptance and new reporting-link activation pending.
+> **Status:** Validated — native readability and read-only reopening correction; actual native acceptance remains separate.
+
+## Validation Proof — native readability and reopening correction, 2026-09-11
+
+User requested continuing until the live experience looks right, with proof.
+Scope: wrapped Power BI business text, one heading per card, taller overview
+rows, and GET-only reopening of an existing case. Reuse the same confirmed Azure
+Dev / East US 2 / supply-response-personal resources and exact report/model IDs.
+No schema, source data, role, licensing, decision, execution, push, or merge changes.
+The reporting activation receipt remains absent. Plan:
+`docs/superpowers/plans/2026-09-11-native-readability-and-reopen.md`.
+
+- [x] All validation checks pass.
+  - [x] 1. AZD Installation (1.30.0).
+  - [x] 2. Schema Validation (official Azure/azure-dev JSON schema).
+  - [x] 3. Environment Setup (same existing named environment).
+  - [x] 4. Authentication Check (Will interactive User).
+  - [x] 5. Subscription/Location Check (same confirmed Azure Dev / East US 2).
+  - [x] 6. Aspire Pre-Provisioning Checks (not applicable).
+  - [x] 7. Provision Preview (AZD and detailed ARM what-if succeeded).
+  - [x] 8. Build Verification (292 frontend tests, production build, uv build).
+  - [x] 9. Docker Build Context Validation (unchanged locked inputs/exclusions).
+  - [x] 10. Package Validation (azd package and uv build passed).
+  - [x] 11. Azure Policy Validation (seven assignments; no preview denial).
+  - [x] 12. Aspire Post-Provisioning Checks (not applicable).
+  - [x] Static role verification (same principal and three exact-resource roles).
+
+Read-only exact-resource preflight passed. Initial invocation lacked the local
+operator selector; resolved by checking the signed-in Will account and passing
+its identity in memory. No identity/configuration change was made. The initial
+parser run lacked access to its public package cache; reruns use the existing
+locked Microsoft parser dependencies. Local failures are not hidden as passes.
+Native acceptance will be recorded separately from deployment/schema success.
+
+Detailed preview succeeded. The local summary initially encountered a null delta;
+reading the saved result with null handling passed. No resources are created or
+deleted. The same image, resources, probes, scale 0–2 and runtime settings are
+preserved; origin/Insights expressions and provider metadata are the only app
+differences. Three reference-based role expressions are unsupported by what-if;
+static templates and actual assignments separately confirm the existing roles.
+Private app/role/preview baseline:
+`/var/folders/zf/rcq9c9jx42l97zd9fgs115400000gn/T/readability-release-baseline-6apuvtv0`.
+
+Report formatting commit `6304b8f` independently passed spec/code review with no
+findings. Its 148 generator/project tests (including Microsoft TOM), fresh 62
+generator tests, artifact checks and Fabric publication dry run passed. The
+report/model definitions, association and datasource metadata are backed up at
+`/var/folders/zf/rcq9c9jx42l97zd9fgs115400000gn/T/readability-report-baseline-d9nyl81a`.
+This reviewed report-only publication proceeds independently of the app release;
+it does not provision Azure infrastructure or activate a reporting receipt.
+The app build/review gate remains pending while reopening is corrected.
+
+App reopening corrections through `ecbdf0f` now independently pass spec/quality
+review. Fresh frontend suite:292passed; production build passed with the existing
+513.84kB chunk advisory. Local isolated desktop/mobile presentation tests:2passed;
+source footers remain below all card contents. These use local synthetic fixtures
+and are not live-user proof. Frontend native acceptance follows deployment.
+
+The first report formatting publication failed actual native acceptance: titles
+were no longer duplicated, but the card runtime still rendered single-line
+ellipses. Correction `7b6e20e` replaces all 46 string callouts with native bound
+paragraph textboxes, retaining every measure, position, title and filter.
+Independent final spec/code review passed with no findings; all 153 report tests,
+locked Microsoft TOM, schema/author checks and a fresh publication dry run passed.
+Direct Measure evaluation and visual fit still require the actual service check.
+Native rendering of the 46 paragraph textboxes passed across the eight pages.
+The case picker cleanup `f5191ad` passed independent review and was deployed as
+revision24; exact-case reopening, unchanged refresh and invalid-bookmark recovery
+were verified. Native Actions/outcomes found a chart axis identity collision.
+Reviewed `4748a91` replaces only that chart with a single-axis table; all 154 report
+tests, offline author/schema checks and fresh publication dry run passed. No DAX,
+SQL, model identity, data or permission changes are needed. The same report/model
+were published and their binding/SQL datasource reverified. A matching existing
+app release is verified ready as `ca-sr-demo--0000025`, image
+`sha256:dfd3e0f566ec0d929a0cc5fbe77a8a92697850f7a91fd91df24c6f4d6b29b4dc`,
+with 100% traffic, live health, schema 12, unchanged identity/scale, and the reporting
+receipt still empty. Exact original-case refresh remained unchanged after this
+final release. Detailed native acceptance and remaining coverage gaps are recorded in
+`docs/reviews/2026-09-11-native-planner-acceptance.md`.
+
+Azure validation workflow completed its error-resolution step after all listed
+checks passed. This Validated status permits the bounded existing-app deployment,
+not report activation or a claim that the rendered experience has passed.
 
 ## Validation Proof — planner conformance correction release
 
