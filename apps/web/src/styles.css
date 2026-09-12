@@ -127,6 +127,8 @@ h3 { margin: 0.75rem 0 0.45rem; }
 .investigation-cards .compact-list dd { text-align: left; }
 .investigation-cards .decision-controls { grid-template-columns: 1fr; }
 .source-role { color: #52645e; font-size: 0.85rem; font-weight: 700; }
+.source-action { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; text-decoration: underline; }
+.source-action-icon { flex: 0 0 auto; width: 24px; height: 24px; }
 .source-footers { margin-top: auto; padding-top: 0.75rem; }
 .source-footers .footer-source { margin: 0.4rem 0; font-size: 0.75rem; color: #52645e; overflow-wrap: anywhere; }
 .source-footers .evidence-footer { padding-top: 0.5rem; }

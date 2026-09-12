@@ -2,6 +2,7 @@ import type {AnalysisVersion, EvidenceItem} from "../types";
 import {trustedServerCitation} from "../security/trustedUrls";
 import {EvidenceFooter} from "./EvidenceFooter";
 import {evidenceStatus} from "./evidenceStatus";
+import {SourceActionIcon} from "./SourceActionIcon";
 
 type SourceProps = {item: EvidenceItem; analysis: AnalysisVersion; tenantSharePointHost?: string | null; label?: string};
 export const statusFor = (item: EvidenceItem, analysis: AnalysisVersion) => evidenceStatus(item, {...analysis, results: analysis.evidence_validation?.item_results ?? []});
@@ -14,6 +15,12 @@ function citationLabel(item: EvidenceItem, url: string) {
   if (["outlook.office.com", "outlook.office365.com"].includes(host) && item.authority_scope.includes("supplier_statement")) return "Open supplier email";
   if (host === "teams.microsoft.com" && item.authority_scope.includes("collaboration_statement")) return "Open Quality Teams post";
   return "Open citation";
+}
+function citationProduct(item: EvidenceItem, url: string): "outlook" | "teams" | null {
+  const host = new URL(url).hostname;
+  if (["outlook.office.com", "outlook.office365.com"].includes(host) && item.authority_scope.includes("supplier_statement")) return "outlook";
+  if (host === "teams.microsoft.com" && item.authority_scope.includes("collaboration_statement")) return "teams";
+  return null;
 }
 function sourceName(item: EvidenceItem) {
   if (item.authority_scope.includes("supplier_statement")) return "Supplier email";
@@ -34,6 +41,7 @@ export function RequiredCitationWarning({analysis, tenantSharePointHost}: {analy
 }
 export function EvidenceSource({item, analysis, tenantSharePointHost, label = "Source statement"}: SourceProps) {
   const status = statusFor(item, analysis); const url = citation(item, analysis, tenantSharePointHost);
+  const product = url ? citationProduct(item, url) : null;
   return <div className="source-evidence"><p className="source-role">{label}</p>
     {status.warning && <p className="warning" role="alert">{status.warning}</p>}
     {item.excerpt ? <details><summary>Read original {excerptName(label)} excerpt</summary><blockquote>{item.excerpt}</blockquote></details> : <p>Source excerpt unavailable</p>}
@@ -41,7 +49,9 @@ export function EvidenceSource({item, analysis, tenantSharePointHost, label = "S
       <div><dt>Source record ID</dt><dd>{item.source_id?.trim() || "Unavailable"}</dd></div><div><dt>Evidence ID</dt><dd>{item.evidence_id}</dd></div>
       <div><dt>Technical authority scopes</dt><dd>{item.authority_scope.join(", ")}</dd></div><div><dt>Internal evidence classification</dt><dd>{item.uncertainty_state}</dd></div>
     </dl><p>Saved source claim: {item.claim}</p><p>The internal classification is not a probability or a guarantee of supplier performance.</p></details>
-    {url && <a href={url} target="_blank" rel="noopener noreferrer">{citationLabel(item, url)}</a>}
+    {url && <a className="source-action" href={url} target="_blank" rel="noopener noreferrer">
+      {product && <SourceActionIcon product={product} />}{citationLabel(item, url)}
+    </a>}
   </div>;
 }
 export function EvidenceFooters({items, analysis}: {items: EvidenceItem[]; analysis: AnalysisVersion}) {
