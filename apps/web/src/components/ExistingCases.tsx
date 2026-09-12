@@ -4,6 +4,7 @@ interface Props {
   cases: CaseInstance[] | null;
   loading: boolean;
   reopening: boolean;
+  busy?: boolean;
   error: string | null;
   onLoad: () => void;
   onReopen: (caseId: string) => void;
@@ -20,11 +21,11 @@ function recordedLabel(value: string): string {
     .format(new Date(value));
 }
 
-export function ExistingCases({cases, loading, reopening, error, onLoad, onReopen}: Props) {
+export function ExistingCases({cases, loading, reopening, busy, error, onLoad, onReopen}: Props) {
   return <section className="panel existing-cases" aria-labelledby="existing-cases-heading">
     <h2 id="existing-cases-heading">Reopen existing case</h2>
     <p>Open saved planning work without creating a case or refreshing its evidence.</p>
-    <button type="button" className="secondary" disabled={loading || reopening} onClick={onLoad}>
+    <button type="button" className="secondary" disabled={busy || loading || reopening} onClick={onLoad}>
       {loading ? "Finding existing cases…" : error ? "Try finding cases again" : "Find existing cases"}
     </button>
     {error && <p className="error" role="alert">{error}</p>}
@@ -33,7 +34,7 @@ export function ExistingCases({cases, loading, reopening, error, onLoad, onReope
       {cases.map(item => <li key={item.case_id}>
         <div><strong>{statusLabels[item.status]}</strong><span>Recorded {recordedLabel(item.recorded_at)}</span>
           <span className="case-id">{item.case_id}</span></div>
-        <button type="button" disabled={reopening} onClick={() => onReopen(item.case_id)}
+        <button type="button" disabled={busy || loading || reopening} onClick={() => onReopen(item.case_id)}
           aria-label={`Reopen case ${item.case_id}`}>Reopen</button>
       </li>)}
     </ul>}

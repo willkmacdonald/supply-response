@@ -5,6 +5,8 @@ interface ExecutionPanelProps {
   actions: ExecutionAction[];
   drafts: DraftArtifact[];
   retrying: boolean;
+  busy?: boolean;
+  canRetryPlanning?: boolean;
   onRetry: () => void;
   onRetryAction: (actionId: string) => void;
 }
@@ -34,14 +36,14 @@ function draftName(kind: string): string {
     : "Draft for review";
 }
 
-export function ExecutionPanel({decision, actions, drafts, retrying, onRetry, onRetryAction}: ExecutionPanelProps) {
+export function ExecutionPanel({decision, actions, drafts, retrying, busy, canRetryPlanning = false, onRetry, onRetryAction}: ExecutionPanelProps) {
   if (!decision || decision.kind !== "approved") return null;
   return <section className="panel" aria-labelledby="execution-heading">
     <p className="step">4. Carry out approved actions</p>
     <h2 id="execution-heading">Execution plan</h2>
     {decision.action_planning_status === "failed" && <div className="failure-banner">
       <strong>Approved — action planning failed</strong>
-      <button type="button" onClick={onRetry} disabled={retrying}>
+      <button type="button" onClick={onRetry} disabled={busy || retrying || !canRetryPlanning}>
         {retrying ? "Retrying action planning…" : "Retry action planning"}
       </button>
     </div>}
@@ -51,7 +53,7 @@ export function ExecutionPanel({decision, actions, drafts, retrying, onRetry, on
         <div data-testid={`execution-action-${action.action_id}`}>
           <div><strong>{actionName(action.kind)}</strong><span>{actionStates.get(action.status) ?? "Status not recognized"}</span></div>
           <details><summary>Action details</summary><p>Action {action.action_id}</p><p>Recorded kind: {action.kind}</p></details>
-          {action.status === "failed" && <button type="button" onClick={() => onRetryAction(action.action_id)}>
+          {action.status === "failed" && <button type="button" disabled={busy || retrying} onClick={() => onRetryAction(action.action_id)}>
             Retry {actionName(action.kind).toLowerCase()}
           </button>}
         </div>

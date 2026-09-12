@@ -23,6 +23,6 @@ export function InvestigationFlow({state}: {state: CaseWorkspaceState}) {
   </div><RequiredCitationWarning analysis={analysis} tenantSharePointHost={props.tenantSharePointHost} />
     <Row id="understand-row" label="1. Understand the disruption"><InvestigationEvidence {...props} row="disruption" /></Row>
     <Row id="responses-row" label="2. Investigate responses"><InvestigationEvidence {...props} row="responses" /></Row>
-    <Row id="decision-row" label="3. Make the decision"><OptionComparison analysis={analysis} selectedOption={state.selectedOption} onSelect={state.selectOption} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /><ExposurePanel analysis={analysis} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /><DecisionPanel state={state} onApprove={state.approve} onReject={state.reject} /></Row>
+    <Row id="decision-row" label="3. Make the decision"><OptionComparison disabled={state.operation !== null} analysis={analysis} selectedOption={state.selectedOption} onSelect={state.selectOption} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /><ExposurePanel analysis={analysis} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /><DecisionPanel state={state} onApprove={state.approve} onReject={state.reject} /></Row>
   </div>;
 }

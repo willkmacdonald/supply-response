@@ -17,7 +17,7 @@ export function DecisionPanel({state, onApprove, onReject}: DecisionPanelProps) 
     ...state.analysis.evidence_validation.global_blocking_codes,
     ...state.analysis.evidence_validation.blocking_codes,
   ];
-  const disabled = state.decisionBlocked || Boolean(state.decision) || state.operation === "deciding";
+  const disabled = state.decisionBlocked || !state.caseInstance?.controls.decide || Boolean(state.decision) || state.operation !== null;
   const recordedOption = state.decision?.analysis_id === state.analysis.analysis_id && state.decision.selected_option_id
     ? state.analysis.response_options.find((option) => option.option_id === state.decision?.selected_option_id) ?? null
     : null;

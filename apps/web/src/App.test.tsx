@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import {act, cleanup, render, screen, within} from "@testing-library/react";
+import {act, cleanup, render, renderHook, screen, waitFor, within} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {StrictMode} from "react";
 import {afterEach, describe, expect, it, vi} from "vitest";
 import App from "./App";
+import {useCaseWorkspace} from "./hooks/useCaseWorkspace";
 import {AuthProvider, type AuthClient} from "./auth/AuthProvider";
 
 const scenarioTime = "2026-09-01T09:00:00-05:00";
@@ -392,7 +393,336 @@ function mockFallbackCaseLifecycle(overrides: {
 
 afterEach(() => {
   cleanup();
+  window.history.replaceState(null, "", "/");
   vi.unstubAllGlobals();
+});
+
+function savedReads(overrides: Record<string, unknown> = {}) {
+  const savedCase = {...caseInstance, current_analysis_id: analysis.analysis_id};
+  const bodies: Record<string, unknown> = {
+    "/api/runtime": runtime, "/api/cases": [savedCase],
+    "/api/cases/RL-CASE-1": savedCase, "/api/cases/RL-CASE-1/analysis": analysis,
+    "/api/decisions/RL-DECISION-1": decision,
+    "/api/decisions/RL-DECISION-1/actions": actions,
+    "/api/decisions/RL-DECISION-1/drafts": drafts,
+    "/api/decisions/RL-DECISION-1/playback": playback,
+    "/api/decisions/RL-DECISION-1/observations": observations,
+    ...overrides,
+  };
+  const mock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const body = bodies[String(input)];
+    if (init?.method === "POST") throw new Error("Unexpected mutation");
+    if (body instanceof Promise) return body.then(value => value.clone());
+    if (body instanceof Response) return Promise.resolve(body.clone());
+    return response(body ?? {detail: {code: "CASE_NOT_FOUND"}}, body === undefined ? 404 : 200);
+  });
+  vi.stubGlobal("fetch", mock);
+  return mock;
+}
+
+describe("reopening lifecycle and operation safety", () => {
+  it("rejects a decision projection with no analysis instead of dropping the decision", async () => {
+    savedReads({"/api/cases/RL-CASE-1": {...caseInstance, current_decision_id: decision.decision_id}});
+    window.history.replaceState(null, "", "/?caseId=RL-CASE-1");
+    const {result} = renderHook(useCaseWorkspace);
+    await waitFor(() => expect(result.current.operation).toBeNull());
+    expect(result.current.error).toMatch(/Unable to reopen/);
+    expect(result.current.caseInstance).toBeNull();
+  });
+
+  it("ignores StrictMode's abandoned startup response after a new startup completes", async () => {
+    let resolveOld!: (value: Response) => void;
+    const oldRuntime = new Promise<Response>(r => {resolveOld = r;});
+    const mock = savedReads();
+    const read = mock.getMockImplementation()!;
+    let calls = 0;
+    mock.mockImplementation((url, init) => url === "/api/runtime" && ++calls === 1 ? oldRuntime : read(url, init));
+    const {result} = renderHook(useCaseWorkspace, {wrapper: StrictMode});
+    await waitFor(() => expect(result.current.operation).toBeNull());
+    expect(result.current.runtime).toEqual(runtime);
+    await act(async () => {resolveOld(await response({...runtime, runtime_mode: "live"}));});
+    expect(result.current.runtime).toEqual(runtime);
+    expect(result.current.operation).toBeNull();
+  });
+
+  it("ignores a late list response after unmount", async () => {
+    let resolveList!: (value: Response) => void;
+    savedReads({"/api/cases": new Promise<Response>(r => {resolveList = r;})});
+    const {result, unmount} = renderHook(useCaseWorkspace);
+    await waitFor(() => expect(result.current.operation).toBeNull());
+    let listing!: Promise<void>;
+    act(() => {listing = result.current.loadExistingCases();});
+    unmount();
+    await act(async () => {resolveList(await response([caseInstance])); await listing;});
+    expect(result.current.existingCases).toBeNull();
+  });
+
+  it.each(["create", "analyze", "approve", "reject", "retryPlanning", "retryAction", "startPlayback"] as const)("holds the shared gate throughout %s", async action => {
+    const needsDecision = ["retryPlanning", "retryAction", "startPlayback"].includes(action);
+    const mock = savedReads({
+      "/api/cases/RL-CASE-1": {...caseInstance, current_analysis_id: analysis.analysis_id,
+        current_decision_id: needsDecision ? decision.decision_id : null,
+        controls: {new_analysis: true, decide: !needsDecision, retry_action_planning: action === "retryPlanning", start_playback: action === "startPlayback"}},
+      "/api/decisions/RL-DECISION-1": {...decision, action_planning_status: action === "retryPlanning" ? "failed" : "complete"},
+      "/api/decisions/RL-DECISION-1/actions": [{...actions[0], status: "failed"}, ...actions.slice(1)],
+      "/api/decisions/RL-DECISION-1/playback": await response({detail: {code: "PLAYBACK_NOT_FOUND"}}, 404),
+      "/api/decisions/RL-DECISION-1/observations": [],
+    });
+    window.history.replaceState(null, "", "/?caseId=RL-CASE-1&analysisId=RL-ANALYSIS-1");
+    const {result} = renderHook(useCaseWorkspace);
+    await waitFor(() => expect(result.current.analysis).not.toBeNull());
+    let resolveMutation!: (value: Response) => void;
+    const pending = new Promise<Response>(r => {resolveMutation = r;});
+    const read = mock.getMockImplementation()!;
+    mock.mockImplementation((url, init) => init?.method === "POST" ? pending : read(url, init));
+    let mutation!: Promise<void>;
+    act(() => {
+      mutation = action === "reject" ? result.current.reject("Wait") : action === "retryAction"
+        ? result.current.retryAction(actions[0].action_id) : result.current[action]();
+    });
+    const count = mock.mock.calls.length;
+    await act(async () => {
+      await result.current.loadExistingCases(); await result.current.reopen("RL-CASE-2"); await result.current.create();
+    });
+    expect(result.current.operation).not.toBeNull();
+    expect(result.current.error).toMatch(/wait/i);
+    expect(mock.mock.calls.slice(count).filter(([, init]) => init?.method !== "POST")).toHaveLength(0);
+    expect(mock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+    await act(async () => {
+      const body = action === "create" ? caseInstance : action === "analyze" ? analysis : action === "retryAction" ? actions[0]
+        : action === "startPlayback" ? playback : decision;
+      resolveMutation(await response(body)); await mutation;
+    });
+    expect(result.current.operation).toBeNull();
+    expect(result.current.caseInstance?.case_id).toBe(caseInstance.case_id);
+  });
+
+  it.each(["retryPlanning", "startPlayback"] as const)("honors disabled saved %s in UI and handlers", async operation => {
+    const mock = savedReads({
+      "/api/cases/RL-CASE-1": {...caseInstance, current_analysis_id: analysis.analysis_id, current_decision_id: decision.decision_id},
+      "/api/decisions/RL-DECISION-1": {...decision, action_planning_status: operation === "retryPlanning" ? "failed" : "complete"},
+      "/api/decisions/RL-DECISION-1/playback": await response({detail: {code: "PLAYBACK_NOT_FOUND"}}, 404),
+      "/api/decisions/RL-DECISION-1/observations": [],
+    });
+    window.history.replaceState(null, "", "/?caseId=RL-CASE-1&analysisId=RL-ANALYSIS-1");
+    const {result} = renderHook(useCaseWorkspace);
+    await waitFor(() => expect(result.current.decision).not.toBeNull());
+    await act(async () => {await result.current[operation]();});
+    expect(mock.mock.calls.every(([, init]) => !init?.method)).toBe(true);
+    render(<App />);
+    expect(await screen.findByRole("button", {name: operation === "retryPlanning" ? "Retry action planning" : "Start simulated execution"})).toBeDisabled();
+  });
+
+  it("ignores late mutation responses after unmount", async () => {
+    const mock = savedReads();
+    const {result, unmount} = renderHook(useCaseWorkspace);
+    await waitFor(() => expect(result.current.operation).toBeNull());
+    let resolveMutation!: (value: Response) => void;
+    mock.mockReturnValue(new Promise<Response>(r => {resolveMutation = r;}));
+    let creating!: Promise<void>;
+    act(() => {creating = result.current.create();});
+    unmount();
+    await act(async () => {resolveMutation(await response(caseInstance)); await creating;});
+    expect(window.location.search).toBe("");
+  });
+
+  it("stops planning polling when the workspace unmounts", async () => {
+    const mock = savedReads({"/api/cases/RL-CASE-1": {...caseInstance, current_analysis_id: analysis.analysis_id,
+      controls: {...caseInstance.controls, decide: true}}});
+    window.history.replaceState(null, "", "/?caseId=RL-CASE-1");
+    const {result, unmount} = renderHook(useCaseWorkspace);
+    await waitFor(() => expect(result.current.analysis).not.toBeNull());
+    mock.mockResolvedValue(await response(pendingDecision));
+    let approving!: Promise<void>;
+    act(() => {approving = result.current.approve();});
+    await waitFor(() => expect(result.current.operation).toBe("planning"));
+    unmount();
+    mock.mockResolvedValue(await response(decision));
+    const calls = mock.mock.calls.length;
+    await act(async () => {await approving;});
+    expect(mock.mock.calls).toHaveLength(calls);
+  });
+
+  it.each([
+    ["case", "/api/cases/RL-CASE-1", {...caseInstance, case_id: "other"}],
+    ["analysis case", "/api/cases/RL-CASE-1/analysis", {...analysis, case_id: "other"}],
+    ["analysis id", "/api/cases/RL-CASE-1/analysis", {...analysis, analysis_id: "other"}],
+    ["material", "/api/cases/RL-CASE-1/analysis", {...analysis, material: {...analysis.material, case_id: "other"}}],
+    ["evidence", "/api/cases/RL-CASE-1/analysis", {...analysis, evidence_items: [{...analysis.evidence_items[0], retrieved_for_analysis_id: "other"}]}],
+    ["decision", "/api/decisions/RL-DECISION-1", {...decision, analysis_id: "other"}],
+    ["action", "/api/decisions/RL-DECISION-1/actions", [{...actions[0], case_id: "other"}]],
+    ["draft", "/api/decisions/RL-DECISION-1/drafts", [{...drafts[0], action_id: "other"}]],
+    ["playback", "/api/decisions/RL-DECISION-1/playback", {...playback, decision_id: "other"}],
+    ["observation", "/api/decisions/RL-DECISION-1/observations", [{...observations[0], playback_id: "other"}]],
+  ])("rejects mismatched %s identity atomically", async (_label, path, value) => {
+    const mock = savedReads({"/api/cases/RL-CASE-1": {...caseInstance, current_analysis_id: analysis.analysis_id, current_decision_id: decision.decision_id}, [String(path)]: value});
+    window.history.replaceState(null, "", "/?caseId=RL-CASE-1&analysisId=RL-ANALYSIS-1");
+    const {result} = renderHook(useCaseWorkspace);
+    await waitFor(() => expect(result.current.operation).toBeNull());
+    expect(result.current.error).toMatch(/Unable to reopen|saved analysis is no longer current/);
+    expect(result.current.caseInstance).toBeNull();
+    expect(result.current.analysis).toBeNull();
+    expect(mock.mock.calls.every(([, init]) => !init?.method)).toBe(true);
+  });
+
+  it("refuses a case whose projection changes during restoration", async () => {
+    const mock = savedReads();
+    const original = mock.getMockImplementation()!;
+    let reads = 0;
+    mock.mockImplementation((url, init) => String(url) === "/api/cases/RL-CASE-1" && ++reads === 2
+      ? response({...caseInstance, current_analysis_id: analysis.analysis_id, projection_updated_at: "2026-09-02T00:00:00Z"}) : original(url, init));
+    window.history.replaceState(null, "", "/?caseId=RL-CASE-1&analysisId=RL-ANALYSIS-1");
+    const {result} = renderHook(useCaseWorkspace);
+    await waitFor(() => expect(result.current.operation).toBeNull());
+    expect(result.current.error).toMatch(/Unable to reopen/);
+    expect(result.current.caseInstance).toBeNull();
+  });
+
+  it.each(["RL-CASE-unknown", "../runtime?secret=x"])("fails unknown or malformed identity %s safely", async id => {
+    const mock = savedReads();
+    window.history.replaceState(null, "", `/?caseId=${encodeURIComponent(id)}`);
+    const {result} = renderHook(useCaseWorkspace);
+    await waitFor(() => expect(result.current.operation).toBeNull());
+    expect(result.current.error).toMatch(/Unable to reopen/);
+    expect(result.current.caseInstance).toBeNull();
+    expect(mock.mock.calls.map(([url]) => url)).toContain(`/api/cases/${encodeURIComponent(id)}`);
+  });
+
+  it("fails an analysis bookmark without a case without extra requests", async () => {
+    const mock = savedReads();
+    window.history.replaceState(null, "", "/?analysisId=RL-ANALYSIS-1");
+    render(<App />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to initialize");
+    expect(mock.mock.calls.map(([url]) => url)).toEqual(["/api/runtime"]);
+  });
+
+  it("restores refresh timestamps and controls exactly, including case-only bookmarks", async () => {
+    const mock = savedReads();
+    window.history.replaceState(null, "", "/?caseId=RL-CASE-1&view=planner");
+    const first = renderHook(useCaseWorkspace);
+    await waitFor(() => expect(first.result.current.analysis).not.toBeNull());
+    expect(first.result.current.analysis).toEqual(analysis);
+    expect(first.result.current.caseInstance).toEqual({...caseInstance, current_analysis_id: analysis.analysis_id});
+    first.unmount();
+    const second = renderHook(useCaseWorkspace);
+    await waitFor(() => expect(second.result.current.analysis).not.toBeNull());
+    expect(second.result.current.analysis).toEqual(analysis);
+    expect(new URLSearchParams(window.location.search).get("view")).toBe("planner");
+    expect(mock.mock.calls.every(([, init]) => !init?.method)).toBe(true);
+  });
+
+  it("keeps picker loading, failure, retry and empty states explicit", async () => {
+    let resolveList!: (value: Response) => void;
+    const mock = savedReads({"/api/cases": new Promise<Response>(r => {resolveList = r;})});
+    render(<App />);
+    await screen.findByText("Fallback mode");
+    await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
+    expect(screen.getByRole("button", {name: "Finding existing cases…"})).toBeDisabled();
+    await act(async () => resolveList(await response({detail: {code: "READ_FAILED"}}, 503)));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to find existing cases");
+    mock.mockResolvedValue(await response([]));
+    await userEvent.click(screen.getByRole("button", {name: "Try finding cases again"}));
+    expect(await screen.findByText("No existing cases are available.")).toBeVisible();
+  });
+
+  it("ignores a restoration response arriving after unmount", async () => {
+    let resolveCase!: (value: Response) => void;
+    savedReads({"/api/cases/RL-CASE-1": new Promise<Response>(r => {resolveCase = r;})});
+    const view = renderHook(useCaseWorkspace);
+    await waitFor(() => expect(view.result.current.operation).toBeNull());
+    let opening!: Promise<void>;
+    act(() => {opening = view.result.current.reopen("RL-CASE-1");});
+    view.unmount();
+    await act(async () => {resolveCase(await response(caseInstance)); await opening;});
+    expect(window.location.search).toBe("");
+  });
+
+  it("keeps every mutation control and picker disabled during a listing", async () => {
+    let resolveList!: (value: Response) => void;
+    savedReads({"/api/cases/RL-CASE-1": {...caseInstance, current_analysis_id: analysis.analysis_id, controls: {...caseInstance.controls, decide: true}},
+      "/api/cases": new Promise<Response>(r => {resolveList = r;})});
+    window.history.replaceState(null, "", "/?caseId=RL-CASE-1");
+    render(<App />);
+    await screen.findByText("Combined response");
+    await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
+    expect(screen.getByRole("button", {name: "Approve combined response"})).toBeDisabled();
+    expect(screen.getByRole("button", {name: "Select Combined response"})).toBeDisabled();
+    await act(async () => resolveList(await response([])));
+  });
+
+  it.each([false, true])("restores under StrictMode (bookmark=%s) using GET only", async bookmark => {
+    const mock = savedReads();
+    if (bookmark) window.history.replaceState(null, "", "/?caseId=RL-CASE-1&analysisId=RL-ANALYSIS-1&view=planner");
+    render(<StrictMode><App /></StrictMode>);
+    if (!bookmark) {
+      await waitFor(() => expect(screen.getByRole("button", {name: "Find existing cases"})).toBeEnabled());
+      await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
+      await userEvent.click(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"}));
+    }
+    expect(await screen.findByText("Combined response")).toBeVisible();
+    expect(screen.queryByText("Reopening saved case…")).not.toBeInTheDocument();
+    expect(mock.mock.calls.every(([, init]) => !init?.method)).toBe(true);
+    expect(new URLSearchParams(window.location.search).get("analysisId")).toBe(analysis.analysis_id);
+  });
+
+  it("blocks synchronous operations during initialization and listing", async () => {
+    let resolveRuntime!: (value: Response) => void;
+    let resolveList!: (value: Response) => void;
+    const mock = savedReads({"/api/runtime": new Promise<Response>(r => { resolveRuntime = r; }),
+      "/api/cases": new Promise<Response>(r => { resolveList = r; })});
+    const {result} = renderHook(useCaseWorkspace);
+    await act(async () => { await result.current.loadExistingCases(); await result.current.create(); await result.current.reopen("RL-CASE-1"); });
+    expect(mock.mock.calls.map(([url]) => url)).toEqual(["/api/runtime"]);
+    await act(async () => resolveRuntime(await response(runtime)));
+    let listing!: Promise<void>;
+    act(() => { listing = result.current.loadExistingCases(); });
+    await act(async () => { await result.current.create(); await result.current.reopen("RL-CASE-1"); });
+    expect(result.current.operation).toBe("listing");
+    expect(mock.mock.calls.map(([url]) => url)).toEqual(["/api/runtime", "/api/cases"]);
+    await act(async () => { resolveList(await response([])); await listing; });
+    expect(result.current.existingCases).toEqual([]);
+  });
+
+  it("coalesces the same identity and visibly refuses a distinct fast reopen", async () => {
+    let resolveCase!: (value: Response) => void;
+    savedReads({"/api/cases/RL-CASE-1": new Promise<Response>(r => {resolveCase = r;})});
+    const {result} = renderHook(useCaseWorkspace);
+    await waitFor(() => expect(result.current.operation).toBeNull());
+    let first!: Promise<void>;
+    act(() => {
+      first = result.current.reopen("RL-CASE-1");
+      expect(result.current.reopen("RL-CASE-1")).toBe(first);
+      expect(result.current.reopen("RL-CASE-2")).not.toBe(first);
+    });
+    expect(result.current.error).toMatch(/wait/i);
+    await act(async () => { resolveCase(await response(caseInstance)); await first; });
+    expect(result.current.caseInstance?.case_id).toBe("RL-CASE-1");
+  });
+
+  it("honors saved decision controls in the UI and direct handlers", async () => {
+    const mock = savedReads();
+    window.history.replaceState(null, "", "/?caseId=RL-CASE-1&analysisId=RL-ANALYSIS-1");
+    const {result} = renderHook(useCaseWorkspace);
+    await waitFor(() => expect(result.current.analysis).not.toBeNull());
+    await act(async () => { await result.current.approve(); await result.current.reject("no"); });
+    expect(mock.mock.calls.every(([, init]) => !init?.method)).toBe(true);
+    render(<App />);
+    expect(await screen.findByRole("button", {name: "Approve combined response"})).toBeDisabled();
+  });
+
+  it.each(["PLAYBACK_NOT_FOUND", "DECISION_NOT_FOUND"])("handles optional playback specifically: %s", async code => {
+    savedReads({"/api/cases/RL-CASE-1": {...caseInstance, current_analysis_id: analysis.analysis_id, current_decision_id: decision.decision_id},
+      "/api/decisions/RL-DECISION-1/playback": await response({detail: {code}}, 404),
+      "/api/decisions/RL-DECISION-1/observations": []});
+    window.history.replaceState(null, "", "/?caseId=RL-CASE-1&analysisId=RL-ANALYSIS-1");
+    render(<App />);
+    if (code === "PLAYBACK_NOT_FOUND") {
+      expect(await screen.findByRole("button", {name: "Start simulated execution"})).toBeDisabled();
+    } else {
+      expect(await screen.findByRole("alert")).toHaveTextContent("Unable to reopen");
+      expect(screen.queryByTestId("decision-receipt")).not.toBeInTheDocument();
+    }
+  });
 });
 
 describe("progressive Case workspace", () => {

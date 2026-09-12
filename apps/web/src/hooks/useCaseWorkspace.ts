@@ -63,10 +63,12 @@ async function pollWhile<T>(
   read: () => Promise<T>,
   pending: (value: T) => boolean,
   description: string,
+  active: () => boolean,
 ): Promise<T> {
   let current = initial;
   for (let attempt = 0; pending(current) && attempt < MAX_POLL_ATTEMPTS; attempt += 1) {
     await delay(POLL_INTERVAL_MS);
+    if (!active()) return current;
     current = await read();
   }
   if (pending(current)) throw new Error(`Timed out waiting for ${description}.`);
@@ -74,9 +76,10 @@ async function pollWhile<T>(
 }
 
 export function useCaseWorkspace(): CaseWorkspaceState {
-  const initialized = useRef(false);
   const playbackOperation = useRef<Promise<void> | null>(null);
   const restoration = useRef<Promise<void> | null>(null);
+  const restorationKey = useRef<string | null>(null);
+  const activeOperation = useRef<number | null>(null);
   const restorationVersion = useRef(0);
   const mounted = useRef(true);
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
@@ -93,7 +96,20 @@ export function useCaseWorkspace(): CaseWorkspaceState {
   const [existingCases, setExistingCases] = useState<CaseInstance[] | null>(null);
   const [existingCasesError, setExistingCasesError] = useState<string | null>(null);
 
-  useEffect(() => () => { mounted.current = false; restorationVersion.current += 1; }, []);
+  const begin = useCallback((kind: WorkspaceOperation) => {
+    if (!mounted.current || activeOperation.current !== null) {
+      if (mounted.current) setError("Please wait for the current operation to finish, then try again.");
+      return null;
+    }
+    const token = ++restorationVersion.current;
+    activeOperation.current = token;
+    setOperation(kind);
+    return token;
+  }, []);
+  const valid = useCallback((token: number) => mounted.current && activeOperation.current === token, []);
+  const finish = useCallback((token: number) => {
+    if (valid(token)) { activeOperation.current = null; setOperation(null); }
+  }, [valid]);
 
   const replaceWorkspaceUrl = useCallback((nextCase: CaseInstance, nextAnalysis: AnalysisVersion | null) => {
     const url = new URL(window.location.href);
@@ -109,22 +125,26 @@ export function useCaseWorkspace(): CaseWorkspaceState {
   }, []);
 
   const loadExistingCases = useCallback(async () => {
-    if (restoration.current) return;
-    setOperation("listing"); setExistingCasesError(null);
-    try { setExistingCases(await api.cases()); }
-    catch (caught) { setExistingCases(null); setExistingCasesError(`Unable to find existing cases. ${safeErrorMessage(caught)}`); }
-    finally { if (mounted.current) setOperation(null); }
-  }, []);
+    const token = begin("listing");
+    if (token === null) return;
+    setExistingCasesError(null);
+    try { const cases = await api.cases(); if (valid(token)) setExistingCases(cases); }
+    catch (caught) { if (valid(token)) { setExistingCases(null); setExistingCasesError(`Unable to find existing cases. ${safeErrorMessage(caught)}`); } }
+    finally { finish(token); }
+  }, [begin, valid, finish]);
 
   const reopen = useCallback((caseId: string, expectedAnalysisId?: string | null): Promise<void> => {
-    if (restoration.current) return restoration.current;
-    const version = ++restorationVersion.current;
+    const key = JSON.stringify([caseId, expectedAnalysisId]);
+    if (restoration.current && restorationKey.current === key) return restoration.current;
+    const version = begin("reopening");
+    if (version === null) return Promise.resolve();
     const running = (async () => {
       setOperation("reopening"); setError(null); clearWorkspace();
       try {
         const firstCase = await api.case(caseId);
         if (firstCase.case_id !== caseId) throw new Error("case identity mismatch");
-        const analysisId = expectedAnalysisId === undefined ? firstCase.current_analysis_id : expectedAnalysisId;
+        if (firstCase.current_decision_id && !firstCase.current_analysis_id) throw new Error("decision has no analysis");
+        const analysisId = expectedAnalysisId ?? firstCase.current_analysis_id;
         if (expectedAnalysisId && firstCase.current_analysis_id !== expectedAnalysisId) {
           throw new Error("saved analysis is no longer current");
         }
@@ -139,9 +159,13 @@ export function useCaseWorkspace(): CaseWorkspaceState {
           if (nextAnalysis.case_id !== caseId || nextAnalysis.analysis_id !== analysisId) {
             throw new Error("saved analysis is no longer current");
           }
+          if (nextAnalysis.material.case_id !== caseId || nextAnalysis.evidence_items.some(item =>
+            item.case_id !== caseId || item.retrieved_for_analysis_id !== analysisId)) {
+            throw new Error("analysis evidence identity mismatch");
+          }
           if (firstCase.current_decision_id) {
             nextDecision = await api.decision(firstCase.current_decision_id);
-            if (nextDecision.decision_id !== firstCase.current_decision_id || nextDecision.case_id !== caseId
+            if (nextDecision.analysis_material_hash !== nextAnalysis.material_hash || nextDecision.decision_id !== firstCase.current_decision_id || nextDecision.case_id !== caseId
               || nextDecision.analysis_id !== nextAnalysis.analysis_id) throw new Error("decision identity mismatch");
             if (nextDecision.kind === "approved" && (!nextDecision.selected_option_id
               || !nextAnalysis.response_options.some(option => option.option_id === nextDecision!.selected_option_id))) {
@@ -150,14 +174,17 @@ export function useCaseWorkspace(): CaseWorkspaceState {
             [nextActions, nextDrafts, nextPlayback, nextObservations] = await Promise.all([
               api.actions(nextDecision.decision_id), api.drafts(nextDecision.decision_id),
               api.playback(nextDecision.decision_id).catch(caught => {
-                if (caught instanceof ApiRequestError && caught.status === 404) return null;
+                if (caught instanceof ApiRequestError && caught.status === 404 && caught.code === "PLAYBACK_NOT_FOUND") return null;
                 throw caught;
               }), api.observations(nextDecision.decision_id),
             ]);
             if (nextActions.some(item => item.case_id !== caseId || item.decision_id !== nextDecision!.decision_id)
-              || nextDrafts.some(item => item.decision_id !== nextDecision!.decision_id)
+              || nextDrafts.some(item => item.decision_id !== nextDecision!.decision_id
+                || !nextActions.some(action => action.action_id === item.action_id))
               || (nextPlayback && (nextPlayback.case_id !== caseId || nextPlayback.decision_id !== nextDecision.decision_id))
-              || nextObservations.some(item => item.case_id !== caseId || item.decision_id !== nextDecision!.decision_id)) {
+              || nextObservations.some(item => item.case_id !== caseId || item.decision_id !== nextDecision!.decision_id
+                || (item.playback_id !== null && item.playback_id !== nextPlayback?.playback_id)
+                || (item.action_id !== null && !nextActions.some(action => action.action_id === item.action_id)))) {
               throw new Error("related record identity mismatch");
             }
           }
@@ -180,18 +207,21 @@ export function useCaseWorkspace(): CaseWorkspaceState {
           ? "This saved analysis is no longer current. Choose the case again to open its current analysis."
           : `Unable to reopen this case. ${safeErrorMessage(caught)}`;
         setError(reason);
-      } finally { if (mounted.current && version === restorationVersion.current) setOperation(null); }
+      } finally { finish(version); }
     })();
     restoration.current = running;
+    restorationKey.current = key;
     void running.finally(() => { if (restoration.current === running) restoration.current = null; });
     return running;
-  }, [clearWorkspace, replaceWorkspaceUrl]);
+  }, [begin, finish, clearWorkspace, replaceWorkspaceUrl]);
 
   const create = useCallback(async (purpose: CasePurpose = "showcase") => {
-    setOperation("creating");
+    const token = begin("creating");
+    if (token === null) return;
     setError(null);
     try {
       const created = await api.createCase(purpose);
+      if (!valid(token)) return;
       setCaseInstance(created);
       setAnalysis(null);
       setSelectedOption(null);
@@ -202,34 +232,46 @@ export function useCaseWorkspace(): CaseWorkspaceState {
       setObservations([]);
       replaceWorkspaceUrl(created, null);
     } catch (caught) {
+      if (!valid(token)) return;
       setError(`Unable to initialize the Case workspace. ${safeErrorMessage(caught)}`);
     } finally {
-      setOperation(null);
+      finish(token);
     }
-  }, [replaceWorkspaceUrl]);
+  }, [begin, valid, finish, replaceWorkspaceUrl]);
 
   useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
+    mounted.current = true;
+    const token = begin("initializing")!;
     void api.runtime()
       .then(async nextRuntime => {
+        if (!valid(token)) return;
         setRuntime(nextRuntime);
         const parameters = new URLSearchParams(window.location.search);
         const caseId = parameters.get("caseId");
         const analysisId = parameters.get("analysisId");
         if (analysisId && !caseId) throw new Error("Analysis bookmark is missing its case ID.");
+        finish(token);
         if (caseId) await reopen(caseId, analysisId);
       })
-      .catch((caught) => setError(`Unable to initialize the Case workspace. ${safeErrorMessage(caught)}`))
-      .finally(() => setOperation(null));
-  }, [reopen]);
+      .catch((caught) => { if (valid(token)) setError(`Unable to initialize the Case workspace. ${safeErrorMessage(caught)}`); })
+      .finally(() => finish(token));
+    return () => {
+      mounted.current = false;
+      activeOperation.current = null;
+      restorationVersion.current += 1;
+      restoration.current = null;
+      playbackOperation.current = null;
+    };
+  }, [begin, valid, finish, reopen]);
 
   const analyze = useCallback(async () => {
-    if (!caseInstance) return;
-    setOperation("analyzing");
+    if (!caseInstance?.controls.new_analysis) return;
+    const token = begin("analyzing");
+    if (token === null) return;
     setError(null);
     try {
       const nextAnalysis = await api.analyze(caseInstance.case_id);
+      if (!valid(token)) return;
       setAnalysis(nextAnalysis);
       setSelectedOption(nextAnalysis.recommendation);
       setDecision(null);
@@ -247,164 +289,26 @@ export function useCaseWorkspace(): CaseWorkspaceState {
       } : current);
       if (caseInstance) replaceWorkspaceUrl(caseInstance, nextAnalysis);
     } catch (caught) {
+      if (!valid(token)) return;
       setError(`Analysis failed. ${safeErrorMessage(caught)}`);
     } finally {
-      setOperation(null);
+      finish(token);
     }
-  }, [caseInstance, replaceWorkspaceUrl]);
+  }, [begin, valid, finish, caseInstance, replaceWorkspaceUrl]);
 
   const selectOption = useCallback((option: ResponseOption) => {
-    if (option.executable) setSelectedOption(option);
+    if (mounted.current && activeOperation.current === null && option.executable) setSelectedOption(option);
   }, []);
 
-  const loadExecution = useCallback(async (decisionId: string) => {
+  const loadExecution = useCallback(async (decisionId: string, token: number) => {
     const [nextActions, nextDrafts] = await Promise.all([
       api.actions(decisionId),
       api.drafts(decisionId),
     ]);
+    if (!valid(token)) return;
     setActions(nextActions);
     setDrafts(nextDrafts);
-  }, []);
-
-  const approve = useCallback(async () => {
-    if (!caseInstance || !analysis || !selectedOption) return;
-    setOperation("deciding");
-    setError(null);
-    try {
-      const recorded = await api.decide(caseInstance.case_id, {
-        analysis_id: analysis.analysis_id,
-        kind: "approved",
-        selected_option_id: selectedOption.option_id,
-      }, `RL-WEB-${caseInstance.case_id}-${analysis.analysis_id}-approved`);
-      setDecision(recorded);
-      if (recorded.action_planning_status === "pending") setOperation("planning");
-      const planned = await pollWhile(
-        recorded,
-        () => api.decision(recorded.decision_id),
-        (current) => current.action_planning_status === "pending",
-        "action planning",
-      );
-      setDecision(planned);
-      setCaseInstance((current) => current ? {
-        ...current,
-        current_decision_id: planned.decision_id,
-        status: planned.action_planning_status === "complete" ? "executing" : "action_planning",
-        display_status: planned.action_planning_status === "failed" ? "Approved — action planning failed" : null,
-        controls: {
-          ...current.controls,
-          decide: false,
-          retry_action_planning: planned.action_planning_status === "failed",
-          start_playback: planned.action_planning_status === "complete",
-        },
-      } : current);
-      if (planned.action_planning_status === "complete") await loadExecution(planned.decision_id);
-    } catch (caught) {
-      setError(`Decision failed. ${safeErrorMessage(caught)}`);
-    } finally {
-      setOperation(null);
-    }
-  }, [analysis, caseInstance, loadExecution, selectedOption]);
-
-  const reject = useCallback(async (reason: string) => {
-    if (!caseInstance || !analysis || !reason.trim()) return;
-    setOperation("deciding");
-    setError(null);
-    try {
-      const recorded = await api.decide(caseInstance.case_id, {
-        analysis_id: analysis.analysis_id,
-        kind: "rejected",
-        rejection_reason: reason.trim(),
-      }, `RL-WEB-${caseInstance.case_id}-${analysis.analysis_id}-rejected`);
-      setDecision(recorded);
-      setCaseInstance((current) => current ? {
-        ...current,
-        status: "decision_rejected",
-        current_decision_id: recorded.decision_id,
-        controls: {...current.controls, decide: false, new_analysis: true},
-      } : current);
-    } catch (caught) {
-      setError(`Decision failed. ${safeErrorMessage(caught)}`);
-    } finally {
-      setOperation(null);
-    }
-  }, [analysis, caseInstance]);
-
-  const retryPlanning = useCallback(async () => {
-    if (!decision) return;
-    setOperation("planning");
-    setError(null);
-    try {
-      const retried = await api.retryPlanning(decision.decision_id);
-      setDecision(retried);
-      const planned = await pollWhile(
-        retried,
-        () => api.decision(retried.decision_id),
-        (current) => current.action_planning_status === "pending",
-        "action planning",
-      );
-      setDecision(planned);
-      if (planned.action_planning_status === "complete") await loadExecution(planned.decision_id);
-      setCaseInstance((current) => current ? {
-        ...current,
-        status: planned.action_planning_status === "complete" ? "executing" : "action_planning",
-        display_status: planned.action_planning_status === "failed" ? "Approved — action planning failed" : null,
-        controls: {
-          ...current.controls,
-          retry_action_planning: planned.action_planning_status === "failed",
-          start_playback: planned.action_planning_status === "complete",
-        },
-      } : current);
-    } catch (caught) {
-      setError(`Action planning retry failed. ${safeErrorMessage(caught)}`);
-    } finally {
-      setOperation(null);
-    }
-  }, [decision, loadExecution]);
-
-  const retryAction = useCallback(async (actionId: string) => {
-    if (!decision) return;
-    setError(null);
-    try {
-      const retried = await api.retryAction(decision.decision_id, actionId);
-      setActions((current) => current.map((action) =>
-        action.action_id === retried.action_id ? retried : action
-      ));
-    } catch (caught) {
-      setError(`Action retry failed. ${safeErrorMessage(caught)}`);
-    }
-  }, [decision]);
-
-  const startPlayback = useCallback((): Promise<void> => {
-    if (!decision) return Promise.resolve();
-    if (playbackOperation.current) return playbackOperation.current;
-    const running = (async () => {
-      setOperation("playback");
-      setError(null);
-      try {
-        const started = await api.startPlayback(decision.decision_id);
-        setPlayback(started);
-        const nextPlayback = await pollWhile(
-          started,
-          () => api.playback(decision.decision_id),
-          (current) => current.status !== "completed" && current.status !== "failed",
-          "simulated playback",
-        );
-        setPlayback(nextPlayback);
-        if (nextPlayback.status === "failed") throw new Error("Simulated playback failed on the server.");
-        const nextObservations = await api.observations(decision.decision_id);
-        setObservations(nextObservations);
-      } catch (caught) {
-        setError(`Simulated execution failed. ${safeErrorMessage(caught)}`);
-      } finally {
-        setOperation(null);
-      }
-    })();
-    playbackOperation.current = running;
-    void running.finally(() => {
-      if (playbackOperation.current === running) playbackOperation.current = null;
-    });
-    return running;
-  }, [decision]);
+  }, [valid]);
 
   const decisionBlocked = useMemo(() => {
     if (!analysis) return true;
@@ -420,6 +324,174 @@ export function useCaseWorkspace(): CaseWorkspaceState {
       && caseInstance?.current_analysis_id !== analysis.analysis_id;
     return stale || blocked || superseded || missingRequiredLiveCitation;
   }, [analysis, caseInstance, runtime]);
+
+  const approve = useCallback(async () => {
+    if (!caseInstance?.controls.decide || !analysis || !selectedOption || decision || decisionBlocked) return;
+    const token = begin("deciding");
+    if (token === null) return;
+    setError(null);
+    try {
+      const recorded = await api.decide(caseInstance.case_id, {
+        analysis_id: analysis.analysis_id,
+        kind: "approved",
+        selected_option_id: selectedOption.option_id,
+      }, `RL-WEB-${caseInstance.case_id}-${analysis.analysis_id}-approved`);
+      if (!valid(token)) return;
+      setDecision(recorded);
+      if (recorded.action_planning_status === "pending") setOperation("planning");
+      const planned = await pollWhile(
+        recorded,
+        () => api.decision(recorded.decision_id),
+        (current) => current.action_planning_status === "pending",
+        "action planning",
+        () => valid(token),
+      );
+      if (!valid(token)) return;
+      setDecision(planned);
+      setCaseInstance((current) => current ? {
+        ...current,
+        current_decision_id: planned.decision_id,
+        status: planned.action_planning_status === "complete" ? "executing" : "action_planning",
+        display_status: planned.action_planning_status === "failed" ? "Approved — action planning failed" : null,
+        controls: {
+          ...current.controls,
+          decide: false,
+          retry_action_planning: planned.action_planning_status === "failed",
+          start_playback: planned.action_planning_status === "complete",
+        },
+      } : current);
+      if (planned.action_planning_status === "complete") await loadExecution(planned.decision_id, token);
+    } catch (caught) {
+      if (!valid(token)) return;
+      setError(`Decision failed. ${safeErrorMessage(caught)}`);
+    } finally {
+      finish(token);
+    }
+  }, [begin, valid, finish, analysis, caseInstance, loadExecution, selectedOption, decision, decisionBlocked]);
+
+  const reject = useCallback(async (reason: string) => {
+    if (!caseInstance?.controls.decide || !analysis || !reason.trim() || decision || decisionBlocked) return;
+    const token = begin("deciding");
+    if (token === null) return;
+    setError(null);
+    try {
+      const recorded = await api.decide(caseInstance.case_id, {
+        analysis_id: analysis.analysis_id,
+        kind: "rejected",
+        rejection_reason: reason.trim(),
+      }, `RL-WEB-${caseInstance.case_id}-${analysis.analysis_id}-rejected`);
+      if (!valid(token)) return;
+      setDecision(recorded);
+      setCaseInstance((current) => current ? {
+        ...current,
+        status: "decision_rejected",
+        current_decision_id: recorded.decision_id,
+        controls: {...current.controls, decide: false, new_analysis: true},
+      } : current);
+    } catch (caught) {
+      if (!valid(token)) return;
+      setError(`Decision failed. ${safeErrorMessage(caught)}`);
+    } finally {
+      finish(token);
+    }
+  }, [begin, valid, finish, analysis, caseInstance, decision, decisionBlocked]);
+
+  const retryPlanning = useCallback(async () => {
+    if (!decision || !caseInstance?.controls.retry_action_planning) return;
+    const token = begin("planning");
+    if (token === null) return;
+    setError(null);
+    try {
+      const retried = await api.retryPlanning(decision.decision_id);
+      if (!valid(token)) return;
+      setDecision(retried);
+      const planned = await pollWhile(
+        retried,
+        () => api.decision(retried.decision_id),
+        (current) => current.action_planning_status === "pending",
+        "action planning",
+        () => valid(token),
+      );
+      if (!valid(token)) return;
+      setDecision(planned);
+      if (planned.action_planning_status === "complete") await loadExecution(planned.decision_id, token);
+      if (!valid(token)) return;
+      setCaseInstance((current) => current ? {
+        ...current,
+        status: planned.action_planning_status === "complete" ? "executing" : "action_planning",
+        display_status: planned.action_planning_status === "failed" ? "Approved — action planning failed" : null,
+        controls: {
+          ...current.controls,
+          retry_action_planning: planned.action_planning_status === "failed",
+          start_playback: planned.action_planning_status === "complete",
+        },
+      } : current);
+    } catch (caught) {
+      if (!valid(token)) return;
+      setError(`Action planning retry failed. ${safeErrorMessage(caught)}`);
+    } finally {
+      finish(token);
+    }
+  }, [begin, valid, finish, decision, caseInstance, loadExecution]);
+
+  const retryAction = useCallback(async (actionId: string) => {
+    if (!decision || decision.kind !== "approved" || !actions.some(action => action.action_id === actionId && action.status === "failed")) return;
+    const token = begin("planning");
+    if (token === null) return;
+    setError(null);
+    try {
+      const retried = await api.retryAction(decision.decision_id, actionId);
+      if (!valid(token)) return;
+      setActions((current) => current.map((action) =>
+        action.action_id === retried.action_id ? retried : action
+      ));
+    } catch (caught) {
+      if (!valid(token)) return;
+      setError(`Action retry failed. ${safeErrorMessage(caught)}`);
+    } finally {
+      finish(token);
+    }
+  }, [begin, valid, finish, decision, actions]);
+
+  const startPlayback = useCallback((): Promise<void> => {
+    if (playbackOperation.current) return playbackOperation.current;
+    if (!decision || decision.kind !== "approved" || !caseInstance?.controls.start_playback || playback || actions.length !== 5) return Promise.resolve();
+    const token = begin("playback");
+    if (token === null) return Promise.resolve();
+    const running = (async () => {
+      setOperation("playback");
+      setError(null);
+      try {
+        const started = await api.startPlayback(decision.decision_id);
+        if (!valid(token)) return;
+        setPlayback(started);
+        const nextPlayback = await pollWhile(
+          started,
+          () => api.playback(decision.decision_id),
+          (current) => current.status !== "completed" && current.status !== "failed",
+          "simulated playback",
+          () => valid(token),
+        );
+        if (!valid(token)) return;
+        setPlayback(nextPlayback);
+        if (nextPlayback.status === "failed") throw new Error("Simulated playback failed on the server.");
+        const nextObservations = await api.observations(decision.decision_id);
+        if (!valid(token)) return;
+        setObservations(nextObservations);
+      } catch (caught) {
+        if (!valid(token)) return;
+        setError(`Simulated execution failed. ${safeErrorMessage(caught)}`);
+      } finally {
+        finish(token);
+      }
+    })();
+    playbackOperation.current = running;
+    void running.finally(() => {
+      if (playbackOperation.current === running) playbackOperation.current = null;
+    });
+    return running;
+  }, [begin, valid, finish, decision, caseInstance, playback, actions.length]);
+
 
   return {
     runtime,

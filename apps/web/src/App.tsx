@@ -35,6 +35,7 @@ function CaseWorkspace() {
       onAnalyze={workspace.analyze}
     />
     <ExistingCases cases={workspace.existingCases} error={workspace.existingCasesError}
+      busy={workspace.operation !== null}
       loading={workspace.operation === "listing"} reopening={workspace.operation === "reopening"}
       onLoad={workspace.loadExistingCases} onReopen={workspace.reopen} />
     {workspace.caseInstance && <p className="reopen-note">This workspace reads saved results and does not refresh evidence or change retrieval times.</p>}
@@ -45,6 +46,8 @@ function CaseWorkspace() {
     />
     <InvestigationFlow state={workspace} />
     <ExecutionPanel
+      busy={workspace.operation !== null}
+      canRetryPlanning={workspace.caseInstance?.controls.retry_action_planning}
       decision={workspace.decision}
       actions={workspace.actions}
       drafts={workspace.drafts}
@@ -53,6 +56,7 @@ function CaseWorkspace() {
       onRetryAction={workspace.retryAction}
     />
     <OutcomePanel
+      disabled={workspace.operation !== null || !workspace.caseInstance?.controls.start_playback}
       decision={workspace.decision}
       actionCount={workspace.actions.length}
       playback={workspace.playback}

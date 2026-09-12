@@ -56,7 +56,7 @@ it("keeps rejection explicit and respects the existing blocked state", async () 
   const decision = screen.getByRole("region", {name: "Review and approve."});
   expect(within(decision).getByLabelText("Rejection reason")).toBeDisabled();
   expect(input.approve).not.toHaveBeenCalled(); expect(input.reject).not.toHaveBeenCalled();
-  cleanup(); input.decisionBlocked = false; render(<InvestigationFlow state={input} />);
+  cleanup(); input.decisionBlocked = false; input.caseInstance!.controls.decide = true; render(<InvestigationFlow state={input} />);
   await userEvent.type(screen.getByLabelText("Rejection reason"), "Wait for evidence");
   await userEvent.click(screen.getByRole("button", {name: "Reject recommendation"}));
   expect(input.reject).toHaveBeenCalledWith("Wait for evidence");

@@ -35,7 +35,7 @@ function state(overrides: Record<string, unknown> = {}): CaseWorkspaceState {
         {analysis_id: "RL-ANALYSIS-1", option_id: combined.option_id, role: "finance_approver", satisfied: false},
       ],
     },
-    caseInstance: null,
+    caseInstance: {controls: {decide: true}},
     selectedOption: combined,
     decision: null,
     operation: null,
