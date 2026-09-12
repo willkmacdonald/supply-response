@@ -1,6 +1,50 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — native readability and read-only reopening correction; actual native acceptance remains separate.
+> **Status:** Validated — session-recovery correction through 5bbb75b; live Microsoft sign-in acceptance remains separate.
+
+## Session recovery release — 2026-09-12 (validation proof)
+
+Scope: the approved expired-session correction only; same Azure Dev subscription
+`24ee21b9-2893-4e4d-bd85-5d3be76470cd`, East US 2, environment
+`supply-response-personal`, existing `ca-sr-demo` in `rg-supply-response-demo`.
+No reporting publication/activation, source changes, schema migrations, permissions,
+new resources, case/analysis/decision/action writes, Git push, or merge.
+Prior Validated status records prior releases, not completion of this release.
+
+- [x] All validation checks pass.
+  - [x] 1. AZD Installation (1.30.0).
+  - [x] 2. Schema Validation (official Azure/azure-dev schema).
+  - [x] 3. Environment Setup (existing named environment).
+  - [x] 4. Authentication Check (Will, interactive User).
+  - [x] 5. Subscription/Location Check (same confirmed Azure Dev / East US 2).
+  - [x] 6. Aspire Pre-Provisioning Checks (not applicable).
+  - [x] 7. Provision Preview (success; no resource creation/deletion).
+  - [x] 8. Build Verification (305 frontend tests, production build, uv build).
+  - [x] 9. Docker Build Context Validation (unchanged locked inputs/exclusions).
+  - [x] 10. Package Validation (azd package and uv build passed).
+  - [x] 11. Azure Policy Validation (same seven assignments; preview no denial).
+  - [x] 12. Aspire Post-Provisioning Checks (not applicable).
+  - [x] Static and live role verification (same principal, three exact-resource roles).
+
+Fresh validation commands completed September 12: `azd version`, `azd auth
+login --check-status`, named environment lookup, guarded same-tenant preflight,
+official-schema jsonschema check, `azd provision --preview --no-prompt`,
+`azd package --no-prompt`, `uv build`, policy/role reads, `npm test`,
+`npm run build`, and `git diff --check`. The first preflight invocation omitted
+the local environment selector and failed before cloud mutations; setting the
+already-selected name in the process environment resolved it. No remote setting
+was changed. Initial public curl reads timed out; subsequent IPv4 and normal
+reads returned 200 live/Fabric SQL/schema12. Callback GET200 has no COOP header.
+
+Implementation `5bbb75b` independently approved by session_recovery_review with
+no findings. Parent verified real installed MSAL bridge in Chromium against both
+Vite development and a production build with synthetic credentials: silent
+broadcast without dashboard/API startup, exact case/analysis return navigation,
+and safe malformed-callback failure. Full App recovery at 1280px and 390px
+preserves the URL, makes no API requests, hides generic workspace errors, and
+displays an actionable sign-in notice. Screenshots inspected in
+`.artifacts/session-recovery/recovery-1280.png` and `recovery-390.png`.
+These are synthetic local-browser checks, not live Microsoft sign-in acceptance.
 
 ## Validation Proof — native readability and reopening correction, 2026-09-11
 
