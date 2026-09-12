@@ -3,6 +3,7 @@ import {ExecutionPanel} from "./components/ExecutionPanel";
 import {InvestigationFlow} from "./components/InvestigationFlow";
 import {OutcomePanel} from "./components/OutcomePanel";
 import {PlanningRoutes} from "./components/PlanningRoutes";
+import {ExistingCases} from "./components/ExistingCases";
 import {useAuth} from "./auth/AuthProvider";
 import {useCaseWorkspace} from "./hooks/useCaseWorkspace";
 import "./styles.css";
@@ -21,17 +22,22 @@ function CaseWorkspace() {
     {workspace.operation === "analyzing" && (
       <p role="status" aria-live="polite">Analysis in progress. Source retrieval and evidence checks will be shown when the analysis completes.</p>
     )}
+    {workspace.operation === "reopening" && <p role="status" aria-live="polite">Reopening saved case…</p>}
     {workspace.error && <p className="error" role="alert">{workspace.error}</p>}
     <CaseHeader
       runtime={workspace.runtime}
       caseInstance={workspace.caseInstance}
       analysis={workspace.analysis}
       createPurpose={createPurpose}
-      creating={workspace.operation === "creating"}
-      analyzing={workspace.operation === "analyzing"}
+      creating={workspace.operation !== null}
+      analyzing={workspace.operation !== null}
       onCreate={workspace.create}
       onAnalyze={workspace.analyze}
     />
+    <ExistingCases cases={workspace.existingCases} error={workspace.existingCasesError}
+      loading={workspace.operation === "listing"} reopening={workspace.operation === "reopening"}
+      onLoad={workspace.loadExistingCases} onReopen={workspace.reopen} />
+    {workspace.caseInstance && <p className="reopen-note">This workspace reads saved results and does not refresh evidence or change retrieval times.</p>}
     <PlanningRoutes
       runtime={workspace.runtime}
       caseInstance={workspace.caseInstance}

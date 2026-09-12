@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {api, safeErrorMessage} from "../api";
+import {ApiRequestError, api, safeErrorMessage} from "../api";
 import type {
   AnalysisVersion,
   CaseInstance,
@@ -16,6 +16,8 @@ import {trustedServerCitation} from "../security/trustedUrls";
 
 export type WorkspaceOperation =
   | "initializing"
+  | "listing"
+  | "reopening"
   | "creating"
   | "analyzing"
   | "deciding"
@@ -34,8 +36,12 @@ export interface CaseWorkspaceState {
   observations: OutcomeObservation[];
   operation: WorkspaceOperation | null;
   error: string | null;
+  existingCases: CaseInstance[] | null;
+  existingCasesError: string | null;
   decisionBlocked: boolean;
   create: (purpose?: CasePurpose) => Promise<void>;
+  loadExistingCases: () => Promise<void>;
+  reopen: (caseId: string, expectedAnalysisId?: string | null) => Promise<void>;
   analyze: () => Promise<void>;
   selectOption: (option: ResponseOption) => void;
   approve: () => Promise<void>;
@@ -70,6 +76,9 @@ async function pollWhile<T>(
 export function useCaseWorkspace(): CaseWorkspaceState {
   const initialized = useRef(false);
   const playbackOperation = useRef<Promise<void> | null>(null);
+  const restoration = useRef<Promise<void> | null>(null);
+  const restorationVersion = useRef(0);
+  const mounted = useRef(true);
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [caseInstance, setCaseInstance] = useState<CaseInstance | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisVersion | null>(null);
@@ -81,6 +90,102 @@ export function useCaseWorkspace(): CaseWorkspaceState {
   const [observations, setObservations] = useState<OutcomeObservation[]>([]);
   const [operation, setOperation] = useState<WorkspaceOperation | null>("initializing");
   const [error, setError] = useState<string | null>(null);
+  const [existingCases, setExistingCases] = useState<CaseInstance[] | null>(null);
+  const [existingCasesError, setExistingCasesError] = useState<string | null>(null);
+
+  useEffect(() => () => { mounted.current = false; restorationVersion.current += 1; }, []);
+
+  const replaceWorkspaceUrl = useCallback((nextCase: CaseInstance, nextAnalysis: AnalysisVersion | null) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("caseId", nextCase.case_id);
+    if (nextAnalysis) url.searchParams.set("analysisId", nextAnalysis.analysis_id);
+    else url.searchParams.delete("analysisId");
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
+
+  const clearWorkspace = useCallback(() => {
+    setCaseInstance(null); setAnalysis(null); setSelectedOption(null); setDecision(null);
+    setActions([]); setDrafts([]); setPlayback(null); setObservations([]);
+  }, []);
+
+  const loadExistingCases = useCallback(async () => {
+    if (restoration.current) return;
+    setOperation("listing"); setExistingCasesError(null);
+    try { setExistingCases(await api.cases()); }
+    catch (caught) { setExistingCases(null); setExistingCasesError(`Unable to find existing cases. ${safeErrorMessage(caught)}`); }
+    finally { if (mounted.current) setOperation(null); }
+  }, []);
+
+  const reopen = useCallback((caseId: string, expectedAnalysisId?: string | null): Promise<void> => {
+    if (restoration.current) return restoration.current;
+    const version = ++restorationVersion.current;
+    const running = (async () => {
+      setOperation("reopening"); setError(null); clearWorkspace();
+      try {
+        const firstCase = await api.case(caseId);
+        if (firstCase.case_id !== caseId) throw new Error("case identity mismatch");
+        const analysisId = expectedAnalysisId === undefined ? firstCase.current_analysis_id : expectedAnalysisId;
+        if (expectedAnalysisId && firstCase.current_analysis_id !== expectedAnalysisId) {
+          throw new Error("saved analysis is no longer current");
+        }
+        let nextAnalysis: AnalysisVersion | null = null;
+        let nextDecision: Decision | null = null;
+        let nextActions: ExecutionAction[] = [];
+        let nextDrafts: DraftArtifact[] = [];
+        let nextPlayback: Playback | null = null;
+        let nextObservations: OutcomeObservation[] = [];
+        if (analysisId) {
+          nextAnalysis = await api.currentAnalysis(caseId);
+          if (nextAnalysis.case_id !== caseId || nextAnalysis.analysis_id !== analysisId) {
+            throw new Error("saved analysis is no longer current");
+          }
+          if (firstCase.current_decision_id) {
+            nextDecision = await api.decision(firstCase.current_decision_id);
+            if (nextDecision.decision_id !== firstCase.current_decision_id || nextDecision.case_id !== caseId
+              || nextDecision.analysis_id !== nextAnalysis.analysis_id) throw new Error("decision identity mismatch");
+            if (nextDecision.kind === "approved" && (!nextDecision.selected_option_id
+              || !nextAnalysis.response_options.some(option => option.option_id === nextDecision!.selected_option_id))) {
+              throw new Error("selected option identity mismatch");
+            }
+            [nextActions, nextDrafts, nextPlayback, nextObservations] = await Promise.all([
+              api.actions(nextDecision.decision_id), api.drafts(nextDecision.decision_id),
+              api.playback(nextDecision.decision_id).catch(caught => {
+                if (caught instanceof ApiRequestError && caught.status === 404) return null;
+                throw caught;
+              }), api.observations(nextDecision.decision_id),
+            ]);
+            if (nextActions.some(item => item.case_id !== caseId || item.decision_id !== nextDecision!.decision_id)
+              || nextDrafts.some(item => item.decision_id !== nextDecision!.decision_id)
+              || (nextPlayback && (nextPlayback.case_id !== caseId || nextPlayback.decision_id !== nextDecision.decision_id))
+              || nextObservations.some(item => item.case_id !== caseId || item.decision_id !== nextDecision!.decision_id)) {
+              throw new Error("related record identity mismatch");
+            }
+          }
+        }
+        const confirmedCase = await api.case(caseId);
+        if (confirmedCase.case_id !== caseId || confirmedCase.current_analysis_id !== firstCase.current_analysis_id
+          || confirmedCase.current_decision_id !== firstCase.current_decision_id
+          || confirmedCase.projection_updated_at !== firstCase.projection_updated_at) throw new Error("case changed during restoration");
+        if (!mounted.current || version !== restorationVersion.current) return;
+        setCaseInstance(confirmedCase); setAnalysis(nextAnalysis); setDecision(nextDecision);
+        setSelectedOption(nextDecision?.selected_option_id
+          ? nextAnalysis?.response_options.find(option => option.option_id === nextDecision!.selected_option_id) ?? null
+          : nextDecision ? null : nextAnalysis?.recommendation ?? null);
+        setActions(nextActions); setDrafts(nextDrafts); setPlayback(nextPlayback); setObservations(nextObservations);
+        replaceWorkspaceUrl(confirmedCase, nextAnalysis);
+      } catch (caught) {
+        if (!mounted.current || version !== restorationVersion.current) return;
+        clearWorkspace();
+        const reason = caught instanceof Error && caught.message === "saved analysis is no longer current"
+          ? "This saved analysis is no longer current. Choose the case again to open its current analysis."
+          : `Unable to reopen this case. ${safeErrorMessage(caught)}`;
+        setError(reason);
+      } finally { if (mounted.current && version === restorationVersion.current) setOperation(null); }
+    })();
+    restoration.current = running;
+    void running.finally(() => { if (restoration.current === running) restoration.current = null; });
+    return running;
+  }, [clearWorkspace, replaceWorkspaceUrl]);
 
   const create = useCallback(async (purpose: CasePurpose = "showcase") => {
     setOperation("creating");
@@ -95,21 +200,29 @@ export function useCaseWorkspace(): CaseWorkspaceState {
       setDrafts([]);
       setPlayback(null);
       setObservations([]);
+      replaceWorkspaceUrl(created, null);
     } catch (caught) {
       setError(`Unable to initialize the Case workspace. ${safeErrorMessage(caught)}`);
     } finally {
       setOperation(null);
     }
-  }, []);
+  }, [replaceWorkspaceUrl]);
 
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
     void api.runtime()
-      .then(setRuntime)
+      .then(async nextRuntime => {
+        setRuntime(nextRuntime);
+        const parameters = new URLSearchParams(window.location.search);
+        const caseId = parameters.get("caseId");
+        const analysisId = parameters.get("analysisId");
+        if (analysisId && !caseId) throw new Error("Analysis bookmark is missing its case ID.");
+        if (caseId) await reopen(caseId, analysisId);
+      })
       .catch((caught) => setError(`Unable to initialize the Case workspace. ${safeErrorMessage(caught)}`))
       .finally(() => setOperation(null));
-  }, []);
+  }, [reopen]);
 
   const analyze = useCallback(async () => {
     if (!caseInstance) return;
@@ -132,12 +245,13 @@ export function useCaseWorkspace(): CaseWorkspaceState {
         display_status: null,
         controls: {...current.controls, new_analysis: false, decide: true, retry_action_planning: false, start_playback: false},
       } : current);
+      if (caseInstance) replaceWorkspaceUrl(caseInstance, nextAnalysis);
     } catch (caught) {
       setError(`Analysis failed. ${safeErrorMessage(caught)}`);
     } finally {
       setOperation(null);
     }
-  }, [caseInstance]);
+  }, [caseInstance, replaceWorkspaceUrl]);
 
   const selectOption = useCallback((option: ResponseOption) => {
     if (option.executable) setSelectedOption(option);
@@ -319,8 +433,12 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     observations,
     operation,
     error,
+    existingCases,
+    existingCasesError,
     decisionBlocked,
     create,
+    loadExistingCases,
+    reopen,
     analyze,
     selectOption,
     approve,

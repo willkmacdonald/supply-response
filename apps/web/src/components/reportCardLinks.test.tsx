@@ -85,8 +85,8 @@ function fixture(): CaseWorkspaceState {
       standing_authorizations: [], approval_satisfactions: [], ranking, calculation_version: "v1",
       evidence_policy_version: "v1", approval_policy_version: "v1"}};
   return {runtime, caseInstance, analysis, selectedOption: null, decision: null, actions: [], drafts: [],
-    playback: null, observations: [], operation: null, error: null, decisionBlocked: true,
-    create: vi.fn(), analyze: vi.fn(), selectOption: vi.fn(), approve: vi.fn(), reject: vi.fn(),
+    playback: null, observations: [], operation: null, error: null, existingCases: null, existingCasesError: null, decisionBlocked: true,
+    create: vi.fn(), loadExistingCases: vi.fn(), reopen: vi.fn(), analyze: vi.fn(), selectOption: vi.fn(), approve: vi.fn(), reject: vi.fn(),
     retryPlanning: vi.fn(), retryAction: vi.fn(), startPlayback: vi.fn()};
 }
 function expectDestination(label: string, page: string, filter: string) {

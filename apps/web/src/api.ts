@@ -77,6 +77,10 @@ async function post<T>(path: string, body: object, headers: Record<string, strin
 
 export const api = {
   runtime: (): Promise<RuntimeStatus> => get("/api/runtime"),
+  cases: (): Promise<CaseInstance[]> => get("/api/cases"),
+  case: (caseId: string): Promise<CaseInstance> => get(`/api/cases/${caseId}`),
+  currentAnalysis: (caseId: string): Promise<AnalysisVersion> =>
+    get(`/api/cases/${caseId}/analysis`),
   createCase: (purpose: CasePurpose): Promise<CaseInstance> =>
     post("/api/cases", {template_id: "RL-001", purpose}),
   analyze: (caseId: string): Promise<AnalysisVersion> =>

@@ -6,6 +6,24 @@ note the case ID and analysis ID in **Analysis source details** and the visible
 walkthrough replays those saved records;
 it is not evidence of a fresh discovery or retrieval run.
 
+## Reopen the saved case
+
+1. Choose **Find existing cases**. The picker loads only when requested and shows
+   each case's planning state, recorded time, and exact case ID.
+2. Choose **Reopen** for the recorded case ID. Wait for the saved workspace to
+   finish loading, then confirm the case ID and analysis ID match the walkthrough.
+3. Refreshing a URL that contains those IDs restores that exact current context.
+   If its saved analysis has since been replaced, restoration stops visibly;
+   choose the case again only when you intend to open its newer current analysis.
+
+Reopening is read-only. It reads the stored case, analysis, decision, action,
+draft, playback, and observation records that exist; it does not retrieve evidence
+again, change retrieval timestamps, create a case, analyze, approve, retry, or run
+the simulation. A case may have no analysis yet, and a recorded decision may have
+no playback. A failure while loading related records leaves no partially actionable
+workspace. This flow restores only the current analysis because there is no
+historical-analysis endpoint.
+
 ## Explore in Power BI
 
 1. **Investigate the delay.** Open the original supplier email from the disruption
@@ -61,7 +79,6 @@ uncertainty, trade-offs, and authorization.
   lineage. **No outcomes recorded** means exactly that; it is not a zero result.
 - Do not create or analyze a case for rehearsal. Do not approve a response, plan
   execution, start a simulation, or start playback. Re-establish lost demo context
-  only through a separately supported workflow; there is deliberately no return
-  button that could silently create a new case.
+  with **Reopen existing case**; it does not silently create a new case.
 - Do not claim measured time, click, accuracy, or operational improvements. Any
   future timing must distinguish cached or replayed material from a fresh run.

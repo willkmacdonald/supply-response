@@ -647,4 +647,121 @@ describe("progressive Case workspace", () => {
     expect(fetchMock.mock.calls).toHaveLength(beforeCalls);
     expect(content.textContent).toBe(beforeContent);
   });
+
+  it("lists and reopens an analyzed case using GET requests only", async () => {
+    const analyzedCase = {...caseInstance, status: "awaiting_decision", current_analysis_id: analysis.analysis_id,
+      controls: {...caseInstance.controls, new_analysis: false, decide: true}};
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      if (path === "/api/runtime") return response(runtime);
+      if (path === "/api/cases") return response([analyzedCase]);
+      if (path === "/api/cases/RL-CASE-1") return response(analyzedCase);
+      if (path === "/api/cases/RL-CASE-1/analysis") return response(analysis);
+      throw new Error(`Unexpected API request: ${init?.method ?? "GET"} ${path}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    window.history.replaceState(null, "", "/?view=planner");
+
+    render(<App />);
+    await screen.findByText("Fallback mode");
+    await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
+    expect(await screen.findByText(/Awaiting decision/)).toBeVisible();
+    expect(screen.getByText(/RL-CASE-1/)).toBeVisible();
+    await userEvent.click(screen.getByRole("button", {name: "Reopen case RL-CASE-1"}));
+
+    expect(await screen.findByText("Combined response")).toBeVisible();
+    expect(screen.getByText(/reads saved results and does not refresh evidence/i)).toBeVisible();
+    expect(new URL(window.location.href).searchParams.get("caseId")).toBe("RL-CASE-1");
+    expect(new URL(window.location.href).searchParams.get("analysisId")).toBe("RL-ANALYSIS-1");
+    expect(new URL(window.location.href).searchParams.get("view")).toBe("planner");
+    expect(fetchMock.mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
+  });
+
+  it("reopens a case without analysis and keeps server controls", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      if (path === "/api/runtime") return response(runtime);
+      if (path === "/api/cases") return response([caseInstance]);
+      if (path === "/api/cases/RL-CASE-1") return response(caseInstance);
+      throw new Error(`Unexpected API request: ${path}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    window.history.replaceState(null, "", "/");
+    render(<App />);
+    await screen.findByText("Fallback mode");
+    await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
+    await userEvent.click(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"}));
+    expect(await screen.findByRole("button", {name: "Analyze disruption"})).toBeEnabled();
+    expect(new URL(window.location.href).searchParams.has("analysisId")).toBe(false);
+  });
+
+  it("fails a superseded analysis bookmark visibly without substituting the current analysis", async () => {
+    const currentCase = {...caseInstance, current_analysis_id: "RL-ANALYSIS-2"};
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      if (path === "/api/runtime") return response(runtime);
+      if (path === "/api/cases/RL-CASE-1") return response(currentCase);
+      if (path === "/api/cases/RL-CASE-1/analysis") return response({...analysis, analysis_id: "RL-ANALYSIS-2"});
+      throw new Error(`Unexpected API request: ${path}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    window.history.replaceState(null, "", "/?caseId=RL-CASE-1&analysisId=RL-ANALYSIS-1");
+    render(<App />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/saved analysis is no longer current/i);
+    expect(screen.queryByText("Combined response")).not.toBeInTheDocument();
+  });
+
+  it("restores a recorded decision and all related saved state without mutation", async () => {
+    const decidedCase = {...caseInstance, status: "executing", current_analysis_id: analysis.analysis_id,
+      current_decision_id: decision.decision_id,
+      controls: {new_analysis: false, decide: false, retry_action_planning: false, start_playback: true}};
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      if (path === "/api/runtime") return response(runtime);
+      if (path === "/api/cases") return response([decidedCase]);
+      if (path === "/api/cases/RL-CASE-1") return response(decidedCase);
+      if (path === "/api/cases/RL-CASE-1/analysis") return response(analysis);
+      if (path === "/api/decisions/RL-DECISION-1") return response(decision);
+      if (path === "/api/decisions/RL-DECISION-1/actions") return response(actions);
+      if (path === "/api/decisions/RL-DECISION-1/drafts") return response(drafts);
+      if (path === "/api/decisions/RL-DECISION-1/playback") return response(playback);
+      if (path === "/api/decisions/RL-DECISION-1/observations") return response(observations);
+      throw new Error(`Unexpected API request: ${path}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    window.history.replaceState(null, "", "/");
+    render(<App />);
+    await screen.findByText("Fallback mode");
+    await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
+    await userEvent.click(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"}));
+    expect(await screen.findByRole("heading", {name: "Approved response"})).toBeVisible();
+    expect(screen.getAllByTestId("execution-action")).toHaveLength(5);
+    expect(screen.getByText("Simulated results")).toBeVisible();
+    expect(fetchMock.mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
+  });
+
+  it("leaves no actionable partial state when a related saved-state read fails", async () => {
+    const decidedCase = {...caseInstance, status: "executing", current_analysis_id: analysis.analysis_id,
+      current_decision_id: decision.decision_id};
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      if (path === "/api/runtime") return response(runtime);
+      if (path === "/api/cases") return response([decidedCase]);
+      if (path === "/api/cases/RL-CASE-1") return response(decidedCase);
+      if (path === "/api/cases/RL-CASE-1/analysis") return response(analysis);
+      if (path === "/api/decisions/RL-DECISION-1") return response(decision);
+      if (path.endsWith("/actions")) return response({detail: {code: "READ_FAILED"}}, 503);
+      if (path.endsWith("/drafts") || path.endsWith("/observations")) return response([]);
+      if (path.endsWith("/playback")) return response({detail: {code: "PLAYBACK_NOT_FOUND"}}, 404);
+      throw new Error(`Unexpected API request: ${path}`);
+    }));
+    window.history.replaceState(null, "", "/");
+    render(<App />);
+    await screen.findByText("Fallback mode");
+    await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
+    await userEvent.click(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"}));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to reopen this case");
+    expect(screen.queryByRole("button", {name: /Approve/})).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", {name: "Approved response"})).not.toBeInTheDocument();
+  });
 });

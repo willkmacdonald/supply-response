@@ -14,8 +14,8 @@ function state(): CaseWorkspaceState {
     excluded_baseline_ids: [], stages: [], recommended_option_id: null, no_feasible_mitigation: true};
   const validation = {policy_version: "v1", blocking_codes: [], global_blocking_codes: [], item_results: []};
   return {runtime: null, selectedOption: null, decision: null, actions: [], drafts: [], playback: null,
-    observations: [], operation: null, error: null, decisionBlocked: true,
-    create: vi.fn(), analyze: vi.fn(), selectOption: vi.fn(), approve: vi.fn(), reject: vi.fn(),
+    observations: [], operation: null, error: null, existingCases: null, existingCasesError: null, decisionBlocked: true,
+    create: vi.fn(), loadExistingCases: vi.fn(), reopen: vi.fn(), analyze: vi.fn(), selectOption: vi.fn(), approve: vi.fn(), reject: vi.fn(),
     retryPlanning: vi.fn(), retryAction: vi.fn(), startPlayback: vi.fn(),
     caseInstance: {case_id: "c", template_id: "RL-001", purpose: "showcase", runtime_mode: "fallback",
       scenario_effective_time: at, scenario_timezone: "America/Chicago", status: "awaiting_decision",
