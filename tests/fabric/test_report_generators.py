@@ -101,31 +101,95 @@ def test_preserves_existing_visual_identities_and_three_rows():
         for identity in identities:
             assert f"pages/{page}/visuals/{identity}/visual.json" in artifacts
     first = artifacts["pages/command-center/visuals/active-cases/visual.json"]
-    assert (
-        first["visual"]["query"]["queryState"]["Data"]["projections"][0]["queryRef"]
-        == "CaseCommandCenter.Disruption Answer"
-    )
+    assert first["visual"]["objects"]["values"][0]["properties"]["expr"][
+        "expr"
+    ] == report_pages.field("Measure", "CaseCommandCenter", "Disruption Answer")
     for row in (1, 2, 3):
         assert f"pages/command-center/visuals/row-label-{row}/visual.json" in artifacts
 
 
 def test_business_cards_wrap_values_and_show_each_question_once():
-    # Microsoft's cardVisual schema calls this textWrap, not wordWrap. Merely
-    # storing the complete DAX text does not stop the native visual truncating it.
+    # Native cardVisual ignored textWrap in the service. Dynamic textbox runs
+    # must resolve a real measure and use paragraphs rather than callout labels.
+    count = 0
     for path, artifact in report_pages.artifacts().items():
         visual = artifact.get("visual", {})
-        if visual.get("visualType") != "cardVisual":
+        title = (
+            visual.get("visualContainerObjects", {})
+            .get("title", [{}])[0]
+            .get("properties", {})
+        )
+        if visual.get("visualType") not in {"cardVisual", "textbox"} or title.get(
+            "show"
+        ) != report_pages.literal(True):
             continue
+        count += 1
+        assert visual["visualType"] == "textbox", path
+        assert "query" not in visual, path
         objects = visual["objects"]
-        assert objects["value"][0]["properties"]["textWrap"] == report_pages.literal(
-            True
+        (paragraph,) = objects["general"][0]["properties"]["paragraphs"]
+        (run,) = paragraph["textRuns"]
+        (binding,) = objects["values"]
+        assert run["value"] == {
+            "propertyIdentifier": {"objectName": "values", "propertyName": "expr"},
+            "selector": binding["selector"],
+        }, path
+        expression = binding["properties"]["expr"]["expr"]
+        assert set(expression) == {"Measure"}, path
+        assert expression["Measure"]["Expression"] == {
+            "SourceRef": {"Entity": report_pages.CC}
+        }, path
+        assert (
+            expression["Measure"]["Property"]
+            in report_model.manifest()["tables"][report_pages.CC]["measures"]
         ), path
-        assert objects["label"][0]["properties"]["show"] == report_pages.literal(
-            False
-        ), path
-        title = visual["visualContainerObjects"]["title"][0]["properties"]
-        assert title["show"] == report_pages.literal(True), path
+        assert paragraph["horizontalTextAlignment"] == "left", path
+        assert run["textStyle"]["fontSize"] == "14pt", path
+        assert run["textStyle"]["fontFamily"] == "Segoe UI", path
+        assert run["textStyle"]["fontWeight"] == "normal", path
+        assert "label" not in objects, path
         assert title["titleWrap"] == report_pages.literal(True), path
+    assert count == 46
+
+
+def test_native_textbox_measure_dependencies_remain_in_preflight_allowlist():
+    from fabric.deploy import _query_refs
+
+    visual = report_pages.card(
+        "explanation", "Meaning", "Record Explanation", (0, 0, 400, 108)
+    )
+    assert _query_refs(visual) == ["CaseCommandCenter.Record Explanation"]
+    assert (
+        "Measure",
+        "CaseCommandCenter",
+        "Record Explanation",
+    ) in report_pages.required_fields()
+
+
+@pytest.mark.parametrize("mutation", ["measure", "selector", "static", "missing"])
+def test_native_textbox_binding_drift_fails_closed(tmp_path, mutation):
+    from fabric.deploy import PreflightError, _validate_visual_inventory
+
+    write_pages(tmp_path)
+    path = tmp_path / "pages/supplier-shipment/visuals/explanation/visual.json"
+    value = json.loads(path.read_text())
+    objects = value["visual"]["objects"]
+    if mutation == "measure":
+        objects["values"][0]["properties"]["expr"]["expr"]["Measure"]["Property"] = (
+            "Stock Explanation"
+        )
+    elif mutation == "selector":
+        objects["values"][0]["selector"]["id"] = "NotTheParagraphBinding"
+    elif mutation == "static":
+        objects["general"][0]["properties"]["paragraphs"][0]["textRuns"][0]["value"] = (
+            "A fake answer"
+        )
+    else:
+        del objects["values"]
+    path.write_text(json.dumps(value))
+    _validate_offline_json_schemas(tmp_path)
+    with pytest.raises(PreflightError, match="visual"):
+        _validate_visual_inventory(tmp_path)
 
 
 def test_overview_reserves_multiline_space_without_shrinking_business_text():
@@ -134,15 +198,18 @@ def test_overview_reserves_multiline_space_without_shrinking_business_text():
         value
         for path, value in artifacts.items()
         if path.startswith("pages/command-center/visuals/")
-        and value.get("visual", {}).get("visualType") == "cardVisual"
+        and "values" in value.get("visual", {}).get("objects", {})
         and value["name"] != "selection-state"
     ]
     assert len(cards) == 9
     for card in cards:
         assert card["position"]["height"] >= 256
-        assert card["visual"]["objects"]["value"][0]["properties"][
-            "fontSize"
-        ] == report_pages.literal(14)
+        assert (
+            card["visual"]["objects"]["general"][0]["properties"]["paragraphs"][0][
+                "textRuns"
+            ][0]["textStyle"]["fontSize"]
+            == "14pt"
+        )
     rows = sorted({card["position"]["y"] for card in cards})
     assert len(rows) == 3
     assert all(next_y >= y + 256 for y, next_y in pairwise(rows))
@@ -222,8 +289,8 @@ def test_traditional_pages_are_neutral_and_options_sort_by_name():
     review = artifacts[
         "pages/command-center/visuals/recommendation-answer/visual.json"
     ]["visual"]
-    assert review["query"]["queryState"]["Data"]["projections"][0]["queryRef"] == (
-        "CaseCommandCenter.Review Approach"
+    assert review["objects"]["values"][0]["properties"]["expr"]["expr"] == (
+        report_pages.field("Measure", "CaseCommandCenter", "Review Approach")
     )
     assert review["visualContainerObjects"]["title"][0]["properties"]["text"] == (
         report_pages.literal("Review approach")
@@ -488,7 +555,8 @@ def test_common_text_fits_font_floors_and_does_not_overlap():
             continue
         paragraphs = visual["objects"]["general"][0]["properties"]["paragraphs"]
         size = max(
-            float(run["textStyle"]["fontSize"].removesuffix("px"))
+            float(run["textStyle"]["fontSize"][:-2])
+            * (4 / 3 if run["textStyle"]["fontSize"].endswith("pt") else 1)
             for paragraph in paragraphs
             for run in paragraph["textRuns"]
         )
@@ -977,11 +1045,11 @@ def test_exposure_page_repeats_saved_baseline_with_strict_analysis_scope():
     def answer(index):
         return pages[f"pages/customer-orders/visuals/answer-{index}/visual.json"][
             "visual"
-        ]["query"]["queryState"]["Data"]["projections"][0]["queryRef"]
+        ]["objects"]["values"][0]["properties"]["expr"]["expr"]["Measure"]["Property"]
 
-    assert answer(1) == "CaseCommandCenter.Orders Baseline Revenue Display"
-    assert answer(2) == "CaseCommandCenter.Orders Baseline OTIF Display"
-    assert answer(3) == "CaseCommandCenter.Affected Lines Display"
+    assert answer(1) == "Orders Baseline Revenue Display"
+    assert answer(2) == "Orders Baseline OTIF Display"
+    assert answer(3) == "Affected Lines Display"
     definitions = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"]
     for name, source in (
         ("Orders Baseline Revenue", "Baseline revenue_at_risk"),

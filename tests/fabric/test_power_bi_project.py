@@ -72,6 +72,14 @@ def _load(path: Path) -> dict[str, Any]:
 def _query_refs(value: object) -> list[str]:
     if isinstance(value, dict):
         matches = [value["queryRef"]] if isinstance(value.get("queryRef"), str) else []
+        if value.get("visualType") == "textbox":
+            for binding in value.get("objects", {}).get("values", []):
+                measure = binding["properties"]["expr"]["expr"]["Measure"]
+                matches.append(
+                    measure["Expression"]["SourceRef"]["Entity"]
+                    + "."
+                    + measure["Property"]
+                )
         for child in value.values():
             matches.extend(_query_refs(child))
         return matches
@@ -472,12 +480,12 @@ def _visual_path(repository: Path, page: str, visual: str) -> Path:
 
 
 def _mutate_projection_field_queryref_disagreement(value: dict[str, Any]) -> None:
-    projection = value["visual"]["query"]["queryState"]["Data"]["projections"][0]
+    projection = value["visual"]["query"]["queryState"]["Y"]["projections"][0]
     projection["field"]["Measure"]["Property"] = "Revenue At Risk"
 
 
 def _mutate_projection_measure_to_column(value: dict[str, Any]) -> None:
-    projection = value["visual"]["query"]["queryState"]["Data"]["projections"][0]
+    projection = value["visual"]["query"]["queryState"]["Y"]["projections"][0]
     projection["field"] = {
         "Column": {
             "Expression": {"SourceRef": {"Entity": "ActionOutcomes"}},
@@ -487,7 +495,7 @@ def _mutate_projection_measure_to_column(value: dict[str, Any]) -> None:
 
 
 def _mutate_aggregation_function(value: dict[str, Any]) -> None:
-    projection = value["visual"]["query"]["queryState"]["Data"]["projections"][0]
+    projection = value["visual"]["query"]["queryState"]["Y"]["projections"][0]
     projection["field"] = {
         "Aggregation": {
             "Expression": {
@@ -502,13 +510,13 @@ def _mutate_aggregation_function(value: dict[str, Any]) -> None:
 
 
 def _mutate_projection_display_name(value: dict[str, Any]) -> None:
-    projection = value["visual"]["query"]["queryState"]["Data"]["projections"][0]
+    projection = value["visual"]["query"]["queryState"]["Y"]["projections"][0]
     projection["displayName"] = "Different Decision Label"
 
 
 def _mutate_projection_role(value: dict[str, Any]) -> None:
     query_state = value["visual"]["query"]["queryState"]
-    query_state["Values"] = query_state.pop("Data")
+    query_state["Values"] = query_state.pop("Y")
 
 
 def _mutate_filter_type(value: dict[str, Any]) -> None:
@@ -516,7 +524,7 @@ def _mutate_filter_type(value: dict[str, Any]) -> None:
 
 
 def _mutate_unknown_projection_shape(value: dict[str, Any]) -> None:
-    projection = value["visual"]["query"]["queryState"]["Data"]["projections"][0]
+    projection = value["visual"]["query"]["queryState"]["Y"]["projections"][0]
     projection["hidden"] = True
 
 
@@ -529,15 +537,31 @@ def _mutate_unknown_filter_shape(value: dict[str, Any]) -> None:
     [
         (
             "actions-outcomes",
-            "decision-id",
+            "predicted-observed-variance",
             _mutate_projection_field_queryref_disagreement,
         ),
-        ("actions-outcomes", "decision-id", _mutate_projection_measure_to_column),
-        ("command-center", "active-cases", _mutate_aggregation_function),
-        ("actions-outcomes", "decision-id", _mutate_projection_display_name),
-        ("actions-outcomes", "decision-id", _mutate_projection_role),
+        (
+            "actions-outcomes",
+            "predicted-observed-variance",
+            _mutate_projection_measure_to_column,
+        ),
+        (
+            "actions-outcomes",
+            "predicted-observed-variance",
+            _mutate_aggregation_function,
+        ),
+        (
+            "actions-outcomes",
+            "predicted-observed-variance",
+            _mutate_projection_display_name,
+        ),
+        ("actions-outcomes", "predicted-observed-variance", _mutate_projection_role),
         ("actions-outcomes", "action-status", _mutate_filter_type),
-        ("actions-outcomes", "decision-id", _mutate_unknown_projection_shape),
+        (
+            "actions-outcomes",
+            "predicted-observed-variance",
+            _mutate_unknown_projection_shape,
+        ),
         ("actions-outcomes", "action-status", _mutate_unknown_filter_shape),
     ],
     ids=(

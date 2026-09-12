@@ -120,6 +120,17 @@ def _load_json(path: Path) -> dict[str, Any]:
 def _query_refs(value: object) -> list[str]:
     if isinstance(value, dict):
         result = [value["queryRef"]] if isinstance(value.get("queryRef"), str) else []
+        # Dynamic textboxes have measure expressions instead of query projections.
+        # Keep these dependencies in the allowlist; exact binding/selector shape
+        # is additionally enforced by _validate_visual_inventory.
+        if value.get("visualType") == "textbox":
+            for binding in value.get("objects", {}).get("values", []):
+                measure = binding["properties"]["expr"]["expr"]["Measure"]
+                result.append(
+                    measure["Expression"]["SourceRef"]["Entity"]
+                    + "."
+                    + measure["Property"]
+                )
         for child in value.values():
             result.extend(_query_refs(child))
         return result

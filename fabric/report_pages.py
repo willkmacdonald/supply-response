@@ -307,41 +307,53 @@ def walkthrough_controls(page):
     return items
 
 
-def card(name, title, value, rect, accent=TEAL, size=18):
-    v = base_visual(name, "cardVisual", rect, title)
-    v["visual"]["query"] = {
-        "queryState": {"Data": {"projections": [measure(value, title)]}}
-    }
+def card(name, title, value, rect, accent=TEAL, size=14):
+    # Native card callouts truncate string measures even with textWrap enabled.
+    # Microsoft's textbox authoring contract pairs a paragraph run selector with
+    # objects.values[].properties.expr; bind the existing measure unchanged.
+    # https://github.com/microsoft/skills-for-fabric/blob/main/plugins/powerbi-authoring/skills/powerbi-report-authoring/references/textbox.md
+    v = base_visual(name, "textbox", rect, title)
+    selector = {"id": "Narrative"}
     v["visual"]["objects"] = {
-        # Supported cardVisual properties from Microsoft's reportThemeSchema-2.149.
-        # Full DAX strings alone still render with ellipses unless textWrap is on.
-        "value": obj(
+        "general": obj(
             {
-                "fontSize": literal(size),
-                "fontColor": color(GREEN),
-                "textWrap": literal(True),
-                "bold": literal(size > 14),
-            },
-            True,
+                "paragraphs": [
+                    {
+                        "textRuns": [
+                            {
+                                "value": {
+                                    "propertyIdentifier": {
+                                        "objectName": "values",
+                                        "propertyName": "expr",
+                                    },
+                                    "selector": selector,
+                                },
+                                "textStyle": {
+                                    "fontFamily": "Segoe UI",
+                                    "fontSize": str(size) + "pt",
+                                    "fontWeight": "normal",
+                                    "color": GREEN,
+                                },
+                            }
+                        ],
+                        "horizontalTextAlignment": "left",
+                    }
+                ]
+            }
         ),
-        "label": obj({"show": literal(False)}, True),
-        "outline": obj({"show": literal(False)}, True),
-        "padding": obj({"paddingUniform": literal(4)}, True),
-        "layout": obj({"paddingUniform": literal(0)}, True),
-        "spacing": obj({"verticalSpacing": literal(0)}, True),
-        "accentBar": obj(
+        "values": [
             {
-                "show": literal(True),
-                "position": literal("Left"),
-                "width": literal(3),
-                "color": color(accent),
-            },
-            True,
-        ),
+                "properties": {"expr": {"expr": field("Measure", CC, value)}},
+                "selector": selector,
+            }
+        ],
     }
-    # A font-floor guard, not proof that arbitrary text fits. Native acceptance
-    # checks the complete business statements at the chosen dimensions.
-    assert 8 + 18 + 8 + int(size * 1.5 + 0.999) <= rect[3]
+    # Retain each row's accent in the visible heading using container formatting.
+    v["visual"]["visualContainerObjects"]["title"][0]["properties"]["fontColor"] = (
+        color(accent)
+    )
+    # Space for a title and two body lines is a floor, not native rendering proof.
+    assert rect[3] >= 90
     return v
 
 
