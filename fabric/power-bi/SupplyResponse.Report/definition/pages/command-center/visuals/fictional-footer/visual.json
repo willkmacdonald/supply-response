@@ -3,7 +3,7 @@
   "name": "fictional-footer",
   "position": {
     "x": 24,
-    "y": 770,
+    "y": 1070,
     "width": 1232,
     "height": 30,
     "z": 17,
@@ -129,6 +129,13 @@
               "expr": {
                 "Literal": {
                   "Value": "'Segoe UI'"
+                }
+              }
+            },
+            "titleWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
                 }
               }
             }

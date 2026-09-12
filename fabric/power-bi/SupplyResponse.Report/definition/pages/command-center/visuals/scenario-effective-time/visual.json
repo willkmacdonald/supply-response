@@ -3,9 +3,9 @@
   "name": "scenario-effective-time",
   "position": {
     "x": 226,
-    "y": 336,
+    "y": 436,
     "width": 334,
-    "height": 156,
+    "height": 256,
     "z": 7,
     "tabOrder": 7
   },
@@ -131,6 +131,13 @@
                   "Value": "'Segoe UI'"
                 }
               }
+            },
+            "titleWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
             }
           }
         }
@@ -180,6 +187,20 @@
                   }
                 }
               }
+            },
+            "textWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
             }
           },
           "selector": {
@@ -193,21 +214,7 @@
             "show": {
               "expr": {
                 "Literal": {
-                  "Value": "true"
-                }
-              }
-            },
-            "text": {
-              "expr": {
-                "Literal": {
-                  "Value": "''"
-                }
-              }
-            },
-            "fontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "12D"
+                  "Value": "false"
                 }
               }
             }

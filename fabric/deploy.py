@@ -847,7 +847,7 @@ def _validate_project() -> None:
         if (
             page.get("displayOption") != "FitToPage"
             or page.get("width") != 1280
-            or page.get("height") != 808
+            or page.get("height") != (1108 if page_name == "command-center" else 808)
         ):
             raise PreflightError(
                 f"{page_name} has an invalid page size or display option"

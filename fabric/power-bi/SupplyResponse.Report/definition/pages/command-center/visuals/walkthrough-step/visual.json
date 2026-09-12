@@ -3,7 +3,7 @@
   "name": "walkthrough-step",
   "position": {
     "x": 24,
-    "y": 714,
+    "y": 1014,
     "width": 768,
     "height": 44,
     "z": 15,
@@ -129,6 +129,13 @@
               "expr": {
                 "Literal": {
                   "Value": "'Segoe UI'"
+                }
+              }
+            },
+            "titleWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
                 }
               }
             }

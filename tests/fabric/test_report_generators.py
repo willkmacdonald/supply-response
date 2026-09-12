@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from copy import deepcopy
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -106,6 +107,47 @@ def test_preserves_existing_visual_identities_and_three_rows():
     )
     for row in (1, 2, 3):
         assert f"pages/command-center/visuals/row-label-{row}/visual.json" in artifacts
+
+
+def test_business_cards_wrap_values_and_show_each_question_once():
+    # Microsoft's cardVisual schema calls this textWrap, not wordWrap. Merely
+    # storing the complete DAX text does not stop the native visual truncating it.
+    for path, artifact in report_pages.artifacts().items():
+        visual = artifact.get("visual", {})
+        if visual.get("visualType") != "cardVisual":
+            continue
+        objects = visual["objects"]
+        assert objects["value"][0]["properties"]["textWrap"] == report_pages.literal(
+            True
+        ), path
+        assert objects["label"][0]["properties"]["show"] == report_pages.literal(
+            False
+        ), path
+        title = visual["visualContainerObjects"]["title"][0]["properties"]
+        assert title["show"] == report_pages.literal(True), path
+        assert title["titleWrap"] == report_pages.literal(True), path
+
+
+def test_overview_reserves_multiline_space_without_shrinking_business_text():
+    artifacts = report_pages.artifacts()
+    cards = [
+        value
+        for path, value in artifacts.items()
+        if path.startswith("pages/command-center/visuals/")
+        and value.get("visual", {}).get("visualType") == "cardVisual"
+        and value["name"] != "selection-state"
+    ]
+    assert len(cards) == 9
+    for card in cards:
+        assert card["position"]["height"] >= 256
+        assert card["visual"]["objects"]["value"][0]["properties"][
+            "fontSize"
+        ] == report_pages.literal(14)
+    rows = sorted({card["position"]["y"] for card in cards})
+    assert len(rows) == 3
+    assert all(next_y >= y + 256 for y, next_y in pairwise(rows))
+    controls = artifacts["pages/command-center/visuals/walkthrough-step/visual.json"]
+    assert controls["position"]["y"] >= rows[-1] + 256
 
 
 def test_walkthrough_sequence_uses_all_existing_pages_once():

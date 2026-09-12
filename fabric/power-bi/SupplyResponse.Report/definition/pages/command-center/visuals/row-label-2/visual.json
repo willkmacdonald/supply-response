@@ -3,7 +3,7 @@
   "name": "row-label-2",
   "position": {
     "x": 24,
-    "y": 356,
+    "y": 456,
     "width": 190,
     "height": 96,
     "z": 10,
@@ -129,6 +129,13 @@
               "expr": {
                 "Literal": {
                   "Value": "'Segoe UI'"
+                }
+              }
+            },
+            "titleWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
                 }
               }
             }

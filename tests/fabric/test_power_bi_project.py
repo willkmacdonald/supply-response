@@ -333,7 +333,7 @@ def test_pages_have_exact_identity_size_and_thirty_second_refresh() -> None:
         assert page["displayName"] == display_name
         assert page["displayOption"] == "FitToPage"
         assert page["width"] == 1280
-        assert page["height"] == 808
+        assert page["height"] == (1108 if page_name == "command-center" else 808)
         page_refresh = page["objects"]["pageRefresh"]
         assert page_refresh == [
             {

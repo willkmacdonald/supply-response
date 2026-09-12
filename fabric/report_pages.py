@@ -30,6 +30,7 @@ WALKTHROUGH = (
 )
 GREEN, TEAL, AMBER, CREAM, WHITE = "#183E35", "#187D78", "#9A641C", "#F5F3EA", "#FFFFFF"
 CC, SR, SO, AO = "CaseCommandCenter", "SavedRecords", "SavedOptions", "ActionOutcomes"
+OVERVIEW_EXTRA_HEIGHT = 300
 
 
 def literal(value):
@@ -180,6 +181,7 @@ def base_visual(name, kind, rect, title=None, fill=WHITE):
                 "fontColor": color(GREEN),
                 "fontSize": literal(12),
                 "fontFamily": literal("Segoe UI"),
+                "titleWrap": literal(True),
             }
         ),
     }
@@ -282,13 +284,14 @@ def navigation_button(name, label, rect, destination):
 def walkthrough_controls(page):
     sequence = tuple(name for name, title in WALKTHROUGH)
     index = sequence.index(page)
-    items = [text("walkthrough-step", WALKTHROUGH[index][1], (24, 714, 768, 44), 18)]
+    y = 714 + (OVERVIEW_EXTRA_HEIGHT if page == "command-center" else 0)
+    items = [text("walkthrough-step", WALKTHROUGH[index][1], (24, y, 768, 44), 18)]
     if index > 0:
         items.append(
             navigation_button(
                 "walkthrough-previous",
                 "Previous",
-                (800, 714, 220, 44),
+                (800, y, 220, 44),
                 sequence[index - 1],
             )
         )
@@ -297,7 +300,7 @@ def walkthrough_controls(page):
             navigation_button(
                 "walkthrough-next",
                 "Next",
-                (1036, 714, 220, 44),
+                (1036, y, 220, 44),
                 sequence[index + 1],
             )
         )
@@ -310,10 +313,18 @@ def card(name, title, value, rect, accent=TEAL, size=18):
         "queryState": {"Data": {"projections": [measure(value, title)]}}
     }
     v["visual"]["objects"] = {
-        "value": obj({"fontSize": literal(size), "fontColor": color(GREEN)}, True),
-        "label": obj(
-            {"show": literal(True), "text": literal(""), "fontSize": literal(12)}, True
+        # Supported cardVisual properties from Microsoft's reportThemeSchema-2.149.
+        # Full DAX strings alone still render with ellipses unless textWrap is on.
+        "value": obj(
+            {
+                "fontSize": literal(size),
+                "fontColor": color(GREEN),
+                "textWrap": literal(True),
+                "bold": literal(size > 14),
+            },
+            True,
         ),
+        "label": obj({"show": literal(False)}, True),
         "outline": obj({"show": literal(False)}, True),
         "padding": obj({"paddingUniform": literal(4)}, True),
         "layout": obj({"paddingUniform": literal(0)}, True),
@@ -328,8 +339,9 @@ def card(name, title, value, rect, accent=TEAL, size=18):
             True,
         ),
     }
-    # Explicit padding/title/value/label heights; leave room for the always-rendered label.
-    assert 8 + 18 + 8 + int(size * 1.5 + 0.999) + 18 <= rect[3]
+    # A font-floor guard, not proof that arbitrary text fits. Native acceptance
+    # checks the complete business statements at the chosen dimensions.
+    assert 8 + 18 + 8 + int(size * 1.5 + 0.999) <= rect[3]
     return v
 
 
@@ -643,6 +655,9 @@ def detail(page):
 
 def overview():
     items = common("Case dashboard", "Overview State")
+    next(item for item in items if item["name"] == "fictional-footer")["position"][
+        "y"
+    ] += OVERVIEW_EXTRA_HEIGHT
     rows = (
         (
             "1. Understand\nthe disruption",
@@ -686,7 +701,7 @@ def overview():
         ),
     )
     for row, (label, cards) in enumerate(rows):
-        y = 166 + row * 170
+        y = 166 + row * 270
         items.append(
             text("row-label-" + str(row + 1), label, (24, y + 20, 190, 96), 20)
         )
@@ -696,7 +711,7 @@ def overview():
                     name,
                     question,
                     value,
-                    (226 + col * 348, y, 334, 156),
+                    (226 + col * 348, y, 334, 256),
                     (TEAL, GREEN, AMBER)[row],
                     size=14,
                 )
@@ -880,7 +895,7 @@ def artifacts():
             "displayName": title,
             "displayOption": "FitToPage",
             "width": 1280,
-            "height": 808,
+            "height": 808 + (OVERVIEW_EXTRA_HEIGHT if page == "command-center" else 0),
             "objects": {
                 "background": obj({"color": color(CREAM), "transparency": literal(0)}),
                 "pageRefresh": [
