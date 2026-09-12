@@ -421,6 +421,25 @@ function savedReads(overrides: Record<string, unknown> = {}) {
 }
 
 describe("reopening lifecycle and operation safety", () => {
+  it.each(["approved", "rejected"])("reopens a newer analysis without attaching its retained earlier %s decision", async kind => {
+    const savedCase = {...caseInstance, status: "awaiting_decision", current_analysis_id: analysis.analysis_id,
+      current_decision_id: decision.decision_id, controls: {...caseInstance.controls, decide: true}};
+    const mock = savedReads({"/api/cases/RL-CASE-1": savedCase,
+      "/api/decisions/RL-DECISION-1": {...decision, kind, analysis_id: "RL-ANALYSIS-EARLIER",
+        analysis_material_hash: "b".repeat(64), decided_at: "2026-08-31T14:00:30Z"}});
+    window.history.replaceState(null, "", "/?caseId=RL-CASE-1&analysisId=RL-ANALYSIS-1");
+    const {result} = renderHook(useCaseWorkspace);
+    await waitFor(() => expect(result.current.operation).toBeNull());
+    expect(result.current.error).toBeNull();
+    expect(result.current.analysis).toEqual(analysis);
+    expect(result.current.caseInstance).toEqual(savedCase);
+    expect(result.current.decision).toBeNull();
+    expect(result.current.actions).toEqual([]);
+    expect(result.current.playback).toBeNull();
+    expect(mock.mock.calls.some(([url]) => String(url).includes("/actions"))).toBe(false);
+    expect(mock.mock.calls.every(([, init]) => !init?.method)).toBe(true);
+  });
+
   it("rejects a decision projection with no analysis instead of dropping the decision", async () => {
     savedReads({"/api/cases/RL-CASE-1": {...caseInstance, current_decision_id: decision.decision_id}});
     window.history.replaceState(null, "", "/?caseId=RL-CASE-1");
@@ -618,6 +637,9 @@ describe("reopening lifecycle and operation safety", () => {
     await screen.findByText("Fallback mode");
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     expect(screen.getByRole("button", {name: "Finding existing cases…"})).toBeDisabled();
+    expect(screen.getByRole("button", {name: "Create showcase case"})).toBeDisabled();
+    expect(screen.queryByText("Creating Case workspace…")).not.toBeInTheDocument();
+    expect(screen.queryByText("Analyzing disruption…")).not.toBeInTheDocument();
     await act(async () => resolveList(await response({detail: {code: "READ_FAILED"}}, 503)));
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to find existing cases");
     mock.mockResolvedValue(await response([]));

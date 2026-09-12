@@ -165,8 +165,21 @@ export function useCaseWorkspace(): CaseWorkspaceState {
           }
           if (firstCase.current_decision_id) {
             nextDecision = await api.decision(firstCase.current_decision_id);
-            if (nextDecision.analysis_material_hash !== nextAnalysis.material_hash || nextDecision.decision_id !== firstCase.current_decision_id || nextDecision.case_id !== caseId
-              || nextDecision.analysis_id !== nextAnalysis.analysis_id) throw new Error("decision identity mismatch");
+            if (nextDecision.decision_id !== firstCase.current_decision_id || nextDecision.case_id !== caseId) {
+              throw new Error("decision identity mismatch");
+            }
+            if (nextDecision.analysis_id !== nextAnalysis.analysis_id) {
+              // The server retains an earlier decision when a new analysis is saved.
+              // Never attach that approval or its execution state to the new analysis.
+              if (!(Date.parse(nextDecision.decided_at) < Date.parse(nextAnalysis.analysis_started_at))) {
+                throw new Error("decision identity mismatch");
+              }
+              nextDecision = null;
+            } else if (nextDecision.analysis_material_hash !== nextAnalysis.material_hash) {
+              throw new Error("decision identity mismatch");
+            }
+          }
+          if (nextDecision) {
             if (nextDecision.kind === "approved" && (!nextDecision.selected_option_id
               || !nextAnalysis.response_options.some(option => option.option_id === nextDecision!.selected_option_id))) {
               throw new Error("selected option identity mismatch");

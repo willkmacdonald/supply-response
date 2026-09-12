@@ -16,6 +16,11 @@ it is not evidence of a fresh discovery or retrieval run.
    If its saved analysis has since been replaced, restoration stops visibly;
    choose the case again only when you intend to open its newer current analysis.
 
+If the case retains a decision from before the current analysis began, the newer
+analysis opens with an explicit notice. The earlier approval and actions are not
+attached to it. Case and decision identity still must match, and a decision dated
+after the current analysis began cannot be treated as an earlier decision.
+
 Reopening is read-only. It reads the stored case, analysis, decision, action,
 draft, playback, and observation records that exist; it does not retrieve evidence
 again, change retrieval timestamps, create a case, analyze, approve, retry, or run

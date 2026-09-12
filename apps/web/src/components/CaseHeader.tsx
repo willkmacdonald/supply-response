@@ -9,6 +9,7 @@ interface CaseHeaderProps {
   createPurpose: CasePurpose;
   creating: boolean;
   analyzing: boolean;
+  busy?: boolean;
   onCreate: (purpose: CasePurpose) => void;
   onAnalyze: () => void;
 }
@@ -32,6 +33,7 @@ export function CaseHeader({
   createPurpose,
   creating,
   analyzing,
+  busy,
   onCreate,
   onAnalyze,
 }: CaseHeaderProps) {
@@ -64,12 +66,12 @@ export function CaseHeader({
       </span>}
       {powerBiUrl && <a href={powerBiUrl} target="_blank" rel="noopener noreferrer">Open case dashboard</a>}
     </div>
-    {runtime && !caseInstance && <button type="button" onClick={() => onCreate(createPurpose)} disabled={creating}>
+    {runtime && !caseInstance && <button type="button" onClick={() => onCreate(createPurpose)} disabled={busy || creating}>
       {creating
         ? "Creating Case workspace…"
         : `Create ${createPurpose === "automated_test" ? "automated test" : createPurpose} case`}
     </button>}
-    {caseInstance?.controls.new_analysis && <button type="button" onClick={onAnalyze} disabled={analyzing}>
+    {caseInstance?.controls.new_analysis && <button type="button" onClick={onAnalyze} disabled={busy || analyzing}>
       {analyzing ? "Analyzing disruption…" : "Analyze disruption"}
     </button>}
   </header>;

@@ -29,8 +29,9 @@ function CaseWorkspace() {
       caseInstance={workspace.caseInstance}
       analysis={workspace.analysis}
       createPurpose={createPurpose}
-      creating={workspace.operation !== null}
-      analyzing={workspace.operation !== null}
+      creating={workspace.operation === "creating"}
+      analyzing={workspace.operation === "analyzing"}
+      busy={workspace.operation !== null}
       onCreate={workspace.create}
       onAnalyze={workspace.analyze}
     />
@@ -39,6 +40,8 @@ function CaseWorkspace() {
       loading={workspace.operation === "listing"} reopening={workspace.operation === "reopening"}
       onLoad={workspace.loadExistingCases} onReopen={workspace.reopen} />
     {workspace.caseInstance && <p className="reopen-note">This workspace reads saved results and does not refresh evidence or change retrieval times.</p>}
+    {workspace.analysis && workspace.caseInstance?.current_decision_id && !workspace.decision &&
+      <p className="reopen-note">The previous decision applies to an earlier analysis. Its approval and actions do not apply to the analysis shown here.</p>}
     <PlanningRoutes
       runtime={workspace.runtime}
       caseInstance={workspace.caseInstance}
