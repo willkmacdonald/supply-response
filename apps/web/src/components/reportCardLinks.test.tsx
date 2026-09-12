@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import {cleanup, render, screen, within} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import {afterEach, expect, it, vi} from "vitest";
+import {afterEach, beforeEach, expect, it, vi} from "vitest";
 import type {AnalysisVersion, CaseInstance, EvidenceItem, ResponseOption, RuntimeStatus} from "../types";
 import type {CaseWorkspaceState} from "../hooks/useCaseWorkspace";
 import {recordFixture, editSnapshot} from "./supportingRecord.fixture";
@@ -11,6 +11,10 @@ import {InvestigationFlow} from "./InvestigationFlow";
 import {reportIdentityKey} from "../reporting/reportNavigation";
 
 afterEach(() => {cleanup(); vi.unstubAllGlobals();});
+beforeEach(() => {
+  Object.defineProperty(HTMLDialogElement.prototype, "showModal", {configurable: true, value: function () { this.setAttribute("open", ""); }});
+  Object.defineProperty(HTMLDialogElement.prototype, "close", {configurable: true, value: function () { this.removeAttribute("open"); }});
+});
 const base = "https://app.powerbi.com/groups/dc3ac590-d892-40a7-9388-65dec120d67a/reports/e7611c8c-c887-443f-858a-13b1044bb4b9";
 const runtime: RuntimeStatus = {
   runtime_mode: "live", work_iq: "work_iq", operational_store: "fabric_sql",
@@ -183,6 +187,7 @@ it("preserves selected and recommended option identities independently", async (
   const optionA = `${exact} and SavedOptions/option_key eq '4F007000740069006F006E002D004100'`;
   const optionB = `${exact} and SavedOptions/option_key eq '4F007000740069006F006E002D004200'`;
   expectDestination("Explore response options in Power BI", "response-options", exact);
+  await userEvent.click(screen.getByRole("button", {name: "Click here to understand why"}));
   expectDestination("Explore recommended response in Power BI", "response-options", optionA);
   s.selectedOption = s.analysis!.response_options[2]; rerender(<InvestigationFlow state={s} />);
   expectDestination("Explore response options in Power BI", "response-options", optionB);

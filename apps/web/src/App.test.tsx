@@ -854,7 +854,8 @@ describe("progressive Case workspace", () => {
     expect(await screen.findAllByTestId("outcome-observation")).toHaveLength(10);
     expect(screen.queryByText("Actual outcomes")).not.toBeInTheDocument();
     expect(screen.getByRole("tab", {name: "1. Understand the disruption"})).toBeVisible();
-    expect(screen.getByRole("heading", {name: "Recommended response—and why."})).toBeVisible();
+    expect(screen.getByRole("button", {name: "Click here to understand why"})).toBeVisible();
+    expect(screen.queryByRole("heading", {name: "Recommended response—and why."})).not.toBeInTheDocument();
     expect(screen.getByRole("heading", {name: "Review and approve."})).toBeVisible();
   });
 

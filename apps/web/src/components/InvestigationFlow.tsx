@@ -3,7 +3,6 @@ import type {KeyboardEvent, ReactNode} from "react";
 import type {CaseWorkspaceState} from "../hooks/useCaseWorkspace";
 import {InvestigationEvidence} from "./InvestigationEvidence";
 import {RequiredCitationWarning} from "./EvidenceSource";
-import {ExposurePanel} from "./ExposurePanel";
 import {OptionComparison} from "./OptionComparison";
 import {DecisionPanel} from "./DecisionPanel";
 import {readPlannerSnapshot} from "./plannerSnapshot";
@@ -68,6 +67,6 @@ function InvestigationPresentation({state}: {state: CaseWorkspaceState}) {
     </div>
     <StagePanel index={0} activeStage={activeStage}><InvestigationEvidence {...props} row="disruption" /></StagePanel>
     <StagePanel index={1} activeStage={activeStage}><InvestigationEvidence {...props} row="responses" /></StagePanel>
-    <StagePanel index={2} activeStage={activeStage}><OptionComparison disabled={state.operation !== null} analysis={analysis} selectedOption={state.selectedOption} onSelect={state.selectOption} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /><ExposurePanel analysis={analysis} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /><DecisionPanel state={state} onApprove={state.approve} onReject={state.reject} /></StagePanel>
+    <StagePanel index={2} activeStage={activeStage}><OptionComparison disabled={state.operation !== null} analysis={analysis} selectedOption={state.selectedOption} onSelect={state.selectOption} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /><DecisionPanel state={state} onApprove={state.approve} onReject={state.reject} /></StagePanel>
   </div>;
 }

@@ -2,11 +2,15 @@
 import "@testing-library/jest-dom/vitest";
 import {cleanup, render, screen, within} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import {afterEach, expect, it, vi} from "vitest";
+import {afterEach, beforeEach, expect, it, vi} from "vitest";
 import type {ResponseOption} from "../types";
 import type {CaseWorkspaceState} from "../hooks/useCaseWorkspace";
 import {InvestigationFlow} from "./InvestigationFlow";
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+beforeEach(() => {
+  Object.defineProperty(HTMLDialogElement.prototype, "showModal", {configurable: true, value: function () { this.setAttribute("open", ""); }});
+  Object.defineProperty(HTMLDialogElement.prototype, "close", {configurable: true, value: function () { this.removeAttribute("open"); }});
+});
 
 function state(): CaseWorkspaceState {
   const at = "2026-09-01T09:00:00-05:00";
@@ -32,6 +36,10 @@ function state(): CaseWorkspaceState {
 async function selectDecisionStage() {
   await userEvent.click(screen.getByRole("tab", {name: "3. Make the decision"}));
 }
+async function openRecommendation() {
+  await userEvent.click(screen.getByRole("button", {name: "Click here to understand why"}));
+  return screen.getByRole("dialog", {name: "Why this response is recommended"});
+}
 it("shows one approved three-card stage at a time", async () => {
   const user = userEvent.setup();
   render(<InvestigationFlow state={state()} />);
@@ -51,7 +59,7 @@ it("shows one approved three-card stage at a time", async () => {
   expect(screen.getByText("Supplier qualification details aren't available for this analysis")).toBeVisible();
   await user.click(screen.getByRole("tab", {name: "3. Make the decision"}));
   expect(screen.getAllByRole("heading", {level: 3}).map(h => h.textContent)).toEqual([
-    "Compare the options.", "Recommended response—and why.", "Review and approve.",
+    "Compare the options.", "Review and approve.",
   ]);
   expect(screen.getByRole("button", {name: "Approve selected response"})).toBeDisabled();
   expect(screen.getByText("No option meets the planning requirements")).toBeVisible();
@@ -162,10 +170,9 @@ it("shows recommended actions and predictions before keeping raw ranking rules i
       retained_option_ids: ["combined"], eliminated_option_ids: ["transfer"]}]};
   render(<InvestigationFlow state={input} />);
   await selectDecisionStage();
-  const recommendation = screen.getByRole("region", {name: "Recommended response—and why."});
+  const recommendation = await openRecommendation();
   const details = within(recommendation).getByText("How the options were compared").closest("details")!;
-  const mainText = Array.from(recommendation.children)
-    .filter(node => node !== details).map(node => node.textContent).join(" ");
+  const mainText = (recommendation.textContent ?? "").replace(details.textContent ?? "", "");
   expect(mainText).toContain("Recommended actions");
   expect(mainText).toContain("Expedite the proposed shipment from the current supplier, transfer stock from another plant, and prioritize production for customer needs.");
   const comparisonSummary = within(recommendation).getByRole("group", {name: "Compared with doing nothing"});
@@ -205,14 +212,14 @@ it("explains when the persisted do-nothing comparison is missing or ambiguous", 
     no_feasible_mitigation: false};
   const {rerender} = render(<InvestigationFlow state={input} />);
   await selectDecisionStage();
-  let card = screen.getByRole("region", {name: "Recommended response—and why."});
+  let card = await openRecommendation();
   expect(within(card).getByText("Do-nothing comparison unavailable: no baseline option is recorded.")).toBeVisible();
   expect(within(card).getByText("Expected if we take this option")).toBeVisible();
   const baseline = {...recommendation, option_id: "baseline-1", option_kind: "no_mitigation" as const,
     name: "No-Mitigation Baseline", active_mitigation: false};
   input.analysis!.response_options = [baseline, {...baseline, option_id: "baseline-2"}, recommendation];
   rerender(<InvestigationFlow state={input} />);
-  card = screen.getByRole("region", {name: "Recommended response—and why."});
+  card = screen.getByRole("dialog", {name: "Why this response is recommended"});
   expect(within(card).getByText("Do-nothing comparison unavailable: more than one baseline option is recorded.")).toBeVisible();
   expect(within(card).getByText("Expected if we take this option")).toBeVisible();
 });
@@ -233,17 +240,17 @@ it("does not compare a missing persisted prediction", async () => {
     no_feasible_mitigation: false};
   const {rerender} = render(<InvestigationFlow state={input} />);
   await selectDecisionStage();
-  let card = screen.getByRole("region", {name: "Recommended response—and why."});
+  let card = await openRecommendation();
   expect(within(card).getByText("Do-nothing comparison unavailable: the baseline prediction is missing or invalid.")).toBeVisible();
   expect(within(card).getByText("Expected if we take this option")).toBeVisible();
   baseline.predicted = undefined as unknown as null;
   rerender(<InvestigationFlow state={input} />);
-  card = screen.getByRole("region", {name: "Recommended response—and why."});
+  card = screen.getByRole("dialog", {name: "Why this response is recommended"});
   expect(within(card).getByText("Do-nothing comparison unavailable: the baseline prediction is missing or invalid.")).toBeVisible();
   baseline.predicted = predicted; recommendation.predicted = null;
   rerender(<InvestigationFlow state={input} />);
-  card = screen.getByRole("region", {name: "Recommended response—and why."});
-  expect(within(card).getByText("Comparison unavailable: the recommended prediction is missing or invalid.")).toBeVisible();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(within(screen.getByRole("region", {name: "Compare the options."})).getByText("Recommendation unavailable for this analysis")).toBeVisible();
 });
 
 it("does not claim a benefit when the persisted recommended and baseline predictions tie", async () => {
@@ -262,7 +269,7 @@ it("does not claim a benefit when the persisted recommended and baseline predict
     no_feasible_mitigation: false};
   render(<InvestigationFlow state={input} />);
   await selectDecisionStage();
-  const comparison = within(screen.getByRole("region", {name: "Recommended response—and why."}))
+  const comparison = within(await openRecommendation())
     .getByRole("group", {name: "Compared with doing nothing"});
   expect(comparison).toHaveTextContent("The values shown here are unchanged from doing nothing; no benefit is shown in these measures.");
   expect(comparison).toHaveTextContent("6,800 → 6,800 component units (part unavailable) (unchanged)");

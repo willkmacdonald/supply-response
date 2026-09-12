@@ -48,6 +48,14 @@ h3 { margin: 0.75rem 0 0.45rem; }
 .badge { display: inline-flex; align-items: center; width: fit-content; border-radius: 999px; padding: 0.28rem 0.55rem; background: #e6ece8; color: #29433d; font-size: 0.73rem; font-weight: 800; text-transform: none; }
 .badge-fallback, .badge-live { background: #ddf3e7; color: #075d4b; }
 .badge.accent { background: #d5eee7; color: #075d4b; }
+.recommendation-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; }
+.option-card .recommendation-trigger { margin-top: 0; width: fit-content; border-radius: 999px; padding: 0.28rem 0.65rem; background: #fff; color: #075d4b; border: 1px solid #5b8f82; font-size: 0.78rem; font-weight: 750; }
+.recommendation-sheet { position: fixed; inset: 0 0 0 auto; width: min(34rem, calc(100vw - 3rem)); max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; border-left: 1px solid #ccd8d2; background: #fff; color: inherit; overflow: hidden; }
+.recommendation-sheet::backdrop { background: rgb(15 30 25 / 48%); }
+.recommendation-sheet-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid #dde4dd; }
+.recommendation-sheet-header h3 { margin: 0; }
+.recommendation-sheet-body { height: calc(100dvh - 4.5rem); padding: 1.25rem; overflow-y: auto; }
+@media (max-width: 639px) { .recommendation-sheet { width: 100%; } }
 .badge.danger { background: #fee7df; color: #8c2e13; }
 .card-grid, .option-grid, .outcome-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 0.9rem; }
 .evidence-card, .option-card, .outcome-list article, .draft { padding: 1.1rem; border: 1px solid #dde4dd; border-radius: 0.9rem; background: #fbfcfa; }

@@ -2,17 +2,7 @@ import type {PredictedOutcome, ResponseOption} from "../types";
 import {number, wholeUsd} from "./plannerFormatting";
 import {customerLineBasis, type PlannerSnapshot} from "./plannerSnapshot";
 import {PredictionSummary} from "./PredictionSummary";
-import {validMoney} from "./snapshotValidation";
-
-function validPrediction(value: PredictedOutcome | null | undefined): value is PredictedOutcome {
-  return value != null
-    && Number.isSafeInteger(value.uncovered_part_demand) && value.uncovered_part_demand >= 0
-    && Number.isInteger(value.otif_loss_percentage) && value.otif_loss_percentage >= 0
-    && value.otif_loss_percentage <= 100
-    && [value.revenue_at_risk, value.margin_at_risk, value.response_cost].every(validMoney)
-    && Array.isArray(value.protected_customer_order_ids)
-    && value.protected_customer_order_ids.every(id => typeof id === "string");
-}
+import {validPrediction} from "./recommendationState";
 
 function sameMoney(left: string, right: string) {
   return BigInt(left.replace(".", "")) === BigInt(right.replace(".", ""));
