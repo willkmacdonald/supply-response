@@ -1000,7 +1000,7 @@ describe("progressive Case workspace", () => {
     expect(content.textContent).toBe(beforeContent);
   });
 
-  it("lists and reopens an analyzed case using GET requests only", async () => {
+  it("collapses the picker after successful reopen and can find cases again using GET only", async () => {
     const analyzedCase = {...caseInstance, status: "awaiting_decision", current_analysis_id: analysis.analysis_id,
       controls: {...caseInstance.controls, new_analysis: false, decide: true}};
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -1022,10 +1022,16 @@ describe("progressive Case workspace", () => {
     await userEvent.click(screen.getByRole("button", {name: "Reopen case RL-CASE-1"}));
 
     expect(await screen.findByText("Combined response")).toBeVisible();
+    expect(screen.queryByRole("button", {name: "Reopen case RL-CASE-1"})).not.toBeInTheDocument();
+    expect(screen.queryByText("No existing cases are available.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", {name: "Find existing cases"})).toBeEnabled();
     expect(screen.getByText(/reads saved results and does not refresh evidence/i)).toBeVisible();
     expect(new URL(window.location.href).searchParams.get("caseId")).toBe("RL-CASE-1");
     expect(new URL(window.location.href).searchParams.get("analysisId")).toBe("RL-ANALYSIS-1");
     expect(new URL(window.location.href).searchParams.get("view")).toBe("planner");
+    await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
+    expect(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"})).toBeEnabled();
+    expect(screen.getByText("Combined response")).toBeVisible();
     expect(fetchMock.mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
   });
 
@@ -1044,6 +1050,7 @@ describe("progressive Case workspace", () => {
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     await userEvent.click(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"}));
     expect(await screen.findByRole("button", {name: "Analyze disruption"})).toBeEnabled();
+    expect(screen.queryByRole("button", {name: "Reopen case RL-CASE-1"})).not.toBeInTheDocument();
     expect(new URL(window.location.href).searchParams.has("analysisId")).toBe(false);
   });
 
@@ -1113,6 +1120,7 @@ describe("progressive Case workspace", () => {
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     await userEvent.click(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"}));
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to reopen this case");
+    expect(screen.getByRole("button", {name: "Reopen case RL-CASE-1"})).toBeEnabled();
     expect(screen.queryByRole("button", {name: /Approve/})).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", {name: "Approved response"})).not.toBeInTheDocument();
   });

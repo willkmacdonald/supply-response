@@ -213,6 +213,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
           : nextDecision ? null : nextAnalysis?.recommendation ?? null);
         setActions(nextActions); setDrafts(nextDrafts); setPlayback(nextPlayback); setObservations(nextObservations);
         replaceWorkspaceUrl(confirmedCase, nextAnalysis);
+        setExistingCases(null); setExistingCasesError(null);
       } catch (caught) {
         if (!mounted.current || version !== restorationVersion.current) return;
         clearWorkspace();
