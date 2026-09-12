@@ -77,6 +77,27 @@ frontend verification passed 318 tests and the production build. Browser checks
 at 1440px and 390px confirmed `$955,000`, `$955,000 → $375,000`, `$7.50` supplier
 pricing, and `$1.50` transfer pricing. This follow-up is also local only.
 
+### USD consistency correction
+
+The revenue-only change above missed margin and response cost, as the user's
+screenshot demonstrated. The corrected scope covers all structured monetary
+totals, per-unit values, monetary thresholds, and outcome observations. Original
+source excerpts and underlying numeric values remain unchanged.
+
+Regression tests reproduced the old margin/response-cost and outcome display
+failures before implementation. Fresh verification: all 320 frontend tests in
+21 files passed, TypeScript/Vite production build passed, and independent
+read-only review found no remaining structured monetary display omissions.
+
+Browser verification with `.tmp/usd-complete-browser.cjs` at 1440px and 390px
+checked all three tabs and expanded details: 3 baseline and 23 comparison/option
+totals per viewport use whole USD; the baseline shows revenue `$955,000`, margin
+`$328,000`, and response cost `$0`. Supplier `$7.50`, transfer `$1.50`, and customer
+unit revenue retain cents. No unspecified-currency text, page errors, or
+horizontal overflow occurred. Both corrected risk-card screenshots were visually
+inspected under `.artifacts/presenter-tabs/usd-risk-corrected-{1440,390}.png`.
+This is isolated local-fixture verification, not a live-service or deployment check.
+
 Parent verification on `8a6252b`: `npm test` passed all 314 tests in 21 files;
 `npm run build` passed TypeScript and Vite production compilation and emitted
 both local product SVGs. `.tmp/presenter-browser.cjs` passed all four desktop,

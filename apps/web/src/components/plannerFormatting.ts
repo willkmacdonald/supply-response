@@ -8,10 +8,11 @@ export const calendar = (value: string | null) => validDate(value)
 export const instant = (value: string | null) => validInstant(value)
   ? new Intl.DateTimeFormat("en-US", {year: "numeric", month: "short", day: "numeric",
     hour: "numeric", minute: "2-digit", timeZone: "UTC", timeZoneName: "short"}).format(new Date(value)) : "Unavailable";
-export function money(value: string) {
-  if (!validMoney(value)) return "Unavailable";
-  const [whole, cents] = value.split(".");
-  return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${cents} (currency not specified)`;
+// Policy thresholds and observations can arrive as integer decimal strings.
+export function usdDecimal(value: string): string {
+  if (!/^\d+(?:\.\d{1,2})?$/.test(value)) return "";
+  const [whole, cents = ""] = value.split(".");
+  return `${whole}.${cents.padEnd(2, "0")}`;
 }
 export function wholeUsd(value: string) {
   if (!validMoney(value)) return "Unavailable";
@@ -44,12 +45,18 @@ export const role = (value: string) => roles.get(value) ?? "Additional authoriza
 const comparators = new Map<string, {label: string; unit: string}>([
   ["uncovered_part_demand", {label: "parts still needed", unit: "component units"}],
   ["otif_loss_percentage", {label: "service-target exposure", unit: "percentage points"}],
-  ["revenue_at_risk", {label: "revenue at risk", unit: "currency units (currency not specified)"}],
-  ["margin_at_risk", {label: "margin at risk", unit: "currency units (currency not specified)"}],
-  ["response_cost", {label: "response cost", unit: "currency units (currency not specified)"}],
+  ["revenue_at_risk", {label: "revenue at risk", unit: ""}],
+  ["margin_at_risk", {label: "margin at risk", unit: ""}],
+  ["response_cost", {label: "response cost", unit: ""}],
   ["approval_burden", {label: "required approval burden", unit: "roles"}],
   ["execution_risk", {label: "execution risk", unit: "score points"}],
 ]);
+export function rankingThreshold(stage: RankingStage): string {
+  if (!["revenue_at_risk", "margin_at_risk", "response_cost"].includes(stage.comparator)) return stage.threshold;
+  const decimal = usdDecimal(stage.threshold);
+  // Preserve exact policy precision; rounding applies only to displayed totals.
+  return decimal.endsWith(".00") ? wholeUsd(decimal) : usd(decimal);
+}
 export function rankingReason(stage: RankingStage, optionId: string): string {
   if (!stage.retained_option_ids.includes(optionId)) return "This saved comparison stage did not retain the displayed option.";
   if (stage.comparator === "option_id") return "The saved comparison used its stable option identifier to resolve the remaining tie.";
@@ -59,7 +66,7 @@ export function rankingReason(stage: RankingStage, optionId: string): string {
   const outcome = count > 0
     ? `${count} other ${count === 1 ? "option was" : "options were"} ruled out in this comparison.`
     : "All remaining options stayed in consideration.";
-  return `This option stayed in consideration after comparing ${known.label}, allowing a difference of ${stage.threshold} ${known.unit} under the saved planning policy. ${outcome}`;
+  return `This option stayed in consideration after comparing ${known.label}, allowing a difference of ${rankingThreshold(stage)}${known.unit ? ` ${known.unit}` : ""} under the saved planning policy. ${outcome}`;
 }
 const states: Record<CaseInstance["status"], string> = {
   open: "Case open; no decision recorded", analyzing: "Case analysis in progress", awaiting_decision: "Case awaiting a decision",

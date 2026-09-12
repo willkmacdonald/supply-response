@@ -103,17 +103,18 @@ source actions retain accurate text; this scope does not require more logos.
 
 ## Implementation boundaries
 
-### Revenue display amendment — September 12, 2026
+### USD display amendment — September 12, 2026 (corrected scope)
 
-At the user's explicit request, display Revenue at risk in USD with a dollar
-sign, thousands separators, and no cents, rounded to the nearest dollar
-(50 cents rounds up). Apply this to the risk summary and both sides of the
-recommended-response comparison. This is display formatting, not currency
-conversion: preserve the exact stored amounts and calculations. Supplier and
-plant-transfer per-component prices, including their supporting-record views,
-also display in USD but retain two decimal places (for example, $7.50 per unit).
-Other monetary fields and raw source/calculation details retain their existing
-presentation; original source-message excerpts are not rewritten.
+Display all structured financial totals in USD with a dollar sign, thousands
+separators, and no cents, rounded to the nearest dollar (50 cents rounds up).
+This includes revenue at risk, margin at risk, response cost, full and compact
+option metrics, both sides of response comparisons, and monetary predicted and
+observed outcomes. The prior revenue-only scope was incomplete.
+Supplier and plant-transfer per-component prices, supporting-record prices, and
+customer unit revenue retain two decimal places (for example, $7.50 per unit).
+Monetary comparison thresholds use USD but preserve exact policy precision.
+This is display formatting, not currency conversion: preserve exact stored
+amounts, calculations, comparison decisions, and original source-message excerpts.
 
 Expected components: CaseHeader for copy/layout, InvestigationFlow for local tab
 state and panels, EvidenceSource for labeled icons, and scoped styles/tests.

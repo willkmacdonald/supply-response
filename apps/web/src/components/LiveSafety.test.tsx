@@ -234,6 +234,15 @@ describe("live journey safety", () => {
     expect(screen.getByText("Observed")).toBeVisible();
     expect(screen.queryByText("Simulated")).not.toBeInTheDocument();
 
+    for (const metric of ["response_cost", "revenue_protected", "margin_protected"]) {
+      rerender(<OutcomePanel decision={{kind: "approved"} as never} actionCount={5} playback={null}
+        observations={[{...observation, metric, observed_value: "328000.50", predicted_value: "0", unit: "USD"}] as never}
+        starting={false} onStart={vi.fn()} />);
+      expect(screen.getByText("$328,001")).toBeVisible();
+      expect(screen.getByText(/Predicted: \$0 · source-1/)).toBeVisible();
+      expect(screen.getByTestId("outcome-observation")).not.toHaveTextContent("USD");
+    }
+
     rerender(<OutcomePanel
       decision={{kind: "approved"} as never}
       actionCount={5}

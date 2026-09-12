@@ -9,7 +9,7 @@ import {
 } from "./supportingRecord";
 import { SupportingRecordDetails } from "./SupportingRecordDetails";
 import { readPlannerSnapshot } from "./plannerSnapshot";
-import { calendar, money, number, plant, supplier, usd } from "./plannerFormatting";
+import { calendar, number, plant, supplier, usd } from "./plannerFormatting";
 import { PredictionSummary } from "./PredictionSummary";
 
 type Props = {
@@ -300,7 +300,7 @@ export function InvestigationEvidence({
                       Customer line {order.customer_order_line_id}:{" "}
                       {number(order.quantity)} finished-product units of{" "}
                       {order.product_id}, due {calendar(order.due_date)}; unit
-                      revenue {money(order.unit_revenue)}.
+                      revenue {usd(order.unit_revenue)}.
                     </li>
                   ))}
                 </ul>

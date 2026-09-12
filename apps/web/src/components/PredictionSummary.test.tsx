@@ -3,16 +3,16 @@ import "@testing-library/jest-dom/vitest";
 import {cleanup, render, screen} from "@testing-library/react";
 import {afterEach, expect, it} from "vitest";
 import {PredictionSummary} from "./PredictionSummary";
-import {calendar, money, blocker, rankingReason, decisionContext} from "./plannerFormatting";
+import {calendar, wholeUsd, usd, blocker, rankingReason, rankingThreshold, decisionContext} from "./plannerFormatting";
 afterEach(cleanup);
 const predicted = {uncovered_part_demand: 0, otif_loss_percentage: 0,
   revenue_at_risk: "0.00", margin_at_risk: "0.00", response_cost: "24750.00",
   protected_customer_order_ids: []};
-it("shows persisted zero, absent currency, and the baseline label without inventing line counts", () => {
+it("shows persisted zero in USD and the baseline label without inventing line counts", () => {
   render(<PredictionSummary predicted={predicted} snapshot={null} basis="baseline" />);
   expect(screen.getByText("Expected if we do nothing — baseline")).toBeVisible();
   expect(screen.getByText("0 component units (part unavailable)")).toBeVisible();
-  expect(screen.getByText("24,750.00 (currency not specified)")).toBeVisible();
+  expect(screen.getByText("$24,750")).toBeVisible();
   expect(screen.getByText("Production orders expected to miss the on-time, in-full target")).toBeVisible();
   expect(screen.getByText(/Customer-order-line interpretation unavailable/)).toBeInTheDocument();
 });
@@ -25,7 +25,18 @@ it.each([
   render(<PredictionSummary predicted={{...predicted, revenue_at_risk: revenue}} snapshot={null} basis="baseline" />);
   expect(screen.getByText("Revenue at risk").nextElementSibling).toHaveTextContent(expected);
   expect(screen.getByText("Revenue at risk").nextElementSibling?.textContent).toBe(expected);
-  expect(screen.getByText("24,750.00 (currency not specified)")).toBeVisible();
+  expect(screen.getByText("$24,750")).toBeVisible();
+});
+it.each([false, true])("uses consistent whole USD totals in compact=%s summaries", compact => {
+  const p = {...predicted, revenue_at_risk: "955000.49", margin_at_risk: "328000.50", response_cost: "24750.99"};
+  const {container} = render(<PredictionSummary predicted={p} snapshot={null} basis="response" compact={compact} />);
+  if (!compact) {
+    expect(screen.getByText("Revenue at risk").nextElementSibling?.textContent).toBe("$955,000");
+    expect(screen.getByText("Margin at risk").nextElementSibling?.textContent).toBe("$328,001");
+  }
+  expect(screen.getByText("Response cost").nextElementSibling?.textContent).toBe("$24,751");
+  expect(container).not.toHaveTextContent("currency not specified");
+  expect(p.margin_at_risk).toBe("328000.50");
 });
 it("labels response predictions and does not invent missing outcomes", () => {
   render(<PredictionSummary predicted={null} snapshot={null} basis="response" />);
@@ -36,8 +47,10 @@ it("labels response predictions and does not invent missing outcomes", () => {
 it("formats calendar dates without day shifts and keeps unsafe values unavailable", () => {
   expect(calendar("2026-09-06")).toBe("September 6, 2026");
   expect(calendar("2026-02-30")).toBe("Unavailable");
-  expect(money("0.00")).toBe("0.00 (currency not specified)");
-  expect(money("NaN")).toBe("Unavailable");
+  expect(wholeUsd("0.00")).toBe("$0");
+  expect(wholeUsd("NaN")).toBe("Unavailable");
+  expect(usd("7.50")).toBe("$7.50");
+  expect(usd("NaN")).toBe("Unavailable");
   expect(blocker("QUALITY_QUALIFICATION_PENDING")).toBe("Cannot use Supplier Beta yet: supplier qualification is incomplete");
   expect(blocker("NEW_POLICY_CODE")).toBe("A planning requirement is unresolved");
   expect(blocker("constructor")).toBe("A planning requirement is unresolved");
@@ -47,7 +60,13 @@ it("describes recorded ranking with business meaning and units without asserting
     input_option_ids: ["a", "b"], values: [], retained_option_ids: ["a"], eliminated_option_ids: ["b"]};
   expect(rankingReason(stage, "a")).toBe("This option stayed in consideration after comparing parts still needed, allowing a difference of 500 component units under the saved planning policy. 1 other option was ruled out in this comparison.");
   expect(rankingReason({...stage, comparator: "otif_loss_percentage", threshold: "10"}, "a")).toContain("10 percentage points");
-  expect(rankingReason({...stage, comparator: "response_cost", threshold: "10000"}, "a")).toContain("currency not specified");
+  expect(rankingReason({...stage, comparator: "response_cost", threshold: "10000"}, "a")).toContain("$10,000");
+  for (const comparator of ["response_cost", "revenue_at_risk", "margin_at_risk"]) {
+    expect(rankingThreshold({...stage, comparator, threshold: "10000"})).toBe("$10,000");
+    expect(rankingThreshold({...stage, comparator, threshold: "10000.25"})).toBe("$10,000.25");
+    expect(rankingThreshold({...stage, comparator, threshold: "NaN"})).toBe("Unavailable");
+  }
+  expect(rankingThreshold(stage)).toBe("500");
   expect(rankingReason({...stage, comparator: "unknown"}, "a")).toContain("additional saved comparison rule");
   expect(rankingReason({...stage, comparator: "constructor"}, "a")).toContain("additional saved comparison rule");
   expect(decisionContext(null, "a", false)).toBe("Case context unavailable; no decision is shown");

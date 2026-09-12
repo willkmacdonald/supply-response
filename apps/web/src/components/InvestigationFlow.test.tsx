@@ -173,8 +173,8 @@ it("shows recommended actions and predictions before keeping raw ranking rules i
   expect(comparisonSummary).toHaveTextContent("Parts still needed6,800 → 2,300 RL-MAT-10247 component units");
   expect(comparisonSummary).toHaveTextContent("Customer order lines expected to miss the on-time, in-full target100% (2 of 2 lines) → 50% (1 of 2 lines)");
   expect(comparisonSummary).toHaveTextContent("Revenue at risk$955,000 → $375,000");
-  expect(comparisonSummary).toHaveTextContent("Margin at risk328,000.00 (currency not specified) → 125,000.00 (currency not specified)");
-  expect(comparisonSummary).toHaveTextContent("Response cost0.00 (currency not specified) → 24,750.00 (currency not specified)");
+  expect(comparisonSummary).toHaveTextContent("Margin at risk$328,000 → $125,000");
+  expect(comparisonSummary).toHaveTextContent("Response cost$0 → $24,750");
   expect(comparisonSummary).toHaveTextContent("Revenue at risk is the value of customer order lines expected to miss the service target.");
   expect(within(recommendation).queryByText("Expected if we take this option")).not.toBeInTheDocument();
   expect(mainText).not.toMatch(/threshold|option_id|stable option identifier/i);

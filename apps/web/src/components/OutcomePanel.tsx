@@ -1,4 +1,5 @@
 import type {Decision, OutcomeObservation, Playback} from "../types";
+import {wholeUsd, usdDecimal} from "./plannerFormatting";
 
 interface OutcomePanelProps {
   decision: Decision | null;
@@ -22,6 +23,10 @@ const metricNames = new Map<string, string>([
   ["otif_loss_percentage", "Service-target exposure"],
   ["remaining_alpha_recovery_date", "Remaining Supplier Alpha recovery date"],
 ]);
+const monetaryMetrics = new Set(["response_cost", "revenue_protected", "margin_protected"]);
+function outcomeValue(observation: OutcomeObservation, value: string) {
+  return monetaryMetrics.has(observation.metric) ? wholeUsd(usdDecimal(value)) : value;
+}
 
 export function OutcomePanel({decision, actionCount, playback, observations, starting, disabled = true, onStart}: OutcomePanelProps) {
   if (!decision || decision.kind !== "approved" || actionCount === 0) return null;
@@ -37,8 +42,8 @@ export function OutcomePanel({decision, actionCount, playback, observations, sta
       {observations.map((observation) => <article data-testid="outcome-observation" key={observation.observation_id}>
         <span className="badge accent">{observation.synthetic ? "Simulated" : observation.display_label}</span>
         <h3>{metricNames.get(observation.metric) ?? "Result metric not recognized"}</h3>
-        <p><strong>{observation.observed_value}</strong> {observation.unit}</p>
-        <small>Predicted: {observation.predicted_value} · {observation.source_reference}</small>
+        <p><strong>{outcomeValue(observation, observation.observed_value)}</strong> {monetaryMetrics.has(observation.metric) ? "" : observation.unit}</p>
+        <small>Predicted: {outcomeValue(observation, observation.predicted_value)} · {observation.source_reference}</small>
       </article>)}
     </div>}
   </section>;
