@@ -847,28 +847,21 @@ def actions():
             (24, 574, 604, 96),
         )
     )
-    chart = base_visual(
+    # Both display fields include case/decision GroupByColumns. Put them on one
+    # table axis: separate chart Category/Series axes overlap those identity keys
+    # and fail in Power BI before the visibility measure can filter empty data.
+    variance_table = table(
         "predicted-observed-variance",
-        "clusteredColumnChart",
-        (644, 386, 612, 176),
         "Observed variance — recorded metrics only",
+        AO,
+        ("metric_display_name", "observation_kind_display"),
+        "Observation Row Visible",
+        (644, 386, 612, 176),
     )
-    chart["visual"]["query"] = {
-        "queryState": {
-            "Category": {"projections": [column(AO, "metric_display_name")]},
-            "Series": {"projections": [column(AO, "observation_kind_display")]},
-            "Y": {"projections": [measure("Observed Variance", "Variance", AO)]},
-        }
-    }
-    chart["visual"]["objects"] = {
-        "labels": obj({"show": literal(True), "fontSize": literal(11)}),
-        "dataPoint": obj({"defaultColor": color(TEAL)}),
-        "legend": obj({"show": literal(True), "fontSize": literal(11)}),
-        "categoryAxis": obj({"fontSize": literal(11)}),
-        "valueAxis": obj({"show": literal(True), "fontSize": literal(11)}),
-    }
-    chart["filterConfig"] = {"filters": [gate("Observation Row Visible")]}
-    items.append(chart)
+    variance_table["visual"]["query"]["queryState"]["Values"]["projections"].append(
+        measure("Observed Variance", "Variance", AO)
+    )
+    items.append(variance_table)
     items.append(
         table(
             "outcome-source-details",

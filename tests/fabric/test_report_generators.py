@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from copy import deepcopy
-from itertools import pairwise
+from itertools import combinations, pairwise
 from pathlib import Path
 
 import pytest
@@ -387,7 +387,7 @@ def test_main_option_comparison_uses_display_value_and_source_details_keep_raw_v
     ]
 
 
-def test_main_actions_and_outcome_chart_use_display_values_without_losing_raw_details():
+def test_main_actions_and_outcome_table_use_display_values_without_losing_raw_details():
     artifacts = report_pages.artifacts()
     actions = artifacts["pages/actions-outcomes/visuals/action-status/visual.json"][
         "visual"
@@ -409,12 +409,17 @@ def test_main_actions_and_outcome_chart_use_display_values_without_losing_raw_de
     chart = artifacts[
         "pages/actions-outcomes/visuals/predicted-observed-variance/visual.json"
     ]["visual"]["query"]["queryState"]
-    assert chart["Category"]["projections"][0]["queryRef"] == (
-        "ActionOutcomes.metric_display_name"
-    )
-    assert chart["Series"]["projections"][0]["queryRef"] == (
-        "ActionOutcomes.observation_kind_display"
-    )
+    assert set(chart) == {"Values"}
+    assert [item["queryRef"] for item in chart["Values"]["projections"]] == [
+        "ActionOutcomes.metric_display_name",
+        "ActionOutcomes.observation_kind_display",
+        "ActionOutcomes.Observed Variance",
+    ]
+    assert [item["displayName"] for item in chart["Values"]["projections"]] == [
+        "Result metric",
+        "Outcome type",
+        "Variance",
+    ]
     outcome_details = artifacts[
         "pages/actions-outcomes/visuals/outcome-source-details/visual.json"
     ]["visual"]["query"]["queryState"]["Values"]["projections"]
@@ -616,10 +621,16 @@ def test_stock_matrix_retains_part_plant_grain_and_guarded_measures():
     for path, value in report_pages.artifacts().items():
         item = value.get("visual", {})
         if item.get("visualType") == "tableEx":
-            assert all(
-                "Column" in p["field"]
-                for p in item["query"]["queryState"]["Values"]["projections"]
-            ), path
+            projections = item["query"]["queryState"]["Values"]["projections"]
+            if (
+                path
+                == "pages/actions-outcomes/visuals/predicted-observed-variance/visual.json"
+            ):
+                assert projections[-1] == report_pages.measure(
+                    "Observed Variance", "Variance", report_pages.AO
+                )
+                projections = projections[:-1]
+            assert all("Column" in p["field"] for p in projections), path
 
 
 @pytest.mark.parametrize(
@@ -690,6 +701,36 @@ def test_model_manifest_binds_every_report_field_without_json_payloads(tmp_path)
     write_model(tmp_path)
     report_model.verify(tmp_path, QUERIES)
     assert report_model.artifacts(QUERIES) == report_model.artifacts(QUERIES)
+
+
+def test_visual_grouping_axes_do_not_share_composite_identity_keys():
+    # Power BI expands display columns through GroupByColumns before filtering.
+    # Shared case/decision keys on Category and Series fail even for empty data.
+    for path, artifact in report_pages.artifacts().items():
+        query = artifact.get("visual", {}).get("query", {}).get("queryState", {})
+        axes = {}
+        for role, state in query.items():
+            keys = set()
+            for projection in state["projections"]:
+                column = projection["field"].get("Column")
+                if not column:
+                    continue
+                entity = column["Expression"]["SourceRef"]["Entity"]
+                name = column["Property"]
+                keys.add((entity, name))
+                keys.update(
+                    (entity, key)
+                    for key in report_model.GROUP_BY_COLUMNS.get((entity, name), ())
+                )
+            if keys:
+                axes[role] = keys
+        for first, second in combinations(axes, 2):
+            assert not axes[first] & axes[second], (
+                path,
+                first,
+                second,
+                axes[first] & axes[second],
+            )
 
 
 def test_display_columns_have_collision_safe_grouping_metadata():

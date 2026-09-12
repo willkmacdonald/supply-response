@@ -480,12 +480,12 @@ def _visual_path(repository: Path, page: str, visual: str) -> Path:
 
 
 def _mutate_projection_field_queryref_disagreement(value: dict[str, Any]) -> None:
-    projection = value["visual"]["query"]["queryState"]["Y"]["projections"][0]
+    projection = value["visual"]["query"]["queryState"]["Values"]["projections"][2]
     projection["field"]["Measure"]["Property"] = "Revenue At Risk"
 
 
 def _mutate_projection_measure_to_column(value: dict[str, Any]) -> None:
-    projection = value["visual"]["query"]["queryState"]["Y"]["projections"][0]
+    projection = value["visual"]["query"]["queryState"]["Values"]["projections"][2]
     projection["field"] = {
         "Column": {
             "Expression": {"SourceRef": {"Entity": "ActionOutcomes"}},
@@ -495,7 +495,7 @@ def _mutate_projection_measure_to_column(value: dict[str, Any]) -> None:
 
 
 def _mutate_aggregation_function(value: dict[str, Any]) -> None:
-    projection = value["visual"]["query"]["queryState"]["Y"]["projections"][0]
+    projection = value["visual"]["query"]["queryState"]["Values"]["projections"][2]
     projection["field"] = {
         "Aggregation": {
             "Expression": {
@@ -510,13 +510,13 @@ def _mutate_aggregation_function(value: dict[str, Any]) -> None:
 
 
 def _mutate_projection_display_name(value: dict[str, Any]) -> None:
-    projection = value["visual"]["query"]["queryState"]["Y"]["projections"][0]
+    projection = value["visual"]["query"]["queryState"]["Values"]["projections"][2]
     projection["displayName"] = "Different Decision Label"
 
 
 def _mutate_projection_role(value: dict[str, Any]) -> None:
     query_state = value["visual"]["query"]["queryState"]
-    query_state["Values"] = query_state.pop("Y")
+    query_state["Data"] = query_state.pop("Values")
 
 
 def _mutate_filter_type(value: dict[str, Any]) -> None:
@@ -524,7 +524,7 @@ def _mutate_filter_type(value: dict[str, Any]) -> None:
 
 
 def _mutate_unknown_projection_shape(value: dict[str, Any]) -> None:
-    projection = value["visual"]["query"]["queryState"]["Y"]["projections"][0]
+    projection = value["visual"]["query"]["queryState"]["Values"]["projections"][2]
     projection["hidden"] = True
 
 

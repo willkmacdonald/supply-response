@@ -10,7 +10,7 @@
     "tabOrder": 9
   },
   "visual": {
-    "visualType": "clusteredColumnChart",
+    "visualType": "tableEx",
     "visualContainerObjects": {
       "background": [
         {
@@ -145,7 +145,7 @@
     },
     "query": {
       "queryState": {
-        "Category": {
+        "Values": {
           "projections": [
             {
               "field": {
@@ -161,11 +161,7 @@
               "queryRef": "ActionOutcomes.metric_display_name",
               "nativeQueryRef": "metric_display_name",
               "displayName": "Result metric"
-            }
-          ]
-        },
-        "Series": {
-          "projections": [
+            },
             {
               "field": {
                 "Column": {
@@ -180,11 +176,7 @@
               "queryRef": "ActionOutcomes.observation_kind_display",
               "nativeQueryRef": "observation_kind_display",
               "displayName": "Outcome type"
-            }
-          ]
-        },
-        "Y": {
-          "projections": [
+            },
             {
               "field": {
                 "Measure": {
@@ -205,50 +197,28 @@
       }
     },
     "objects": {
-      "labels": [
+      "columnHeaders": [
         {
           "properties": {
-            "show": {
-              "expr": {
-                "Literal": {
-                  "Value": "true"
-                }
-              }
-            },
-            "fontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "11D"
-                }
-              }
-            }
-          }
-        }
-      ],
-      "dataPoint": [
-        {
-          "properties": {
-            "defaultColor": {
+            "fontColor": {
               "solid": {
                 "color": {
                   "expr": {
                     "Literal": {
-                      "Value": "'#187D78'"
+                      "Value": "'#FFFFFF'"
                     }
                   }
                 }
               }
-            }
-          }
-        }
-      ],
-      "legend": [
-        {
-          "properties": {
-            "show": {
-              "expr": {
-                "Literal": {
-                  "Value": "true"
+            },
+            "backColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#183E35'"
+                    }
+                  }
                 }
               }
             },
@@ -262,9 +232,42 @@
           }
         }
       ],
-      "categoryAxis": [
+      "values": [
         {
           "properties": {
+            "fontColorPrimary": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#183E35'"
+                    }
+                  }
+                }
+              }
+            },
+            "backColorPrimary": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#FFFFFF'"
+                    }
+                  }
+                }
+              }
+            },
+            "backColorSecondary": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#F5F3EA'"
+                    }
+                  }
+                }
+              }
+            },
             "fontSize": {
               "expr": {
                 "Literal": {
@@ -275,20 +278,26 @@
           }
         }
       ],
-      "valueAxis": [
+      "total": [
         {
           "properties": {
-            "show": {
+            "totals": {
               "expr": {
                 "Literal": {
-                  "Value": "true"
+                  "Value": "false"
                 }
               }
-            },
-            "fontSize": {
+            }
+          }
+        }
+      ],
+      "grid": [
+        {
+          "properties": {
+            "rowPadding": {
               "expr": {
                 "Literal": {
-                  "Value": "11D"
+                  "Value": "5D"
                 }
               }
             }
