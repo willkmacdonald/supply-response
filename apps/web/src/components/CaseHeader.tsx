@@ -49,15 +49,13 @@ export function CaseHeader({
       })
     : null;
   return <header className="case-header panel">
-    <div>
-      <p className="eyebrow">RL-001 · Supply disruption response</p>
-      <h1>Progressive Case workspace</h1>
+    <div className="case-header-intro">
+      <p className="eyebrow">RL-001 · Supply Disruption Response</p>
+      <h1>Respond to supply disruptions with AI</h1>
+      <p className="case-header-summary">AI brings together supplier messages, inventory, and customer orders to assess the impact of a delay, compare recovery options, and support the planner's decision.</p>
       {caseInstance && <details><summary>Case details</summary><p>Case {caseInstance.case_id}</p></details>}
     </div>
     <div className="provenance" aria-label="Runtime provenance">
-      {runtime && <span className={`badge badge-${runtime.runtime_mode}`}>
-        {runtime.runtime_mode === "live" ? "Live-service mode" : "Fallback mode"}
-      </span>}
       {caseInstance && <span>Scenario time: {scenarioLabel(caseInstance.scenario_effective_time)}</span>}
       {runtime && !runtime.power_bi_available && <span>
         {runtime.runtime_mode === "fallback"
@@ -74,5 +72,12 @@ export function CaseHeader({
     {caseInstance?.controls.new_analysis && <button type="button" onClick={onAnalyze} disabled={busy || analyzing}>
       {analyzing ? "Analyzing disruption…" : "Analyze disruption"}
     </button>}
+    <p className="case-header-mode">
+      {runtime?.runtime_mode === "live"
+        ? "Fictional scenario · Uses live Microsoft services"
+        : runtime?.runtime_mode === "fallback"
+          ? "Fictional scenario · Uses predefined sample data"
+          : "Fictional scenario · Service mode not yet available"}
+    </p>
   </header>;
 }

@@ -37,6 +37,10 @@ function authenticatedClient(): AuthClient {
   return client;
 }
 
+async function selectDecisionStage() {
+  await userEvent.click(await screen.findByRole("tab", {name: "3. Make the decision"}));
+}
+
 const runtime = {
   runtime_mode: "fallback",
   work_iq: "synthetic",
@@ -634,7 +638,7 @@ describe("reopening lifecycle and operation safety", () => {
     let resolveList!: (value: Response) => void;
     const mock = savedReads({"/api/cases": new Promise<Response>(r => {resolveList = r;})});
     render(<App />);
-    await screen.findByText("Fallback mode");
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     expect(screen.getByRole("button", {name: "Finding existing cases…"})).toBeDisabled();
     expect(screen.getByRole("button", {name: "Create showcase case"})).toBeDisabled();
@@ -665,6 +669,7 @@ describe("reopening lifecycle and operation safety", () => {
       "/api/cases": new Promise<Response>(r => {resolveList = r;})});
     window.history.replaceState(null, "", "/?caseId=RL-CASE-1");
     render(<App />);
+    await selectDecisionStage();
     await screen.findByText("Combined response");
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     expect(screen.getByRole("button", {name: "Approve combined response"})).toBeDisabled();
@@ -681,6 +686,7 @@ describe("reopening lifecycle and operation safety", () => {
       await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
       await userEvent.click(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"}));
     }
+    await selectDecisionStage();
     expect(await screen.findByText("Combined response")).toBeVisible();
     expect(screen.queryByText("Reopening saved case…")).not.toBeInTheDocument();
     expect(mock.mock.calls.every(([, init]) => !init?.method)).toBe(true);
@@ -729,6 +735,7 @@ describe("reopening lifecycle and operation safety", () => {
     await act(async () => { await result.current.approve(); await result.current.reject("no"); });
     expect(mock.mock.calls.every(([, init]) => !init?.method)).toBe(true);
     render(<App />);
+    await selectDecisionStage();
     expect(await screen.findByRole("button", {name: "Approve combined response"})).toBeDisabled();
   });
 
@@ -771,7 +778,7 @@ describe("progressive Case workspace", () => {
 
     render(<AuthProvider config={entraConfig} client={client}><App /></AuthProvider>);
 
-    expect(await screen.findByText("Fallback mode")).toBeVisible();
+    expect(await screen.findByText("Fictional scenario · Uses predefined sample data")).toBeVisible();
     expect(screen.queryByRole("button", {name: "Sign in as Alex"})).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/api/runtime", {
       headers: {Authorization: "Bearer test-api-token"},
@@ -806,7 +813,7 @@ describe("progressive Case workspace", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
-    expect(await screen.findByText("Fallback mode")).toBeVisible();
+    expect(await screen.findByText("Fictional scenario · Uses predefined sample data")).toBeVisible();
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     expect(await screen.findByRole("status")).toHaveTextContent("Creating Case workspace…");
@@ -817,7 +824,7 @@ describe("progressive Case workspace", () => {
   it("creates only one Case under the app's StrictMode development shell", async () => {
     const fetchMock = mockFallbackCaseLifecycle();
     render(<StrictMode><App /></StrictMode>);
-    await screen.findByText("Fallback mode");
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await screen.findByText(/RL-CASE-1/);
     const createCalls = fetchMock.mock.calls.filter(([input, init]) =>
@@ -829,12 +836,13 @@ describe("progressive Case workspace", () => {
   it("keeps provenance, decision, execution, and simulated outcomes visible", async () => {
     mockFallbackCaseLifecycle();
     render(<App />);
-    expect(await screen.findByText("Fallback mode")).toBeVisible();
+    expect(await screen.findByText("Fictional scenario · Uses predefined sample data")).toBeVisible();
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await screen.findByText(/RL-CASE-1/);
     expect(screen.getByText("Scenario time: Sep 1, 2026, 9:00 AM CDT")).toBeVisible();
     expect(screen.getByText("Power BI unavailable in fallback")).toBeVisible();
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
+    await selectDecisionStage();
     expect(await screen.findByText("Combined response")).toBeVisible();
     await userEvent.click(screen.getByRole("button", {name: "Approve combined response"}));
     expect(await screen.findByRole("heading", {name: "Approved response"})).toBeVisible();
@@ -845,7 +853,7 @@ describe("progressive Case workspace", () => {
     expect(await screen.findByText("Simulated results")).toBeVisible();
     expect(await screen.findAllByTestId("outcome-observation")).toHaveLength(10);
     expect(screen.queryByText("Actual outcomes")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", {name: "1. Understand the disruption"})).toBeVisible();
+    expect(screen.getByRole("tab", {name: "1. Understand the disruption"})).toBeVisible();
     expect(screen.getByRole("heading", {name: "Recommended response—and why."})).toBeVisible();
     expect(screen.getByRole("heading", {name: "Review and approve."})).toBeVisible();
   });
@@ -855,20 +863,22 @@ describe("progressive Case workspace", () => {
     const delayedAnalysis = new Promise<Response>((resolve) => { resolveAnalysis = resolve; });
     mockFallbackCaseLifecycle({analysis: delayedAnalysis});
     render(<App />);
-    await screen.findByText("Fallback mode");
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     expect(await screen.findByRole("status")).toHaveTextContent("Analysis in progress. Source retrieval and evidence checks will be shown when the analysis completes.");
     await act(async () => resolveAnalysis(await response(analysis, 201)));
+    await selectDecisionStage();
     expect(await screen.findByText("Combined response")).toBeVisible();
   });
 
   it("keeps the alternate supplier blocker visible and nonselectable", async () => {
     mockFallbackCaseLifecycle();
     render(<App />);
-    await screen.findByText("Fallback mode");
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
+    await selectDecisionStage();
     const beta = await screen.findByRole("article", {name: "Use the alternate supplier"});
     expect(within(beta).getByText("Cannot use Supplier Beta yet: supplier qualification is incomplete")).toBeVisible();
     expect(within(beta).getByRole("button", {name: "Select Use the alternate supplier"})).toBeDisabled();
@@ -884,9 +894,10 @@ describe("progressive Case workspace", () => {
     };
     mockFallbackCaseLifecycle({analysis: blockedAnalysis});
     render(<App />);
-    await screen.findByText("Fallback mode");
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
+    await selectDecisionStage();
     expect(await screen.findByText("A planning requirement is unresolved")).toBeVisible();
     expect(screen.getByText("Decision details").closest("details")).toHaveTextContent("REQUIRED_EVIDENCE_STALE");
     expect(screen.getByRole("button", {name: "Approve combined response"})).toBeDisabled();
@@ -903,9 +914,10 @@ describe("progressive Case workspace", () => {
     };
     mockFallbackCaseLifecycle({analysis: staleAnalysis});
     render(<App />);
-    await screen.findByText("Fallback mode");
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
+    await selectDecisionStage();
     expect(await screen.findByText("Required evidence is stale")).toBeVisible();
     expect(screen.getByRole("button", {name: "Approve combined response"})).toBeDisabled();
     expect(screen.getByRole("button", {name: "Reject recommendation"})).toBeDisabled();
@@ -915,9 +927,10 @@ describe("progressive Case workspace", () => {
     const failedDecision = {...decision, action_planning_status: "failed"};
     mockFallbackCaseLifecycle({decision: failedDecision, retryDecision: decision});
     render(<App />);
-    await screen.findByText("Fallback mode");
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
+    await selectDecisionStage();
     await screen.findByText("Combined response");
     await userEvent.click(screen.getByRole("button", {name: "Approve combined response"}));
     expect(await screen.findByText("Approved — action planning failed")).toBeVisible();
@@ -929,9 +942,10 @@ describe("progressive Case workspace", () => {
   it("surfaces a failed child action and retries only that action", async () => {
     mockFallbackCaseLifecycle({actions: [{...actions[0], status: "failed"}, ...actions.slice(1)]});
     render(<App />);
-    await screen.findByText("Fallback mode");
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
+    await selectDecisionStage();
     await screen.findByText("Combined response");
     await userEvent.click(screen.getByRole("button", {name: "Approve combined response"}));
     const failedAction = await screen.findByTestId("execution-action-RL-ACTION-1");
@@ -953,24 +967,26 @@ describe("progressive Case workspace", () => {
     };
     mockFallbackCaseLifecycle({decision: rejectedDecision});
     render(<App />);
-    await screen.findByText("Fallback mode");
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
+    await selectDecisionStage();
     await screen.findByText("Combined response");
     await userEvent.type(screen.getByLabelText("Rejection reason"), "Wait for refreshed supplier evidence.");
     await userEvent.click(screen.getByRole("button", {name: "Reject recommendation"}));
     expect(await screen.findByRole("heading", {name: "Recommendation rejected"})).toBeVisible();
     expect(screen.getByText("Wait for refreshed supplier evidence.")).toBeVisible();
-    expect(screen.getByRole("heading", {name: "1. Understand the disruption"})).toBeVisible();
+    expect(screen.getByRole("tab", {name: "1. Understand the disruption"})).toBeVisible();
     expect(screen.queryAllByTestId("execution-action")).toHaveLength(0);
   });
 
   it("does not relabel synthetic observations from server responses as actual", async () => {
     const fetchMock = mockFallbackCaseLifecycle();
     render(<App />);
-    await screen.findByText("Fallback mode");
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
+    await selectDecisionStage();
     await screen.findByText("Combined response");
     await userEvent.click(screen.getByRole("button", {name: "Approve combined response"}));
     await screen.findAllByTestId("execution-action");
@@ -1007,7 +1023,7 @@ describe("progressive Case workspace", () => {
   it("keeps the loaded analysis when entering assisted review", async () => {
     const fetchMock = mockFallbackCaseLifecycle();
     render(<App />);
-    await screen.findByText("Fallback mode");
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await screen.findByText(/RL-CASE-1/);
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
@@ -1036,12 +1052,13 @@ describe("progressive Case workspace", () => {
     window.history.replaceState(null, "", "/?view=planner");
 
     render(<App />);
-    await screen.findByText("Fallback mode");
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     expect(await screen.findByText(/Awaiting decision/)).toBeVisible();
     expect(screen.getByText(/RL-CASE-1/)).toBeVisible();
     await userEvent.click(screen.getByRole("button", {name: "Reopen case RL-CASE-1"}));
 
+    await selectDecisionStage();
     expect(await screen.findByText("Combined response")).toBeVisible();
     expect(screen.queryByRole("button", {name: "Reopen case RL-CASE-1"})).not.toBeInTheDocument();
     expect(screen.queryByText("No existing cases are available.")).not.toBeInTheDocument();
@@ -1067,7 +1084,7 @@ describe("progressive Case workspace", () => {
     vi.stubGlobal("fetch", fetchMock);
     window.history.replaceState(null, "", "/");
     render(<App />);
-    await screen.findByText("Fallback mode");
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     await userEvent.click(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"}));
     expect(await screen.findByRole("button", {name: "Analyze disruption"})).toBeEnabled();
@@ -1111,9 +1128,10 @@ describe("progressive Case workspace", () => {
     vi.stubGlobal("fetch", fetchMock);
     window.history.replaceState(null, "", "/");
     render(<App />);
-    await screen.findByText("Fallback mode");
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     await userEvent.click(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"}));
+    await selectDecisionStage();
     expect(await screen.findByRole("heading", {name: "Approved response"})).toBeVisible();
     expect(screen.getAllByTestId("execution-action")).toHaveLength(5);
     expect(screen.getByText("Simulated results")).toBeVisible();
@@ -1137,7 +1155,7 @@ describe("progressive Case workspace", () => {
     }));
     window.history.replaceState(null, "", "/");
     render(<App />);
-    await screen.findByText("Fallback mode");
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     await userEvent.click(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"}));
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to reopen this case");

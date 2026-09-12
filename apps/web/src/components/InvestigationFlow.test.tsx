@@ -6,7 +6,7 @@ import {afterEach, expect, it, vi} from "vitest";
 import type {ResponseOption} from "../types";
 import type {CaseWorkspaceState} from "../hooks/useCaseWorkspace";
 import {InvestigationFlow} from "./InvestigationFlow";
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 function state(): CaseWorkspaceState {
   const at = "2026-09-01T09:00:00-05:00";
@@ -29,47 +29,93 @@ function state(): CaseWorkspaceState {
         conflicts: [], conflict_resolutions: [], evidence_validation: validation, response_options: [], standing_authorizations: [],
         approval_satisfactions: [], ranking, calculation_version: "v1", evidence_policy_version: "v1", approval_policy_version: "v1"}}};
 }
-it("keeps all nine cards in the exact approved row and DOM reading order", () => {
+async function selectDecisionStage() {
+  await userEvent.click(screen.getByRole("tab", {name: "3. Make the decision"}));
+}
+it("shows one approved three-card stage at a time", async () => {
+  const user = userEvent.setup();
   render(<InvestigationFlow state={state()} />);
-  expect(screen.getAllByRole("heading", {level: 2}).map(h => h.textContent)).toEqual([
+  expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual([
     "1. Understand the disruption", "2. Investigate responses", "3. Make the decision",
   ]);
   expect(screen.getAllByRole("heading", {level: 3}).map(h => h.textContent)).toEqual([
     "What changed?", "What do we have available?", "What does that put at risk?",
+  ]);
+  expect(screen.getByText("Disruption details aren't available for this analysis")).toBeVisible();
+  await user.click(screen.getByRole("tab", {name: "2. Investigate responses"}));
+  expect(screen.getAllByRole("heading", {level: 3}).map(h => h.textContent)).toEqual([
     "What can Supplier Alpha still supply?", "Can another plant help?", "Can we use the alternate supplier?",
+  ]);
+  expect(screen.getByText("Shipment details aren't available for this analysis")).toBeVisible();
+  expect(screen.getByText("Plant transfer details aren't available for this analysis")).toBeVisible();
+  expect(screen.getByText("Supplier qualification details aren't available for this analysis")).toBeVisible();
+  await user.click(screen.getByRole("tab", {name: "3. Make the decision"}));
+  expect(screen.getAllByRole("heading", {level: 3}).map(h => h.textContent)).toEqual([
     "Compare the options.", "Recommended response—and why.", "Review and approve.",
   ]);
   expect(screen.getByRole("button", {name: "Approve selected response"})).toBeDisabled();
   expect(screen.getByText("No option meets the planning requirements")).toBeVisible();
-  expect(screen.getByText("Disruption details aren't available for this analysis")).toBeVisible();
-  expect(screen.getByText("Shipment details aren't available for this analysis")).toBeVisible();
-  expect(screen.getByText("Plant transfer details aren't available for this analysis")).toBeVisible();
-  expect(screen.getByText("Supplier qualification details aren't available for this analysis")).toBeVisible();
   expect(screen.getByText("Sample data — not a live retrieval")).toBeVisible();
   const comparison = screen.getByRole("region", {name: "Compare the options."});
   expect(within(comparison).getByText("Do-nothing comparison unavailable for this analysis")).toBeVisible();
   expect(within(comparison).getByText("How the options were compared")).toBeVisible();
   expect(comparison.lastElementChild).toHaveTextContent("Comparison from this analysis; selection is not approval or execution.");
 });
+it("uses manual keyboard activation with wrapping and stable panel associations", async () => {
+  const user = userEvent.setup(); const input = state(); const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+  const location = window.location.href; render(<InvestigationFlow state={input} />);
+  const tabs = screen.getAllByRole("tab");
+  expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("tabpanel")).toHaveAccessibleName("1. Understand the disruption");
+  tabs[0].focus(); await user.keyboard("{ArrowLeft}");
+  expect(tabs[2]).toHaveFocus(); expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+  await user.keyboard("{Enter}"); expect(tabs[2]).toHaveAttribute("aria-selected", "true");
+  await user.keyboard("{Home}"); expect(tabs[0]).toHaveFocus();
+  expect(tabs[2]).toHaveAttribute("aria-selected", "true");
+  await user.keyboard(" "); expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+  await user.keyboard("{End}"); expect(tabs[2]).toHaveFocus();
+  await user.keyboard("{ArrowRight}"); expect(tabs[0]).toHaveFocus();
+  expect(fetch).not.toHaveBeenCalled(); expect(window.location.href).toBe(location);
+  expect(input.selectOption).not.toHaveBeenCalled(); expect(input.approve).not.toHaveBeenCalled();
+  expect(input.reject).not.toHaveBeenCalled(); expect(input.analyze).not.toHaveBeenCalled();
+});
+
+it("preserves the selected stage on same-case rerenders and resets for a different case", async () => {
+  const user = userEvent.setup(); const input = state();
+  const {rerender} = render(<InvestigationFlow state={input} />);
+  await user.click(screen.getByRole("tab", {name: "2. Investigate responses"}));
+  input.operation = "analyzing"; rerender(<InvestigationFlow state={input} />);
+  expect(screen.getByRole("tab", {name: "2. Investigate responses"})).toHaveAttribute("aria-selected", "true");
+  input.operation = null; input.caseInstance = {...input.caseInstance!, case_id: "another-case"};
+  input.analysis = {...input.analysis!, case_id: "another-case"};
+  rerender(<InvestigationFlow state={input} />);
+  expect(screen.getByRole("tab", {name: "1. Understand the disruption"})).toHaveAttribute("aria-selected", "true");
+});
 it("keeps rejection explicit and respects the existing blocked state", async () => {
-  const input = state(); render(<InvestigationFlow state={input} />);
+  const user = userEvent.setup(); const input = state(); render(<InvestigationFlow state={input} />);
+  await user.click(screen.getByRole("tab", {name: "3. Make the decision"}));
   const decision = screen.getByRole("region", {name: "Review and approve."});
   expect(within(decision).getByLabelText("Rejection reason")).toBeDisabled();
   expect(input.approve).not.toHaveBeenCalled(); expect(input.reject).not.toHaveBeenCalled();
   cleanup(); input.decisionBlocked = false; input.caseInstance!.controls.decide = true; render(<InvestigationFlow state={input} />);
-  await userEvent.type(screen.getByLabelText("Rejection reason"), "Wait for evidence");
-  await userEvent.click(screen.getByRole("button", {name: "Reject recommendation"}));
+  await user.click(screen.getByRole("tab", {name: "3. Make the decision"}));
+  await user.type(screen.getByLabelText("Rejection reason"), "Wait for evidence");
+  await user.click(screen.getByRole("tab", {name: "1. Understand the disruption"}));
+  await user.click(screen.getByRole("tab", {name: "3. Make the decision"}));
+  expect(screen.getByLabelText("Rejection reason")).toHaveValue("Wait for evidence");
+  await user.click(screen.getByRole("button", {name: "Reject recommendation"}));
   expect(input.reject).toHaveBeenCalledWith("Wait for evidence");
   expect(input.approve).not.toHaveBeenCalled();
 });
-it("reports historical and closed case state without inventing an awaiting decision", () => {
+it("reports historical and closed case state without inventing an awaiting decision", async () => {
   const input = state(); input.caseInstance!.status = "closed";
   input.caseInstance!.current_analysis_id = "newer";
   render(<InvestigationFlow state={input} />);
+  await selectDecisionStage();
   expect(screen.getByText("Historical saved analysis. Case closed; no decision is shown for this analysis.")).toBeVisible();
   expect(screen.queryByText("Awaiting your explicit decision")).not.toBeInTheDocument();
 });
-it("shows recommended actions and predictions before keeping raw ranking rules in calculation details", () => {
+it("shows recommended actions and predictions before keeping raw ranking rules in calculation details", async () => {
   const input = state();
   const option: ResponseOption = {
     option_id: "combined", option_kind: "combined", name: "Combine expedite, transfer, and resequencing",
@@ -113,6 +159,7 @@ it("shows recommended actions and predictions before keeping raw ranking rules i
       lower_is_better: true, input_option_ids: ["combined", "transfer"], values: [],
       retained_option_ids: ["combined"], eliminated_option_ids: ["transfer"]}]};
   render(<InvestigationFlow state={input} />);
+  await selectDecisionStage();
   const recommendation = screen.getByRole("region", {name: "Recommended response—and why."});
   const details = within(recommendation).getByText("How the options were compared").closest("details")!;
   const mainText = Array.from(recommendation.children)
@@ -141,7 +188,7 @@ it("shows recommended actions and predictions before keeping raw ranking rules i
   expect(optionCard).toHaveTextContent("This score is not a probability of failure");
 });
 
-it("explains when the persisted do-nothing comparison is missing or ambiguous", () => {
+it("explains when the persisted do-nothing comparison is missing or ambiguous", async () => {
   const input = state();
   const recommendation: ResponseOption = {
     option_id: "combined", option_kind: "combined", name: "Combined response", executable: true,
@@ -155,6 +202,7 @@ it("explains when the persisted do-nothing comparison is missing or ambiguous", 
   input.analysis!.ranking = {...input.analysis!.ranking, recommended_option_id: recommendation.option_id,
     no_feasible_mitigation: false};
   const {rerender} = render(<InvestigationFlow state={input} />);
+  await selectDecisionStage();
   let card = screen.getByRole("region", {name: "Recommended response—and why."});
   expect(within(card).getByText("Do-nothing comparison unavailable: no baseline option is recorded.")).toBeVisible();
   expect(within(card).getByText("Expected if we take this option")).toBeVisible();
@@ -167,7 +215,7 @@ it("explains when the persisted do-nothing comparison is missing or ambiguous", 
   expect(within(card).getByText("Expected if we take this option")).toBeVisible();
 });
 
-it("does not compare a missing persisted prediction", () => {
+it("does not compare a missing persisted prediction", async () => {
   const input = state();
   const predicted = {uncovered_part_demand: 2300, otif_loss_percentage: 50,
     revenue_at_risk: "375000.00", margin_at_risk: "125000.00", response_cost: "24750.00",
@@ -182,6 +230,7 @@ it("does not compare a missing persisted prediction", () => {
   input.analysis!.ranking = {...input.analysis!.ranking, recommended_option_id: recommendation.option_id,
     no_feasible_mitigation: false};
   const {rerender} = render(<InvestigationFlow state={input} />);
+  await selectDecisionStage();
   let card = screen.getByRole("region", {name: "Recommended response—and why."});
   expect(within(card).getByText("Do-nothing comparison unavailable: the baseline prediction is missing or invalid.")).toBeVisible();
   expect(within(card).getByText("Expected if we take this option")).toBeVisible();
@@ -195,7 +244,7 @@ it("does not compare a missing persisted prediction", () => {
   expect(within(card).getByText("Comparison unavailable: the recommended prediction is missing or invalid.")).toBeVisible();
 });
 
-it("does not claim a benefit when the persisted recommended and baseline predictions tie", () => {
+it("does not claim a benefit when the persisted recommended and baseline predictions tie", async () => {
   const input = state();
   const predicted = {uncovered_part_demand: 6800, otif_loss_percentage: 100,
     revenue_at_risk: "955000.00", margin_at_risk: "328000.00", response_cost: "0.00",
@@ -210,6 +259,7 @@ it("does not claim a benefit when the persisted recommended and baseline predict
   input.analysis!.ranking = {...input.analysis!.ranking, recommended_option_id: recommendation.option_id,
     no_feasible_mitigation: false};
   render(<InvestigationFlow state={input} />);
+  await selectDecisionStage();
   const comparison = within(screen.getByRole("region", {name: "Recommended response—and why."}))
     .getByRole("group", {name: "Compared with doing nothing"});
   expect(comparison).toHaveTextContent("The values shown here are unchanged from doing nothing; no benefit is shown in these measures.");

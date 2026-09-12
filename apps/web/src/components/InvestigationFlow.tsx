@@ -1,4 +1,5 @@
-import type {ReactNode} from "react";
+import {useRef, useState} from "react";
+import type {KeyboardEvent, ReactNode} from "react";
 import type {CaseWorkspaceState} from "../hooks/useCaseWorkspace";
 import {InvestigationEvidence} from "./InvestigationEvidence";
 import {RequiredCitationWarning} from "./EvidenceSource";
@@ -7,22 +8,63 @@ import {OptionComparison} from "./OptionComparison";
 import {DecisionPanel} from "./DecisionPanel";
 import {readPlannerSnapshot} from "./plannerSnapshot";
 import {instant} from "./plannerFormatting";
-function Row({id, label, children}: {id: string; label: string; children: ReactNode}) { return <section className="investigation-row" aria-labelledby={id}><h2 id={id}>{label}</h2><div className="investigation-cards">{children}</div></section>; }
 export function InvestigationFlow({state}: {state: CaseWorkspaceState}) {
   const {caseInstance, analysis} = state; if (!analysis) return null; if (!caseInstance) return <p className="warning">Case details aren't available for this analysis</p>;
+  return <InvestigationPresentation key={caseInstance.case_id} state={state} />;
+}
+
+const stages = [
+  {id: "understand", label: "1. Understand the disruption"},
+  {id: "responses", label: "2. Investigate responses"},
+  {id: "decision", label: "3. Make the decision"},
+] as const;
+
+function StagePanel({index, activeStage, children}: {index: number; activeStage: number; children: ReactNode}) {
+  const stage = stages[index]; const active = activeStage === index;
+  return <section role="tabpanel" aria-labelledby={`investigation-tab-${stage.id}`}
+    id={`investigation-panel-${stage.id}`} className="investigation-panel"
+    hidden={!active} inert={!active} tabIndex={0}>
+    <div className="investigation-cards">{children}</div>
+  </section>;
+}
+
+function InvestigationPresentation({state}: {state: CaseWorkspaceState}) {
+  const {caseInstance, analysis} = state;
+  const [activeStage, setActiveStage] = useState(0);
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  if (!analysis || !caseInstance) return null;
   const props = {caseInstance, analysis, runtime: state.runtime, tenantSharePointHost: state.runtime?.deployment_contract?.tenant_sharepoint_host}; const snapshot = readPlannerSnapshot(props);
   const reportContext = snapshot ? {
     caseId: analysis.case_id,
     analysisId: analysis.analysis_id,
     runtimeMode: analysis.runtime_mode,
   } : null;
+  function moveFocus(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    let next: number | null = null;
+    if (event.key === "ArrowRight") next = (index + 1) % stages.length;
+    if (event.key === "ArrowLeft") next = (index - 1 + stages.length) % stages.length;
+    if (event.key === "Home") next = 0;
+    if (event.key === "End") next = stages.length - 1;
+    if (next === null) return;
+    event.preventDefault();
+    tabRefs.current[next]?.focus();
+  }
   return <div id="assisted-review" className="investigation-flow"><div className="analysis-context">
     <p>{analysis.material.corpus === "demo_corpus" ? "Demo corpus — fictional" : "Fictional provenance not established for this analysis"}</p>
     <p>Snapshot used for this analysis · In this scenario, as of {instant(analysis.scenario_effective_time)}</p><p>Analysis saved at {instant(analysis.created_at)}. Sources are not monitored continuously.</p>
     {analysis.runtime_mode === "fallback" && <p>Sample data — not a live retrieval</p>}<details><summary>Analysis source details</summary><p>Case {analysis.case_id}</p><p>Analysis {analysis.analysis_id}</p></details>
   </div><RequiredCitationWarning analysis={analysis} tenantSharePointHost={props.tenantSharePointHost} />
-    <Row id="understand-row" label="1. Understand the disruption"><InvestigationEvidence {...props} row="disruption" /></Row>
-    <Row id="responses-row" label="2. Investigate responses"><InvestigationEvidence {...props} row="responses" /></Row>
-    <Row id="decision-row" label="3. Make the decision"><OptionComparison disabled={state.operation !== null} analysis={analysis} selectedOption={state.selectedOption} onSelect={state.selectOption} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /><ExposurePanel analysis={analysis} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /><DecisionPanel state={state} onApprove={state.approve} onReject={state.reject} /></Row>
+    <div className="investigation-tabs" role="tablist" aria-label="Investigation stages">
+      {stages.map((stage, index) => <button key={stage.id} type="button" role="tab"
+        id={`investigation-tab-${stage.id}`} aria-controls={`investigation-panel-${stage.id}`}
+        aria-selected={activeStage === index} tabIndex={activeStage === index ? 0 : -1}
+        ref={element => { tabRefs.current[index] = element; }}
+        onKeyDown={event => moveFocus(event, index)} onClick={() => setActiveStage(index)}>
+        {stage.label}
+      </button>)}
+    </div>
+    <StagePanel index={0} activeStage={activeStage}><InvestigationEvidence {...props} row="disruption" /></StagePanel>
+    <StagePanel index={1} activeStage={activeStage}><InvestigationEvidence {...props} row="responses" /></StagePanel>
+    <StagePanel index={2} activeStage={activeStage}><OptionComparison disabled={state.operation !== null} analysis={analysis} selectedOption={state.selectedOption} onSelect={state.selectOption} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /><ExposurePanel analysis={analysis} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /><DecisionPanel state={state} onApprove={state.approve} onReject={state.reject} /></StagePanel>
   </div>;
 }
