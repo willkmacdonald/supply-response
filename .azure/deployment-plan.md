@@ -1,6 +1,56 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed — session-recovery correction through 5bbb75b, release be45c4d, revision ca-sr-demo--0000026; real expired Microsoft-session acceptance remains separate.
+> **Status:** Validated — presenter and recommendation-sheet release from 70f14be; fresh azure-validate workflow complete, ready for approved deployment.
+
+## Presenter experience release — 2026-09-12
+
+User approved deployment of the reviewed local experience to the existing demo.
+Same Azure Dev subscription, East US 2, supply-response-personal environment and
+ca-sr-demo application. Changes since be45c4d are frontend and documentation only:
+presenter header, three stage tabs, source icons, USD formatting and recommendation
+explanation sheet. No source/SQL/schema/report publication, permission, scale,
+case/analysis/decision/execution writes, Git push or merge are part of this release.
+The preview fixture is not the production entry point.
+
+- [x] All validation checks pass.
+  - [x] 1. AZD Installation (1.30.0).
+  - [x] 2. Schema Validation (official Azure/azure-dev schema).
+  - [x] 3. Environment Setup (existing named environment).
+  - [x] 4. Authentication Check (Will, interactive User).
+  - [x] 5. Subscription/Location Check (Azure Dev / East US 2).
+  - [x] 6. Aspire Pre-Provisioning Checks (not applicable).
+  - [x] 7. Provision Preview (success, no resource creation/deletion).
+  - [x] 8. Build Verification (325 tests, TypeScript/Vite, uv build).
+  - [x] 9. Docker Build Context Validation (unchanged Dockerfile, exclusions, locks).
+  - [x] 10. Package Validation (named azd package passed).
+  - [x] 11. Azure Policy Validation (same seven assignments; no preview denial).
+  - [x] 12. Aspire Post-Provisioning Checks (not applicable).
+  - [x] Static and pre-deployment live role verification.
+
+### Validation Proof
+
+Fresh checks September 12, approximately 18:54–18:57 America/Chicago:
+`azd version`, `azd env list`, `azd auth login --check-status`, exact guarded
+preflight, official-schema jsonschema validation, named `azd provision --preview
+--no-prompt`, `npm test` (325/325), `npm run build`, `uv build`, named `azd package`,
+policy/role/resource queries, and `git diff --check` passed. Initial sandboxed CLI,
+package and cache operations were denied; scoped escalated reruns succeeded.
+The resource tag query initially used incompatible CLI flags; the supported query
+returned exactly one target, ca-sr-demo. No configuration changed to resolve these.
+
+Preview reconciles only the existing app and Application Insights; no new/deleted
+resources or permission changes. Backend, infrastructure, deployment scripts,
+Docker inputs and migrations are identical to deployed be45c4d. Static definitions
+and live assignments confirm resource-scoped AcrPull, Key Vault Secrets User and
+Foundry User for unchanged principal a95ffce4-570b-4931-bfd4-4894e7281890.
+Existing schema access is preserved; no SQL grants/migrations are required.
+
+Rollback checkpoint: ca-sr-demo--0000026, image digest
+sha256:51d21a6e997e198867af0c8c8e0cef19bb4940cf4390d0f59a81f742507e5af2.
+Scale is 0–2 and latest revision has 100% traffic.
+Desktop/mobile sheet and currency acceptance is documented in
+docs/reviews/2026-09-12-recommendation-explanation-sheet-verification.md.
+
 
 ## Session recovery release — 2026-09-12 (validation proof)
 
