@@ -1,235 +1,174 @@
 # Supply Response Roadmap
 
-**Last updated:** 2026-09-09 (planner branch; published baseline unchanged)
-**Source of truth:** [Frozen demo contract](superpowers/specs/2026-08-30-supply-response-demo-contract-design.md) and [implementation plan](superpowers/plans/2026-08-30-supply-response-demo-implementation.md)
+**Last updated:** September 12, 2026 (America/Chicago).
+**Deployed baseline:** website revision **ca-sr-demo--0000028**, deployed source
+`78a6bf5`; reviewed report/model artifacts through `fd53e99`.
 
-This roadmap reports the durable, reviewed repository baseline. Uncommitted or actively developed work is not counted as complete.
+This roadmap distinguishes implemented code, configured identities, verified live
+behavior and work still missing. The September 12 release was deployed from
+`codex/planner-experience`; deployment is not a claim that the branch was merged.
 
-## Unreleased planner-experience branch
+## What is live now
 
-The approved redesign is being delivered on `codex/planner-experience`, with
-independent review between delegated tasks. This does not change the published
-baseline recorded below.
+[Open the demo](https://ca-sr-demo.orangehill-337f5d48.eastus2.azurecontainerapps.io/).
 
-- Reviewed: supplier-delay-first card flow, planner terminology, original source
-  links, exact inline supporting records, and bottom-of-card retrieval status.
-- Reviewed: saved-analysis reporting projections, exercised on a dedicated
-  synthetic SQL test database; eight native report pages and an exact generated
-  model/preflight contract. Microsoft TOM and offline visual validation pass,
-  but do not execute DAX or prove native report rendering.
-- Reviewed: mounted card-to-record Power BI links, with 204 web tests/build and
-  twelve desktop/mobile browser checks passing. A release-specific activation
-  check keeps new links unavailable until the matching report is accepted and
-  configured.
-- Reviewed: the traditional versus AI-assisted walkthrough, including neutral
-  report presentation, eight-page navigation, exact-context route controls and a
-  [presenter guide](demo/traditional-and-assisted-walkthrough.md). The approved
-  private-VM SQL rerun passed 126 tests; the web suite now passes 226 tests plus
-  the production build. Twenty-four local desktop/mobile browser variants check
-  route navigation and existing card links. Native report acceptance is separate.
-- Final local regression: 1,182 non-live Python tests and all six local browser
-  lifecycle tests pass. See the [verification checkpoint](superpowers/plans/2026-09-08-planner-experience-delivery.md#final-local-regression-checkpoint-2026-09-09)
-  for deliberate live-test exclusions and the remaining release boundary.
-- Final-review follow-up corrects the no-feasible-response state, baseline
-  parts/cost and recommended service exposure, and adds the user-approved
-  **Customer orders protected** comparison column. The latest private-VM SQL
-  run passes **137 tests**, including the new no-feasible and legacy-analysis
-  cases; its disposable database was removed. The focused report/model suite
-  passes **185 tests**. Final independent whole-branch review approved local
-  readiness through `1ef0aaf`, with no remaining critical or important findings.
-- Still required: coordinated publication, actual DAX/value parity, native
-  layouts/navigation, Alex's access, and every card-to-source journey. No new
-  reporting receipt has been issued or installed.
+- Presenter header **Respond to supply disruptions with AI**, followed by three
+  tabs: **Understand the disruption**, **Investigate responses**, **Make the decision**.
+- Vertically arranged, planner-language cards with source details at the bottom,
+  email/Teams icons, whole-dollar USD totals and two-decimal per-part costs.
+- **Click here to understand why** opens the recommendation explanation sheet.
+  Recommendation, human approval and execution remain different steps.
+- Seven traditional Power BI pages: **Supply overview**, **Inventory**,
+  **Supplier deliveries**, **Plant transfers**, **Supplier qualification**,
+  **Customer orders**, **Production demand**. They lead with rows, charts and
+  filters across 178 fictional operational records—not copies of the AI cards.
+- Separate card links open exact saved inventory, shipment, transfer,
+  qualification, customer-order and response-option context. Reporting activation
+  is enabled only for the accepted artifact.
+- Existing saved cases can be reopened without creating another case or refreshing
+  evidence. A fresh showcase case/analysis is a separate operation.
 
-See the [delivery sequence and verification boundaries](superpowers/plans/2026-09-08-planner-experience-delivery.md).
+The traditional reporting snapshot is isolated in the existing Fabric SQL
+database. It did not replace the canonical operational source or modify saved
+cases/analyses. Exact saved evidence never falls back to wider reporting data.
 
-## Status summary
+## Verified release boundary
 
-| Area | Status | Current boundary |
+The [release evidence](reviews/2026-09-12-traditional-reporting-verification.md)
+records native Power BI inspection as Alex, actual deployed website checks,
+SQL-to-model parity, publication review, negative identity checks and deployment.
+
+- Native broad pages show rows/charts; Chicago/component filtering changes the
+  inventory view to 4,500 on hand − 200 held − 300 protected = 4,000 usable.
+- Exact current and older saved inventory/order views were checked. The live
+  website's inventory, order and shipment destinations match its saved analysis.
+  Two affected order lines are $375,000 and $580,000; Alpha's proposed partial
+  shipment is 3,000 units on September 6 at $7.50 per unit.
+- Unknown/mismatched selections remain unavailable rather than showing another
+  case's values. The historical inventory gap was a DAX measure defect, not absent
+  records in the inspected analysis.
+- Final release regression: 187 Fabric tests passed (one optional live test
+  skipped), 326 frontend tests and production build passed, and 98 deployment/
+  activation tests passed. Actual SQL-engine and native-model checks are recorded
+  separately; unit tests are not treated as native acceptance.
+- Revision28 is Healthy/Running with 100% traffic; scale 0–2 and the same three
+  resource-scoped Azure roles are unchanged. Live Fabric/Foundry readiness passed.
+  No case, analysis, Decision, approval, simulation or execution was created by
+  this release verification.
+
+The release reused saved evidence. It does not prove a fresh Work IQ retrieval,
+Foundry explanation invocation, finance-person approval or downstream execution.
+
+## Current capability status
+
+| Area | Status | Boundary |
 |---|---|---|
-| Contract, domain model, and ADRs | Complete | Frozen contract, glossary, and four ADRs are committed |
-| Deterministic decision quality | Complete | Canonical RL-001 and all ten focused evaluation cases are integrated |
-| Durable closed-loop backend | Complete | SQLite persistence, immutable Decisions, outbox, five actions, attempts, playback, and observations are covered |
-| Web decision console | Complete in fallback mode | Progressive workspace and browser journey pass locally |
-| Fabric SQL | Canonical source loaded and verified live | Schema version 12; canonical RL-001 loader passed planned → inserted → unchanged with exact metadata/payload and production-adapter readback; deployed app created a live Case |
-| Power BI | Published; empty-state live render validated | The semantic model and two-page report are published, OAuth2-bound to Fabric SQL, DAX-queryable, and visually clean with an empty database; populated Decision-ID parity remains a post-application-deployment gate |
-| Entra ID and persona authorization | Alex sign-in passed; full authorization journey pending | Private-browser Alex request passed authentication and reached analysis; approval/rejection and downstream gates remain |
-| Work IQ | Structured discovery/read/validation and citation navigation verified | Revision19 fresh Alex analysis displayed both source links and enabled approval; the user confirmed both links open the intended Outlook/Teams messages. Revision20 publishes clearer link labels. See the [result](deployment/workiq-discovery-integration-result.md) |
-| Foundry orchestration | Implemented and agents published; invocation pending | Signal, context, and decision agents are verified as immutable version `1` contracts on `gpt-5.6-luna`; no live invocation or evaluation has run |
-| Complete live Case journey | Case creation and live analysis passed; approval enabled | Fresh revision19 Case recommends the combined response at $24,750 with 2,300 uncovered units and both source links. No Decision approved or actions executed. Decision, five actions, ten observations, and populated Power BI parity remain unverified |
-| Personal-tenant deployment and hardening | Updated application and readiness verified | New immutable revision ready; exact Azure roles and live Fabric/Foundry readiness passed; delegated acceptance checks remain |
+| Domain, deterministic calculations and ranking | Implemented and tested | RL-001 and ten focused evaluation cases; AI does not own arithmetic or approval |
+| Durable backend and fallback journey | Implemented and locally verified | Immutable Decisions, outbox, five bounded actions, simulated observations; not equivalent to live downstream acceptance |
+| Planner website | Deployed and inspected as Alex | Header, tabs, currency, source links and explanation sheet verified on an existing saved case |
+| Fabric SQL | Live and verified | Schema12, canonical source, saved projections and isolated 178-record reporting dataset |
+| Power BI | Traditional and exact-source reporting published and accepted | Native rows/charts/filtering and selected current/older evidence parity; populated execution outcomes and within-case multi-version history are not certified |
+| Work IQ | Prior structured discovery/read/validation passed | Work IQ entity tools discover sources and read individual messages; configured IDs validate results, not lookup inputs. No direct Graph fallback. This release did not repeat discovery |
+| Alex identity | Interactive app sign-in verified | Deployed application binds the interactive actor to Alex |
+| Jordan and Taylor identities | Tenant identities/roles provisioned | Identity provisioning does not implement their interactive web workflows |
+| Finance review | Interactive workflow missing | Current analysis uses predefined Taylor standing authorization, not a Taylor login, inbox or case-specific approval |
+| Foundry | Agents published and contract/readiness checks passed | Optional explanation invocation/evaluation remains a separate gate |
+| Complete live journey | Not complete | Live human approval, bounded downstream actions/observations and cross-service outcome parity remain unverified |
 
-## Delivery sequence
+## Remaining work
 
-### 1. Contract and portable core — complete
+### 1. Separate finance-person review workflow
 
-Tasks 0–4 established the frozen contract and reconciled the portable core with it.
+Taylor Brooks (`RL-PERSONA-TAYLOR`) already has a separate Finance Approver
+identity and tenant role assignment. Reuse that identity; do not create a
+replacement or present an Alex click as Taylor's approval.
 
-- Canonical domain language and Case Instance model
-- Frozen RL-001 operational facts and expected outcomes
-- Evidence, approval, and analysis-version policy
-- Deterministic option evaluation and thresholded lexicographic ranking
-- Integrated coverage for ten focused evaluation cases
+The deployed composition currently configures only Alex's interactive persona
+binding and supplies Taylor's predefined RL-001 standing authorization. It has
+no Taylor sign-in/review inbox/case-specific approve-or-reject workflow. This is
+missing implementation, not merely a hidden link or a pending test.
 
-### 2. Durable closed loop — complete
+The next finance increment must make the planner-to-finance handoff visible,
+enforce the independent identity and role, bind the review to the exact analysis
+and response, record the outcome, and return meaningful status to the planner.
+Review and verify that journey separately from Alex's final Decision. Any new
+tenant permission or role change remains an explicit approval boundary.
 
-Tasks 5–9 implemented the local application lifecycle.
+### 2. Teams source opening and session behavior
 
-- Explicit runtime configuration and persistence ports
-- Durable, append-only, idempotent Decisions
-- Transactional outbox and exactly five bounded Execution Actions
-- Execution-attempt history and deterministic Simulated Execution
-- Decision-linked Outcome Observations
-- Closed-loop FastAPI application service
+The user previously opened the exact Quality post, but later reported that the
+link did not use the already-open Teams app and that the browser looped through
+authentication. The UX/reporting release did not fix or certify this behavior.
 
-### 3. Fallback decision experience — complete
+Reproduce the actual browser-to-Teams handoff as Alex, distinguish link correctness
+from desktop association and browser authentication, and verify a usable presenter
+path to the exact Jordan-authored post. Do not infer success from the source URL
+or a provisioned Teams identity alone.
 
-Tasks 10–11 delivered and proved the local decision experience.
+### 3. Finish live approval and downstream acceptance
 
-- Progressive React Case workspace
-- Evidence, exposure, option, recommendation, and approval views
-- Immutable Decision receipt
-- Action, playback, observation, and variance views
-- Explicit fallback and simulation labeling
-- Full Python, Vitest, production-build, and Playwright fallback gate
+Retain the existing fail-closed policy and immutable lineage while verifying:
 
-### 4. Fabric and Power BI — live SQL and Power BI publication validated
+- Independently satisfied Quality and Finance prerequisites and Alex's final
+  approval/rejection against the intended Analysis Version.
+- The approved Decision, its five linked bounded actions, and ten permanently
+  labeled simulated observations.
+- Populated Power BI Decision/action/outcome parity for that same case.
+- Within-case analysis-version history, optional Foundry explanation invocation
+  and evaluation, and live/fallback recovery.
+- Privacy, failure, retry, citation, timing and narrated rehearsal gates from the
+  controlling contract. Do not claim the 90-second analysis or five-minute
+  workflow targets without measurement.
 
-Tasks 12–13 implemented the live persistence and reporting artifacts. The dedicated
-Fabric SQL setup and Power BI publication were completed under approval-gated live
-checks.
+### 4. Presenter usability follow-through
 
-Completed locally:
+- Power BI DirectQuery charts can load noticeably later than row grids; profile
+  this before claiming a smooth timed presentation.
+- Browser automation did not expose a new tab after one target-blank click.
+  Exact emitted links were separately rendered and verified; automatic app/browser
+  handoff is not certified by that result.
+- The user requested a way to clean up unfamiliar test cases. No case deletion
+  or delete workflow shipped in this release. Resolve exact targets and choose a
+  recoverable cleanup design before removing data.
+- Rehearse the [traditional-versus-assisted walkthrough](demo/traditional-and-assisted-walkthrough.md)
+  using a known saved case; keep broad fictional context distinct from exact
+  supporting evidence and avoid unmeasured productivity claims.
 
-- Fabric SQL adapter using Entra tokens and explicit credential selection
-- Operational schema, schema-version health checks, and retry-safe deployment path
-- Decision-linked `analytics.case_command_center` and `analytics.action_outcomes` views
-- Two-page Power BI Project: **Command Center** and **Actions and Outcomes**
-- DirectQuery semantic model and deployment preflight
-- Offline Microsoft schema validation and semantic-model parsing
+## Controlling guidance and history
 
-Verified live:
+The [frozen demo contract](superpowers/specs/2026-08-30-supply-response-demo-contract-design.md)
+defines the original closed-loop acceptance. Later approved guidance controls
+the specific presenter and reporting corrections:
 
-- Dedicated `Supply Response Demo` workspace and `SupplyResponseDemo` SQL Database
-  discovered and bound exactly
-- Operational and analytics scripts applied twice without collisions; schema version
-  12 is live
-- Approval-gated live Fabric SQL integration test and health check passed
-- `SupplyResponse` semantic model and report published to the dedicated workspace
-- Fabric SQL OAuth2 data-source binding and live DAX query succeeded
-- Both required report pages rendered their empty state without visual errors
-- Canonical `RL-001-OPERATIONAL-V1` inserted once and exact repeat returned
-  `unchanged`; full stored metadata/JSON and production-adapter readback passed
-- Deployed app created a live showcase Case with the fixed Scenario Effective Time
+- [Planner experience delivery history](superpowers/plans/2026-09-08-planner-experience-delivery.md)
+- [Presenter header and three planning tabs](superpowers/specs/2026-09-12-presenter-header-and-stage-tabs-design.md)
+- [Recommendation explanation sheet](superpowers/specs/2026-09-12-recommendation-explanation-sheet-design.md)
+- [Traditional operational reporting correction](superpowers/specs/2026-09-12-traditional-operational-reporting-design.md)
+- [Traditional reporting implementation and reviews](superpowers/plans/2026-09-12-traditional-operational-reporting.md)
+- [Deployment and live acceptance proof](../.azure/deployment-plan.md)
+- [Prior Work IQ discovery result](deployment/workiq-discovery-integration-result.md)
 
-Still required:
-
-- Run the approval-gated populated Power BI live consistency test after application deployment
-- Verify refresh behavior, filters, and Decision ID parity against a live showcase case
-
-### 5. Identity, Work IQ, Foundry, and live composition — tenant prerequisites configured; invocation gates pending
-
-Tasks 14–17 implement the live case journey. Their local code and contract gates are complete; tenant-backed acceptance is not.
-
-Completed implementation and tenant setup:
-
-1. Implemented single-tenant Entra authentication and bound the stable Demo Personas:
-   - `RL-PERSONA-ALEX` — Alex Morgan, Material Planner and Response Approver
-   - `RL-PERSONA-JORDAN` — Jordan Lee, Quality Approver
-   - `RL-PERSONA-TAYLOR` — Taylor Brooks, Finance Approver
-2. Implemented cited supplier and Quality retrieval through Work IQ MCP, including bounded delegated OBO, structured email and named Team/channel discovery, individual discovered-message reads, strict source binding, actual-message evidence, and citation validation. This is structured discovery, not semantic `ask` search. Graph-backed resources remain behind Work IQ; the application has no direct Graph fallback. Revision19 fresh Alex analysis verifies both source links and an enabled approval gate.
-3. Implemented Foundry Agent Service and Microsoft Agent Framework orchestration while deterministic services retain decision authority. The three committed prompt-agent contracts are published and verified as immutable version `1` agents using `gpt-5.6-luna`.
-4. Implemented the complete live Detect → Analyze → Decide → Execute → Observe composition with fail-closed readiness and Decision-linked lineage.
-5. Created the fictional Work IQ Demo Corpus, verified the supplier email in Alex's mailbox and the Jordan-authored Quality post in Teams, and recorded their deployment-specific source and identity/location bindings. The reviewed v2 receipt was regenerated and deployed with revision 14.
-
-Still required:
-
-- Retain the verified discovery, individual-read, validation, and citation-navigation behavior in subsequent releases; source IDs remain validation-only, never fallback fetch inputs.
-- Invoke and evaluate the published Foundry agents through a separately approved live gate.
-- Complete populated Power BI parity after an approved live Decision.
-- Complete the remaining persona, Decision and downstream live browser checks. Alex analysis and user-confirmed Work IQ citation navigation have passed.
-
-Exit conditions include authenticated Alex approval/rejection, independently satisfied Quality and Finance prerequisites, navigable citations, and Decision-linked downstream work.
-
-### 6. Deployment and release hardening — Azure application deployed; acceptance pending
-
-Tasks 18–19 deploy the runtime to the personal tenant and prove the final contract. Revision20 is healthy with clearer citation labels and unchanged Azure roles. Live Fabric-backed Case creation and Alex-authenticated analysis passed on revision19, followed by user-confirmed source-link navigation. The downstream acceptance journey remains.
-
-- Provision the Azure application resources and configure deployment-specific bindings
-- Deploy the API and web console, then connect them to the verified Fabric, Work IQ, Foundry, Entra, and Power BI prerequisites
-- Verify live/fallback contract parity without mixing provenance
-- Prove evidence conflict, staleness, citation, retry, and failure behavior
-- Verify Demo Corpus privacy and the absence of real business data
-- Meet the 90-second live-analysis target
-- Complete the five core workflows within five minutes
-- Rehearse a seven-to-ten-minute narrated demonstration
-- Run both live and fallback recovery rehearsals
-
-Final completion requires all 20 frozen acceptance criteria to pass. Local implementation alone is not sufficient for live-demo acceptance.
-
-### Remaining deployment and acceptance gates
-
-The Entra, Foundry, Fabric SQL, Work IQ Demo Corpus, and Power BI prerequisites
-are configured and recorded in deployment-local storage. The remaining gates are:
-
-1. Verify the pinned Foundry invocation/explanation separately; preserved deterministic analysis is not proof of optional explanation success.
-2. Record the approved Decision, verify five linked actions and ten simulated observations.
-3. Verify Power BI refresh, filters, and Decision-ID parity for that same Case.
-
-The reviewed loader update passed full Python regression, 51 web tests, package
-and web builds, and scoped lint/type checks. Existing repository-wide static-check
-debt remains (82 Ruff findings and 47 Pyright errors in unchanged files), plus a
-third-party Starlette deprecation warning; these are not reported as clean gates.
-
-## Task-level status
-
-| Task | Deliverable | Status |
-|---:|---|---|
-| 0 | Commit the frozen contract package | Complete |
-| 1 | Canonical domain contracts and RL-001 template | Complete |
-| 2 | Deterministic evaluation of every RL-001 Response Option | Complete |
-| 3 | Evidence, approval, and analysis-version policy | Complete |
-| 4 | Ranking and all ten evaluation cases | Complete |
-| 5 | Runtime configuration and persistence ports | Complete |
-| 6 | Immutable Decisions and transactional outbox | Complete |
-| 7 | Exactly five actions and attempt history | Complete |
-| 8 | Simulated Execution and Outcome Observations | Complete |
-| 9 | Closed-loop application service | Complete |
-| 10 | Progressive Case workspace | Complete |
-| 11 | Complete fallback browser journey | Complete |
-| 12 | Fabric SQL adapter and analytics views | Complete; live Fabric SQL setup, schema, idempotency, and health checks passed |
-| 13 | Two-page Power BI project | Published; OAuth2 binding, DAX smoke query, and empty-state live render passed; populated parity pending |
-| 14 | Single-tenant Entra authentication and persona roles | Tenant configuration and normal Alex-authenticated analysis verified; other persona/approval gates remain |
-| 15 | Cited Microsoft 365 evidence through Work IQ | Discovery, reads, validation, both displayed source links and enabled approval verified; user confirmed navigation to both messages |
-| 16 | Foundry-managed Agent Framework orchestration | Complete locally; three Luna agents published and verified; invocation/evaluation pending |
-| 17 | Complete live Case journey | Live Case creation and Alex-authenticated analysis passed; Decision/execution/observation and Power BI parity pending |
-| 18 | Personal-tenant provisioning and deployment | Revision20 healthy with clearer labels and unchanged roles; live readiness and delegated analysis accepted on revision19 |
-| 19 | Privacy, parity, failure, timing, and rehearsal gates | Planned |
+The [original Tasks 0–19 plan](superpowers/plans/2026-08-30-supply-response-demo-implementation.md)
+and dated verification reports retain historical test counts and checkpoints.
+An old “pending” statement is not current release status; conversely, a newer UX
+release does not certify unrelated downstream gates.
 
 ## Backlog outside active acceptance
 
-### Foundry IQ institutional knowledge
+**Foundry IQ institutional knowledge:** SOPs, policies, supplier-risk assessments
+and continuity playbooks require a separate design covering permissions,
+freshness, retrieval, cost and typed constraints. No new infrastructure or
+acceptance criterion is implied by this backlog.
 
-A future increment may retrieve SOPs, Supply and Quality policies, supplier-risk assessments, and continuity playbooks through a permission-aware cited knowledge base. This requires its own design review covering Azure AI Search, permissions, freshness, preview status, cost, typed constraint production, and fallback fixtures.
-
-No Foundry IQ adapter, infrastructure, or acceptance criterion belongs in the active milestones until that increment is separately designed and approved.
-
-### Optional Power BI expansion
-
-Dedicated Exposure and Response Option Comparison pages may be considered after the two required pages pass live acceptance. The web decision console remains authoritative for case-level investigation and interaction.
-
-### Non-blocking scale target
-
-The original scale targets remain performance fixtures rather than correctness gates: 250 suppliers, 10,000 parts, 100,000 BOM relationships, multiple plants, 50,000 open customer-order lines, and twelve months of history.
+**Scale fixtures:** 250 suppliers, 10,000 parts, 100,000 BOM relationships, multiple
+plants, 50,000 open customer-order lines and twelve months of history remain
+future performance fixtures—not claims about the 178-record reporting dataset.
 
 ## Definition of done
 
-The project is ready for the final live demonstration only when:
-
-- All frozen acceptance criteria pass.
-- Runtime provenance remains immutable and visible.
-- Live Work IQ, Fabric, Foundry, Entra, and Power BI paths are verified.
-- Fallback remains explicit and cannot be mistaken for live success.
-- Every approved Decision is durable and every downstream action and observation references it.
-- No external supplier communication, purchase-order change, or financial commitment can occur.
-- The Demo Corpus and deployed persona bindings pass the privacy review.
+A final end-to-end live demonstration requires all applicable acceptance gates:
+verified service paths and independent human approvals; immutable runtime/source
+provenance; durable Decision-linked actions and observations; explicit simulation
+and fallback labels; privacy review; and actual presentation/recovery rehearsal.
+No external supplier communication, purchase-order change or financial commitment
+is authorized by the demonstration. A healthy deployment alone is not completion.

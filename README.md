@@ -4,13 +4,35 @@ Supply Response is a decision-support demonstration for managing a fictional sup
 
 The project combines a deterministic supply-response core with a FastAPI application, a React decision console, durable SQLite or Fabric SQL persistence, and a Power BI project. Microsoft 365 and Azure integrations are added through explicit adapters so the complete live demonstration can use Work IQ, Microsoft Fabric, Microsoft Foundry, Microsoft Agent Framework, Entra ID, and Power BI without coupling the business logic to those services.
 
-> **Current status (2026-09-08 UTC):** Revision20 deploys clearer **Open supplier email** and **Open Quality Teams post** labels, verified in the published app bundle. Revision19's fresh Alex analysis displayed both citations and enabled approval; the user subsequently confirmed both links open the intended messages. No Decision was approved or actions executed; downstream acceptance remains. See the [deployment result](docs/deployment/workiq-discovery-integration-result.md) and [roadmap](docs/ROADMAP.md).
+> **Deployed September 12, 2026:** [Open the demo](https://ca-sr-demo.orangehill-337f5d48.eastus2.azurecontainerapps.io/). Revision **ca-sr-demo--0000028** includes the presenter-focused header, three planning tabs, plain-language cards, bottom-of-card source details, email/Teams icons, USD formatting and recommendation explanation sheet. Power BI now has seven traditional tables/charts/filter pages and separate exact saved-data destinations from the cards. Native reporting checks and live website checks passed; see the [release evidence](docs/reviews/2026-09-12-traditional-reporting-verification.md).
 
-> **Unreleased planner redesign:** The `codex/planner-experience` branch adds a supplier-delay-first investigation, plain-language cards, bottom-of-card source status, and exact saved-record inspection. Eight focused Power BI pages, their saved-analysis projections, and a [traditional-versus-assisted walkthrough](docs/demo/traditional-and-assisted-walkthrough.md) are implemented locally; coordinated publication and native report acceptance are still required. The current live report has not been replaced. See the [delivery checkpoints](docs/superpowers/plans/2026-09-08-planner-experience-delivery.md).
+> **Not yet a completed end-to-end live demo:** Taylor's separate Finance Approver identity is provisioned, but an interactive Taylor sign-in/review/approval workflow is not implemented. The current app uses a predefined standing authorization. Teams app handoff/browser authentication remains an open issue, and live approval, execution and outcome acceptance remain separate. See the [roadmap](docs/ROADMAP.md).
+
+## Presenting the comparison
+
+Reopen a known analyzed case for a repeatable walkthrough; create a showcase case
+when deliberately demonstrating a fresh case and analysis. Reopening saved work
+does not retrieve sources again or approve a response.
+
+- **Explore in Power BI** starts a traditional investigation across 178 fictional
+  operational records: inventory, deliveries, transfers, qualification, production
+  demand and customer orders. The presenter uses rows, charts and filters to reason
+  through the disruption.
+- **Review with AI assistance** organizes the case into **Understand the disruption**,
+  **Investigate responses**, and **Make the decision**. Authoritative calculations
+  and recommendation ranking remain deterministic.
+- **A card's supporting-data link** opens the exact saved records used by that
+  analysis—not the broad dataset or an unrelated case count. The inventory view
+  reconciles 4,500 on hand − 200 held − 300 protected = 4,000 available components.
+
+Follow the [traditional-versus-assisted presenter walkthrough](docs/demo/traditional-and-assisted-walkthrough.md).
+Real services host fictional data. A saved snapshot, successful source check or
+working citation is not proof of a fresh retrieval during the presentation.
 
 ## What the demo shows
 
-The canonical `RL-001` Demo Template follows one closed-loop story:
+The canonical `RL-001` Demo Template targets the following closed-loop story.
+The downstream steps are implemented locally but are not all accepted in the live tenant:
 
 1. **Detect** — retrieve and structure a fictional supplier signal with source evidence.
 2. **Analyze** — calculate inventory, production, customer, revenue, margin, and OTIF exposure deterministically.
@@ -18,7 +40,9 @@ The canonical `RL-001` Demo Template follows one closed-loop story:
 4. **Execute** — preserve the immutable Decision, create five bounded Execution Actions, and explicitly start visibly labeled Simulated Execution.
 5. **Observe** — append Simulated Observations and compare predicted and observed results in the web console and, in live mode, Power BI.
 
-All personas, organizations, supplier records, communications, orders, and outcomes are fictional and use the `RL-` namespace.
+Business personas, suppliers, communications, orders and outcomes are fictional.
+Canonical scenario identities use `RL-`; the wider reporting context also uses
+explicitly fictional `RPT-` identities.
 
 ## Architecture
 
@@ -39,7 +63,10 @@ flowchart LR
     OUTBOX --> ACTIONS[Bounded Execution Actions]
     ACTIONS --> OUTCOMES[Outcome Observations]
     OUTCOMES --> WEB
-    DECISION --> PBI[Power BI command center]
+    ANALYSIS --> SAVED[Exact saved supporting records]
+    SAVED --> PBI[Power BI supporting-data pages]
+    REPORTING[Fictional operational reporting snapshot] --> TRAD[Traditional Power BI tables and charts]
+    DECISION --> PBI
     OUTCOMES --> PBI
 ```
 
@@ -53,16 +80,16 @@ The Decision is the immutable pivot between analysis and downstream activity. Au
 - Append-only, idempotent Decisions and transactional outbox processing.
 - Exactly five bounded Execution Actions with durable attempt history.
 - Explicit, idempotent Simulated Execution with permanently labeled observations.
-- Progressive React case workspace for evidence, exposure, options, Decisions, execution, and outcomes.
+- Presenter-focused React workspace with three planning tabs, source links/icons, bottom-of-card provenance, whole-dollar USD totals, two-decimal unit prices and an accessible recommendation explanation sheet.
 - Durable fallback persistence through SQLite and a complete browser end-to-end gate.
 - Opt-in Fabric SQL persistence, Entra token authentication, schema health checks, and read-only analytics views.
 - Guarded, insert-only canonical RL-001 source loading with full stored-data readback and timezone-preserving SQL binding. Live retrieval freshness is separate from fictional business dates, so the corpus does not require daily regeneration. See the [loader procedure](docs/deployment/personal-tenant.md#load-the-canonical-rl-001-operational-source).
-- A published two-page Power BI project for **Command Center** and **Actions and Outcomes**, with its Fabric SQL OAuth2 binding, DAX access, and empty-state rendering verified live.
-- Single-tenant Entra authentication, strict persona authorization, deployment manifests, and idempotent tenant-configuration tooling. The target-tenant registrations, consent grants, and Alex/Jordan/Taylor role assignments are verified.
-- A delegated Work IQ OBO client and bounded MCP integration with strict source-statement validation. A narrow email query and named Team/channel lookup through Work IQ entity tools are followed by individual message reads. This is structured discovery, not Copilot semantic search. Microsoft Graph backs Work IQ resource paths; the application has no direct Graph client. Configured message IDs remain validation checks, never lookup inputs or fallback fetch targets. Both sources passed application-authenticated discovery/read/validation; revision19 additionally verified both displayed citation targets and an enabled approval gate. The user confirmed both links open the intended messages in Teams/Outlook.
+- A published DirectQuery Power BI project with seven broad traditional pages and eight exact saved-context pages. The isolated reporting dataset contains 178 records without changing saved analyses or the canonical operational source. Native tables/charts/filter checks, current/older saved inventory and order parity, and mismatched-identity safeguards passed. Artifact-bound acceptance enables the website links; populated execution outcomes remain unverified.
+- Single-tenant Entra authentication, deployment manifests and idempotent tenant-configuration tooling. Target-tenant registrations, consent grants and Alex/Jordan/Taylor role assignments are verified. The deployed application currently binds interactive sign-in to Alex only; provisioning Taylor is not a completed finance approval workflow.
+- A delegated Work IQ OBO client and bounded MCP integration with strict source-statement validation. A narrow email query and named Team/channel lookup through Work IQ entity tools are followed by individual message reads. This is structured discovery, not Copilot semantic search. Microsoft Graph backs Work IQ resource paths; the application has no direct Graph client. Configured message IDs remain validation checks, never lookup inputs or fallback fetch targets. Prior live analysis verified both sources and the user opened the intended messages; the later Teams handoff/authentication-loop report remains unresolved. The September 12 UX release reopened saved evidence and did not repeat discovery.
 - Microsoft Agent Framework orchestration that preserves deterministic decision authority, plus fail-closed Foundry publication and verification tooling.
 - Three immutable Foundry prompt agents—signal, context, and decision—published as version `1` and verified against their committed contracts on `gpt-5.6-luna`.
-- Personal-tenant Azure infrastructure deployed in East US 2 through the approval-gated workflow. The updated immutable Container App revision, exact ACR/Key Vault/Foundry roles, Fabric-backed live readiness, live Case creation, and delegated analysis are verified; downstream acceptance gates remain.
+- Personal-tenant Azure infrastructure deployed in East US 2 through the guarded workflow. Revision28 is healthy with verified reporting activation, unchanged resource-scoped roles and unchanged scale. Prior live Case creation and delegated analysis are recorded separately from this release's saved-case UI checks.
 
 Live Microsoft service integration is not yet complete. Published or configured cloud prerequisites do not count as live acceptance until their approval-gated invocation, data, browser, and cross-service consistency gates pass. The [roadmap](docs/ROADMAP.md) records the verified boundary between implemented, configured, and pending work.
 
@@ -169,7 +196,10 @@ Cloud deployment and live tests are intentionally approval-gated because they au
 ## Project documentation
 
 - [Frozen demo contract](docs/superpowers/specs/2026-08-30-supply-response-demo-contract-design.md) — controlling product scope and acceptance criteria
-- [Implementation plan](docs/superpowers/plans/2026-08-30-supply-response-demo-implementation.md) — Tasks 0–19
+- [Original implementation plan](docs/superpowers/plans/2026-08-30-supply-response-demo-implementation.md) — Tasks 0–19
+- [Approved traditional reporting correction](docs/superpowers/specs/2026-09-12-traditional-operational-reporting-design.md) — traditional investigation versus exact supporting-data links
+- [Presenter header and planning tabs](docs/superpowers/specs/2026-09-12-presenter-header-and-stage-tabs-design.md)
+- [Recommendation explanation sheet](docs/superpowers/specs/2026-09-12-recommendation-explanation-sheet-design.md)
 - [Roadmap and current status](docs/ROADMAP.md)
 - [Canonical domain language](CONTEXT.md)
 - [Architecture decisions](docs/adr/)

@@ -20,6 +20,30 @@ _Avoid_: Demo Template, resettable run
 An immutable assessment of a Disruption Case at a particular point in its evidence and operational state.
 _Avoid_: Analysis run, current analysis
 
+**Saved Supporting Records**:
+The operational records captured for a particular Analysis Version and used to substantiate its quantities, dates and calculated impacts. Broader or newer records are not substitutes for these records.
+_Avoid_: Current inventory, latest data, unrelated case summary
+
+**Traditional Investigation**:
+A planner's examination of operational rows, charts and filters to connect supplier deliveries, inventory, production demand, customer exposure and response possibilities.
+_Avoid_: AI answer dashboard, recommendation walkthrough
+
+**Operational Reporting Snapshot**:
+A fixed collection of fictional operational records providing wider business context for Traditional Investigation. It is distinct from the Saved Supporting Records of an individual Analysis Version.
+_Avoid_: Live ERP feed, historical analysis evidence
+
+**AI-Assisted Review**:
+A planner's review of the disruption, cited communications, operational evidence, calculated impacts and response choices brought together for a Disruption Case. Assistance does not transfer calculation or approval authority to the AI.
+_Avoid_: Autonomous decision, automatic approval
+
+**Current Supplier — RL-Supplier Alpha**:
+The fictional supplier whose disrupted delivery initiates the canonical RL-001 case and who proposes a partial shipment.
+_Avoid_: Alpha without a supplier label, person
+
+**Alternate Supplier — RL-Supplier Beta**:
+The fictional alternative supplier whose qualification must be checked before its proposed supply can be used.
+_Avoid_: Beta without a supplier label, person, approved supplier
+
 **Response Option**:
 An evaluated alternative that Alex may select when making a Decision.
 _Avoid_: Scenario, selected action, response action
@@ -48,6 +72,10 @@ _Avoid_: Partially protected order, allocated order
 A policy that evaluates Response Options through an ordered series of comparators, retaining options within each comparator's materiality threshold before evaluating the next comparator.
 _Avoid_: Weighted score, pairwise tolerance ranking
 
+**Recommended for Review**:
+A Response Option retained by the planning policy recorded for an Analysis Version and presented for human consideration. Its recommendation is neither approval nor evidence of execution, and predicted benefits remain predictions.
+_Avoid_: AI-approved response, executed response, guaranteed outcome
+
 **Analysis Horizon**:
 The fixed period from a disruption's effective date through the latest due date among the affected production and customer orders assessed in an Analysis Version.
 _Avoid_: Rolling window, scenario horizon
@@ -55,6 +83,10 @@ _Avoid_: Rolling window, scenario horizon
 **Scenario Effective Time**:
 The visible business time at which a Demo Corpus case is evaluated. It is distinct from the wall-clock time when sources are retrieved.
 _Avoid_: Current time, retrieval time
+
+**Evidence Retrieval Time**:
+The wall-clock time a source was retrieved for an Analysis Version. Reopening that analysis does not make the retrieval new or establish when every underlying operational record was last updated.
+_Avoid_: Scenario date, current freshness, last ERP update
 
 **Evidence Item**:
 A source-backed operational fact, source statement, Prerequisite Approval, or contextual item used to understand a Disruption Case.
