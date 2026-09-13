@@ -69,7 +69,7 @@ table SavedOptions
     dataType: decimal
     sourceColumn: revenue_at_risk
     summarizeBy: none
-    formatString: #,0.00
+    formatString: $#,0
 
   column margin_at_risk
     dataType: decimal
@@ -81,7 +81,7 @@ table SavedOptions
     dataType: decimal
     sourceColumn: response_cost
     summarizeBy: none
-    formatString: #,0.00
+    formatString: $#,0
 
   column blockers_text
     dataType: string

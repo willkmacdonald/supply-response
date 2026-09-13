@@ -262,6 +262,18 @@ def test_option_money_displays_are_usd_whole_dollars():
         expression = measures[name].expression
         assert 'FORMAT(V, "$#,0")' in expression
         assert "currency not specified" not in expression
+    assert report_model.column_format("SavedOptions", "revenue_at_risk") == "$#,0"
+    assert report_model.column_format("SavedOptions", "response_cost") == "$#,0"
+    assert measures["Option Revenue"].format_string == "$#,0"
+    assert measures["Option Response Cost"].format_string == "$#,0"
+    table = report_pages.artifacts()[
+        "pages/response-options/visuals/option-comparison/visual.json"
+    ]
+    refs = {
+        item["queryRef"]
+        for item in table["visual"]["query"]["queryState"]["Values"]["projections"]
+    }
+    assert {"SavedOptions.revenue_at_risk", "SavedOptions.response_cost"} <= refs
 
 
 def test_native_tom_validator_requires_the_explicit_six_table_contract():

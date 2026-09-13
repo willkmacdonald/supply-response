@@ -248,6 +248,8 @@ DATE_ONLY = {
 
 def column_format(table, name):
     kind = TYPES[table][name]
+    if table == SO and name in {"response_cost", "revenue_at_risk"}:
+        return "$#,0"
     if table == SR and name in {"line_revenue", "customer_revenue", "customer_margin"}:
         return "$#,0"
     if table == SR and name in {
@@ -951,7 +953,7 @@ def measures():
             )
             + "))",
             "decimal",
-            "#,0.00",
+            "$#,0",
         )
     for field in (
         "option_display_name",

@@ -929,7 +929,8 @@ def test_formats_preserve_dates_utc_zero_and_literal_m_escapes():
         report_model.column_format("SavedRecords", "retrieved_at")
         == 'MMM d, yyyy HH:mm "UTC"'
     )
-    assert report_model.column_format("SavedOptions", "response_cost") == "#,0.00"
+    assert report_model.column_format("SavedOptions", "response_cost") == "$#,0"
+    assert report_model.column_format("SavedOptions", "revenue_at_risk") == "$#,0"
     assert report_model.column_format("SavedOptions", "otif_loss_percentage") == '0"%"'
     assert report_model.m_string('#(lf)\n"quoted"') == '"#(#)(lf)#(lf)""quoted"""'
     cc = report_model.measures()["CaseCommandCenter"]

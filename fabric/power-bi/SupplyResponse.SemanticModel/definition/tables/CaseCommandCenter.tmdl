@@ -845,13 +845,13 @@ table CaseCommandCenter
       IF([Option Row Visible] == 1,(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Selected Analysis Key]
       RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[revenue_at_risk])), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key]))))))
-    formatString: #,0.00
+    formatString: $#,0
 
   measure 'Option Response Cost' =
       IF([Option Row Visible] == 1,(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Selected Analysis Key]
       RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedOptions) == 1,SELECTEDVALUE(SavedOptions[response_cost])), KEEPFILTERS(TREATAS({ScopeCase}, SavedOptions[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedOptions[analysis_key]))))))
-    formatString: #,0.00
+    formatString: $#,0
 
   measure 'Selected Option option_display_name' =
       IF(NOT ISBLANK([Selected Option Key]),(VAR ScopeCase = [Selected Case Key]
