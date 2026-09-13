@@ -230,6 +230,30 @@ def test_only_exact_independent_taylor_identity_can_resolve(
         )
 
 
+def test_equivalent_object_uuid_spelling_cannot_bypass_independent_reviewer_rule():
+    with pytest.raises(FinanceReviewViolation, match="different person"):
+        resolve_finance_review(
+            review=pending_review(),
+            current_proposal=proposal(),
+            actor=actor("TAYLOR", object_id="aaaaaaaaaaaa4aaa8aaaaaaaaaaaaaaa"),
+            approved=True,
+            reason=None,
+            now=NOW + timedelta(seconds=1),
+        )
+
+
+def test_equivalent_tenant_uuid_spelling_is_accepted():
+    approved = resolve_finance_review(
+        review=pending_review(),
+        current_proposal=proposal(),
+        actor=actor("TAYLOR", tenant_id="{11111111-1111-4111-8111-111111111111}"),
+        approved=True,
+        reason=None,
+        now=NOW + timedelta(seconds=1),
+    )
+    assert approved.status is FinanceReviewStatus.APPROVED
+
+
 def test_naive_and_backwards_transition_times_are_rejected():
     with pytest.raises(FinanceReviewViolation):
         submit_finance_review(

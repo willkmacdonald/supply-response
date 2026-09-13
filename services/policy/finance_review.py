@@ -16,16 +16,16 @@ def _require_aware(now: datetime) -> None:
         raise FinanceReviewViolation("Timestamp must be timezone-aware")
 
 
-def _require_uuid(value: str | None, label: str) -> None:
+def _require_uuid(value: str | None, label: str) -> UUID:
     try:
-        UUID(value or "")
+        return UUID(value or "")
     except ValueError as exc:
         raise FinanceReviewViolation(f"{label} must be a valid UUID") from exc
 
 
 def _require_actor(
     actor: IdentitySnapshot, *, persona: str, source: str, roles: tuple[str, ...]
-) -> None:
+) -> tuple[UUID, UUID]:
     if (
         actor.persona_id != persona
         or actor.source_id != source
@@ -35,8 +35,10 @@ def _require_actor(
         raise FinanceReviewViolation(
             "Actor is not authorized for this Finance transition"
         )
-    _require_uuid(actor.tenant_id, "tenant_id")
-    _require_uuid(actor.object_id, "object_id")
+    return (
+        _require_uuid(actor.tenant_id, "tenant_id"),
+        _require_uuid(actor.object_id, "object_id"),
+    )
 
 
 def submit_finance_review(
@@ -72,15 +74,21 @@ def resolve_finance_review(
     now: datetime,
 ) -> FinanceReview:
     _require_aware(now)
-    _require_actor(
+    reviewer_tenant, reviewer_object = _require_actor(
         actor,
         persona="RL-PERSONA-TAYLOR",
         source="RL-ENTRA-TAYLOR",
         roles=("finance_approver",),
     )
-    if actor.tenant_id != review.submitted_by.tenant_id:
+    submitter_tenant = _require_uuid(
+        review.submitted_by.tenant_id, "submitter tenant_id"
+    )
+    submitter_object = _require_uuid(
+        review.submitted_by.object_id, "submitter object_id"
+    )
+    if reviewer_tenant != submitter_tenant:
         raise FinanceReviewViolation("Finance reviewer must share the submitter tenant")
-    if actor.object_id == review.submitted_by.object_id:
+    if reviewer_object == submitter_object:
         raise FinanceReviewViolation("Finance reviewer must be a different person")
     if review.status is not FinanceReviewStatus.PENDING:
         raise FinanceReviewViolation("Only a pending review can be resolved")
