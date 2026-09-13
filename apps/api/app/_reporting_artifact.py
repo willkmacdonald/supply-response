@@ -2,5 +2,5 @@
 # This identifies local artifacts, not a deployed or available report.
 REPORTING_CONTRACT = "saved-analysis-v1"
 REPORTING_ARTIFACT_SHA256 = (
-    "fabf4860f00af21c53030a48c119b632e2ed567b4d594fe784c72ec9b8373190"
+    "198ea01a8fc25a999355b730c92e843f6dc565e645c8ef571e6ab403b9b177c0"
 )

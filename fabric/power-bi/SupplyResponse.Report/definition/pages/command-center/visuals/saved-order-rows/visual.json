@@ -155,6 +155,21 @@
                       "Entity": "SavedRecords"
                     }
                   },
+                  "Property": "source_record_id"
+                }
+              },
+              "queryRef": "SavedRecords.source_record_id",
+              "nativeQueryRef": "source_record_id",
+              "displayName": "Order line"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "SavedRecords"
+                    }
+                  },
                   "Property": "customer_order_id"
                 }
               },

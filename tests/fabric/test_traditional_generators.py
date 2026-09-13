@@ -341,6 +341,16 @@ def test_saved_order_chart_uses_row_scoped_revenue():
     assert category["queryRef"] == "SavedRecords.source_record_id"
 
 
+def test_saved_overview_leads_orders_with_canonical_line_identity():
+    table = report_pages.artifacts()[
+        "pages/command-center/visuals/saved-order-rows/visual.json"
+    ]
+    projections = table["visual"]["query"]["queryState"]["Values"]["projections"]
+    assert projections[0]["queryRef"] == "SavedRecords.source_record_id"
+    assert projections[0]["displayName"] == "Order line"
+    assert projections[1]["queryRef"] == "SavedRecords.customer_order_id"
+
+
 def test_saved_numeric_guards_normalize_empty_countblank_only():
     measures = report_model.measures()["CaseCommandCenter"]
     guarded = (

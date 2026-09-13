@@ -684,24 +684,26 @@ def overview():
             (24, 164, 608, 388),
         )
     )
-    items.append(
-        table(
-            "saved-order-rows",
-            "Saved customer-order contributing rows",
-            SR,
-            (
-                "customer_order_id",
-                "product_id",
-                "part_id",
-                "plant_id",
-                "quantity",
-                "due_date",
-                "line_revenue",
-            ),
-            "Order Row Visible",
-            (648, 164, 608, 388),
-        )
+    order_rows = table(
+        "saved-order-rows",
+        "Saved customer-order contributing rows",
+        SR,
+        (
+            "customer_order_id",
+            "product_id",
+            "part_id",
+            "plant_id",
+            "quantity",
+            "due_date",
+            "line_revenue",
+        ),
+        "Order Row Visible",
+        (648, 164, 608, 388),
     )
+    order_rows["visual"]["query"]["queryState"]["Values"]["projections"].insert(
+        0, projection("Column", SR, "source_record_id", "Order line")
+    )
+    items.append(order_rows)
     return "Saved case snapshot", items, None
 
 
