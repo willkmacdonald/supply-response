@@ -87,11 +87,47 @@ historical Case, Analysis and Decision raw payloads and hashes across upgrade
 and downgrade. Parent rerun: 239 domain/auth/persistence tests passed in 16.48s;
 the original disposable-database cost reproduction is now correctly rejected.
 Independent re-review: spec compliant and quality approved, no remaining
-findings. Concurrent-writer tests remain a separate increment in progress.
+findings.
+
+Concurrent-writer increment: `8250316`, corrected by `cba711a`. Three portable
+two-connection tests force both writers to read pending revision 1 before either
+can append. They verify a single winner for competing decisions, exact replay
+for identical requests, conflict for reused keys with different requests, and
+exactly two persisted rows without losing-transaction residue. Review identified
+an unbounded test barrier; the correction adds a five-second timeout and leaves
+synchronization failure visible. Independent re-review: spec compliant and
+quality approved. Parent final focused run: 3 passed, 22 deselected in 0.30s.
+Implementer non-live regression: 117 passed, 12 deselected; Ruff and Pyright clean.
+Native Fabric contention remains unverified and requires its separate gate.
+
+## Explicit case policy — locally accepted
+
+Commit `f449d7f` adds an opt-in independent Finance policy. Existing case-creation
+routes remain on the legacy policy until authenticated Finance integration is
+ready. New-policy analysis excludes Taylor's standing authorization and retains
+other prerequisites. Persistence rejects mismatched case/projection/analysis
+policies, including attempts to inject legacy Finance evidence into new cases.
+
+The parent froze full legacy Case, projection, Analysis, ApprovalTarget, Decision,
+command and operational snapshot JSON before model changes. Nineteen new tests
+verify exact serialization, nested nulls, unchanged hashes, actual recomputation,
+negative policy cases and reopening records from a migration-created database.
+Independent reviewer confirmed the golden fixture matches the original patch.
+Spec and quality review: approved, no Critical or Important findings. Parent
+confirmed save/get provenance call sites as the review's cross-hunk check.
+
+Final parent regression on the committed snapshot: 290 passed, 12 deselected in
+4.57s. Existing Starlette/httpx deprecation warning remains. Unfiltered scoped
+Ruff reports inherited FURB157/UP047 findings; the run excluding those two rules
+passes and Pyright reports no errors. The global commit hook attempted unrelated
+Decimal rewrites and then blocked on the existing generic-style finding. Those
+rewrites were reverted; the implementer disclosed using the hook bypass after
+manual checks. Original Decimal spelling and canonical values remain unchanged.
+These baseline tooling issues are tracked separately, not claimed fixed.
 
 ## Remaining gates
 
-1. Durable append-only Finance review, idempotency and concurrency.
+1. Native database acceptance for the locally tested durable Finance review log.
 2. Versioned new-case policy, independent Taylor authentication and API access,
    current-proposal checks, and final Alex Decision enforcement.
 3. Finance cross-session UI integration and final five-stage workflow verification.
