@@ -85,8 +85,7 @@ export function buildTraditionalReportUrl(
   const base = buildReportUrl(runtime, { ...target, page: "command-center" });
   if (!base || !usableIdentity(target.analysisId)) return null;
   const url = new URL(base);
-  const filter = url.searchParams.get("filter");
-  if (!filter) return null;
-  url.searchParams.set("filter", filter + " and CaseCommandCenter/walkthrough_route eq 'traditional'");
+  url.pathname = url.pathname.slice(0, -"/command-center".length) + "/operations-overview";
+  url.searchParams.set("filter", "OperationalRecords/dataset_id eq 'TRADITIONAL-OPS-2026-09-V1'");
   return url.search.length <= 2000 ? url.href : null;
 }

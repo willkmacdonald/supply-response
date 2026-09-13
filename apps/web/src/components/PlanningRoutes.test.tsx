@@ -4,7 +4,6 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeStatus } from "../types";
-import { reportIdentityKey } from "../reporting/reportNavigation";
 import { PlanningRoutes } from "./PlanningRoutes";
 
 const runtime: RuntimeStatus = {
@@ -20,18 +19,19 @@ const props = { runtime, caseInstance, analysis };
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe("planning routes", () => {
-  it("names both routes and opens an exact unselected traditional context", () => {
+  it("distinguishes broad traditional reporting from exact analysis evidence", () => {
     render(<PlanningRoutes {...props} />);
     expect(screen.getByRole("navigation", { name: "Planning routes" })).toBeVisible();
     const report = screen.getByRole("link", { name: "Explore in Power BI" });
     expect(report).toHaveAttribute("target", "_blank");
     expect(report).toHaveAttribute("rel", "noopener noreferrer");
     const href = new URL(report.getAttribute("href")!);
-    expect(href.searchParams.get("filter")).toBe([
-      `CaseCommandCenter/case_key eq '${reportIdentityKey(caseInstance.case_id)}'`,
-      `SavedAnalyses/analysis_key eq '${reportIdentityKey(analysis.analysis_id)}'`,
-      "CaseCommandCenter/walkthrough_route eq 'traditional'",
-    ].join(" and "));
+    expect(href.pathname.endsWith("/operations-overview")).toBe(true);
+    expect(href.searchParams.get("filter")).toBe("OperationalRecords/dataset_id eq 'TRADITIONAL-OPS-2026-09-V1'");
+    expect(href.search).not.toMatch(/CaseCommandCenter|SavedAnalyses/);
+    expect(screen.getByText(/broad fictional operational reporting snapshot/i)).toBeVisible();
+    expect(screen.getByText(/exact evidence captured for this analysis/i)).toBeVisible();
+    expect(screen.queryByText(/Both routes use the same information/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review with AI assistance" }))
       .toHaveAttribute("href", "#assisted-review");
     expect(screen.getByText("Showing saved evidence; no new source retrieval is running.")).toBeVisible();

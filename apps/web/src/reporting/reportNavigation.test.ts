@@ -86,16 +86,14 @@ describe("exact report navigation", () => {
     expect(buildReportUrl(runtime, { ...shipment, caseId: "" })).toBeNull();
     expect(buildReportUrl(runtime, { ...shipment, analysisId: "" })).toBeNull();
   });
-  it("launches traditional mode without a record or option preselection", () => {
+  it("launches the broad traditional operations snapshot without saved case or analysis filters", () => {
     const result = new URL(buildTraditionalReportUrl(runtime, {
       caseId: "Case-A", analysisId: "Historical-A", runtimeMode: "live",
     })!);
-    expect(result.pathname.endsWith("/command-center")).toBe(true);
-    expect(result.searchParams.get("filter")).toBe([
-      `CaseCommandCenter/case_key eq '${reportIdentityKey("Case-A")}'`,
-      `SavedAnalyses/analysis_key eq '${reportIdentityKey("Historical-A")}'`,
-      "CaseCommandCenter/walkthrough_route eq 'traditional'",
-    ].join(" and "));
+    expect(result.pathname.endsWith("/operations-overview")).toBe(true);
+    expect(result.searchParams.get("filter")).toBe("OperationalRecords/dataset_id eq 'TRADITIONAL-OPS-2026-09-V1'");
+    expect(result.search).not.toContain("CaseCommandCenter");
+    expect(result.search).not.toContain("SavedAnalyses");
     expect(result.search).not.toContain("SavedRecords");
     expect(result.search).not.toContain("SavedOptions");
   });
@@ -103,9 +101,13 @@ describe("exact report navigation", () => {
     expect(buildTraditionalReportUrl(runtime, {
       caseId: "Case-A", analysisId: "", runtimeMode: "live",
     })).toBeNull();
+    expect(buildTraditionalReportUrl(runtime, {
+      caseId: "Case-A", analysisId: "Analysis-A", runtimeMode: "fallback",
+    })).toBeNull();
   });
   it.each([
     { ...runtime, deployment_contract: null },
+    { ...runtime, deployment_contract: { power_bi_reporting_contract: "old" } },
     { ...runtime, power_bi_available: false },
     { ...runtime, runtime_mode: "fallback" as const },
     { ...runtime, power_bi_url: "https://evil.example" },
