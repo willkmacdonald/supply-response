@@ -247,7 +247,7 @@ def _race_finance_appends(
                 synchronized_connections.append(id(repository._connection))
                 synchronize = True
         if synchronize:
-            barrier.wait()
+            barrier.wait(timeout=5)
         return result
 
     monkeypatch.setattr(
