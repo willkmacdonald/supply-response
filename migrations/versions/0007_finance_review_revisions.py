@@ -38,7 +38,8 @@ def upgrade() -> None:
             "idempotency_key", name="uq_finance_review_revisions_idempotency_key"
         ),
         sa.CheckConstraint(
-            "revision > 0", name="ck_finance_review_revisions_revision_positive"
+            "revision > 0",
+            name=op.f("ck_finance_review_revisions_revision_positive"),
         ),
         sa.ForeignKeyConstraint(
             ["case_id"],

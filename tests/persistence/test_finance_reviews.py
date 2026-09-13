@@ -5,21 +5,32 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, func, inspect, select, update
+from sqlalchemy import func, inspect, select, text, update
 from sqlalchemy.exc import IntegrityError
 
-from data.domain.decisions import IdentitySnapshot
+from data.domain import CaseStatus, RuntimeMode
+from data.domain.analysis import AnalysisVersion
+from data.domain.decisions import (
+    DecisionKind,
+    IdentitySnapshot,
+    RecordDecisionCommand,
+)
 from data.domain.evidence import IdentitySource
-from data.domain.finance import FinanceProposal, FinanceReviewStatus
+from data.domain.finance import FinanceProposal, FinanceReview, FinanceReviewStatus
+from services.decisions.service import DecisionService
 from services.persistence.finance_reviews import (
     FinanceReviewIdempotencyConflict,
     FinanceReviewRevisionConflict,
     SqlAlchemyFinanceReviewRepository,
     append_finance_review,
 )
-from services.persistence.sqlite import sqlite_store
-from services.persistence.store import PersistenceIntegrityError, RecordNotFound
-from services.persistence.tables import finance_review_revisions
+from services.persistence.sqlite import SqliteStore, build_sqlite_engine, sqlite_store
+from services.persistence.store import (
+    PersistenceIntegrityError,
+    RecordNotFound,
+    serialize_model,
+)
+from services.persistence.tables import analysis_versions, finance_review_revisions
 from services.policy.finance_review import (
     resolve_finance_review,
     submit_finance_review,
@@ -122,13 +133,82 @@ def test_finance_review_migration_is_frozen_and_downgrades_only_its_table(tmp_pa
     config = Config("migrations/alembic.ini")
     url = f"sqlite:///{tmp_path / 'migration.db'}"
     config.set_main_option("sqlalchemy.url", url)
-    command.upgrade(config, "head")
-    engine = create_engine(url)
+    command.upgrade(config, "0006_playback_terminal_failure")
+    engine = build_sqlite_engine(url)
+    assert "finance_review_revisions" not in inspect(engine).get_table_names()
+    store = SqliteStore(engine, runtime_mode=RuntimeMode.FALLBACK)
+    case, snapshot = fallback_rl001_case("RL-CASE-FINANCE-MIGRATION")
+    analysis = fallback_rl001_analysis(case, snapshot, "RL-ANALYSIS-FINANCE-MIGRATION")
+    store.create_case(case, snapshot)
+    store.save_analysis(analysis)
+    store.save_case_projection(
+        case.model_copy(update={"status": CaseStatus.AWAITING_DECISION})
+    )
+    decision = DecisionService(store.uow_factory, clock=lambda: NOW).record(
+        RecordDecisionCommand(
+            case_id=case.case_id,
+            analysis_id=analysis.analysis_id,
+            selected_option_id=None,
+            kind=DecisionKind.REJECTED,
+            idempotency_key="migration-decision",
+            rejection_reason="Migration preservation fixture",
+        ),
+        actor("ALEX"),
+    )
+    with engine.connect() as connection:
+        before = connection.execute(
+            text(
+                "SELECT (SELECT payload_json FROM case_instances WHERE case_id=:case_id), "
+                "(SELECT payload_json FROM analysis_versions WHERE analysis_id=:analysis_id), "
+                "(SELECT material_hash FROM analysis_versions WHERE analysis_id=:analysis_id), "
+                "(SELECT payload_json FROM decisions WHERE decision_id=:decision_id)"
+            ),
+            {
+                "case_id": case.case_id,
+                "analysis_id": analysis.analysis_id,
+                "decision_id": decision.decision_id,
+            },
+        ).one()
+    command.upgrade(config, "0007_finance_review_revisions")
     assert "finance_review_revisions" in inspect(engine).get_table_names()
+    assert {
+        item["name"]
+        for item in inspect(engine).get_check_constraints("finance_review_revisions")
+    } >= {"ck_finance_review_revisions_revision_positive"}
+    with engine.connect() as connection:
+        after_upgrade = connection.execute(
+            text(
+                "SELECT (SELECT payload_json FROM case_instances WHERE case_id=:case_id), "
+                "(SELECT payload_json FROM analysis_versions WHERE analysis_id=:analysis_id), "
+                "(SELECT material_hash FROM analysis_versions WHERE analysis_id=:analysis_id), "
+                "(SELECT payload_json FROM decisions WHERE decision_id=:decision_id)"
+            ),
+            {
+                "case_id": case.case_id,
+                "analysis_id": analysis.analysis_id,
+                "decision_id": decision.decision_id,
+            },
+        ).one()
+    assert after_upgrade == before
     command.downgrade(config, "0006_playback_terminal_failure")
     tables = set(inspect(engine).get_table_names())
     assert "finance_review_revisions" not in tables
     assert "analysis_versions" in tables
+    with engine.connect() as connection:
+        after_downgrade = connection.execute(
+            text(
+                "SELECT (SELECT payload_json FROM case_instances WHERE case_id=:case_id), "
+                "(SELECT payload_json FROM analysis_versions WHERE analysis_id=:analysis_id), "
+                "(SELECT material_hash FROM analysis_versions WHERE analysis_id=:analysis_id), "
+                "(SELECT payload_json FROM decisions WHERE decision_id=:decision_id)"
+            ),
+            {
+                "case_id": case.case_id,
+                "analysis_id": analysis.analysis_id,
+                "decision_id": decision.decision_id,
+            },
+        ).one()
+    assert after_downgrade == before
 
 
 def test_uncommitted_first_append_rolls_back(finance_context):
@@ -194,6 +274,18 @@ def test_append_preserves_three_complete_snapshots_and_replays(finance_context):
         idempotency_key="supersede",
         request_fingerprint="c" * 64,
     ) == (superseded, 3)
+    with store.engine.connect() as connection:
+        payloads = (
+            connection.execute(
+                select(finance_review_revisions.c.payload_json)
+                .where(finance_review_revisions.c.review_id == pending.review_id)
+                .order_by(finance_review_revisions.c.revision)
+            )
+            .scalars()
+            .all()
+        )
+    snapshots = tuple(FinanceReview.model_validate_json(item) for item in payloads)
+    assert snapshots == (pending, accepted, superseded)
     assert (superseded.reviewed_by, superseded.reviewed_at, superseded.reason) == (
         accepted.reviewed_by,
         accepted.reviewed_at,
@@ -206,6 +298,87 @@ def test_append_preserves_three_complete_snapshots_and_replays(finance_context):
         idempotency_key="supersede",
         request_fingerprint="c" * 64,
     ) == (superseded, 3)
+
+
+def test_finance_cost_is_bound_to_hashed_material_not_mutable_outer_options(
+    finance_context,
+):
+    store, pending = finance_context
+    with store.engine.begin() as connection:
+        row = connection.execute(select(analysis_versions)).mappings().one()
+        analysis = AnalysisVersion.model_validate_json(row["payload_json"])
+        selected = next(
+            item
+            for item in analysis.response_options
+            if item.option_id == pending.proposal.option_id
+        )
+        assert selected.predicted is not None
+        changed = selected.model_copy(
+            update={
+                "predicted": selected.predicted.model_copy(
+                    update={"response_cost": Decimal("21000.00")}
+                )
+            }
+        )
+        tampered = analysis.model_copy(
+            update={
+                "response_options": tuple(
+                    changed if item.option_id == changed.option_id else item
+                    for item in analysis.response_options
+                )
+            }
+        )
+        connection.execute(
+            update(analysis_versions).values(payload_json=serialize_model(tampered))
+        )
+    proposal = pending.proposal.model_copy(
+        update={"response_cost": Decimal("21000.00")}
+    )
+    candidate = submit_finance_review(
+        review_id=pending.review_id,
+        proposal=proposal,
+        actor=pending.submitted_by,
+        now=pending.submitted_at,
+    )
+    with pytest.raises(PersistenceIntegrityError):
+        append_finance_review(
+            store.uow_factory,
+            candidate,
+            expected_revision=None,
+            idempotency_key="tampered-outer-option",
+            request_fingerprint="4" * 64,
+        )
+
+
+def test_finance_analysis_reuses_immutable_case_provenance_validation(finance_context):
+    store, pending = finance_context
+    second_case, second_snapshot = fallback_rl001_case("RL-CASE-FINANCE-OTHER")
+    store.create_case(second_case, second_snapshot)
+    with store.engine.begin() as connection:
+        row = connection.execute(select(analysis_versions)).mappings().one()
+        analysis = AnalysisVersion.model_validate_json(row["payload_json"])
+        reassigned = analysis.model_copy(update={"case_id": second_case.case_id})
+        connection.execute(
+            update(analysis_versions).values(
+                case_id=second_case.case_id,
+                payload_json=serialize_model(reassigned),
+            )
+        )
+    candidate = pending.model_copy(
+        update={
+            "proposal": pending.proposal.model_copy(
+                update={"case_id": second_case.case_id}
+            )
+        }
+    )
+    with pytest.raises(PersistenceIntegrityError):
+        append_finance_review(
+            store.uow_factory,
+            candidate,
+            expected_revision=None,
+            idempotency_key="reassigned-case",
+            request_fingerprint="5" * 64,
+        )
 
 
 def test_failed_append_has_no_partial_persistence(finance_context):

@@ -9,16 +9,16 @@ from pydantic import ValidationError
 from sqlalchemy import Connection, insert, select
 from sqlalchemy.exc import IntegrityError
 
-from data.domain.analysis import AnalysisVersion
+from data.domain.analysis import AnalysisResponseOptionMaterial, AnalysisVersion
 from data.domain.finance import FinanceReview, FinanceReviewStatus
-from services.analysis.service import analysis_material_hash
 from services.persistence.ports import UnitOfWork
 from services.persistence.store import (
     PersistenceIntegrityError,
     RecordNotFound,
+    SqlAlchemyCaseRepository,
     serialize_model,
 )
-from services.persistence.tables import analysis_versions, finance_review_revisions
+from services.persistence.tables import finance_review_revisions
 from services.policy.finance_review import (
     FinanceReviewViolation,
     resolve_finance_review,
@@ -61,35 +61,14 @@ class SqlAlchemyFinanceReviewRepository:
         return review.superseded_at or review.reviewed_at or review.submitted_at
 
     def _analysis(self, review: FinanceReview) -> AnalysisVersion:
-        row = (
-            self._connection.execute(
-                select(analysis_versions).where(
-                    analysis_versions.c.analysis_id == review.proposal.analysis_id
-                )
+        try:
+            return SqlAlchemyCaseRepository(self._store, self._connection).get_analysis(
+                review.proposal.analysis_id
             )
-            .mappings()
-            .one_or_none()
-        )
-        if row is None:
+        except RecordNotFound as error:
             raise PersistenceIntegrityError(
                 "Finance review Analysis Version does not exist"
-            )
-        try:
-            analysis = AnalysisVersion.model_validate_json(row["payload_json"])
-        except (ValidationError, ValueError) as error:
-            raise PersistenceIntegrityError(
-                "persisted Analysis Version contains invalid JSON"
             ) from error
-        if (
-            analysis.analysis_id != row["analysis_id"]
-            or analysis.case_id != row["case_id"]
-            or analysis.material_hash != row["material_hash"]
-            or analysis.material_hash != analysis_material_hash(analysis.material)
-        ):
-            raise PersistenceIntegrityError(
-                "Finance review Analysis Version lineage is invalid"
-            )
-        return analysis
 
     def _require_bound_analysis(self, review: FinanceReview) -> None:
         analysis = self._analysis(review)
@@ -101,7 +80,15 @@ class SqlAlchemyFinanceReviewRepository:
             raise PersistenceIntegrityError(
                 "Finance proposal conflicts with immutable Analysis Version"
             )
-        option = next(
+        material_option = next(
+            (
+                item
+                for item in analysis.material.response_options
+                if item.option_id == proposal.option_id
+            ),
+            None,
+        )
+        outer_option = next(
             (
                 item
                 for item in analysis.response_options
@@ -110,9 +97,12 @@ class SqlAlchemyFinanceReviewRepository:
             None,
         )
         if (
-            option is None
-            or option.predicted is None
-            or option.predicted.response_cost != proposal.response_cost
+            material_option is None
+            or material_option.predicted is None
+            or material_option.predicted.response_cost != proposal.response_cost
+            or outer_option is None
+            or AnalysisResponseOptionMaterial.from_option(outer_option)
+            != material_option
         ):
             raise PersistenceIntegrityError(
                 "Finance proposal option or evaluated cost conflicts with Analysis Version"
