@@ -75,8 +75,9 @@ def test_operational_unit_totals_require_one_nonblank_component():
         "Production Component Demand",
     ):
         expression = measures[name].expression
-        assert "SELECTEDVALUE(OperationalRecords[part_id])" in expression
+        assert "CALCULATE(SELECTEDVALUE(OperationalRecords[part_id])" in expression
         assert "NOT ISBLANK(PartKey)" in expression
+        assert expression.count("OperationalRecords[record_family] ==") == 2
     context = measures["Operational Quantity Context"].expression
     assert "Select one component" in context
 

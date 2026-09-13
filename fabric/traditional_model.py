@@ -135,7 +135,9 @@ def install_measures(add, external) -> None:
         add(
             name,
             "VAR Dataset = [Selected Operational Dataset] "
-            "VAR PartKey = SELECTEDVALUE(OperationalRecords[part_id]) "
+            "VAR PartKey = CALCULATE(SELECTEDVALUE(OperationalRecords[part_id]), "
+            "KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), "
+            + f'KEEPFILTERS(OperationalRecords[record_family] == "{family}")) '
             "RETURN IF(NOT ISBLANK(Dataset) && NOT ISBLANK(PartKey), CALCULATE("
             + aggregate
             + ", KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), "
