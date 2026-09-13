@@ -3,11 +3,11 @@
   "name": "supporting-records",
   "position": {
     "x": 24,
-    "y": 386,
+    "y": 164,
     "width": 1232,
-    "height": 166,
-    "z": 7,
-    "tabOrder": 7
+    "height": 388,
+    "z": 3,
+    "tabOrder": 3
   },
   "visual": {
     "visualType": "tableEx",
@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Supporting records'"
+                  "Value": "'Contributing rows from the selected saved snapshot'"
                 }
               }
             },

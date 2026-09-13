@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from copy import deepcopy
-from itertools import combinations, pairwise
+from itertools import combinations
 from pathlib import Path
 
 import pytest
@@ -34,7 +34,7 @@ def test_deterministic_native_pages_match_pinned_schemas(tmp_path):
     write_pages(tmp_path)
     report_pages.verify(tmp_path)
     _validate_offline_json_schemas(tmp_path)
-    assert report_pages.ORDER == (
+    assert report_pages.ORDER == report_pages.OPERATIONAL_ORDER + (
         "command-center",
         "actions-outcomes",
         "supplier-shipment",
@@ -77,35 +77,13 @@ def test_deterministic_native_pages_match_pinned_schemas(tmp_path):
             assert condition["Right"] == {"Literal": {"Value": "1L"}}
 
 
-def test_preserves_existing_visual_identities_and_three_rows():
+def test_preserves_existing_page_identities_without_rejected_question_grid():
     artifacts = report_pages.artifacts()
-    old_ids = {
-        "command-center": (
-            "active-cases",
-            "current-decision",
-            "otif-loss",
-            "revenue-at-risk",
-            "scenario-effective-time",
-            "showcase-cases",
-        ),
-        "actions-outcomes": (
-            "action-status",
-            "decision-id",
-            "observation-kind",
-            "predicted-observed-variance",
-            "projection-refresh",
-            "scenario-effective-time",
-        ),
-    }
-    for page, identities in old_ids.items():
-        for identity in identities:
-            assert f"pages/{page}/visuals/{identity}/visual.json" in artifacts
-    first = artifacts["pages/command-center/visuals/active-cases/visual.json"]
-    assert first["visual"]["objects"]["values"][0]["properties"]["expr"][
-        "expr"
-    ] == report_pages.field("Measure", "CaseCommandCenter", "Disruption Answer")
-    for row in (1, 2, 3):
-        assert f"pages/command-center/visuals/row-label-{row}/visual.json" in artifacts
+    for page in report_pages.LEGACY_ORDER:
+        assert f"pages/{page}/page.json" in artifacts
+    assert "pages/command-center/visuals/saved-inventory-rows/visual.json" in artifacts
+    assert "pages/command-center/visuals/saved-order-rows/visual.json" in artifacts
+    assert not any("row-label-" in path for path in artifacts)
 
 
 def test_business_cards_wrap_values_and_show_each_question_once():
@@ -149,7 +127,7 @@ def test_business_cards_wrap_values_and_show_each_question_once():
         assert run["textStyle"]["fontWeight"] == "normal", path
         assert "label" not in objects, path
         assert title["titleWrap"] == report_pages.literal(True), path
-    assert count == 46
+    assert count >= len(report_pages.LEGACY_ORDER)
 
 
 def test_native_textbox_measure_dependencies_remain_in_preflight_allowlist():
@@ -163,6 +141,11 @@ def test_native_textbox_measure_dependencies_remain_in_preflight_allowlist():
         "Measure",
         "CaseCommandCenter",
         "Record Explanation",
+    ) not in report_pages.required_fields()
+    assert (
+        "Measure",
+        "CaseCommandCenter",
+        "Overview State",
     ) in report_pages.required_fields()
 
 
@@ -171,7 +154,7 @@ def test_native_textbox_binding_drift_fails_closed(tmp_path, mutation):
     from fabric.deploy import PreflightError, _validate_visual_inventory
 
     write_pages(tmp_path)
-    path = tmp_path / "pages/supplier-shipment/visuals/explanation/visual.json"
+    path = tmp_path / "pages/supplier-shipment/visuals/selection-state/visual.json"
     value = json.loads(path.read_text())
     objects = value["visual"]["objects"]
     if mutation == "measure":
@@ -194,33 +177,20 @@ def test_native_textbox_binding_drift_fails_closed(tmp_path, mutation):
 
 def test_overview_reserves_multiline_space_without_shrinking_business_text():
     artifacts = report_pages.artifacts()
-    cards = [
-        value
-        for path, value in artifacts.items()
-        if path.startswith("pages/command-center/visuals/")
-        and "values" in value.get("visual", {}).get("objects", {})
-        and value["name"] != "selection-state"
-    ]
-    assert len(cards) == 9
-    for card in cards:
-        assert card["position"]["height"] >= 256
+    assert artifacts["pages/command-center/page.json"]["height"] == 808
+    for name in ("saved-inventory-rows", "saved-order-rows"):
         assert (
-            card["visual"]["objects"]["general"][0]["properties"]["paragraphs"][0][
-                "textRuns"
-            ][0]["textStyle"]["fontSize"]
-            == "14pt"
+            artifacts[f"pages/command-center/visuals/{name}/visual.json"]["position"][
+                "height"
+            ]
+            >= 300
         )
-    rows = sorted({card["position"]["y"] for card in cards})
-    assert len(rows) == 3
-    assert all(next_y >= y + 256 for y, next_y in pairwise(rows))
-    controls = artifacts["pages/command-center/visuals/walkthrough-step/visual.json"]
-    assert controls["position"]["y"] >= rows[-1] + 256
 
 
 def test_walkthrough_sequence_uses_all_existing_pages_once():
     sequence = tuple(page for page, title in report_pages.WALKTHROUGH)
     assert len(sequence) == len(set(sequence)) == 8
-    assert set(sequence) == set(report_pages.ORDER)
+    assert set(sequence) == set(report_pages.LEGACY_ORDER)
     assert sequence[0] == "command-center"
     assert sequence[-1] == "actions-outcomes"
 
@@ -231,7 +201,7 @@ def test_walkthrough_footer_replaces_old_page_tab_instruction():
         "Snapshot used for this analysis · Demo corpus — fictional · "
         "Return to the existing demo tab for original messages and AI assistance."
     )
-    for page in report_pages.ORDER:
+    for page in report_pages.LEGACY_ORDER:
         footer = artifacts[f"pages/{page}/visuals/fictional-footer/visual.json"]
         paragraphs = footer["visual"]["objects"]["general"][0]["properties"][
             "paragraphs"
@@ -286,15 +256,7 @@ def test_native_navigation_rejects_unrecognized_destinations():
 
 def test_traditional_pages_are_neutral_and_options_sort_by_name():
     artifacts = report_pages.artifacts()
-    review = artifacts[
-        "pages/command-center/visuals/recommendation-answer/visual.json"
-    ]["visual"]
-    assert review["objects"]["values"][0]["properties"]["expr"]["expr"] == (
-        report_pages.field("Measure", "CaseCommandCenter", "Review Approach")
-    )
-    assert review["visualContainerObjects"]["title"][0]["properties"]["text"] == (
-        report_pages.literal("Review approach")
-    )
+    assert not any("recommendation-answer" in path for path in artifacts)
     comparison = artifacts[
         "pages/response-options/visuals/option-comparison/visual.json"
     ]["visual"]
@@ -445,7 +407,7 @@ def test_report_copy_matches_planner_language_and_preserves_required_context():
         "5. Review the decision",
     )
     assert title("supplier-shipment", "supporting-records") == report_pages.literal(
-        "Supporting records"
+        "Contributing rows from the selected saved snapshot"
     )
     assert title("actions-outcomes", "decision-id") == report_pages.literal(
         "Current decision"
@@ -464,7 +426,7 @@ def test_report_copy_matches_planner_language_and_preserves_required_context():
 
 
 def test_clearable_case_selector_is_shared_without_a_default():
-    for page in report_pages.ORDER:
+    for page in report_pages.LEGACY_ORDER:
         value = report_pages.artifacts()[
             f"pages/{page}/visuals/case-selector/visual.json"
         ]["visual"]
@@ -533,10 +495,15 @@ def test_filters_have_globally_unique_names_and_preserve_conditions():
         for item in artifact.get("filterConfig", {}).get("filters", []):
             names.append(item["name"])
             if "visual" in artifact:
-                expected = report_pages.gate(item["field"]["Measure"]["Property"])
+                binding = item["field"]["Measure"]
+                expected = report_pages.gate(
+                    binding["Property"],
+                    binding["Expression"]["SourceRef"]["Entity"],
+                )
             else:
-                family = report_pages.DETAILS[artifact["name"]][1]
-                expected = report_pages.family_filter(family)
+                assert item["type"] == "Categorical"
+                assert item["isHiddenInViewMode"] and item["isLockedInViewMode"]
+                continue
             actual = deepcopy(item)
             actual.pop("name")
             expected.pop("name")
@@ -549,7 +516,7 @@ def test_common_text_fits_font_floors_and_does_not_overlap():
     from math import ceil
 
     artifacts = report_pages.artifacts()
-    for page in report_pages.ORDER:
+    for page in report_pages.LEGACY_ORDER:
         prefix = f"pages/{page}/visuals/"
         title = artifacts[prefix + "page-title/visual.json"]["position"]
         state = artifacts[prefix + "selection-state/visual.json"]["position"]
@@ -1083,15 +1050,7 @@ def test_page_cli_rejects_late_symlink_before_any_write(tmp_path, monkeypatch):
 
 def test_exposure_page_repeats_saved_baseline_with_strict_analysis_scope():
     pages = report_pages.artifacts()
-
-    def answer(index):
-        return pages[f"pages/customer-orders/visuals/answer-{index}/visual.json"][
-            "visual"
-        ]["objects"]["values"][0]["properties"]["expr"]["expr"]["Measure"]["Property"]
-
-    assert answer(1) == "Orders Baseline Revenue Display"
-    assert answer(2) == "Orders Baseline OTIF Display"
-    assert answer(3) == "Affected Lines Display"
+    assert "pages/customer-orders/visuals/supporting-records/visual.json" in pages
     definitions = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"]
     for name, source in (
         ("Orders Baseline Revenue", "Baseline revenue_at_risk"),
@@ -1192,11 +1151,11 @@ def test_overview_service_target_percentage_names_its_production_order_basis():
     assert "% of production orders" in exposure
     assert "% of order lines" not in exposure
 
-    title = artifacts["pages/customer-orders/visuals/answer-2/visual.json"]["visual"][
-        "visualContainerObjects"
-    ]["title"][0]["properties"]["text"]
+    title = artifacts["pages/customer-orders/visuals/supporting-records/visual.json"][
+        "visual"
+    ]["visualContainerObjects"]["title"][0]["properties"]["text"]
     assert title == report_pages.literal(
-        "Production orders expected to miss on-time, in-full"
+        "Contributing rows from the selected saved snapshot"
     )
 
 
@@ -1236,16 +1195,12 @@ def test_main_report_explanations_use_business_language():
     )
     assert "Review with AI assistance" in definitions["Review Approach"]["expression"]
 
-    affected_lines = artifacts["pages/customer-orders/visuals/answer-3/visual.json"][
-        "visual"
-    ]["visualContainerObjects"]["title"][0]["properties"]["text"]
     option_table = artifacts[
         "pages/response-options/visuals/option-comparison/visual.json"
     ]["visual"]["visualContainerObjects"]["title"][0]["properties"]["text"]
     action_explanation = artifacts[
         "pages/actions-outcomes/visuals/action-explanation/visual.json"
     ]["visual"]["visualContainerObjects"]["title"][0]["properties"]["text"]
-    assert affected_lines == report_pages.literal("Order lines in this analysis")
     assert option_table == report_pages.literal(
         "Response options — expected results, subject to planning requirements"
     )

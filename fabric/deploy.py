@@ -841,10 +841,10 @@ def _validate_project() -> None:
     pages = _load_json(report_definition / "pages" / "pages.json")
     if tuple(pages.get("pageOrder", ())) != EXPECTED_PAGE_ORDER:
         raise PreflightError(
-            "report page order must contain exactly the eight approved pages"
+            "report page order differs from the approved generated pages"
         )
-    if pages.get("activePageName") != "command-center":
-        raise PreflightError("Command Center must be the active landing page")
+    if pages.get("activePageName") != "operations-overview":
+        raise PreflightError("Supply overview must be the active landing page")
 
     actual_page_directories = {
         path.name for path in (report_definition / "pages").iterdir() if path.is_dir()
@@ -858,7 +858,8 @@ def _validate_project() -> None:
         if (
             page.get("displayOption") != "FitToPage"
             or page.get("width") != 1280
-            or page.get("height") != (1108 if page_name == "command-center" else 808)
+            or page.get("height")
+            != (720 if page_name in report_pages.OPERATIONAL_ORDER else 808)
         ):
             raise PreflightError(
                 f"{page_name} has an invalid page size or display option"

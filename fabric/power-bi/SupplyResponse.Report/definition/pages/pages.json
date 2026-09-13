@@ -1,6 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/pagesMetadata/1.1.0/schema.json",
   "pageOrder": [
+    "operations-overview",
+    "operations-inventory",
+    "operations-deliveries",
+    "operations-transfers",
+    "operations-qualification",
+    "operations-orders",
+    "operations-demand",
     "command-center",
     "actions-outcomes",
     "supplier-shipment",
@@ -10,5 +17,5 @@
     "customer-orders",
     "response-options"
   ],
-  "activePageName": "command-center"
+  "activePageName": "operations-overview"
 }

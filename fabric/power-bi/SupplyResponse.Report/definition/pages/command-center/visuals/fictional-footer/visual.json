@@ -3,11 +3,11 @@
   "name": "fictional-footer",
   "position": {
     "x": 24,
-    "y": 1070,
+    "y": 770,
     "width": 1232,
     "height": 30,
-    "z": 17,
-    "tabOrder": 17
+    "z": 7,
+    "tabOrder": 7
   },
   "visual": {
     "visualType": "textbox",

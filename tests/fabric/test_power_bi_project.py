@@ -312,7 +312,9 @@ def test_project_json_files_declare_current_official_schemas() -> None:
         assert _load(POWER_BI / directory / ".platform")["$schema"] == PLATFORM_SCHEMA
 
 
-def test_power_bi_project_has_exactly_eight_generated_pages() -> None:
+def test_power_bi_project_has_exactly_the_generated_operational_and_saved_pages() -> (
+    None
+):
     pages = _load(REPORT / "pages" / "pages.json")
     assert pages == {
         "$schema": (
@@ -320,7 +322,7 @@ def test_power_bi_project_has_exactly_eight_generated_pages() -> None:
             "pagesMetadata/1.1.0/schema.json"
         ),
         "pageOrder": list(PAGES),
-        "activePageName": "command-center",
+        "activePageName": "operations-overview",
     }
 
     page_directories = sorted(
@@ -331,7 +333,9 @@ def test_power_bi_project_has_exactly_eight_generated_pages() -> None:
         name: _load(REPORT / "pages" / name / "page.json")["displayName"]
         for name in PAGES
     } == PAGES
-    assert len(PAGES) == 8
+    assert len(PAGES) == len(report_pages.OPERATIONAL_ORDER) + len(
+        report_pages.LEGACY_ORDER
+    )
 
 
 def test_pages_have_exact_identity_size_and_thirty_second_refresh() -> None:
@@ -341,7 +345,9 @@ def test_pages_have_exact_identity_size_and_thirty_second_refresh() -> None:
         assert page["displayName"] == display_name
         assert page["displayOption"] == "FitToPage"
         assert page["width"] == 1280
-        assert page["height"] == (1108 if page_name == "command-center" else 808)
+        assert page["height"] == (
+            720 if page_name in report_pages.OPERATIONAL_ORDER else 808
+        )
         page_refresh = page["objects"]["pageRefresh"]
         assert page_refresh == [
             {
@@ -395,6 +401,7 @@ def test_every_visual_is_schema_shaped_and_inside_its_page() -> None:
                         "queryRef",
                         "nativeQueryRef",
                         "displayName",
+                        "active",
                     }
                     assert set(projection) >= {
                         "field",
@@ -604,26 +611,10 @@ def test_preflight_has_exact_visual_inventory_and_per_visual_contracts() -> None
     assert deploy.EXPECTED_PAGE_ORDER == report_pages.ORDER
     assert deploy.EXPECTED_QUERY_REFS == QUERY_REF_ALLOWLIST
     deploy._validate_visual_inventory(REPORT)
-    old_ids = {
-        "command-center": {
-            "active-cases",
-            "current-decision",
-            "otif-loss",
-            "revenue-at-risk",
-            "scenario-effective-time",
-            "showcase-cases",
-        },
-        "actions-outcomes": {
-            "action-status",
-            "decision-id",
-            "observation-kind",
-            "predicted-observed-variance",
-            "projection-refresh",
-            "scenario-effective-time",
-        },
-    }
-    for page, names in old_ids.items():
-        assert names <= set(EXPECTED_VISUAL_IDS[page])
+    assert {"saved-inventory-rows", "saved-order-rows"} <= set(
+        EXPECTED_VISUAL_IDS["command-center"]
+    )
+    assert "operational-rows" in EXPECTED_VISUAL_IDS["operations-overview"]
 
 
 def test_visual_inventory_rejects_schema_valid_additional_reused_queryref(
@@ -688,7 +679,7 @@ def test_visual_inventory_rejects_swapped_or_missing_visuals(tmp_path: Path) -> 
         / "pages"
         / "command-center"
         / "visuals"
-        / "otif-loss"
+        / "saved-inventory-rows"
         / "visual.json"
     )
     missing.unlink()
@@ -705,8 +696,8 @@ def test_visual_inventory_rejects_wrong_page_and_altered_locked_filter(
 
     repository = _copy_power_bi(tmp_path, "wrong-page")
     pages = repository / "SupplyResponse.Report" / "definition" / "pages"
-    source = pages / "command-center" / "visuals" / "otif-loss"
-    destination = pages / "actions-outcomes" / "visuals" / "otif-loss"
+    source = pages / "command-center" / "visuals" / "saved-inventory-rows"
+    destination = pages / "actions-outcomes" / "visuals" / "saved-inventory-rows"
     shutil.move(source, destination)
     with pytest.raises(deploy.PreflightError, match="visual inventory"):
         deploy._validate_visual_inventory(
@@ -780,7 +771,7 @@ def test_scope_mutations_fail_before_auth(tmp_path, monkeypatch, attack):
 
 
 def test_case_picker_is_explicit_single_select_and_synced_on_every_page():
-    for page in PAGES:
+    for page in report_pages.LEGACY_ORDER:
         visual = _load(
             REPORT / "pages" / page / "visuals" / "case-selector" / "visual.json"
         )["visual"]
@@ -800,24 +791,18 @@ def test_case_picker_is_explicit_single_select_and_synced_on_every_page():
         )
 
 
-def test_overview_contains_eight_saved_answers_and_neutral_review_approach():
-    expected = {
-        "Disruption",
-        "Availability",
-        "Exposure",
-        "Shipment",
-        "Transfer",
-        "Qualification",
-        "Options",
-        "Decision",
-    }
-    actual = {
-        ref.removeprefix("CaseCommandCenter.").removesuffix(" Answer")
-        for ref in QUERY_REF_ALLOWLIST["command-center"]
-        if ref.endswith(" Answer")
-    }
-    assert actual == expected
-    assert "CaseCommandCenter.Review Approach" in QUERY_REF_ALLOWLIST["command-center"]
+def test_saved_overview_contains_exact_contributing_tables_not_ai_answers():
+    assert not any(
+        ref.endswith(" Answer") for ref in QUERY_REF_ALLOWLIST["command-center"]
+    )
+    assert "SavedRecords.part_id" in QUERY_REF_ALLOWLIST["command-center"]
+    inventory = _load(
+        REPORT / "pages/command-center/visuals/saved-inventory-rows/visual.json"
+    )
+    assert (
+        inventory["filterConfig"]["filters"][0]["field"]["Measure"]["Property"]
+        == "Stock Row Visible"
+    )
     report_pages.verify(REPORT)
 
 
@@ -870,8 +855,11 @@ def test_no_persisted_case_default_or_latest_showcase_override():
             .get("filterConfig", {})
             .get("filters", [])
         )
+        allowed = {"record_family"}
+        if page in report_pages.OPERATIONAL_ORDER:
+            allowed.add("dataset_id")
         assert all(
-            item["field"].get("Column", {}).get("Property") == "record_family"
+            item["field"].get("Column", {}).get("Property") in allowed
             for item in filters
         )
     definitions = report_model.manifest()["tables"]["CaseCommandCenter"]["measures"]
@@ -954,7 +942,7 @@ def test_tmdl_folder_has_strong_structural_contract() -> None:
     from fabric import deploy
 
     deploy._validate_generated_model(SEMANTIC_MODEL)
-    assert len(report_model.manifest()["tables"]) == 5
+    assert len(report_model.manifest()["tables"]) == 6
     definitions = report_model.manifest()["tables"]
     expression = definitions["ActionOutcomes"]["measures"]["Observed Variance"][
         "expression"

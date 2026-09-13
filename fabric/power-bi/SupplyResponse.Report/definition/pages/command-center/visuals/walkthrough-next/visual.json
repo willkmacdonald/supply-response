@@ -3,11 +3,11 @@
   "name": "walkthrough-next",
   "position": {
     "x": 1036,
-    "y": 1014,
+    "y": 714,
     "width": 220,
     "height": 44,
-    "z": 16,
-    "tabOrder": 16
+    "z": 6,
+    "tabOrder": 6
   },
   "visual": {
     "visualType": "actionButton",

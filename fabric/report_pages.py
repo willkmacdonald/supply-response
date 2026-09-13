@@ -8,7 +8,7 @@ BASE = "https://developer.microsoft.com/json-schemas/fabric/item/report/definiti
 PAGE_SCHEMA = BASE + "page/2.0.0/schema.json"
 VISUAL_SCHEMA = BASE + "visualContainer/2.9.0/schema.json"
 PAGES_SCHEMA = BASE + "pagesMetadata/1.1.0/schema.json"
-ORDER = (
+LEGACY_ORDER = (
     "command-center",
     "actions-outcomes",
     "supplier-shipment",
@@ -18,6 +18,9 @@ ORDER = (
     "customer-orders",
     "response-options",
 )
+from fabric.traditional_pages import ORDER as OPERATIONAL_ORDER
+
+ORDER = OPERATIONAL_ORDER + LEGACY_ORDER
 WALKTHROUGH = (
     ("command-center", "1. Investigate the delay"),
     ("available-stock", "2. Check available stock"),
@@ -30,7 +33,7 @@ WALKTHROUGH = (
 )
 GREEN, TEAL, AMBER, CREAM, WHITE = "#183E35", "#187D78", "#9A641C", "#F5F3EA", "#FFFFFF"
 CC, SR, SO, AO = "CaseCommandCenter", "SavedRecords", "SavedOptions", "ActionOutcomes"
-OVERVIEW_EXTRA_HEIGHT = 300
+OVERVIEW_EXTRA_HEIGHT = 0
 
 
 def literal(value):
@@ -113,17 +116,17 @@ def column(table, name):
     return projection("Column", table, name, label)
 
 
-def gate(name):
+def gate(name, table=CC):
     return {
         "name": "Locked" + name.replace(" ", ""),
-        "field": field("Measure", CC, name),
+        "field": field("Measure", table, name),
         "type": "Advanced",
         "howCreated": "User",
         "isHiddenInViewMode": True,
         "isLockedInViewMode": True,
         "filter": {
             "Version": 2,
-            "From": [{"Name": "c", "Entity": CC, "Type": 0}],
+            "From": [{"Name": "c", "Entity": table, "Type": 0}],
             "Where": [
                 {
                     "Condition": {
@@ -158,6 +161,31 @@ def family_filter(family):
                                 field("Column", "r", "record_family", True)
                             ],
                             "Values": [[{"Literal": {"Value": "'" + family + "'"}}]],
+                        }
+                    }
+                }
+            ],
+        },
+    }
+
+
+def categorical_filter(table, column_name, value, name):
+    return {
+        "name": name,
+        "field": field("Column", table, column_name),
+        "type": "Categorical",
+        "howCreated": "User",
+        "isHiddenInViewMode": True,
+        "isLockedInViewMode": True,
+        "filter": {
+            "Version": 2,
+            "From": [{"Name": "r", "Entity": table, "Type": 0}],
+            "Where": [
+                {
+                    "Condition": {
+                        "In": {
+                            "Expressions": [field("Column", "r", column_name, True)],
+                            "Values": [[{"Literal": {"Value": "'" + value + "'"}}]],
                         }
                     }
                 }
@@ -357,12 +385,12 @@ def card(name, title, value, rect, accent=TEAL, size=14):
     return v
 
 
-def table(name, title, entity, names, scope, rect):
+def table(name, title, entity, names, scope, rect, scope_table=CC):
     v = base_visual(name, "tableEx", rect, title)
     v["visual"]["query"] = {
         "queryState": {"Values": {"projections": [column(entity, n) for n in names]}}
     }
-    v["filterConfig"] = {"filters": [gate(scope)]}
+    v["filterConfig"] = {"filters": [gate(scope, scope_table)]}
     v["visual"]["objects"] = {
         "columnHeaders": obj(
             {
@@ -551,34 +579,15 @@ def common(title, state):
 
 
 def detail(page):
-    title, family, state, metrics, explanation, scope, fields = DETAILS[page]
+    title, family, state, _metrics, _explanation, scope, fields = DETAILS[page]
     items = common(title, state)
-    for i, (label, value) in enumerate(metrics):
-        items.append(
-            card(
-                "answer-" + str(i + 1),
-                label,
-                value,
-                (24 + 416 * i, 164, 400, 108),
-                (TEAL, GREEN, AMBER)[i],
-            )
-        )
-    items.append(
-        card(
-            "explanation",
-            "What this means for the response",
-            explanation,
-            (24, 284, 1232, 90),
-            size=14,
-        )
-    )
     supporting = table(
         "supporting-records",
-        "Supporting records",
+        "Contributing rows from the selected saved snapshot",
         SR,
         fields,
         scope,
-        (24, 386, 1232, 166),
+        (24, 164, 1232, 388),
     )
     if page == "available-stock":
         visual = supporting["visual"]
@@ -666,69 +675,43 @@ def detail(page):
 
 
 def overview():
-    items = common("Case dashboard", "Overview State")
-    next(item for item in items if item["name"] == "fictional-footer")["position"][
-        "y"
-    ] += OVERVIEW_EXTRA_HEIGHT
-    rows = (
-        (
-            "1. Understand\nthe disruption",
+    items = common("Saved case snapshot", "Overview State")
+    items.append(
+        table(
+            "saved-inventory-rows",
+            "Saved inventory contributing rows",
+            SR,
             (
-                ("active-cases", "What changed?", "Disruption Answer"),
-                (
-                    "revenue-at-risk",
-                    "What do we have available?",
-                    "Availability Answer",
-                ),
-                ("otif-loss", "What does that put at risk?", "Exposure Answer"),
+                "part_id",
+                "plant_id",
+                "on_hand",
+                "quality_hold",
+                "protected_allocation",
+                "usable_inventory",
             ),
-        ),
-        (
-            "2. Investigate\nresponses",
-            (
-                (
-                    "scenario-effective-time",
-                    "What can Supplier Alpha still supply?",
-                    "Shipment Answer",
-                ),
-                ("showcase-cases", "Can another plant help?", "Transfer Answer"),
-                (
-                    "qualification-answer",
-                    "Can we use the alternate supplier?",
-                    "Qualification Answer",
-                ),
-            ),
-        ),
-        (
-            "3. Make\nthe decision",
-            (
-                ("options-answer", "Compare the options", "Options Answer"),
-                (
-                    "recommendation-answer",
-                    "Review approach",
-                    "Review Approach",
-                ),
-                ("current-decision", "Recorded decision", "Decision Answer"),
-            ),
-        ),
-    )
-    for row, (label, cards) in enumerate(rows):
-        y = 166 + row * 270
-        items.append(
-            text("row-label-" + str(row + 1), label, (24, y + 20, 190, 96), 20)
+            "Stock Row Visible",
+            (24, 164, 608, 388),
         )
-        for col, (name, question, value) in enumerate(cards):
-            items.append(
-                card(
-                    name,
-                    question,
-                    value,
-                    (226 + col * 348, y, 334, 256),
-                    (TEAL, GREEN, AMBER)[row],
-                    size=14,
-                )
-            )
-    return "Case dashboard", items, None
+    )
+    items.append(
+        table(
+            "saved-order-rows",
+            "Saved customer-order contributing rows",
+            SR,
+            (
+                "customer_order_id",
+                "product_id",
+                "part_id",
+                "plant_id",
+                "quantity",
+                "due_date",
+                "line_revenue",
+            ),
+            "Order Row Visible",
+            (648, 164, 608, 388),
+        )
+    )
+    return "Saved case snapshot", items, None
 
 
 def options():
@@ -876,6 +859,8 @@ def actions():
 
 
 def artifacts():
+    from fabric import traditional_pages
+
     result = {
         "pages/pages.json": {
             "$schema": PAGES_SCHEMA,
@@ -885,22 +870,25 @@ def artifacts():
     }
     for page in ORDER:
         title, items, family = (
-            overview()
-            if page == ORDER[0]
+            traditional_pages.page(page, __import__(__name__, fromlist=["*"]))
+            if page in OPERATIONAL_ORDER
+            else overview()
+            if page == "command-center"
             else actions()
-            if page == ORDER[1]
+            if page == "actions-outcomes"
             else options()
             if page == "response-options"
             else detail(page)
         )
-        items.extend(walkthrough_controls(page))
+        if page not in OPERATIONAL_ORDER:
+            items.extend(walkthrough_controls(page))
         definition = {
             "$schema": PAGE_SCHEMA,
             "name": page,
             "displayName": title,
             "displayOption": "FitToPage",
             "width": 1280,
-            "height": 808 + (OVERVIEW_EXTRA_HEIGHT if page == "command-center" else 0),
+            "height": 720 if page in OPERATIONAL_ORDER else 808,
             "objects": {
                 "background": obj({"color": color(CREAM), "transparency": literal(0)}),
                 "pageRefresh": [
@@ -914,7 +902,21 @@ def artifacts():
                 ],
             },
         }
-        if family:
+        if page in OPERATIONAL_ORDER:
+            filters = [
+                traditional_pages.dataset_filter(__import__(__name__, fromlist=["*"]))
+            ]
+            if family:
+                filters.append(
+                    categorical_filter(
+                        "OperationalRecords",
+                        "record_family",
+                        family,
+                        "LockedOperationalFamily",
+                    )
+                )
+            definition["filterConfig"] = {"filters": filters}
+        elif family:
             definition["filterConfig"] = {"filters": [family_filter(family)]}
         for filter_item in definition.get("filterConfig", {}).get("filters", []):
             filter_item["name"] = page + "-" + filter_item["name"]
