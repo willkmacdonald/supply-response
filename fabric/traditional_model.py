@@ -84,6 +84,11 @@ def install_measures(add, external) -> None:
         'IF(NOT ISBLANK([Selected Operational Dataset]), "Fictional planning dataset · " & [Selected Operational Dataset] & " · Snapshot " & FORMAT(MAX(OperationalRecords[effective_at]), "MMM d, yyyy HH:mm") & " UTC")',
         table=TABLE,
     )
+    add(
+        "Operational Quantity Context",
+        'IF(ISBLANK([Selected Operational Dataset]), "Select one dataset", IF(ISBLANK(SELECTEDVALUE(OperationalRecords[part_id])), "Select one component to compare material quantities", "Quantities for " & SELECTEDVALUE(OperationalRecords[part_id])))',
+        table=TABLE,
+    )
     gates = {
         "Operational Row Visible": None,
         "Inventory Row Visible": "inventory",
@@ -126,6 +131,20 @@ def install_measures(add, external) -> None:
             table=TABLE,
         )
 
+    def unit_scoped(name, aggregate, family):
+        add(
+            name,
+            "VAR Dataset = [Selected Operational Dataset] "
+            "VAR PartKey = SELECTEDVALUE(OperationalRecords[part_id]) "
+            "RETURN IF(NOT ISBLANK(Dataset) && NOT ISBLANK(PartKey), CALCULATE("
+            + aggregate
+            + ", KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), "
+            + f'KEEPFILTERS(OperationalRecords[record_family] == "{family}")))',
+            "int64",
+            "#,0",
+            table=TABLE,
+        )
+
     scoped("Operational Record Count", "COUNTROWS(OperationalRecords)")
     scoped("Inventory Position Count", "COUNTROWS(OperationalRecords)", "inventory")
     scoped("Delivery Line Count", "COUNTROWS(OperationalRecords)", "shipment")
@@ -139,27 +158,41 @@ def install_measures(add, external) -> None:
     scoped(
         "Production Order Count", "COUNTROWS(OperationalRecords)", "production_order"
     )
-    scoped("Inventory On Hand Units", "SUM(OperationalRecords[on_hand])", "inventory")
-    scoped("Inventory Hold Units", "SUM(OperationalRecords[quality_hold])", "inventory")
-    scoped(
+    unit_scoped(
+        "Inventory On Hand Units", "SUM(OperationalRecords[on_hand])", "inventory"
+    )
+    unit_scoped(
+        "Inventory Hold Units", "SUM(OperationalRecords[quality_hold])", "inventory"
+    )
+    unit_scoped(
         "Inventory Protected Units",
         "SUM(OperationalRecords[protected_allocation])",
         "inventory",
     )
-    scoped(
+    unit_scoped(
         "Inventory Usable Units",
         "SUM(OperationalRecords[usable_inventory])",
         "inventory",
     )
-    scoped("Delivery Units", "SUM(OperationalRecords[quantity])", "shipment")
-    scoped(
+    unit_scoped("Delivery Units", "SUM(OperationalRecords[quantity])", "shipment")
+    add(
         "Delivery Extended Cost",
-        "SUMX(OperationalRecords, OperationalRecords[quantity] * OperationalRecords[incremental_cost_per_unit])",
-        "shipment",
+        """VAR Dataset = [Selected Operational Dataset]
+        VAR MissingCostInputs = CALCULATE(COUNTROWS(OperationalRecords),
+            KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])),
+            KEEPFILTERS(OperationalRecords[record_family] == "shipment"),
+            FILTER(OperationalRecords, ISBLANK(OperationalRecords[quantity])
+                || ISBLANK(OperationalRecords[incremental_cost_per_unit])))
+        RETURN IF(NOT ISBLANK(Dataset) && MissingCostInputs == 0,
+            CALCULATE(SUMX(OperationalRecords,
+                OperationalRecords[quantity] * OperationalRecords[incremental_cost_per_unit]),
+                KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])),
+                KEEPFILTERS(OperationalRecords[record_family] == "shipment")))""",
         "decimal",
         "$#,0",
+        table=TABLE,
     )
-    scoped("Transfer Units", "SUM(OperationalRecords[quantity])", "transfer")
+    unit_scoped("Transfer Units", "SUM(OperationalRecords[quantity])", "transfer")
     scoped(
         "Open Customer Revenue",
         "SUM(OperationalRecords[line_revenue])",
@@ -174,7 +207,7 @@ def install_measures(add, external) -> None:
         "decimal",
         "$#,0",
     )
-    scoped(
+    unit_scoped(
         "Production Component Demand",
         "SUM(OperationalRecords[component_demand])",
         "production_order",

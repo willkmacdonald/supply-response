@@ -63,6 +63,35 @@ def test_operational_totals_are_family_specific_and_formats_are_honest():
     assert "quantity" not in measures["Operational Record Count"].expression.lower()
 
 
+def test_operational_unit_totals_require_one_nonblank_component():
+    measures = report_model.measures()["OperationalRecords"]
+    for name in (
+        "Inventory On Hand Units",
+        "Inventory Hold Units",
+        "Inventory Protected Units",
+        "Inventory Usable Units",
+        "Delivery Units",
+        "Transfer Units",
+        "Production Component Demand",
+    ):
+        expression = measures[name].expression
+        assert "SELECTEDVALUE(OperationalRecords[part_id])" in expression
+        assert "NOT ISBLANK(PartKey)" in expression
+    context = measures["Operational Quantity Context"].expression
+    assert "Select one component" in context
+
+
+def test_delivery_cost_is_blank_if_any_contributing_line_lacks_cost_inputs():
+    expression = report_model.measures()["OperationalRecords"][
+        "Delivery Extended Cost"
+    ].expression
+    assert "MissingCostInputs" in expression
+    assert "ISBLANK(OperationalRecords[quantity])" in expression
+    assert "ISBLANK(OperationalRecords[incremental_cost_per_unit])" in expression
+    assert "MissingCostInputs == 0" in expression
+    assert "COALESCE" not in expression
+
+
 def test_operational_partition_uses_the_accepted_explicit_query():
     artifacts = report_model.artifacts(QUERIES)
     tmdl = artifacts["tables/OperationalRecords.tmdl"]

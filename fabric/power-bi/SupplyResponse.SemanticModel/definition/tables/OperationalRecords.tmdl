@@ -210,6 +210,9 @@ table OperationalRecords
   measure 'Operational Snapshot Context' =
       IF(NOT ISBLANK([Selected Operational Dataset]), "Fictional planning dataset · " & [Selected Operational Dataset] & " · Snapshot " & FORMAT(MAX(OperationalRecords[effective_at]), "MMM d, yyyy HH:mm") & " UTC")
 
+  measure 'Operational Quantity Context' =
+      IF(ISBLANK([Selected Operational Dataset]), "Select one dataset", IF(ISBLANK(SELECTEDVALUE(OperationalRecords[part_id])), "Select one component to compare material quantities", "Quantities for " & SELECTEDVALUE(OperationalRecords[part_id])))
+
   measure 'Operational Row Visible' =
       INT(NOT ISBLANK([Selected Operational Dataset]))
     isHidden
@@ -267,31 +270,41 @@ table OperationalRecords
     formatString: #,0
 
   measure 'Inventory On Hand Units' =
-      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUM(OperationalRecords[on_hand]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "inventory")))
+      VAR Dataset = [Selected Operational Dataset] VAR PartKey = SELECTEDVALUE(OperationalRecords[part_id]) RETURN IF(NOT ISBLANK(Dataset) && NOT ISBLANK(PartKey), CALCULATE(SUM(OperationalRecords[on_hand]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "inventory")))
     formatString: #,0
 
   measure 'Inventory Hold Units' =
-      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUM(OperationalRecords[quality_hold]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "inventory")))
+      VAR Dataset = [Selected Operational Dataset] VAR PartKey = SELECTEDVALUE(OperationalRecords[part_id]) RETURN IF(NOT ISBLANK(Dataset) && NOT ISBLANK(PartKey), CALCULATE(SUM(OperationalRecords[quality_hold]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "inventory")))
     formatString: #,0
 
   measure 'Inventory Protected Units' =
-      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUM(OperationalRecords[protected_allocation]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "inventory")))
+      VAR Dataset = [Selected Operational Dataset] VAR PartKey = SELECTEDVALUE(OperationalRecords[part_id]) RETURN IF(NOT ISBLANK(Dataset) && NOT ISBLANK(PartKey), CALCULATE(SUM(OperationalRecords[protected_allocation]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "inventory")))
     formatString: #,0
 
   measure 'Inventory Usable Units' =
-      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUM(OperationalRecords[usable_inventory]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "inventory")))
+      VAR Dataset = [Selected Operational Dataset] VAR PartKey = SELECTEDVALUE(OperationalRecords[part_id]) RETURN IF(NOT ISBLANK(Dataset) && NOT ISBLANK(PartKey), CALCULATE(SUM(OperationalRecords[usable_inventory]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "inventory")))
     formatString: #,0
 
   measure 'Delivery Units' =
-      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUM(OperationalRecords[quantity]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "shipment")))
+      VAR Dataset = [Selected Operational Dataset] VAR PartKey = SELECTEDVALUE(OperationalRecords[part_id]) RETURN IF(NOT ISBLANK(Dataset) && NOT ISBLANK(PartKey), CALCULATE(SUM(OperationalRecords[quantity]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "shipment")))
     formatString: #,0
 
   measure 'Delivery Extended Cost' =
-      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUMX(OperationalRecords, OperationalRecords[quantity] * OperationalRecords[incremental_cost_per_unit]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "shipment")))
+      VAR Dataset = [Selected Operational Dataset]
+              VAR MissingCostInputs = CALCULATE(COUNTROWS(OperationalRecords),
+                  KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])),
+                  KEEPFILTERS(OperationalRecords[record_family] == "shipment"),
+                  FILTER(OperationalRecords, ISBLANK(OperationalRecords[quantity])
+                      || ISBLANK(OperationalRecords[incremental_cost_per_unit])))
+              RETURN IF(NOT ISBLANK(Dataset) && MissingCostInputs == 0,
+                  CALCULATE(SUMX(OperationalRecords,
+                      OperationalRecords[quantity] * OperationalRecords[incremental_cost_per_unit]),
+                      KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])),
+                      KEEPFILTERS(OperationalRecords[record_family] == "shipment")))
     formatString: $#,0
 
   measure 'Transfer Units' =
-      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUM(OperationalRecords[quantity]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "transfer")))
+      VAR Dataset = [Selected Operational Dataset] VAR PartKey = SELECTEDVALUE(OperationalRecords[part_id]) RETURN IF(NOT ISBLANK(Dataset) && NOT ISBLANK(PartKey), CALCULATE(SUM(OperationalRecords[quantity]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "transfer")))
     formatString: #,0
 
   measure 'Open Customer Revenue' =
@@ -303,7 +316,7 @@ table OperationalRecords
     formatString: $#,0
 
   measure 'Production Component Demand' =
-      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUM(OperationalRecords[component_demand]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "production_order")))
+      VAR Dataset = [Selected Operational Dataset] VAR PartKey = SELECTEDVALUE(OperationalRecords[part_id]) RETURN IF(NOT ISBLANK(Dataset) && NOT ISBLANK(PartKey), CALCULATE(SUM(OperationalRecords[component_demand]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "production_order")))
     formatString: #,0
 
   partition OperationalRecords = m
