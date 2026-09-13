@@ -41,6 +41,7 @@ packages = ["apps", "services", "data", "integrations", "agents"]
 [tool.hatch.build.targets.wheel.force-include]
 "fabric/sql/001_operational_schema.sql" = "fabric/sql/001_operational_schema.sql"
 "fabric/sql/002_analytics_views.sql" = "fabric/sql/002_analytics_views.sql"
+"fabric/sql/003_reporting_dataset.sql" = "fabric/sql/003_reporting_dataset.sql"
 
 [tool.pytest.ini_options]
 addopts = "-q"

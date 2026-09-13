@@ -1,15 +1,15 @@
 """Explicit Fabric SQL schema application."""
 
-from pathlib import Path
 import re
+from pathlib import Path
 
 from sqlalchemy import Engine
-
 
 FABRIC_SQL_DIRECTORY = Path(__file__).resolve().parents[2] / "fabric" / "sql"
 FABRIC_SCHEMA_SCRIPTS = (
     FABRIC_SQL_DIRECTORY / "001_operational_schema.sql",
     FABRIC_SQL_DIRECTORY / "002_analytics_views.sql",
+    FABRIC_SQL_DIRECTORY / "003_reporting_dataset.sql",
 )
 
 

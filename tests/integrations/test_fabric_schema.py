@@ -1,14 +1,13 @@
+import tomllib
 from contextlib import nullcontext
 from importlib.util import find_spec
 from pathlib import Path
-import tomllib
 from typing import cast
 
 import pytest
 from sqlalchemy import Engine
 
 from integrations.fabric import schema
-
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -76,7 +75,7 @@ def test_script_application_stops_after_a_failed_batch():
     assert engine.statements == ["SELECT 1;", "SELECT 2;"]
 
 
-def test_fabric_schema_application_executes_both_checked_in_scripts(monkeypatch):
+def test_fabric_schema_application_executes_all_checked_in_scripts(monkeypatch):
     scripts: list[str] = []
     monkeypatch.setattr(
         schema,
@@ -86,9 +85,10 @@ def test_fabric_schema_application_executes_both_checked_in_scripts(monkeypatch)
 
     schema.apply_fabric_schema(cast(Engine, object()))
 
-    assert len(scripts) == 2
+    assert len(scripts) == 3
     assert "CREATE TABLE app.case_instances" in scripts[0]
     assert "CREATE OR ALTER VIEW analytics.action_outcomes" in scripts[1]
+    assert "CREATE TABLE reporting.datasets" in scripts[2]
 
 
 def test_fabric_schema_scripts_are_included_in_the_production_wheel():
@@ -102,4 +102,7 @@ def test_fabric_schema_scripts_are_included_in_the_production_wheel():
             "fabric/sql/001_operational_schema.sql"
         ),
         "fabric/sql/002_analytics_views.sql": ("fabric/sql/002_analytics_views.sql"),
+        "fabric/sql/003_reporting_dataset.sql": (
+            "fabric/sql/003_reporting_dataset.sql"
+        ),
     }
