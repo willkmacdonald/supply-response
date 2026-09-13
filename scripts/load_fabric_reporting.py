@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from azure.core.exceptions import AzureError
+from pydantic import ValidationError
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -142,6 +143,8 @@ def main() -> int:
         OSError,
         RuntimeError,
         SQLAlchemyError,
+        ValidationError,
+        ValueError,
     ):
         print(
             "Reporting dataset failed: configuration, identity, or SQL operation failed",

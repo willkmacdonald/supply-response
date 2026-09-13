@@ -85,6 +85,14 @@ class OperationalReportingRecord(FrozenModel):
             self.on_hand or 0
         ) - (self.quality_hold or 0) - (self.protected_allocation or 0):
             raise ValueError("usable inventory must reconcile")
+        if (
+            self.record_family == "qualification"
+            and self.status == "approved"
+            and not (
+                self.audit_complete is True and self.first_article_complete is True
+            )
+        ):
+            raise ValueError("approved qualification requires completed checks")
         return self
 
 
@@ -346,6 +354,8 @@ def _background_records(effective: datetime) -> list[OperationalReportingRecord]
         supplier_id, supplier_name = suppliers[pidx % len(suppliers)]
         plant_id, plant_name = plants[pidx % len(plants)]
         quantity = 500 + pidx * 75
+        audit_complete = pidx % 3 != 0
+        first_article_complete = pidx % 2 == 0
         records.extend(
             (
                 OperationalReportingRecord(
@@ -402,9 +412,13 @@ def _background_records(effective: datetime) -> list[OperationalReportingRecord]
                     supplier_name=supplier_name,
                     part_id=part_id,
                     part_name=part_name,
-                    status=("approved" if pidx % 3 else "pending"),
-                    audit_complete=pidx % 3 != 0,
-                    first_article_complete=pidx % 2 == 0,
+                    status=(
+                        "approved"
+                        if audit_complete and first_article_complete
+                        else "pending"
+                    ),
+                    audit_complete=audit_complete,
+                    first_article_complete=first_article_complete,
                     expected_decision_date=day + timedelta(days=10 + pidx),
                     data_origin="fictional_reporting_context",
                 ),

@@ -193,6 +193,34 @@ def test_flat_record_rejects_oversized_ids() -> None:
         type(record).model_validate({**record.model_dump(), "record_id": "x" * 129})
 
 
+def test_qualification_cannot_be_approved_before_required_checks() -> None:
+    qualification = next(
+        record
+        for record in _dataset().records
+        if record.record_family == "qualification"
+    )
+    with pytest.raises(ValidationError, match="approved qualification"):
+        type(qualification).model_validate(
+            {
+                **qualification.model_dump(),
+                "status": "approved",
+                "audit_complete": True,
+                "first_article_complete": False,
+            }
+        )
+
+    approved = [
+        record
+        for record in _dataset().records
+        if record.record_family == "qualification" and record.status == "approved"
+    ]
+    assert approved
+    assert all(
+        record.audit_complete is True and record.first_article_complete is True
+        for record in approved
+    )
+
+
 def test_production_and_customer_order_links_reconcile() -> None:
     records = _dataset().records
     production = {
@@ -342,6 +370,24 @@ def test_loader_defaults_to_read_only_and_apply_verifies_after_commit(
     )
     assert events == ["ensure:False", "ensure:True", "verify"]
     assert engine.begin_calls == 1
+
+
+def test_loader_main_redacts_validation_error_input(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    secret = "dummy-secret-that-must-never-appear"
+
+    def invalid_settings() -> Settings:
+        raise ValueError(f"invalid settings input_value={secret}")
+
+    monkeypatch.setattr(load_fabric_reporting, "Settings", invalid_settings)
+    monkeypatch.setattr("sys.argv", ["load_fabric_reporting.py"])
+
+    assert load_fabric_reporting.main() == 1
+    captured = capsys.readouterr()
+    assert secret not in captured.out
+    assert secret not in captured.err
+    assert len(captured.err) < 200
 
 
 def test_reporting_sql_is_isolated_typed_explicit_and_version_scoped() -> None:
