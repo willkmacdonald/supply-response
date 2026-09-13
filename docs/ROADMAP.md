@@ -86,7 +86,8 @@ deployed by this roadmap update. Historical cases keep their original evidence.
 
 September 13 local progress: the immutable Finance review lifecycle has passed
 56 focused tests, the 171-test targeted regression and independent review. The
-five-stage navigation is being implemented. Neither the Finance inbox nor the
+five-stage navigation passes 331 frontend tests, the production build, and local
+desktop/phone browser checks. Neither the Finance inbox nor the
 new email workflow is enabled yet; see the
 [increment evidence and remaining gates](reviews/2026-09-13-email-workflow-progress.md).
 

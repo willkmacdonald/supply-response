@@ -39,20 +39,38 @@ This does **not** yet authenticate a Taylor browser session, store reviews in th
 database, enforce a review at final Decision creation, or provide a Finance inbox.
 Identity snapshots remain inputs owned by the future authenticated service layer.
 
-## Five-stage navigation — implementation in progress
+## Five-stage navigation — local browser verification passed
 
-Existing frontend baseline: 326 tests passed across 22 files.
-The new local browser check first failed as expected: five tabs required, three
-rendered. This establishes the missing-layout condition, not completion proof.
+Implementation commit: `cacc412`. Existing frontend baseline: 326 tests across
+22 files. New navigation tests first failed against the three-tab implementation.
+Parent verification after implementation: 331 tests passed across 22 files;
+TypeScript and Vite production build passed.
+
+The local browser check passed at 1440px and 390px: five exact tab labels,
+manual keyboard activation and wrapping, preserved selection, one visible panel,
+hidden/inert inactive panels, visible email/Teams source links, explicit execution
+prerequisites, no horizontal overflow and no operation requests from navigation.
+Screenshots are saved locally in `.artifacts/five-stage-navigation/`; the parent
+visually inspected desktop approval and phone execution views. The check's first
+post-change run used an obsolete exact approval-button label; the actual button
+includes the selected option. Corrected that test locator before the passing run.
+
+Independent review found no navigation-code defects. Its initial scope finding
+concerned parent-owned documentation commit `676f6bb`, included because the review
+package retained the original dispatch base `e712a32`. That documentation is
+separately accounted for here. Reviewer acknowledgment: spec compliant and quality
+approved, with no remaining findings.
+
 Local preview data and source links are explicitly simulated; no live services
-or real case mutations are used for layout verification.
+or real case mutations were used. The approval panel still represents the legacy
+workflow until the independent Finance service/UI integration is implemented.
 
 ## Remaining gates
 
 1. Durable append-only Finance review, idempotency and concurrency.
 2. Versioned new-case policy, independent Taylor authentication and API access,
    current-proposal checks, and final Alex Decision enforcement.
-3. Five-stage browser verification and Finance cross-session UI integration.
+3. Finance cross-session UI integration and final five-stage workflow verification.
 4. Presenter-controlled Work IQ discovery of a new email from Will, exact
    case-specific source binding and duplicate-safe case creation.
 5. Option-specific execution plans and an explicitly reviewed real email from
