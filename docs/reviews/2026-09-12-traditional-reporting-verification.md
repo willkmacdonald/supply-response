@@ -109,9 +109,81 @@ supporting-data navigation. It does not certify within-case multi-version histor
 populated outcomes or execution. The older activation plan is explicitly marked
 superseded in those respects; no saved fixture is created to satisfy it.
 
-## Outstanding acceptance
+## Native report acceptance — September 12, in progress
 
-- Traditional semantic model, native tables/charts/slicers and exact saved pages.
-- Existing-item publication, native rendering/filter checks as the demo account.
-- Card-to-record parity, negative identity checks and justified link activation.
-- Presenter walkthrough and final screenshots of the actual published report.
+Reviewed report/model artifacts were published to the existing item IDs at
+21:15 America/Chicago; the reviewed plain-language chart/date labels (`ada7f41`)
+were published at 21:23. No replacement workspace, model or report was created.
+Eleven read-only checks against the persisted model passed, including seven
+supplier chart groups, the two saved order lines ($375,000 and $580,000), the
+saved Chicago stock row (4,500/200/300/4,000), and unavailable results for absent,
+unknown or mismatched selections. These were not query-local candidate measures.
+
+Native browser inspection under Alex's existing session showed all seven broad
+pages rendering rows and charts. The inventory Plant and Component slicers were
+used to select Chicago and RL-MAT-10247; the resulting single row and chart
+showed 4,000 usable units. Customer and production tables showed both canonical
+lines alongside the wider fictional business context. Transfer rows showed
+distinct source/destination plants and $1.50 per-unit cost. Whole-dollar order
+values and two-decimal per-unit prices rendered correctly.
+
+Exact saved customer-order navigation rendered the two $375,000/$580,000 rows
+and matching chart, with the selected case/analysis identifiers below. Shipment
+and transfer source rows rendered 3,000 / September 6 / $7.50 and 1,500 /
+September 5 / $1.50 respectively. The qualification record rendered pending,
+both requirements false and September 15 review date. A qualification evidence
+ID mistakenly used as a source-record ID correctly produced an unavailable
+message and no unrelated rows; the verified RL-QUAL-BETA source-record ID then
+rendered the expected row.
+
+Native acceptance found additional issues despite correct query results: the
+saved stock matrix was blank, and exact-record contextual measures were slow
+enough to leave the header loading after the row tables appeared. Shipment,
+transfer and qualification charts did eventually render. These observations
+are not waived as successful acceptance; correction and retest are underway.
+The website reporting receipt remains disabled pending that work.
+
+## Final native acceptance — published fd53e99
+
+The apparent blank inventory matrix eventually rendered after a long DirectQuery
+wait; it was not missing data. Commit 61dbdfa replaces it with a direct row table
+while retaining StockRowVisible, and uses the fast saved snapshot header on exact
+shipment, transfer and qualification pages. Commit 4577602 formats the actual
+SavedOptions numeric columns as whole-dollar USD, not just summary labels.
+Commit fd53e99 leads the saved command-center order grid with source_record_id.
+
+Final model/report publication completed September 12 at 21:40:19/21:40:22
+America/Chicago, using the existing resource IDs. Independent read-only remote
+review matched all 180 committed report parts, with only Fabric-managed .platform
+and expected byPath-to-byConnection normalization. The report is bound to model
+2100a769-d718-47b7-9715-7f4e804f1c8a. Artifact SHA-256:
+198ea01a8fc25a999355b730c92e843f6dc565e645c8ef571e6ab403b9b177c0.
+
+Actual native browser screenshots as Alex confirmed after final publication:
+
+- Exact available-stock table: 4,500 on hand, 200 held, 300 protected, 4,000 usable;
+  matching chart and September 9 saved snapshot context.
+- Exact supplier-shipment: 3,000 units, September 6, $7.50 per unit, saved snapshot
+  header and eventually rendered quantity chart.
+- Exact response-options raw table: combined response $24,750 cost / $375,000
+  revenue at risk; do nothing $0 / $955,000; expedite $22,500 / $955,000.
+
+Earlier native acceptance in this same release covers all seven broad pages,
+interactive Chicago/component filtering, current and older saved inventory/order
+lineage, transfer and qualification source rows, and unavailable mismatched IDs.
+Final persisted-model read-only results retain all expected values and the
+mismatched-analysis result valid=0, count=null. No query-local measure overrides
+or synthetic replacement of saved source data were used for acceptance.
+
+Fresh regression checks: 187 Fabric tests passed with one optional live integration
+skip; 326 frontend tests and production build passed; 98 deployment/activation
+tests passed (one inherited Starlette warning); git diff --check and guarded
+read-only Azure preflight passed. The separately executed actual SQL engine test
+and live SQL-to-model parity remain recorded above.
+
+Reporting activation is accepted for the controlling September 12 scope. Some
+native DirectQuery charts still load noticeably later than the row grids; instant
+rendering is not claimed. Populated execution outcomes, within-case multi-version
+history, Teams app handoff and finance-person interactive approval are not certified.
+The presenter walkthrough is committed. Website deployment and actual website
+link verification remain the final release steps.

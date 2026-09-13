@@ -1,6 +1,66 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed — presenter and recommendation-sheet release c8a7c38, revision ca-sr-demo--0000027; live saved-case UI acceptance passed.
+> **Status:** Validated — traditional operational reporting/navigation correction. Existing website remains c8a7c38 / ca-sr-demo--0000027 until the guarded release completes.
+
+## Traditional operational reporting release — 2026-09-12
+
+User approved the traditional reporting correction and implementation. Same
+existing Azure Dev subscription, East US 2, supply-response-personal environment,
+ca-sr-demo, Fabric SQL database, report and semantic model. No new resources,
+permissions, licensing, scale changes, saved-case mutations or operational actions.
+The additive isolated reporting dataset and reviewed semantic model have their
+own verification record. Website changes only correct traditional navigation and
+scope language; reporting activation remains separately gated on native proof.
+
+Recipe: AZD, existing guarded deployment script. No infrastructure redesign.
+
+- [x] All validation checks pass, including final reporting artifact review and native acceptance.
+  - [x] 1. AZD Installation.
+  - [x] 2. Schema Validation.
+  - [x] 3. Environment Setup.
+  - [x] 4. Authentication Check.
+  - [x] 5. Subscription/Location Check.
+  - [x] 6. Aspire Pre-Provisioning Checks (not applicable).
+  - [x] 7. Provision Preview.
+  - [x] 8. Build Verification.
+  - [x] 9. Docker Build Context Validation.
+  - [x] 10. Package Validation.
+  - [x] 11. Azure Policy Validation.
+  - [x] 12. Aspire Post-Provisioning Checks (not applicable).
+  - [x] Static and live role verification.
+
+### Validation Proof — current reporting release
+
+Fresh September 12 checks around 21:01 America/Chicago: AZD1.30.0, login as Will,
+named environment, official Azure/azure-dev azure.yaml JSON schema validation,
+guarded existing-target preflight, named provision preview, 326 frontend tests,
+production build, uv build, named azd package, and 98 infrastructure/activation
+tests passed. One inherited Starlette deprecation warning remains. The first
+preflight attempt omitted the local environment selector and stopped before
+mutation; rerunning with the verified operator and selected environment passed.
+
+Preview has no resource creation/deletion or permission expansion. It reconciles
+the existing Container App and Application Insights provider properties. Seven
+existing policy assignments were read; preview returned no denial. Dockerfile
+and exclusions are unchanged, npm lock exists, no new application permission is
+needed. Static Bicep and live assignments confirm the same resource-scoped
+AcrPull, Key Vault Secrets User and Foundry User for principal
+a95ffce4-570b-4931-bfd4-4894e7281890. Final reporting artifact review/native
+acceptance still precedes receipt activation. Evidence is recorded in
+docs/reviews/2026-09-12-traditional-reporting-verification.md.
+
+Final artifact fd53e99 was published at 21:40 America/Chicago. Independent remote
+definition review matched all 180 committed report parts and the existing model
+binding. Native Alex-session acceptance confirmed the corrected stock table,
+shipment snapshot/row/chart and whole-dollar response-options table. Artifact
+digest: 198ea01a8fc25a999355b730c92e843f6dc565e645c8ef571e6ab403b9b177c0.
+Final regression evidence: 187 Fabric tests passed (one optional live test skipped),
+326 web tests passed, production build passed, 98 deployment/activation tests
+passed, and guarded read-only existing-target preflight passed. Persisted native
+query results include unavailable output for mismatched identities. The
+azure-validate workflow completed ResolveErrors before this status was set.
+Receipt activation is accepted for September 12 traditional/exact-source reporting,
+not for populated execution outcomes or a separate finance-person login workflow.
 
 ## Presenter experience release — 2026-09-12
 
