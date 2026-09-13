@@ -17,6 +17,7 @@ from data.domain import (
     RuntimeMode,
     SupplyReceiptOption,
 )
+from data.domain.cases import WorkflowVersion
 from data.domain.evidence import (
     AuthorityScope,
     EvidenceItem,
@@ -26,7 +27,6 @@ from data.domain.evidence import (
     RetrievalHealth,
     UncertaintyState,
 )
-
 
 SCENARIO_EFFECTIVE_TIME = datetime.fromisoformat("2026-09-01T09:00:00-05:00")
 
@@ -192,7 +192,11 @@ def build_rl001_template() -> DemoTemplate:
 
 
 def instantiate_rl001(
-    *, case_id: str, purpose: CasePurpose, runtime_mode: RuntimeMode
+    *,
+    case_id: str,
+    purpose: CasePurpose,
+    runtime_mode: RuntimeMode,
+    workflow_version: WorkflowVersion | None = None,
 ) -> tuple[CaseInstance, OperationalSnapshot]:
     case = CaseInstance(
         case_id=case_id,
@@ -200,6 +204,7 @@ def instantiate_rl001(
         purpose=purpose,
         runtime_mode=runtime_mode,
         scenario_effective_time=SCENARIO_EFFECTIVE_TIME,
+        workflow_version=workflow_version,
     )
     return case, OperationalSnapshot.rl001(
         case_id=case_id,

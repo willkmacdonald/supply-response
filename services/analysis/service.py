@@ -43,6 +43,7 @@ from services.policy.evidence import (
     PolicyViolation,
     validate_required_evidence,
 )
+from services.policy.workflow import approval_policy_for, standing_authorizations_for
 
 APPROVAL_POLICY_VERSION = "standing-authorization-v1"
 
@@ -69,7 +70,7 @@ class AnalyzeCaseCommand(FrozenModel):
     conflict_resolutions: tuple[ConflictResolution, ...] = ()
     required_authority_scope: tuple[AuthorityScope, ...] = ()
     evidence_policy_version: str = EVIDENCE_POLICY_VERSION
-    approval_policy_version: str = APPROVAL_POLICY_VERSION
+    approval_policy_version: str | None = None
 
 
 def _reject_duplicate_ids(
@@ -154,11 +155,15 @@ def create_analysis_version(
     conflict_resolutions: tuple[ConflictResolution, ...] = (),
     required_authority_scope: tuple[AuthorityScope, ...] = (),
     evidence_policy_version: str = EVIDENCE_POLICY_VERSION,
-    approval_policy_version: str = APPROVAL_POLICY_VERSION,
+    approval_policy_version: str | None = None,
 ) -> AnalysisVersion:
     if evidence_policy_version != EVIDENCE_POLICY_VERSION:
         raise PolicyViolation("Evidence policy version does not match the evaluator.")
-    if approval_policy_version != APPROVAL_POLICY_VERSION:
+    effective_approval_policy = approval_policy_for(case)
+    if (
+        approval_policy_version is not None
+        and approval_policy_version != effective_approval_policy
+    ):
         raise PolicyViolation("Approval policy version does not match the evaluator.")
     if created_at < analysis_started_at:
         raise PolicyViolation("Analysis creation cannot precede analysis start.")
@@ -197,7 +202,10 @@ def create_analysis_version(
         sorted(conflict_resolutions, key=lambda item: item.conflict_id)
     )
     canonical_authorizations = tuple(
-        sorted(standing_authorizations, key=lambda item: item.authorization_id)
+        sorted(
+            standing_authorizations_for(case, standing_authorizations),
+            key=lambda item: item.authorization_id,
+        )
     )
     evidence_validation = validate_required_evidence(
         canonical_evidence,
@@ -280,7 +288,7 @@ def create_analysis_version(
         ranking=ranking,
         calculation_version=calculation_version,
         evidence_policy_version=EVIDENCE_POLICY_VERSION,
-        approval_policy_version=APPROVAL_POLICY_VERSION,
+        approval_policy_version=effective_approval_policy,
     )
     return AnalysisVersion(
         analysis_id=analysis_id,

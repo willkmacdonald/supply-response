@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 
 from data.domain import CaseInstance, CasePurpose, CaseStatus, RuntimeMode
 from data.domain.analysis import AnalysisVersion
+from data.domain.cases import WorkflowVersion
 from data.domain.decisions import (
     ApprovalSatisfaction,
     CaseProjection,
@@ -60,6 +61,7 @@ from services.persistence.tables import (
     outcome_observations,
     playbacks,
 )
+from services.policy.workflow import approval_policy_for
 
 if TYPE_CHECKING:
     from apps.api.app.settings import Settings
@@ -275,6 +277,31 @@ class SqlAlchemyStore:
         )
         stored_snapshot = self._stored_snapshot(connection, analysis.case_id)
         material = analysis.material
+        if material.approval_policy_version != approval_policy_for(stored_case):
+            raise PersistenceIntegrityError(
+                "Analysis approval policy must match its immutable Case Instance"
+            )
+        if (
+            stored_case.effective_workflow_version
+            is WorkflowVersion.INDEPENDENT_FINANCE
+            and (
+                any(
+                    item.role == "finance_approver"
+                    for item in material.standing_authorizations
+                )
+                or any(
+                    item.role == "finance_approver"
+                    for item in material.approval_satisfactions
+                )
+                or any(
+                    item.role == "finance_approver"
+                    for item in analysis.approval_satisfactions
+                )
+            )
+        ):
+            raise PersistenceIntegrityError(
+                "Independent Finance approval policy cannot contain Finance standing evidence"
+            )
         if material.case_id != analysis.case_id:
             raise ValueError("analysis material case_id must match Analysis Version")
         if (
@@ -335,6 +362,13 @@ class SqlAlchemyStore:
             )
         for item in analysis.approval_satisfactions:
             target_case = item.target.case
+            if (
+                target_case.effective_workflow_version
+                is not stored_case.effective_workflow_version
+            ):
+                raise PersistenceIntegrityError(
+                    "Approval Satisfaction case policy must match its immutable Case Instance"
+                )
             if item.analysis_id != analysis.analysis_id:
                 raise ValueError(
                     "Approval Satisfaction analysis_id must match Analysis Version"
@@ -393,6 +427,8 @@ class SqlAlchemyStore:
             or case.runtime_mode is not stored_case.runtime_mode
             or case.scenario_effective_time != stored_case.scenario_effective_time
             or case.scenario_timezone != stored_case.scenario_timezone
+            or case.effective_workflow_version
+            is not stored_case.effective_workflow_version
         ):
             raise PersistenceIntegrityError(
                 "case projection conflicts with immutable Case Instance provenance"
@@ -754,6 +790,13 @@ class SqlAlchemyStore:
                 case_id=case.case_id,
                 runtime_mode=case.runtime_mode,
             )
+            if (
+                case.effective_workflow_version
+                is not stored_case.effective_workflow_version
+            ):
+                raise PersistenceIntegrityError(
+                    "case projection conflicts with immutable Case Instance policy"
+                )
             if (
                 case.template_id != stored_case.template_id
                 or case.purpose is not stored_case.purpose

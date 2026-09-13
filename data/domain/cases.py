@@ -1,6 +1,9 @@
+from collections.abc import Mapping
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal, Mapping, Self
+from typing import Any, Literal, Self
+
+from pydantic import SerializerFunctionWrapHandler, model_serializer
 
 from .common import CasePurpose, FrozenModel, RuntimeMode
 
@@ -23,6 +26,11 @@ class DemoTemplate(FrozenModel):
     scenario_timezone: Literal["America/Chicago"] = "America/Chicago"
 
 
+class WorkflowVersion(StrEnum):
+    LEGACY = "standing-authorization-v1"
+    INDEPENDENT_FINANCE = "independent-finance-v1"
+
+
 class CaseInstance(FrozenModel):
     case_id: str
     template_id: str
@@ -31,6 +39,18 @@ class CaseInstance(FrozenModel):
     scenario_effective_time: datetime
     scenario_timezone: Literal["America/Chicago"] = "America/Chicago"
     status: CaseStatus = CaseStatus.OPEN
+    workflow_version: WorkflowVersion | None = None
+
+    @property
+    def effective_workflow_version(self) -> WorkflowVersion:
+        return self.workflow_version or WorkflowVersion.LEGACY
+
+    @model_serializer(mode="wrap")
+    def serialize_case(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload = handler(self)
+        if self.workflow_version is None:
+            payload.pop("workflow_version", None)
+        return payload
 
     def model_copy(
         self,
@@ -47,4 +67,9 @@ class CaseInstance(FrozenModel):
             and changed.case_id == self.case_id
         ):
             raise ValueError("runtime_mode changes require a different case_id")
+        if (
+            changed.effective_workflow_version != self.effective_workflow_version
+            and changed.case_id == self.case_id
+        ):
+            raise ValueError("workflow_version changes require a different case_id")
         return changed
