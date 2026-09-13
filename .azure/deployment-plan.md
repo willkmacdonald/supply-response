@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — presenter and recommendation-sheet release from 70f14be; fresh azure-validate workflow complete, ready for approved deployment.
+> **Status:** Deployed — presenter and recommendation-sheet release c8a7c38, revision ca-sr-demo--0000027; live saved-case UI acceptance passed.
 
 ## Presenter experience release — 2026-09-12
 
@@ -51,6 +51,32 @@ Scale is 0–2 and latest revision has 100% traffic.
 Desktop/mobile sheet and currency acceptance is documented in
 docs/reviews/2026-09-12-recommendation-explanation-sheet-verification.md.
 
+
+### Deployment and live acceptance
+
+Guarded deployment of c8a7c38 completed September 12, approximately 19:03
+America/Chicago. ACR run ch1h succeeded. Image digest:
+sha256:5cef6c684159811db263fa7943fda1b3f9f0250c19f258fe6c328cb325409cc4.
+Revision ca-sr-demo--0000027 is Healthy/Running with 100% traffic. Existing health
+initially timed out twice, then passed before the image build; no bypass was used.
+Post-deployment `azd show`, active revision query, public health/runtime reads,
+asset checks and unchanged three-role assignment verification passed. Health is
+live/Fabric SQL/schema12; all four capability readiness checks report ready.
+Served assets: index-D9jRDwmc.js, application-IVdiKzW2.js,
+application-BVnbdk36.css. New labels, sheet styling and source SVG assets verified.
+
+Browser acceptance used the actual deployed application and Alex's existing
+Microsoft session, not the preview fixture. Reopened existing case
+RL-CASE-213c13ef-828c-4b6d-b56c-5f8332c406d1 and its September 9 analysis.
+Verified updated header, all three stage tabs, $955,000/$328,000/$0 baseline,
+$7.50/$1.50 unit prices, recommendation explanation trigger and modal, predicted
+comparison values and recorded ranking reason. Visually inspected the live sheet.
+Escape dismissed it and returned focus to its trigger; reopening worked.
+No case creation, analysis, source retrieval, decision approval or execution ran.
+This particular saved analysis reports Power BI comparison unavailable; readiness
+is not proof of report availability for an individual historical analysis.
+The live sheet was left open for the presenter. Fresh retrieval and actual
+approval/execution remain untested in this release acceptance.
 
 ## Session recovery release — 2026-09-12 (validation proof)
 
