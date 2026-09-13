@@ -1,89 +1,90 @@
-# Traditional and assisted planning walkthrough
+# Traditional and AI-assisted planning walkthrough
 
-Use one existing analyzed fictional case for both routes. Keep the demo tab open,
-note the case ID and analysis ID in **Analysis source details** and the visible
-**Analysis saved at** time, and use that same case and analysis throughout. This
-walkthrough replays those saved records;
-it is not evidence of a fresh discovery or retrieval run.
+## The comparison
 
-## Reopen the saved case
+Power BI is the planner's traditional investigation: rows, charts and filters
+across suppliers, stock, deliveries and orders. The website brings the disruption,
+communications, supporting records, calculated impacts and response choices
+together. Power BI is not a second copy of the website's answer cards.
 
-1. Choose **Find existing cases**. The picker loads only when requested and shows
-   each case's planning state, recorded time, and exact case ID.
-2. Choose **Reopen** for the recorded case ID. Wait for the saved workspace to
-   finish loading, then confirm the case ID and analysis ID match the walkthrough.
-3. Refreshing a URL that contains those IDs restores that exact current context.
-   If its saved analysis has since been replaced, restoration stops visibly;
-   choose the case again only when you intend to open its newer current analysis.
+The broad report uses one explicitly fictional operational snapshot,
+`TRADITIONAL-OPS-2026-09-V1`, containing 178 distinct records. It includes wider
+business context as well as the canonical RL-001 example. A card's supporting-data
+link is different: it opens the exact records captured for that saved analysis.
+The broad snapshot is not a fresh retrieval or a substitute for saved evidence.
 
-If the case retains a decision from before the current analysis began, the newer
-analysis opens with an explicit notice. The earlier approval and actions are not
-attached to it. Case and decision identity still must match, and a decision dated
-after the current analysis began cannot be treated as an earlier decision.
+## Prepare the demo
 
-Reopening is read-only. It reads the stored case, analysis, decision, action,
-draft, playback, and observation records that exist; it does not retrieve evidence
-again, change retrieval timestamps, create a case, analyze, approve, retry, or run
-the simulation. A case may have no analysis yet, and a recorded decision may have
-no playback. A failure while loading related records leaves no partially actionable
-workspace. This flow restores only the current analysis because there is no
-historical-analysis endpoint.
+Reopen a known analyzed case rather than creating another case for rehearsal.
+Keep the website tab open and note its case ID, analysis ID and saved time.
+Reopening reads existing work; it does not discover sources again, approve a
+response or execute anything. If the bookmark no longer matches an available
+analysis, stop rather than selecting a similar case merely to populate a screen.
 
-## Explore in Power BI
+## Traditional investigation in Power BI
 
-1. **Investigate the delay.** Open the original supplier email from the disruption
-   card. Identify the component, Chicago plant, original quantity and due date,
-   then choose **Explore in Power BI**. Confirm the report's case ID and analysis
-   ID exactly match the demo and that it says **Snapshot used for this analysis**.
-2. **Check available stock.** Review on-hand units, quality holds, protected
-   allocation, and usable component units. Then inspect the affected order lines
-   and due dates. Treat the saved baseline as the prediction without a response.
-3. **Investigate responses.** Review **RL-Supplier Alpha — Current supplier** and
-   its proposed shipment, the Dallas plant to Chicago plant transfer, and
-   **RL-Supplier Beta — Alternate supplier** and its qualification status.
-   Compare quantities, dates, costs, and blockers with the original supplier email
-   and Quality Teams post. A qualification review date is not approval or a
-   delivery promise.
-4. **Weigh the trade-offs.** Compare every saved option using the same units and
-   assumptions: response cost, service exposure, parts still needed, and planning
-   requirements. No option is highlighted as the recommendation. The planner
-   states a proposed response and unresolved questions.
-5. **Review the decision.** Open **Actions and outcomes** and describe only the
-   recorded decision, action, and outcome states. Keep predictions separate from
-   observations and retain the **Simulated** label on simulated observations.
+Choose **Explore in Power BI** to open the broad traditional report in a new tab.
+
+1. **Supply overview.** Begin with the broad operational rows and customer-order
+   revenue by due date. Show that the report contains multiple suppliers,
+   components and plants. Point out the fictional snapshot context. A due-date
+   distribution is not a trend in actual delivery performance.
+2. **Supplier deliveries.** Filter to `RL-MAT-10247`, Chicago and the current
+   supplier, **RL-Supplier Alpha**. Compare original purchase obligations with
+   proposed partial-shipment rows, dates and status. The 3,000-unit partial offer
+   is not an additional 3,000 units of original demand, and it is not proof that
+   anything has shipped. Open the original supplier email from the website for
+   the communication context.
+3. **Inventory.** Filter to Chicago and `RL-MAT-10247`. Read the stock row:
+   4,500 on hand, 200 on quality hold, 300 protected allocation, leaving 4,000
+   usable component units. Inspect other components or plants to demonstrate
+   manual filtering. Do not add unlike components as one material quantity.
+4. **Production demand.** Inspect production orders, component requirements and
+   due dates for the affected component. The planner connects these requirements
+   to the stock and delivery information rather than starting with an AI ranking.
+5. **Customer orders.** Inspect the customer lines, due dates, revenue and margin
+   associated with that component and plant. USD totals are whole dollars. These
+   are order values; do not label the entire broad portfolio as the selected
+   analysis's calculated revenue at risk.
+6. **Plant transfers.** Inspect the Dallas-to-Chicago proposal, quantity,
+   timing, status and per-component cost. Source and destination are distinct
+   filters. Proposed transfer stock is not evidence of an executed movement.
+7. **Supplier qualification.** Inspect **RL-Supplier Beta — Alternate supplier**,
+   its incomplete audit and first article, and review date. Open the original
+   Quality Teams post from the website. A review date is not approval or a
+   promised delivery date.
+
+State the response you would investigate and the unresolved questions. The
+traditional route starts with operational records, not the application's saved
+option rankings. Each report page has its own filters; verify the visible scope
+when changing pages rather than assuming previous selections followed you.
 
 ## Review with AI assistance
 
-Return to the existing demo tab without changing its case or analysis. Choose
-**Review with AI assistance** and read the three investigation rows in order:
-disruption, stock and exposure; response evidence; then option comparison,
-recommendation, and review and approval. Show the recommendation and explanation
-beside the same saved comparison and original sources. Human judgment still owns
-uncertainty, trade-offs, and authorization.
+Return to the existing website tab and the same saved case. Walk through
+**Understand the disruption**, **Investigate responses**, and **Make the decision**.
+Show how the evidence, impacts and response options are brought together. Open
+the explanation beside the recommendation and distinguish its recorded ranking
+reason from source facts and deterministic calculations.
 
-## Presenter notes
+From the inventory, shipment or customer-exposure card, open its supporting-data
+link. Confirm the report's selected case, analysis and record context and reconcile
+the rows with the card. These exact saved-data pages are intentionally separate
+from the broad operational walkthrough. A presentation of the same saved record
+is traceability, not independent corroboration.
 
-- The Power BI route and assisted route use the same fictional case, immutable
-  analysis snapshot, permissions, assumptions, units, and option predictions.
-- The report's option predictions come from the application's shared saved
-  calculation engine. Power BI presents those values; it does not independently
-  recalculate the analysis. Do not attribute deterministic arithmetic or ranking
-  to Work IQ or an LLM.
-- The traditional route is a neutral planning experience using focused report
-  pages plus the original email and Teams sources. The assisted route brings the
-  same evidence together. The comparison concerns how information is found,
-  connected, checked, and interpreted—not whether Power BI can integrate sources.
-- Check the exact case, analysis, source-record or option identity, quantity,
-  date, status, and units at each destination. A report view of saved evidence is
-  presentation, not independent corroboration. Keep unknowns and source links
-  visible.
-- If a selection is unavailable, a record is missing or ambiguous, the report has
-  not caught up, or an ID differs, stop and use the inline source view. Never pick
-  a similar record or latest analysis merely to populate the report.
-- If the governing decision belongs to a different saved analysis, explain that
-  lineage. **No outcomes recorded** means exactly that; it is not a zero result.
-- Do not create or analyze a case for rehearsal. Do not approve a response, plan
-  execution, start a simulation, or start playback. Re-establish lost demo context
-  with **Reopen existing case**; it does not silently create a new case.
-- Do not claim measured time, click, accuracy, or operational improvements. Any
-  future timing must distinguish cached or replayed material from a fresh run.
+## Presenter safeguards
+
+- Fictional records are presented through real services; neither a saved view nor
+  a working link proves a new Work IQ retrieval occurred during the demonstration.
+- Power BI can integrate sources. The contrast is the investigation and planning
+  workflow, not a claim that conventional reporting cannot combine data.
+- If records are unavailable, incomplete, ambiguous or mismatched, retain the
+  unavailable state. Never replace them with today's or another case's records.
+- This walkthrough does not approve responses, create decisions, execute actions,
+  start simulations or certify populated outcomes or within-case version history.
+- Do not claim measured time savings, click reductions or accuracy improvements
+  without a separate measurement. Human judgment retains authorization.
+
+Publication and native acceptance evidence:
+[traditional reporting verification](../reviews/2026-09-12-traditional-reporting-verification.md).

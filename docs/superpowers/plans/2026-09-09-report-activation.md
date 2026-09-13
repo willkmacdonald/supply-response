@@ -1,5 +1,14 @@
 # Saved-analysis reporting activation implementation plan
 
+> September 12 scope correction: the controlling acceptance is now
+> [Traditional operational reporting](../specs/2026-09-12-traditional-operational-reporting-design.md).
+> Its native broad-report and exact saved-record acceptance supersedes the
+> original AI-clone walkthrough requirements below. A release attestation must
+> identify the actual verified artifact, bindings, account and record selections.
+> It must not claim within-case multi-version history, populated outcomes or
+> execution acceptance without corresponding evidence. Do not create operational
+> fixtures or manufacture a receipt merely to satisfy the older gates.
+
 > **For agentic workers:** Use superpowers:executing-plans to implement this narrow task after controller review. Do not spawn workers or issue a deployment receipt as part of this plan.
 
 **Goal:** Advertise `power_bi_reporting_contract=saved-analysis-v1` only when a separately configured release attestation matches this API build's generated reporting artifacts and the composed report/database bindings.

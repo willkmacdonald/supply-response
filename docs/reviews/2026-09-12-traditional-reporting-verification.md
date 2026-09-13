@@ -49,9 +49,68 @@ Read-only prepublication snapshots of the existing report (124 definition parts)
 and semantic model (10 parts) are preserved locally for recovery. No item was
 published or modified by that export.
 
+## Live additive data installation
+
+After a read-only preflight confirmed the reporting schema had no existing objects,
+only `003_reporting_dataset.sql` and the insert-only dataset loader were applied
+to the existing Fabric SQL target. Committed readback verified dataset ID, timestamp,
+payload bytes/hash and typed row count. Dataset `TRADITIONAL-OPS-2026-09-V1` contains
+178 rows: 74 inventory, 25 purchase, 25 shipment, 13 transfer, 13 qualification,
+14 production orders and 14 customer orders.
+
+Before/after fingerprints matched for all 12 case payloads, 12 operational
+snapshots, seven analysis versions and the canonical live operational snapshot.
+The application's operational schema version remained 12. No report/model
+publication, application deployment or link activation occurred in this step.
+
+Dataset content SHA-256:
+`9f825e6b6fc468f267b9cc5207aba3a4c55dd2c97719a9ad3e54d30a5d9d8ce8`.
+
+## Published semantic model checks
+
+The six-table model was published to the existing semantic-model ID. Native
+execution exposed a defect not caught by the structural TOM parser: `Dataset`
+is reserved as a DAX variable name. Commit `25733bb` replaces that variable with
+`SelectedDatasetId`; independent review passed. The corrected committed model
+was published separately, without changing the report or website.
+
+Read-only queries against the persisted model (not query-local overrides) passed:
+178 operational records; 74 inventory positions; 14 customer order lines;
+Chicago canonical component 4,500/200/300/4,000; Alpha partial shipment 3,000
+units and $22,500; 13 distinct component inventory groups. Mixed-component unit
+totals and missing/unknown dataset selections remain unavailable. The selected
+saved analysis now has one valid inventory row; a mismatched case/analysis
+returns unavailable rather than another case's stock.
+
+Native rendering is still a separate gate. Independent page review found a
+supplier chart aggregation filter, transfer plant filter, missing date/snapshot
+presentation, legacy page visibility and supporting-page chart gaps. These are
+being corrected before the report definition is published.
+
+The candidate customer-order chart exposed two further native defects: the saved
+line's canonical identifier is `source_record_id`, while `customer_order_id` is
+null on those rows; and the native engine returned BLANK for COUNTBLANK over two
+nonblank revenue cells. Strict comparison to zero suppressed both financial and
+stock measures. The correction normalizes only the blank-count result, retaining
+positive row count, completeness, identity and source-null safeguards. No source
+value is replaced with zero. The actual query returned two rows, a $955,000 sum,
+BLANK blank-count, false strict comparison and true normalized comparison.
+
+Query-local corrected native measures now return customer line RL-CO-DEMO-1 at
+$375,000 and RL-CO-DEMO-2 at $580,000, plus the exact saved stock row
+4,500/200/300/4,000. Supplier chart grouping returns seven suppliers and 50
+purchase/shipment rows without summing the two quantities as new supply.
+Read-only SQL-to-published-model parity separately matched ten rows and twelve
+fields per row for both the selected analysis and existing older analysis
+`RL-ANALYSIS-de5f07b1-2cb0-496b-9a11-b29573f40bd4`.
+
+The September 12 controlling acceptance covers traditional reporting and exact
+supporting-data navigation. It does not certify within-case multi-version history,
+populated outcomes or execution. The older activation plan is explicitly marked
+superseded in those respects; no saved fixture is created to satisfy it.
+
 ## Outstanding acceptance
 
-- Live additive loading of the accepted dataset.
 - Traditional semantic model, native tables/charts/slicers and exact saved pages.
 - Existing-item publication, native rendering/filter checks as the demo account.
 - Card-to-record parity, negative identity checks and justified link activation.
