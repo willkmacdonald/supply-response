@@ -1,0 +1,312 @@
+table OperationalRecords
+  column dataset_id
+    dataType: string
+    sourceColumn: dataset_id
+    summarizeBy: none
+
+  column effective_at
+    dataType: dateTime
+    sourceColumn: effective_at
+    summarizeBy: none
+    formatString: MMM d, yyyy HH:mm "UTC"
+
+  column record_id
+    dataType: string
+    sourceColumn: record_id
+    summarizeBy: none
+
+  column record_family
+    dataType: string
+    sourceColumn: record_family
+    summarizeBy: none
+
+  column supplier_id
+    dataType: string
+    sourceColumn: supplier_id
+    summarizeBy: none
+
+  column supplier_name
+    dataType: string
+    sourceColumn: supplier_name
+    summarizeBy: none
+
+  column part_id
+    dataType: string
+    sourceColumn: part_id
+    summarizeBy: none
+
+  column part_name
+    dataType: string
+    sourceColumn: part_name
+    summarizeBy: none
+
+  column plant_id
+    dataType: string
+    sourceColumn: plant_id
+    summarizeBy: none
+
+  column plant_name
+    dataType: string
+    sourceColumn: plant_name
+    summarizeBy: none
+
+  column source_plant_id
+    dataType: string
+    sourceColumn: source_plant_id
+    summarizeBy: none
+
+  column source_plant_name
+    dataType: string
+    sourceColumn: source_plant_name
+    summarizeBy: none
+
+  column destination_plant_id
+    dataType: string
+    sourceColumn: destination_plant_id
+    summarizeBy: none
+
+  column destination_plant_name
+    dataType: string
+    sourceColumn: destination_plant_name
+    summarizeBy: none
+
+  column customer_id
+    dataType: string
+    sourceColumn: customer_id
+    summarizeBy: none
+
+  column product_id
+    dataType: string
+    sourceColumn: product_id
+    summarizeBy: none
+
+  column production_order_id
+    dataType: string
+    sourceColumn: production_order_id
+    summarizeBy: none
+
+  column customer_order_id
+    dataType: string
+    sourceColumn: customer_order_id
+    summarizeBy: none
+
+  column quantity
+    dataType: int64
+    sourceColumn: quantity
+    summarizeBy: none
+    formatString: #,0
+
+  column on_hand
+    dataType: int64
+    sourceColumn: on_hand
+    summarizeBy: none
+    formatString: #,0
+
+  column quality_hold
+    dataType: int64
+    sourceColumn: quality_hold
+    summarizeBy: none
+    formatString: #,0
+
+  column protected_allocation
+    dataType: int64
+    sourceColumn: protected_allocation
+    summarizeBy: none
+    formatString: #,0
+
+  column usable_inventory
+    dataType: int64
+    sourceColumn: usable_inventory
+    summarizeBy: none
+    formatString: #,0
+
+  column component_demand
+    dataType: int64
+    sourceColumn: component_demand
+    summarizeBy: none
+    formatString: #,0
+
+  column due_date
+    dataType: dateTime
+    sourceColumn: due_date
+    summarizeBy: none
+    formatString: MMM d, yyyy
+
+  column original_due_date
+    dataType: dateTime
+    sourceColumn: original_due_date
+    summarizeBy: none
+    formatString: MMM d, yyyy
+
+  column dispatch_date
+    dataType: dateTime
+    sourceColumn: dispatch_date
+    summarizeBy: none
+    formatString: MMM d, yyyy
+
+  column arrival_date
+    dataType: dateTime
+    sourceColumn: arrival_date
+    summarizeBy: none
+    formatString: MMM d, yyyy
+
+  column incremental_cost_per_unit
+    dataType: decimal
+    sourceColumn: incremental_cost_per_unit
+    summarizeBy: none
+    formatString: $#,0.00
+
+  column line_revenue
+    dataType: decimal
+    sourceColumn: line_revenue
+    summarizeBy: none
+    formatString: $#,0
+
+  column line_margin
+    dataType: decimal
+    sourceColumn: line_margin
+    summarizeBy: none
+    formatString: $#,0
+
+  column status
+    dataType: string
+    sourceColumn: status
+    summarizeBy: none
+
+  column audit_complete
+    dataType: boolean
+    sourceColumn: audit_complete
+    summarizeBy: none
+
+  column first_article_complete
+    dataType: boolean
+    sourceColumn: first_article_complete
+    summarizeBy: none
+
+  column expected_decision_date
+    dataType: dateTime
+    sourceColumn: expected_decision_date
+    summarizeBy: none
+    formatString: MMM d, yyyy
+
+  column data_origin
+    dataType: string
+    sourceColumn: data_origin
+    summarizeBy: none
+
+  measure 'External Selected Operational Dataset' =
+      VAR DatasetCount = CALCULATE(DISTINCTCOUNT(OperationalRecords[dataset_id]),
+                  ALLSELECTED(OperationalRecords))
+              RETURN IF(ISFILTERED(OperationalRecords[dataset_id])
+              && HASONEFILTER(OperationalRecords[dataset_id])
+              && DatasetCount == 1,
+              SELECTEDVALUE(OperationalRecords[dataset_id]))
+    isHidden
+
+  measure 'Selected Operational Dataset' =
+      CALCULATE([External Selected Operational Dataset], ALLSELECTED(OperationalRecords))
+    isHidden
+
+  measure 'Operational Snapshot Context' =
+      IF(NOT ISBLANK([Selected Operational Dataset]), "Fictional planning dataset · " & [Selected Operational Dataset] & " · Snapshot " & FORMAT(MAX(OperationalRecords[effective_at]), "MMM d, yyyy HH:mm") & " UTC")
+
+  measure 'Operational Row Visible' =
+      INT(NOT ISBLANK([Selected Operational Dataset]))
+    isHidden
+
+  measure 'Inventory Row Visible' =
+      INT(NOT ISBLANK([Selected Operational Dataset]) && SELECTEDVALUE(OperationalRecords[record_family]) == "inventory")
+    isHidden
+
+  measure 'Delivery Row Visible' =
+      INT(NOT ISBLANK([Selected Operational Dataset]) && SELECTEDVALUE(OperationalRecords[record_family]) == "shipment")
+    isHidden
+
+  measure 'Transfer Row Visible' =
+      INT(NOT ISBLANK([Selected Operational Dataset]) && SELECTEDVALUE(OperationalRecords[record_family]) == "transfer")
+    isHidden
+
+  measure 'Qualification Row Visible' =
+      INT(NOT ISBLANK([Selected Operational Dataset]) && SELECTEDVALUE(OperationalRecords[record_family]) == "qualification")
+    isHidden
+
+  measure 'Customer Order Row Visible' =
+      INT(NOT ISBLANK([Selected Operational Dataset]) && SELECTEDVALUE(OperationalRecords[record_family]) == "customer_order")
+    isHidden
+
+  measure 'Production Demand Row Visible' =
+      INT(NOT ISBLANK([Selected Operational Dataset]) && SELECTEDVALUE(OperationalRecords[record_family]) == "production_order")
+    isHidden
+
+  measure 'Operational Record Count' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(COUNTROWS(OperationalRecords), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id]))))
+    formatString: #,0
+
+  measure 'Inventory Position Count' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(COUNTROWS(OperationalRecords), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "inventory")))
+    formatString: #,0
+
+  measure 'Delivery Line Count' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(COUNTROWS(OperationalRecords), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "shipment")))
+    formatString: #,0
+
+  measure 'Transfer Line Count' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(COUNTROWS(OperationalRecords), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "transfer")))
+    formatString: #,0
+
+  measure 'Qualification Record Count' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(COUNTROWS(OperationalRecords), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "qualification")))
+    formatString: #,0
+
+  measure 'Customer Order Line Count' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(COUNTROWS(OperationalRecords), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "customer_order")))
+    formatString: #,0
+
+  measure 'Production Order Count' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(COUNTROWS(OperationalRecords), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "production_order")))
+    formatString: #,0
+
+  measure 'Inventory On Hand Units' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUM(OperationalRecords[on_hand]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "inventory")))
+    formatString: #,0
+
+  measure 'Inventory Hold Units' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUM(OperationalRecords[quality_hold]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "inventory")))
+    formatString: #,0
+
+  measure 'Inventory Protected Units' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUM(OperationalRecords[protected_allocation]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "inventory")))
+    formatString: #,0
+
+  measure 'Inventory Usable Units' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUM(OperationalRecords[usable_inventory]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "inventory")))
+    formatString: #,0
+
+  measure 'Delivery Units' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUM(OperationalRecords[quantity]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "shipment")))
+    formatString: #,0
+
+  measure 'Delivery Extended Cost' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUMX(OperationalRecords, OperationalRecords[quantity] * OperationalRecords[incremental_cost_per_unit]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "shipment")))
+    formatString: $#,0
+
+  measure 'Transfer Units' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUM(OperationalRecords[quantity]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "transfer")))
+    formatString: #,0
+
+  measure 'Open Customer Revenue' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUM(OperationalRecords[line_revenue]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "customer_order")))
+    formatString: $#,0
+
+  measure 'Open Customer Margin' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUM(OperationalRecords[line_margin]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "customer_order")))
+    formatString: $#,0
+
+  measure 'Production Component Demand' =
+      VAR Dataset = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(Dataset), CALCULATE(SUM(OperationalRecords[component_demand]), KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] == "production_order")))
+    formatString: #,0
+
+  partition OperationalRecords = m
+    mode: directQuery
+    source =
+        Sql.Database(FABRIC_SQL_SERVER, FABRIC_SQL_DATABASE, [Query="SELECT dataset_id,#(lf)       effective_at,#(lf)       record_id,#(lf)       record_family,#(lf)       supplier_id,#(lf)       supplier_name,#(lf)       part_id,#(lf)       part_name,#(lf)       plant_id,#(lf)       plant_name,#(lf)       source_plant_id,#(lf)       source_plant_name,#(lf)       destination_plant_id,#(lf)       destination_plant_name,#(lf)       customer_id,#(lf)       product_id,#(lf)       production_order_id,#(lf)       customer_order_id,#(lf)       quantity,#(lf)       on_hand,#(lf)       quality_hold,#(lf)       protected_allocation,#(lf)       usable_inventory,#(lf)       component_demand,#(lf)       due_date,#(lf)       original_due_date,#(lf)       dispatch_date,#(lf)       arrival_date,#(lf)       incremental_cost_per_unit,#(lf)       line_revenue,#(lf)       line_margin,#(lf)       status,#(lf)       audit_complete,#(lf)       first_article_complete,#(lf)       expected_decision_date,#(lf)       data_origin#(lf)FROM reporting.operational_records;#(lf)"])

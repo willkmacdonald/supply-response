@@ -681,6 +681,7 @@ def test_model_manifest_binds_every_report_field_without_json_payloads(tmp_path)
         "SavedAnalyses",
         "SavedRecords",
         "SavedOptions",
+        "OperationalRecords",
     }
     assert manifest["relationships"] == []
     for flag in (
@@ -891,7 +892,7 @@ def test_all_dax_bindings_resolve_and_selection_gates_are_explicit():
 def test_traditional_marker_is_a_presentation_column_not_a_new_table():
     model = report_model.manifest()
     assert set(model["tables"]) == set(report_model.TABLES)
-    assert len(model["tables"]) == 5
+    assert len(model["tables"]) == 6
     assert (
         model["tables"]["CaseCommandCenter"]["columns"]["walkthrough_route"] == "string"
     )

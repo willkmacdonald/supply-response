@@ -5,14 +5,17 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-CC, SA, SR, SO, AO = (
+from fabric import traditional_model
+
+CC, SA, SR, SO, AO, OR = (
     "CaseCommandCenter",
     "SavedAnalyses",
     "SavedRecords",
     "SavedOptions",
     "ActionOutcomes",
+    traditional_model.TABLE,
 )
-TABLES = (CC, AO, SA, SR, SO)
+TABLES = (CC, AO, SA, SR, SO, OR)
 COLUMNS = {
     CC: [
         "case_id",
@@ -184,6 +187,7 @@ COLUMNS = {
         "production_order_key",
         "in_disruption_scope",
     ],
+    OR: list(traditional_model.COLUMNS),
 }
 GROUP_BY_COLUMNS = {
     (SO, "option_display_name"): ("case_key", "analysis_key", "option_key"),
@@ -218,8 +222,10 @@ EXCEPTIONS = {
         "int64": "quantity on_hand quality_hold protected_allocation usable_inventory component_demand customer_priority original_quantity partial_quantity",
         "decimal": "incremental_cost_per_unit customer_revenue customer_margin unit_revenue unit_margin line_revenue",
     },
+    OR: {},
 }
 TYPES = {t: {c: "string" for c in COLUMNS[t]} for t in TABLES}
+TYPES[OR].update(traditional_model.TYPES)
 for _table, _groups in EXCEPTIONS.items():
     for _type, _names in _groups.items():
         for _column in _names.split():
@@ -242,6 +248,10 @@ DATE_ONLY = {
 
 def column_format(table, name):
     kind = TYPES[table][name]
+    if table == OR and name == "incremental_cost_per_unit":
+        return "$#,0.00"
+    if table == OR and name in {"line_revenue", "line_margin"}:
+        return "$#,0"
     if kind == "dateTime":
         return "MMM d, yyyy" if name in DATE_ONLY else 'MMM d, yyyy HH:mm "UTC"'
     if kind == "decimal":
@@ -338,14 +348,23 @@ def measures():
         result[table][name] = Measure(expression, kind, fmt, hidden)
 
     def external(name, expression, table, kind="string"):
+        return _external(name, expression, table, kind)
+
+    def _external(name, expression, table, kind="string", destination=CC):
         helper = "External " + name
-        add(helper, expression, kind, hidden=True)
+        add(helper, expression, kind, hidden=True, table=destination)
         add(
             name,
             calc("[" + helper + "]", ["ALLSELECTED(" + table + ")"]),
             kind,
             hidden=True,
+            table=destination,
         )
+
+    def install_external(name, expression, table, kind="string", destination=CC):
+        return _external(name, expression, table, kind, destination)
+
+    traditional_model.install_measures(add, install_external)
 
     external(
         "Walkthrough Requested",

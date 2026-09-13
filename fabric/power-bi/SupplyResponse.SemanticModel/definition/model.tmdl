@@ -14,3 +14,4 @@ ref table ActionOutcomes
 ref table SavedAnalyses
 ref table SavedRecords
 ref table SavedOptions
+ref table OperationalRecords
