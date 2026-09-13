@@ -4,7 +4,7 @@
 
 Design captured from Will's approved conversational direction on September 12,
 2026, including the clarification that his real mailbox represents Supplier
-Alpha. Written specification awaiting review. This document is not an
+Alpha. Written specification approved by Will on September 13, 2026. This document is not an
 implementation, deployment, permission grant, or claim of successful delivery.
 
 The presenter demonstrates a connected business story: receive a supplier delay,

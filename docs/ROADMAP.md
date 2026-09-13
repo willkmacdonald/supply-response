@@ -81,7 +81,7 @@ The proposed [email-to-mitigation presenter journey](superpowers/specs/2026-09-1
 captures the next integrated increment: Will's real mailbox as Supplier Alpha,
 presenter-controlled Work IQ discovery, five stages, independent Taylor review,
 option-specific plans, and an explicitly reviewed real email back to Will.
-Its written design is awaiting review; none of these additions is claimed as
+Its written design was approved September 13; none of these additions is claimed as
 deployed by this roadmap update. Historical cases keep their original evidence.
 
 ### 1. Separate finance-person review workflow
