@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Supplier qualification — filtered view'"
+                  "Value": "'Qualification records by supplier (count)'"
                 }
               }
             },

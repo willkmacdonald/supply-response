@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Plant transfers — filtered view'"
+                  "Value": "'Transfer lines by source plant (count)'"
                 }
               }
             },

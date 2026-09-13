@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Customer orders — filtered view'"
+                  "Value": "'Open customer order value by customer (USD)'"
                 }
               }
             },

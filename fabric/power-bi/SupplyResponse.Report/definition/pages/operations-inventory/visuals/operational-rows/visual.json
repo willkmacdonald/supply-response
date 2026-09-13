@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Inventory — operational rows'"
+                  "Value": "'Inventory details'"
                 }
               }
             },

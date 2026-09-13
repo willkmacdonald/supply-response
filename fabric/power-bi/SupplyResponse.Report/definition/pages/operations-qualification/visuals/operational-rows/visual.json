@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Supplier qualification — operational rows'"
+                  "Value": "'Supplier qualification details'"
                 }
               }
             },

@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Customer orders — operational rows'"
+                  "Value": "'Customer orders details'"
                 }
               }
             },

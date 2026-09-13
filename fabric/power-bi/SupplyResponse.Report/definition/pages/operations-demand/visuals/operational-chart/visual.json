@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Production demand — filtered view'"
+                  "Value": "'Production demand by component (units)'"
                 }
               }
             },

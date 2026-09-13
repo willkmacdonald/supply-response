@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Supply overview — operational rows'"
+                  "Value": "'Supply overview details'"
                 }
               }
             },

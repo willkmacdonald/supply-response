@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Supply overview — filtered view'"
+                  "Value": "'Open customer order value by due date (USD)'"
                 }
               }
             },

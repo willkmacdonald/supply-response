@@ -221,7 +221,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Operational date'"
+                  "Value": "'Expected arrival'"
                 }
               }
             },

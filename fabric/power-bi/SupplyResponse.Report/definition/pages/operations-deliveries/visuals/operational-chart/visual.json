@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Supplier deliveries — filtered view'"
+                  "Value": "'Purchase and shipment lines by supplier (count)'"
                 }
               }
             },

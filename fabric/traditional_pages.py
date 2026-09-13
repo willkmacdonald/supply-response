@@ -22,6 +22,24 @@ DATE_FIELDS = {
     "operations-orders": "due_date",
     "operations-demand": "due_date",
 }
+DATE_LABELS = {
+    "operations-overview": "Due date",
+    "operations-inventory": "Stock snapshot date",
+    "operations-deliveries": "Due date",
+    "operations-transfers": "Expected arrival",
+    "operations-qualification": "Review date",
+    "operations-orders": "Due date",
+    "operations-demand": "Due date",
+}
+CHART_TITLES = {
+    "operations-overview": "Open customer order value by due date (USD)",
+    "operations-inventory": "Usable inventory by component (units)",
+    "operations-deliveries": "Purchase and shipment lines by supplier (count)",
+    "operations-transfers": "Transfer lines by source plant (count)",
+    "operations-qualification": "Qualification records by supplier (count)",
+    "operations-orders": "Open customer order value by customer (USD)",
+    "operations-demand": "Production demand by component (units)",
+}
 
 PAGES = {
     "operations-overview": (
@@ -267,20 +285,20 @@ def page(page_id, rp):
         _slicer(
             rp,
             "date-filter",
-            "Operational date",
+            DATE_LABELS[page_id],
             DATE_FIELDS[page_id],
             (1016, 62, 240, 86),
         ),
         rp.table(
             "operational-rows",
-            title + " — operational rows",
+            title + " details",
             TABLE,
             fields,
             scope,
             (24, 166, 784, 456),
             scope_table=TABLE,
         ),
-        _chart(rp, category, measure_name, title + " — filtered view", scope),
+        _chart(rp, category, measure_name, CHART_TITLES[page_id], scope),
         rp.card(
             "snapshot-context",
             "Selected fictional snapshot",

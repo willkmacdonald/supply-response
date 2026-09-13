@@ -174,18 +174,41 @@ def test_broad_pages_use_visible_slicers_dense_tables_and_native_charts():
         assert set(chart["visual"]["query"]["queryState"]) == {"Category", "Y"}
 
     expected_dates = {
-        "operations-overview": "due_date",
-        "operations-inventory": "effective_at",
-        "operations-deliveries": "due_date",
-        "operations-transfers": "arrival_date",
-        "operations-qualification": "expected_decision_date",
-        "operations-orders": "due_date",
-        "operations-demand": "due_date",
+        "operations-overview": ("due_date", "Due date"),
+        "operations-inventory": ("effective_at", "Stock snapshot date"),
+        "operations-deliveries": ("due_date", "Due date"),
+        "operations-transfers": ("arrival_date", "Expected arrival"),
+        "operations-qualification": ("expected_decision_date", "Review date"),
+        "operations-orders": ("due_date", "Due date"),
+        "operations-demand": ("due_date", "Due date"),
     }
-    for page, field_name in expected_dates.items():
+    for page, (field_name, label) in expected_dates.items():
         slicer = artifacts[f"pages/{page}/visuals/date-filter/visual.json"]
         projection = slicer["visual"]["query"]["queryState"]["Values"]["projections"][0]
         assert projection["queryRef"] == f"OperationalRecords.{field_name}"
+        assert slicer["visual"]["objects"]["header"][0]["properties"][
+            "text"
+        ] == report_pages.literal(label)
+
+    for page, expected_title in {
+        "operations-overview": "Open customer order value by due date (USD)",
+        "operations-inventory": "Usable inventory by component (units)",
+        "operations-deliveries": "Purchase and shipment lines by supplier (count)",
+        "operations-transfers": "Transfer lines by source plant (count)",
+        "operations-qualification": "Qualification records by supplier (count)",
+        "operations-orders": "Open customer order value by customer (USD)",
+        "operations-demand": "Production demand by component (units)",
+    }.items():
+        chart = artifacts[f"pages/{page}/visuals/operational-chart/visual.json"]
+        title = chart["visual"]["visualContainerObjects"]["title"][0]["properties"][
+            "text"
+        ]
+        assert title == report_pages.literal(expected_title)
+        table = artifacts[f"pages/{page}/visuals/operational-rows/visual.json"]
+        table_title = table["visual"]["visualContainerObjects"]["title"][0][
+            "properties"
+        ]["text"]
+        assert "operational rows" not in table_title["expr"]["Literal"]["Value"].lower()
 
 
 def test_active_projection_metadata_is_only_on_categories_and_slicers():

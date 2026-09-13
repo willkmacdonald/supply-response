@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Production demand — operational rows'"
+                  "Value": "'Production demand details'"
                 }
               }
             },
