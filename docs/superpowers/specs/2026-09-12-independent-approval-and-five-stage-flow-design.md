@@ -1,6 +1,6 @@
 # Independent approval and five-stage flow
 
-Status: proposed written design under the
+Status: approved by Will on September 13, 2026, under the
 [email-to-mitigation journey](2026-09-12-email-to-mitigation-workflow-design.md).
 
 ## Presentation
