@@ -15,6 +15,7 @@ from data.domain.execution import (
     OutcomeObservation,
     Playback,
 )
+from data.domain.finance import FinanceReview
 from data.synthetic.rl001 import OperationalSnapshot
 
 
@@ -70,6 +71,23 @@ class DecisionStore(Protocol):
         self,
         decision_id: str,
     ) -> tuple[ApprovalSatisfaction, ...]: ...
+
+
+class FinanceReviewStore(Protocol):
+    def get_latest(self, review_id: str) -> tuple[FinanceReview, int]: ...
+
+    def get_by_idempotency_key(
+        self, idempotency_key: str
+    ) -> tuple[FinanceReview, int, str] | None: ...
+
+    def append(
+        self,
+        review: FinanceReview,
+        *,
+        expected_revision: int | None,
+        idempotency_key: str,
+        request_fingerprint: str,
+    ) -> tuple[FinanceReview, int]: ...
 
 
 class ExecutionStore(Protocol):
@@ -155,8 +173,9 @@ class UnitOfWork(Protocol):
     cases: CaseStore
     decisions: DecisionStore
     execution: ExecutionStore
+    finance_reviews: FinanceReviewStore
 
-    def __enter__(self) -> "UnitOfWork": ...
+    def __enter__(self) -> "UnitOfWork": ...  # noqa: PYI034
 
     def __exit__(
         self,

@@ -92,6 +92,38 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.analy
     CREATE INDEX ix_analysis_versions_created_at ON app.analysis_versions (created_at);
 GO
 
+IF OBJECT_ID(N'app.finance_review_revisions', N'U') IS NULL
+BEGIN
+CREATE TABLE app.finance_review_revisions (
+    review_id nvarchar(128) NOT NULL,
+    revision int NOT NULL,
+    case_id nvarchar(128) NOT NULL,
+    analysis_id nvarchar(128) NOT NULL,
+    analysis_material_hash nvarchar(64) NOT NULL,
+    option_id nvarchar(128) NOT NULL,
+    status nvarchar(32) NOT NULL,
+    idempotency_key nvarchar(256) NOT NULL,
+    request_fingerprint nvarchar(64) NOT NULL,
+    recorded_at datetimeoffset(6) NOT NULL,
+    payload_json nvarchar(max) NOT NULL,
+    CONSTRAINT pk_finance_review_revisions PRIMARY KEY (review_id, revision),
+    CONSTRAINT uq_finance_review_revisions_idempotency_key UNIQUE (idempotency_key),
+    CONSTRAINT ck_finance_review_revisions_revision_positive CHECK (revision > 0),
+    CONSTRAINT ck_finance_review_revisions_payload_json CHECK (ISJSON(payload_json) = 1),
+    CONSTRAINT fk_finance_review_revisions_case FOREIGN KEY (case_id) REFERENCES app.case_instances (case_id),
+    CONSTRAINT fk_finance_review_revisions_analysis FOREIGN KEY (analysis_id) REFERENCES app.analysis_versions (analysis_id)
+);
+END;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.finance_review_revisions') AND name = N'ix_finance_review_revisions_case_id') CREATE INDEX ix_finance_review_revisions_case_id ON app.finance_review_revisions (case_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.finance_review_revisions') AND name = N'ix_finance_review_revisions_analysis_id') CREATE INDEX ix_finance_review_revisions_analysis_id ON app.finance_review_revisions (analysis_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.finance_review_revisions') AND name = N'ix_finance_review_revisions_analysis_material_hash') CREATE INDEX ix_finance_review_revisions_analysis_material_hash ON app.finance_review_revisions (analysis_material_hash);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.finance_review_revisions') AND name = N'ix_finance_review_revisions_option_id') CREATE INDEX ix_finance_review_revisions_option_id ON app.finance_review_revisions (option_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.finance_review_revisions') AND name = N'ix_finance_review_revisions_status') CREATE INDEX ix_finance_review_revisions_status ON app.finance_review_revisions (status);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.finance_review_revisions') AND name = N'ix_finance_review_revisions_recorded_at') CREATE INDEX ix_finance_review_revisions_recorded_at ON app.finance_review_revisions (recorded_at);
+GO
+
 IF OBJECT_ID(N'app.evidence_items', N'U') IS NULL
 BEGIN
 CREATE TABLE app.evidence_items (

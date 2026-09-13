@@ -151,6 +151,7 @@ def test_shared_metadata_defines_closed_loop_schema():
         "execution_actions",
         "execution_attempts",
         "execution_events",
+        "finance_review_revisions",
         "operational_snapshots",
         "outbox_events",
         "outcome_observations",
@@ -668,7 +669,7 @@ def test_alembic_upgrade_path_adds_pointer_foreign_keys_after_original_0001(
             connection.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-            == "0006_playback_terminal_failure"
+            == "0007_finance_review_revisions"
         )
     head_foreign_keys = {
         tuple(item["constrained_columns"])

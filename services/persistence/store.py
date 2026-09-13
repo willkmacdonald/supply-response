@@ -2383,6 +2383,10 @@ class SqlAlchemyUnitOfWork:
         self._transaction = None
 
     def __enter__(self) -> SqlAlchemyUnitOfWork:
+        from services.persistence.finance_reviews import (
+            SqlAlchemyFinanceReviewRepository,
+        )
+
         self._connection = self._store.engine.connect()
         self._transaction = self._connection.begin()
         self.cases = SqlAlchemyCaseRepository(self._store, self._connection)
@@ -2395,6 +2399,9 @@ class SqlAlchemyUnitOfWork:
             self._store,
             self._connection,
             before_outbox_insert=self._before_outbox_insert,
+        )
+        self.finance_reviews = SqlAlchemyFinanceReviewRepository(
+            self._store, self._connection
         )
         return self
 

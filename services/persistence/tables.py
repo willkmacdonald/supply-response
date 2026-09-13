@@ -142,6 +142,38 @@ analysis_versions = Table(
     Column("payload_json", Text, nullable=False),
 )
 
+finance_review_revisions = Table(
+    "finance_review_revisions",
+    metadata,
+    Column("review_id", String(128), primary_key=True),
+    Column("revision", Integer, primary_key=True),
+    Column(
+        "case_id",
+        String(128),
+        ForeignKey("case_instances.case_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    ),
+    Column(
+        "analysis_id",
+        String(128),
+        ForeignKey("analysis_versions.analysis_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    ),
+    Column("analysis_material_hash", String(64), nullable=False, index=True),
+    Column("option_id", String(128), nullable=False, index=True),
+    Column("status", String(32), nullable=False, index=True),
+    Column("idempotency_key", String(256), nullable=False),
+    Column("request_fingerprint", String(64), nullable=False),
+    Column("recorded_at", DateTime(timezone=True), nullable=False, index=True),
+    Column("payload_json", Text, nullable=False),
+    UniqueConstraint(
+        "idempotency_key", name="uq_finance_review_revisions_idempotency_key"
+    ),
+    CheckConstraint("revision > 0", name="revision_positive"),
+)
+
 evidence_items = Table(
     "evidence_items",
     metadata,

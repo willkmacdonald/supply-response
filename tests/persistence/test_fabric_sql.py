@@ -16,6 +16,26 @@ def test_fabric_sql_adapter_module_exists():
     assert find_spec("services.persistence.fabric_sql") is not None
 
 
+def test_finance_review_schema_is_additive_and_bound():
+    sql = Path("fabric/sql/001_operational_schema.sql").read_text()
+    assert "CREATE TABLE app.finance_review_revisions" in sql
+    assert "PRIMARY KEY (review_id, revision)" in sql
+    assert "UNIQUE (idempotency_key)" in sql
+    assert "CHECK (revision > 0)" in sql
+    assert "CHECK (ISJSON(payload_json) = 1)" in sql
+    assert "REFERENCES app.case_instances (case_id)" in sql
+    assert "REFERENCES app.analysis_versions (analysis_id)" in sql
+    for column in (
+        "case_id",
+        "analysis_id",
+        "analysis_material_hash",
+        "option_id",
+        "status",
+        "recorded_at",
+    ):
+        assert f"ix_finance_review_revisions_{column}" in sql
+
+
 def test_fabric_sql_adapter_exposes_required_contract():
     assert hasattr(fabric_sql, "build_fabric_engine")
     assert hasattr(fabric_sql, "fabric_store")
