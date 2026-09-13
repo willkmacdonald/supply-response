@@ -9,13 +9,14 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from threading import Barrier
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from threading import Barrier, Lock
 from typing import cast
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 
 from data.domain import CasePurpose, CaseStatus
 from data.domain.analysis import AnalysisVersion
@@ -28,6 +29,7 @@ from data.domain.decisions import (
     StandingAuthorization,
 )
 from data.domain.evidence import IdentitySource
+from data.domain.finance import FinanceProposal, FinanceReview
 from data.synthetic.rl001 import (
     OperationalSnapshot,
     build_rl001_evidence,
@@ -39,6 +41,12 @@ from services.analysis.service import AnalyzeCaseCommand, analyze_case
 from services.decisions.service import DecisionService, IdempotencyKeyConflict
 from services.execution.playback import ImmediateClock, PlaybackService
 from services.execution.worker import ActionPlanningWorker, UnitOfWorkFactory
+from services.persistence.finance_reviews import (
+    FinanceReviewIdempotencyConflict,
+    FinanceReviewRevisionConflict,
+    SqlAlchemyFinanceReviewRepository,
+    append_finance_review,
+)
 from services.persistence.sqlite import sqlite_store
 from services.persistence.store import (
     ImmutableRecordConflict,
@@ -49,9 +57,10 @@ from services.persistence.store import (
 from services.persistence.tables import (
     case_projection,
     execution_actions,
+    finance_review_revisions,
     outbox_events,
 )
-
+from services.policy.finance_review import resolve_finance_review, submit_finance_review
 
 StoreFactory = Callable[[], SqlAlchemyStore]
 OutboxCleanup = Callable[["DecisionContext"], None]
@@ -97,6 +106,25 @@ def _alex() -> IdentitySnapshot:
         source_id="RL-ENTRA-ALEX",
         display_name="Alex Morgan",
         user_principal_name="alex@example.invalid",
+    )
+
+
+def _finance_actor(persona: str) -> IdentitySnapshot:
+    return IdentitySnapshot(
+        persona_id=f"RL-PERSONA-{persona}",
+        effective_roles=(
+            ("material_planner", "response_approver")
+            if persona == "ALEX"
+            else ("finance_approver",)
+        ),
+        identity_source=IdentitySource.ENTRA,
+        source_id=f"RL-ENTRA-{persona}",
+        tenant_id="11111111-1111-4111-8111-111111111111",
+        object_id=(
+            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+            if persona == "ALEX"
+            else "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+        ),
     )
 
 
@@ -151,6 +179,117 @@ def _persist_analysis(store: SqlAlchemyStore) -> DecisionContext:
         analysis=analysis,
         suffix=suffix,
     )
+
+
+def _pending_finance_review(context: DecisionContext) -> FinanceReview:
+    option = next(
+        item
+        for item in context.analysis.response_options
+        if item.option_id == "RL-OPTION-COMBINED"
+    )
+    assert option.predicted is not None
+    proposal = FinanceProposal(
+        case_id=context.case.case_id,
+        analysis_id=context.analysis.analysis_id,
+        analysis_material_hash=context.analysis.material_hash,
+        option_id=option.option_id,
+        response_cost=Decimal(option.predicted.response_cost),
+    )
+    return submit_finance_review(
+        review_id=f"RL-FINANCE-CONTRACT-{context.suffix}",
+        proposal=proposal,
+        actor=_finance_actor("ALEX"),
+        now=datetime(2026, 9, 13, 12, tzinfo=UTC),
+    )
+
+
+def _resolved_finance_review(
+    pending: FinanceReview, *, approved: bool
+) -> FinanceReview:
+    return resolve_finance_review(
+        review=pending,
+        current_proposal=pending.proposal,
+        actor=_finance_actor("TAYLOR"),
+        approved=approved,
+        reason="Within budget" if approved else "Too costly",
+        now=pending.submitted_at + timedelta(seconds=1),
+    )
+
+
+def _finance_rows(store: SqlAlchemyStore, review_id: str):
+    with store.engine.connect() as connection:
+        return tuple(
+            connection.execute(
+                select(finance_review_revisions)
+                .where(finance_review_revisions.c.review_id == review_id)
+                .order_by(finance_review_revisions.c.revision)
+            )
+            .mappings()
+            .all()
+        )
+
+
+def _race_finance_appends(
+    monkeypatch: pytest.MonkeyPatch,
+    store: SqlAlchemyStore,
+    calls: tuple[tuple[FinanceReview, str, str], tuple[FinanceReview, str, str]],
+):
+    barrier = Barrier(2)
+    coordination_lock = Lock()
+    original = SqlAlchemyFinanceReviewRepository.get_latest
+    synchronized_connections: list[int] = []
+
+    def synchronized_get_latest(repository, review_id):
+        result = original(repository, review_id)
+        synchronize = False
+        with coordination_lock:
+            if review_id == calls[0][0].review_id and len(synchronized_connections) < 2:
+                synchronized_connections.append(id(repository._connection))
+                synchronize = True
+        if synchronize:
+            barrier.wait()
+        return result
+
+    monkeypatch.setattr(
+        SqlAlchemyFinanceReviewRepository,
+        "get_latest",
+        synchronized_get_latest,
+    )
+
+    def append(call):
+        review, key, fingerprint = call
+        return append_finance_review(
+            cast(UnitOfWorkFactory, store.uow_factory),
+            review,
+            expected_revision=1,
+            idempotency_key=key,
+            request_fingerprint=fingerprint,
+        )
+
+    def capture(call):
+        try:
+            return append(call)
+        except (
+            FinanceReviewRevisionConflict,
+            FinanceReviewIdempotencyConflict,
+        ) as error:
+            return error
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = tuple(executor.map(capture, calls))
+
+    assert len(synchronized_connections) == 2
+    assert len(set(synchronized_connections)) == 2
+    return results
+
+
+def _delete_finance_review(store: SqlAlchemyStore, review_id: str) -> None:
+    with store.engine.begin() as connection:
+        connection.execute(
+            delete(finance_review_revisions).where(
+                finance_review_revisions.c.review_id == review_id
+            )
+        )
 
 
 def _decision_command(
@@ -318,6 +457,115 @@ def test_case_analysis_decision_outbox_action_and_observation_round_trip(
     assert len(cast(tuple[object, ...], restored["actions"])) == 5
     assert len(cast(tuple[object, ...], restored["drafts"])) == 1
     assert len(cast(tuple[object, ...], restored["observations"])) == 10
+
+
+def test_concurrent_finance_review_resolutions_with_different_keys_have_one_winner(
+    store_factory: StoreFactory,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    store = store_factory()
+    pending = _pending_finance_review(_persist_analysis(store))
+    approved = _resolved_finance_review(pending, approved=True)
+    rejected = _resolved_finance_review(pending, approved=False)
+    append_finance_review(
+        cast(UnitOfWorkFactory, store.uow_factory),
+        pending,
+        expected_revision=None,
+        idempotency_key=f"submit-{pending.review_id}",
+        request_fingerprint="a" * 64,
+    )
+    try:
+        results = _race_finance_appends(
+            monkeypatch,
+            store,
+            (
+                (approved, f"approve-{pending.review_id}", "b" * 64),
+                (rejected, f"reject-{pending.review_id}", "c" * 64),
+            ),
+        )
+
+        winners = tuple(item for item in results if isinstance(item, tuple))
+        conflicts = tuple(
+            item for item in results if isinstance(item, FinanceReviewRevisionConflict)
+        )
+        assert len(winners) == 1
+        assert winners[0][1] == 2
+        assert len(conflicts) == 1
+        with store.uow_factory() as uow:
+            assert uow.finance_reviews.get_latest(pending.review_id) == winners[0]
+        rows = _finance_rows(store, pending.review_id)
+        assert [row["revision"] for row in rows] == [1, 2]
+        assert len(rows) == 2
+    finally:
+        _delete_finance_review(store, pending.review_id)
+
+
+def test_concurrent_finance_review_replay_with_same_key_returns_one_revision(
+    store_factory: StoreFactory,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    store = store_factory()
+    pending = _pending_finance_review(_persist_analysis(store))
+    approved = _resolved_finance_review(pending, approved=True)
+    append_finance_review(
+        cast(UnitOfWorkFactory, store.uow_factory),
+        pending,
+        expected_revision=None,
+        idempotency_key=f"submit-{pending.review_id}",
+        request_fingerprint="d" * 64,
+    )
+    call = (approved, f"approve-{pending.review_id}", "e" * 64)
+    try:
+        results = _race_finance_appends(monkeypatch, store, (call, call))
+
+        assert results == ((approved, 2), (approved, 2))
+        rows = _finance_rows(store, pending.review_id)
+        assert [row["revision"] for row in rows] == [1, 2]
+        assert sum(row["revision"] == 2 for row in rows) == 1
+    finally:
+        _delete_finance_review(store, pending.review_id)
+
+
+def test_concurrent_finance_review_same_key_with_different_request_conflicts(
+    store_factory: StoreFactory,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    store = store_factory()
+    pending = _pending_finance_review(_persist_analysis(store))
+    approved = _resolved_finance_review(pending, approved=True)
+    rejected = _resolved_finance_review(pending, approved=False)
+    append_finance_review(
+        cast(UnitOfWorkFactory, store.uow_factory),
+        pending,
+        expected_revision=None,
+        idempotency_key=f"submit-{pending.review_id}",
+        request_fingerprint="f" * 64,
+    )
+    shared_key = f"resolve-{pending.review_id}"
+    try:
+        results = _race_finance_appends(
+            monkeypatch,
+            store,
+            (
+                (approved, shared_key, "1" * 64),
+                (rejected, shared_key, "2" * 64),
+            ),
+        )
+
+        winners = tuple(item for item in results if isinstance(item, tuple))
+        conflicts = tuple(
+            item
+            for item in results
+            if isinstance(item, FinanceReviewIdempotencyConflict)
+        )
+        assert len(winners) == 1
+        assert winners[0][1] == 2
+        assert len(conflicts) == 1
+        rows = _finance_rows(store, pending.review_id)
+        assert [row["revision"] for row in rows] == [1, 2]
+        assert len(rows) == 2
+    finally:
+        _delete_finance_review(store, pending.review_id)
 
 
 def test_decision_and_outbox_transaction_rolls_back_atomically(
