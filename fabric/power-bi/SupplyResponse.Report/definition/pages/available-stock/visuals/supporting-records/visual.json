@@ -10,7 +10,7 @@
     "tabOrder": 3
   },
   "visual": {
-    "visualType": "pivotTable",
+    "visualType": "tableEx",
     "visualContainerObjects": {
       "background": [
         {
@@ -141,24 +141,11 @@
             }
           }
         }
-      ],
-      "stylePreset": [
-        {
-          "properties": {
-            "name": {
-              "expr": {
-                "Literal": {
-                  "Value": "'None'"
-                }
-              }
-            }
-          }
-        }
       ]
     },
     "query": {
       "queryState": {
-        "Rows": {
+        "Values": {
           "projections": [
             {
               "field": {
@@ -189,70 +176,66 @@
               "queryRef": "SavedRecords.plant_id",
               "nativeQueryRef": "plant_id",
               "displayName": "Plant id"
-            }
-          ]
-        },
-        "Values": {
-          "projections": [
+            },
             {
               "field": {
-                "Measure": {
+                "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "CaseCommandCenter"
+                      "Entity": "SavedRecords"
                     }
                   },
-                  "Property": "Stock On Hand Row"
+                  "Property": "on_hand"
                 }
               },
-              "queryRef": "CaseCommandCenter.Stock On Hand Row",
-              "nativeQueryRef": "Stock On Hand Row",
+              "queryRef": "SavedRecords.on_hand",
+              "nativeQueryRef": "on_hand",
               "displayName": "On hand"
             },
             {
               "field": {
-                "Measure": {
+                "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "CaseCommandCenter"
+                      "Entity": "SavedRecords"
                     }
                   },
-                  "Property": "Stock Held Row"
+                  "Property": "quality_hold"
                 }
               },
-              "queryRef": "CaseCommandCenter.Stock Held Row",
-              "nativeQueryRef": "Stock Held Row",
+              "queryRef": "SavedRecords.quality_hold",
+              "nativeQueryRef": "quality_hold",
               "displayName": "Quality hold"
             },
             {
               "field": {
-                "Measure": {
+                "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "CaseCommandCenter"
+                      "Entity": "SavedRecords"
                     }
                   },
-                  "Property": "Stock Protected Row"
+                  "Property": "protected_allocation"
                 }
               },
-              "queryRef": "CaseCommandCenter.Stock Protected Row",
-              "nativeQueryRef": "Stock Protected Row",
+              "queryRef": "SavedRecords.protected_allocation",
+              "nativeQueryRef": "protected_allocation",
               "displayName": "Protected allocation"
             },
             {
               "field": {
-                "Measure": {
+                "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "CaseCommandCenter"
+                      "Entity": "SavedRecords"
                     }
                   },
-                  "Property": "Stock Usable Row"
+                  "Property": "usable_inventory"
                 }
               },
-              "queryRef": "CaseCommandCenter.Stock Usable Row",
-              "nativeQueryRef": "Stock Usable Row",
-              "displayName": "Usable units"
+              "queryRef": "SavedRecords.usable_inventory",
+              "nativeQueryRef": "usable_inventory",
+              "displayName": "Usable inventory"
             }
           ]
         }
@@ -288,20 +271,6 @@
               "expr": {
                 "Literal": {
                   "Value": "11D"
-                }
-              }
-            },
-            "autoSizeColumnWidth": {
-              "expr": {
-                "Literal": {
-                  "Value": "true"
-                }
-              }
-            },
-            "columnAdjustment": {
-              "expr": {
-                "Literal": {
-                  "Value": "'growToFit'"
                 }
               }
             }
@@ -350,15 +319,17 @@
                   "Value": "11D"
                 }
               }
-            },
-            "fontColorSecondary": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "Literal": {
-                      "Value": "'#183E35'"
-                    }
-                  }
+            }
+          }
+        }
+      ],
+      "total": [
+        {
+          "properties": {
+            "totals": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
                 }
               }
             }
@@ -377,173 +348,8 @@
             }
           }
         }
-      ],
-      "rowHeaders": [
-        {
-          "properties": {
-            "stepped": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "repeatRowHeaders": {
-              "expr": {
-                "Literal": {
-                  "Value": "true"
-                }
-              }
-            },
-            "showExpandCollapseButtons": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "fontColor": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "Literal": {
-                      "Value": "'#183E35'"
-                    }
-                  }
-                }
-              }
-            },
-            "backColor": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "Literal": {
-                      "Value": "'#FFFFFF'"
-                    }
-                  }
-                }
-              }
-            },
-            "fontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "11D"
-                }
-              }
-            }
-          }
-        }
-      ],
-      "subTotals": [
-        {
-          "properties": {
-            "rowSubtotals": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "columnSubtotals": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            }
-          }
-        },
-        {
-          "selector": {
-            "id": "Row"
-          },
-          "properties": {
-            "rowSubtotals": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "columnSubtotals": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            }
-          }
-        },
-        {
-          "selector": {
-            "id": "Column"
-          },
-          "properties": {
-            "rowSubtotals": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "columnSubtotals": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            }
-          }
-        }
       ]
-    },
-    "expansionStates": [
-      {
-        "roles": [
-          "Rows"
-        ],
-        "levels": [
-          {
-            "queryRefs": [
-              "SavedRecords.part_id"
-            ],
-            "identityKeys": [
-              {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "SavedRecords"
-                    }
-                  },
-                  "Property": "part_id"
-                }
-              }
-            ],
-            "isCollapsed": false,
-            "isPinned": true
-          },
-          {
-            "queryRefs": [
-              "SavedRecords.plant_id"
-            ],
-            "identityKeys": [
-              {
-                "Column": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "SavedRecords"
-                    }
-                  },
-                  "Property": "plant_id"
-                }
-              }
-            ],
-            "isCollapsed": false,
-            "isPinned": true
-          }
-        ]
-      }
-    ]
+    }
   },
   "filterConfig": {
     "filters": [

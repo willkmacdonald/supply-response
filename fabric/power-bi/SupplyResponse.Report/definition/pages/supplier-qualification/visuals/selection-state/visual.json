@@ -185,7 +185,7 @@
                       "Entity": "CaseCommandCenter"
                     }
                   },
-                  "Property": "Record State"
+                  "Property": "Snapshot Context"
                 }
               }
             }

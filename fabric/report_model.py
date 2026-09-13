@@ -990,12 +990,14 @@ def measures():
     display(
         "Option Revenue Display",
         "Selected Option revenue_at_risk",
-        "; currency not specified",
+        "",
+        "$#,0",
     )
     display(
         "Option Cost Display",
         "Selected Option response_cost",
-        "; currency not specified",
+        "",
+        "$#,0",
     )
     add(
         "Options Explanation",

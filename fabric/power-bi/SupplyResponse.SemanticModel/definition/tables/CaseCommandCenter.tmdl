@@ -896,10 +896,10 @@ table CaseCommandCenter
       IF([Option Requested] == 0,"Compare the saved options",IF(ISBLANK([Selected Option Key]),"Selected option unavailable",[Selected Option option_display_name]))
 
   measure 'Option Revenue Display' =
-      VAR V = [Selected Option revenue_at_risk] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "#,0.##") & "; currency not specified")
+      VAR V = [Selected Option revenue_at_risk] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "$#,0") & "")
 
   measure 'Option Cost Display' =
-      VAR V = [Selected Option response_cost] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "#,0.##") & "; currency not specified")
+      VAR V = [Selected Option response_cost] RETURN IF(ISBLANK(V), "Unavailable", FORMAT(V, "$#,0") & "")
 
   measure 'Options Explanation' =
       IF(NOT ISBLANK([Selected Analysis Key]),IF([Option Requested] == 0,"Compare expected cost, service exposure, parts still needed, and whether each option meets the planning requirements. These predictions are not approved actions or outcomes.",IF(NOT ISBLANK([Selected Option Key]),COALESCE([Selected Option blockers_text],"Planning blockers unavailable") & ". " & COALESCE([Selected Option required_roles_text],"Required roles unavailable"))))

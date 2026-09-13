@@ -559,6 +559,12 @@ def case_selector():
 
 
 def common(title, state):
+    if state == "Record State":
+        # Record State expands several DirectQuery identity/provenance measures and
+        # takes about a minute in the service. The exact row and source-detail
+        # visuals below retain the record identity; this header binds the faster
+        # saved-analysis snapshot context.
+        state = "Snapshot Context"
     return [
         text("page-title", title, (24, 12, 1232, 49), 26),
         card(
@@ -589,65 +595,7 @@ def detail(page):
         scope,
         (24, 164, 800, 388),
     )
-    if page == "available-stock":
-        visual = supporting["visual"]
-        visual["visualType"] = "pivotTable"
-        rows = [column(SR, "part_id"), column(SR, "plant_id")]
-        visual["query"]["queryState"] = {
-            "Rows": {"projections": rows},
-            "Values": {
-                "projections": [
-                    measure("Stock On Hand Row", "On hand"),
-                    measure("Stock Held Row", "Quality hold"),
-                    measure("Stock Protected Row", "Protected allocation"),
-                    measure("Stock Usable Row", "Usable units"),
-                ]
-            },
-        }
-        visual["expansionStates"] = [
-            {
-                "roles": ["Rows"],
-                "levels": [
-                    {
-                        "queryRefs": [item["queryRef"]],
-                        "identityKeys": [item["field"]],
-                        "isCollapsed": False,
-                        "isPinned": True,
-                    }
-                    for item in rows
-                ],
-            }
-        ]
-        objects = visual["objects"]
-        del objects["total"]
-        objects["rowHeaders"] = obj(
-            {
-                "stepped": literal(False),
-                "repeatRowHeaders": literal(True),
-                "showExpandCollapseButtons": literal(False),
-                "fontColor": color(GREEN),
-                "backColor": color(WHITE),
-                "fontSize": literal(11),
-            }
-        )
-        totals = {
-            "rowSubtotals": literal(False),
-            "columnSubtotals": literal(False),
-        }
-        objects["subTotals"] = [
-            {"properties": totals},
-            {"selector": {"id": "Row"}, "properties": totals},
-            {"selector": {"id": "Column"}, "properties": totals},
-        ]
-        objects["columnHeaders"][0]["properties"].update(
-            {
-                "autoSizeColumnWidth": literal(True),
-                "columnAdjustment": literal("growToFit"),
-            }
-        )
-        objects["values"][0]["properties"]["fontColorSecondary"] = color(GREEN)
-        visual["visualContainerObjects"]["stylePreset"] = obj({"name": literal("None")})
-    elif page == "customer-orders":
+    if page == "customer-orders":
         supporting["visual"]["query"]["queryState"]["Values"]["projections"].insert(
             0, projection("Column", SR, "source_record_id", "Order line")
         )

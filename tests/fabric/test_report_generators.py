@@ -469,10 +469,10 @@ def test_business_tables_preserve_stock_totals_and_order_line_grain():
     assert [item["queryRef"] for item in stock] == [
         "SavedRecords.part_id",
         "SavedRecords.plant_id",
-        "CaseCommandCenter.Stock On Hand Row",
-        "CaseCommandCenter.Stock Held Row",
-        "CaseCommandCenter.Stock Protected Row",
-        "CaseCommandCenter.Stock Usable Row",
+        "SavedRecords.on_hand",
+        "SavedRecords.quality_hold",
+        "SavedRecords.protected_allocation",
+        "SavedRecords.usable_inventory",
     ]
     orders = projections("customer-orders")
     assert any(
@@ -549,47 +549,28 @@ def test_common_text_fits_font_floors_and_does_not_overlap():
         assert position["y"] + position["height"] <= page["height"], path
 
 
-def test_stock_matrix_retains_part_plant_grain_and_guarded_measures():
+def test_stock_table_retains_raw_part_plant_grain_and_exact_gate():
     artifact = report_pages.artifacts()[
         "pages/available-stock/visuals/supporting-records/visual.json"
     ]
     visual = artifact["visual"]
-    assert visual["visualType"] == "pivotTable"
+    assert visual["visualType"] == "tableEx"
     roles = visual["query"]["queryState"]
-    assert set(roles) == {"Rows", "Values"}
-    assert roles["Rows"]["projections"] == [
-        report_pages.column(report_pages.SR, "part_id"),
-        report_pages.column(report_pages.SR, "plant_id"),
-    ]
+    assert set(roles) == {"Values"}
     assert roles["Values"]["projections"] == [
-        report_pages.measure("Stock On Hand Row", "On hand"),
-        report_pages.measure("Stock Held Row", "Quality hold"),
-        report_pages.measure("Stock Protected Row", "Protected allocation"),
-        report_pages.measure("Stock Usable Row", "Usable units"),
+        report_pages.column(report_pages.SR, field)
+        for field in (
+            "part_id",
+            "plant_id",
+            "on_hand",
+            "quality_hold",
+            "protected_allocation",
+            "usable_inventory",
+        )
     ]
     assert artifact["filterConfig"]["filters"][0]["field"] == report_pages.field(
         "Measure", report_pages.CC, "Stock Row Visible"
     )
-    assert visual["expansionStates"] == [
-        {
-            "roles": ["Rows"],
-            "levels": [
-                {
-                    "queryRefs": [item["queryRef"]],
-                    "identityKeys": [item["field"]],
-                    "isCollapsed": False,
-                    "isPinned": True,
-                }
-                for item in roles["Rows"]["projections"]
-            ],
-        }
-    ]
-    assert "total" not in visual["objects"]
-    for instance in visual["objects"]["subTotals"]:
-        assert instance["properties"] == {
-            "rowSubtotals": report_pages.literal(False),
-            "columnSubtotals": report_pages.literal(False),
-        }
     for path, value in report_pages.artifacts().items():
         item = value.get("visual", {})
         if item.get("visualType") == "tableEx":

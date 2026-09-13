@@ -244,6 +244,26 @@ def test_saved_detail_pages_remain_exact_and_are_not_ai_prose_layouts():
         assert artifacts[f"pages/{page}/page.json"]["visibility"] == "HiddenInViewMode"
 
 
+def test_exact_record_headers_use_fast_saved_snapshot_context():
+    artifacts = report_pages.artifacts()
+    for page in ("supplier-shipment", "plant-transfer", "supplier-qualification"):
+        header = artifacts[f"pages/{page}/visuals/selection-state/visual.json"]
+        expression = header["visual"]["objects"]["values"][0]["properties"]["expr"][
+            "expr"
+        ]
+        assert expression == report_pages.field(
+            "Measure", report_pages.CC, "Snapshot Context"
+        )
+
+
+def test_option_money_displays_are_usd_whole_dollars():
+    measures = report_model.measures()["CaseCommandCenter"]
+    for name in ("Option Revenue Display", "Option Cost Display"):
+        expression = measures[name].expression
+        assert 'FORMAT(V, "$#,0")' in expression
+        assert "currency not specified" not in expression
+
+
 def test_native_tom_validator_requires_the_explicit_six_table_contract():
     source = (ROOT / "tests/fabric/tmdl-validator/Program.cs").read_text()
     assert "manifest must contain the six approved tables" in source
