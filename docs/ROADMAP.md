@@ -77,6 +77,13 @@ Foundry explanation invocation, finance-person approval or downstream execution.
 
 ## Remaining work
 
+The proposed [email-to-mitigation presenter journey](superpowers/specs/2026-09-12-email-to-mitigation-workflow-design.md)
+captures the next integrated increment: Will's real mailbox as Supplier Alpha,
+presenter-controlled Work IQ discovery, five stages, independent Taylor review,
+option-specific plans, and an explicitly reviewed real email back to Will.
+Its written design is awaiting review; none of these additions is claimed as
+deployed by this roadmap update. Historical cases keep their original evidence.
+
 ### 1. Separate finance-person review workflow
 
 Taylor Brooks (`RL-PERSONA-TAYLOR`) already has a separate Finance Approver
