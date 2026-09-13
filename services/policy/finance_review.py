@@ -89,8 +89,6 @@ def resolve_finance_review(
     if now < review.submitted_at:
         raise FinanceReviewViolation("Review time cannot precede submission")
     normalized_reason = reason.strip() if reason is not None else None
-    if approved and normalized_reason:
-        raise FinanceReviewViolation("Approved review cannot include a reason")
     if not approved and not normalized_reason:
         raise FinanceReviewViolation("Rejected review requires a nonblank reason")
     values = review.model_dump()

@@ -110,8 +110,6 @@ class FinanceReview(FrozenModel):
                 or self.superseded_at is not None
             ):
                 raise ValueError("resolved review requires reviewer and review time")
-            if self.status is FinanceReviewStatus.APPROVED and self.reason is not None:
-                raise ValueError("approved review cannot contain a reason")
             if self.status is FinanceReviewStatus.REJECTED and self.reason is None:
                 raise ValueError("rejected review requires a nonblank reason")
         elif self.superseded_at is None:

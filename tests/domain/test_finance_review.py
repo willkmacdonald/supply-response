@@ -140,19 +140,24 @@ def test_malformed_analysis_hash_is_rejected(value: str):
         proposal(analysis_material_hash=value)
 
 
-def test_approval_records_taylor_and_preserves_pending_object():
+def test_approval_records_taylor_and_optional_note_and_preserves_pending_object():
     pending = pending_review()
     approved = resolve_finance_review(
         review=pending,
         current_proposal=proposal(),
         actor=actor("TAYLOR"),
         approved=True,
-        reason=None,
+        reason="  Approved within budget  ",
         now=NOW + timedelta(seconds=1),
     )
     assert pending.status is FinanceReviewStatus.PENDING
     assert approved.status is FinanceReviewStatus.APPROVED
     assert approved.reviewed_by == actor("TAYLOR")
+    assert approved.reason == "Approved within budget"
+    superseded = supersede_finance_review(
+        review=approved, now=NOW + timedelta(seconds=2)
+    )
+    assert superseded.reason == "Approved within budget"
 
 
 @pytest.mark.parametrize("reason", [None, "", "   "])
@@ -314,12 +319,6 @@ def test_supersession_is_immutable_idempotent_and_preserves_review_metadata():
             "status": FinanceReviewStatus.REJECTED,
             "reviewed_by": actor("TAYLOR"),
             "reviewed_at": NOW,
-        },
-        {
-            "status": FinanceReviewStatus.APPROVED,
-            "reviewed_by": actor("TAYLOR"),
-            "reviewed_at": NOW,
-            "reason": "no",
         },
         {"status": FinanceReviewStatus.SUPERSEDED},
         {
