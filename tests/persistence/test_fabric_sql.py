@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from apps.api.app.settings import Settings
 from data.domain import RuntimeMode
+from integrations.fabric.schema import split_go_batches
 from services.persistence import fabric_sql
 from services.persistence import store as store_module
 
@@ -34,6 +35,36 @@ def test_finance_review_schema_is_additive_and_bound():
         "recorded_at",
     ):
         assert f"ix_finance_review_revisions_{column}" in sql
+
+
+def test_proposal_selection_schema_is_guarded_and_ordered():
+    sql = Path("fabric/sql/001_operational_schema.sql").read_text()
+    assert "CREATE TABLE app.case_proposal_selections" in sql
+    assert "FOREIGN KEY (finance_review_id, finance_review_revision)" in sql
+    assert (
+        "finance_review_id IS NOT NULL AND finance_review_revision IS NOT NULL" in sql
+    )
+    assert "WHERE finance_review_id IS NOT NULL" in sql
+    assert "CHECK (ISJSON(payload_json) = 1)" in sql
+    assert "DEFAULT (0) WITH VALUES" in sql
+    batches = split_go_batches(sql)
+    generation_add = next(
+        index
+        for index, batch in enumerate(batches)
+        if "ADD proposal_generation" in batch
+    )
+    pointer_add = next(
+        index
+        for index, batch in enumerate(batches)
+        if "ADD current_selection_id" in batch
+    )
+    for token, added in (
+        ("proposal_generation >= 0", generation_add),
+        ("FOREIGN KEY (current_selection_id)", pointer_add),
+        ("ix_case_projection_current_selection_id", pointer_add),
+    ):
+        assert any(token in batch for batch in batches[added + 1 :])
+        assert token not in batches[added]
 
 
 def test_fabric_sql_adapter_exposes_required_contract():

@@ -36,6 +36,7 @@ from services.persistence.tables import (
     analysis_versions,
     case_instances,
     case_projection,
+    case_proposal_selections,
     evidence_items,
     metadata,
 )
@@ -185,6 +186,33 @@ def test_case_projection_current_pointers_enforce_immutable_references():
         item.target_fullname
         for item in case_projection.c.current_decision_id.foreign_keys
     } == {"decisions.decision_id"}
+
+
+def test_proposal_selection_metadata_has_composite_review_fk_and_filtered_unique():
+    table = case_proposal_selections
+    assert {column.name for column in table.primary_key.columns} == {"selection_id"}
+    composite = next(
+        constraint
+        for constraint in table.foreign_key_constraints
+        if constraint.name == "fk_case_proposal_selections_finance_review"
+    )
+    assert tuple(element.parent.name for element in composite.elements) == (
+        "finance_review_id",
+        "finance_review_revision",
+    )
+    filtered = next(
+        index
+        for index in table.indexes
+        if index.name == "uq_case_proposal_selections_finance_review_id"
+    )
+    assert filtered.unique
+    assert str(filtered.dialect_options["sqlite"]["where"]) == (
+        "finance_review_id IS NOT NULL"
+    )
+    assert {
+        item.target_fullname
+        for item in case_projection.c.current_selection_id.foreign_keys
+    } == {"case_proposal_selections.selection_id"}
 
 
 def test_sqlite_store_creates_shared_schema(tmp_path):
@@ -740,3 +768,227 @@ def test_outbox_uniqueness_migration_is_frozen_from_runtime_metadata():
     )
 
     assert "services.persistence.tables" not in revision
+
+
+def _seed_reflected_finance_legacy(engine):
+    import sqlalchemy as sa
+
+    from data.domain.analysis import AnalysisVersion
+    from data.domain.cases import CaseInstance
+    from data.domain.decisions import Decision, IdentitySnapshot
+    from data.domain.evidence import IdentitySource
+    from data.domain.execution import ActionPlanningRequested
+    from data.domain.finance import FinanceProposal
+    from data.synthetic.rl001 import OperationalSnapshot
+    from services.policy.finance_review import submit_finance_review
+
+    raw = json.loads(Path("tests/finance/fixtures/legacy-policy.json").read_text())
+    case = CaseInstance.model_validate_json(raw["case"])
+    projected = CaseInstance.model_validate_json(raw["projected_case"])
+    snapshot = OperationalSnapshot.model_validate_json(raw["snapshot"])
+    analysis = AnalysisVersion.model_validate_json(raw["analysis"])
+    decision = Decision.model_validate_json(raw["decision"])
+    reflected = sa.MetaData()
+    reflected.reflect(bind=engine)
+    assert "proposal_generation" not in reflected.tables["case_projection"].c
+    with engine.begin() as connection:
+
+        def put(name, model, *, canonical=None, **extra):
+            table = reflected.tables[name]
+            fields = {
+                **model.model_dump(mode="python"),
+                **extra,
+                "payload_json": canonical
+                if canonical is not None
+                else serialize_model(model),
+            }
+            connection.execute(
+                table.insert().values(
+                    **{key: value for key, value in fields.items() if key in table.c}
+                )
+            )
+
+        put("case_instances", case, canonical=raw["case"])
+        put(
+            "operational_snapshots",
+            snapshot,
+            canonical=raw["snapshot"],
+            analysis_horizon_end=snapshot.analysis_horizon_end.isoformat(),
+        )
+        put(
+            "analysis_versions",
+            analysis,
+            canonical=raw["analysis"],
+            runtime_mode=analysis.material.runtime_mode.value,
+        )
+        for evidence in analysis.evidence_items:
+            put("evidence_items", evidence, analysis_id=analysis.analysis_id)
+        for satisfaction in analysis.approval_satisfactions:
+            put("approval_satisfactions", satisfaction, decision_id=None)
+        put("decisions", decision, canonical=raw["decision"])
+        for satisfaction in decision.approval_satisfactions:
+            put(
+                "approval_satisfactions",
+                satisfaction,
+                decision_id=decision.decision_id,
+            )
+        event = ActionPlanningRequested.for_decision(decision)
+        put("outbox_events", event)
+        put(
+            "case_projection",
+            projected,
+            canonical=raw["projected_case"],
+            current_analysis_id=analysis.analysis_id,
+            current_analysis_hash=analysis.material_hash,
+            current_decision_id=decision.decision_id,
+        )
+        option = next(
+            item
+            for item in analysis.response_options
+            if item.option_id == "RL-OPTION-COMBINED"
+        )
+        pending = submit_finance_review(
+            review_id="legacy-migration-review",
+            proposal=FinanceProposal(
+                case_id=case.case_id,
+                analysis_id=analysis.analysis_id,
+                analysis_material_hash=analysis.material_hash,
+                option_id=option.option_id,
+                response_cost=option.predicted.response_cost,
+            ),
+            actor=IdentitySnapshot(
+                persona_id="RL-PERSONA-ALEX",
+                source_id="RL-ENTRA-ALEX",
+                identity_source=IdentitySource.ENTRA,
+                effective_roles=("material_planner", "response_approver"),
+                tenant_id="11111111-1111-4111-8111-111111111111",
+                object_id="22222222-2222-4222-8222-222222222222",
+            ),
+            now=datetime.fromisoformat("2026-09-01T14:02:00+00:00"),
+        )
+        import hashlib
+
+        put(
+            "finance_review_revisions",
+            pending,
+            revision=1,
+            case_id=case.case_id,
+            analysis_id=analysis.analysis_id,
+            analysis_material_hash=analysis.material_hash,
+            option_id=option.option_id,
+            recorded_at=pending.submitted_at,
+            idempotency_key="legacy-migration-review-key",
+            request_fingerprint=hashlib.sha256(
+                serialize_model(pending).encode()
+            ).hexdigest(),
+        )
+    return raw, case.case_id, analysis.analysis_id, decision.decision_id
+
+
+def _raw_legacy_payloads(engine):
+    import sqlalchemy as sa
+
+    reflected = sa.MetaData()
+    reflected.reflect(bind=engine)
+    names = (
+        "case_instances",
+        "operational_snapshots",
+        "case_projection",
+        "analysis_versions",
+        "evidence_items",
+        "decisions",
+        "approval_satisfactions",
+        "outbox_events",
+        "finance_review_revisions",
+    )
+    with engine.connect() as connection:
+        return {
+            name: tuple(
+                connection.scalars(
+                    sa.select(reflected.tables[name].c.payload_json).order_by(
+                        *reflected.tables[name].primary_key.columns
+                    )
+                )
+            )
+            for name in names
+        }
+
+
+def test_selection_upgrade_preserves_populated_frozen_0007_records(
+    tmp_path, monkeypatch
+):
+    import sqlalchemy as sa
+
+    from services.persistence.sqlite import SqliteStore, build_sqlite_engine
+
+    monkeypatch.delenv("SUPPLY_RESPONSE_DATABASE_URL", raising=False)
+    url = f"sqlite:///{tmp_path / 'legacy-selection-upgrade.db'}"
+    config = Config("migrations/alembic.ini")
+    config.set_main_option("sqlalchemy.url", url)
+    command.upgrade(config, "0007_finance_review_revisions")
+    engine = build_sqlite_engine(url)
+    raw, case_id, analysis_id, decision_id = _seed_reflected_finance_legacy(engine)
+    before = _raw_legacy_payloads(engine)
+    old_fks = {
+        item["name"] for item in sa.inspect(engine).get_foreign_keys("case_projection")
+    }
+    old_indexes = {
+        item["name"] for item in sa.inspect(engine).get_indexes("case_projection")
+    }
+    engine.dispose()
+    command.upgrade(config, "0008_case_proposal_selection")
+    engine = build_sqlite_engine(url)
+    assert _raw_legacy_payloads(engine) == before
+    assert old_fks <= {
+        item["name"] for item in sa.inspect(engine).get_foreign_keys("case_projection")
+    }
+    assert old_indexes <= {
+        item["name"] for item in sa.inspect(engine).get_indexes("case_projection")
+    }
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+        assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+        assert connection.exec_driver_sql(
+            "SELECT proposal_generation, current_selection_id FROM case_projection"
+        ).one() == (0, None)
+    store = SqliteStore(engine, runtime_mode=RuntimeMode.FALLBACK)
+    assert serialize_model(store.get_case(case_id)) == raw["projected_case"]
+    assert serialize_model(store.get_analysis(analysis_id)) == raw["analysis"]
+    with store.uow_factory() as uow:
+        assert serialize_model(uow.decisions.get(decision_id)) == raw["decision"]
+        assert uow.finance_reviews.get_latest("legacy-migration-review")[1] == 1
+    engine.dispose()
+    command.downgrade(config, "0007_finance_review_revisions")
+    engine = build_sqlite_engine(url)
+    assert _raw_legacy_payloads(engine) == before
+    assert "case_proposal_selections" not in sa.inspect(engine).get_table_names()
+    assert "current_selection_id" not in {
+        item["name"] for item in sa.inspect(engine).get_columns("case_projection")
+    }
+    engine.dispose()
+    command.upgrade(config, "0008_case_proposal_selection")
+    engine = build_sqlite_engine(url)
+    assert _raw_legacy_payloads(engine) == before
+    engine.dispose()
+
+
+def test_selection_migration_empty_schema_downgrade_is_structural(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("SUPPLY_RESPONSE_DATABASE_URL", raising=False)
+    source = Path("migrations/versions/0008_case_proposal_selection.py").read_text()
+    assert "services.persistence" not in source
+    url = f"sqlite:///{tmp_path / 'selection-empty.db'}"
+    config = Config("migrations/alembic.ini")
+    config.set_main_option("sqlalchemy.url", url)
+    command.upgrade(config, "0008_case_proposal_selection")
+    engine = create_engine(url)
+    assert "case_proposal_selections" in inspect(engine).get_table_names()
+    engine.dispose()
+    command.downgrade(config, "0007_finance_review_revisions")
+    engine = create_engine(url)
+    assert "case_proposal_selections" not in inspect(engine).get_table_names()
+    assert "proposal_generation" not in {
+        item["name"] for item in inspect(engine).get_columns("case_projection")
+    }
+    engine.dispose()

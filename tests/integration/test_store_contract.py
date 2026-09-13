@@ -6,6 +6,9 @@ opted-in Fabric run can never consume unrelated persistent application work.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import sqlite3
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -17,10 +20,11 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from data.domain import CasePurpose, CaseStatus
 from data.domain.analysis import AnalysisVersion
-from data.domain.cases import CaseInstance
+from data.domain.cases import CaseInstance, WorkflowVersion
 from data.domain.decisions import (
     CorpusScope,
     DecisionKind,
@@ -30,6 +34,7 @@ from data.domain.decisions import (
 )
 from data.domain.evidence import IdentitySource
 from data.domain.finance import FinanceProposal, FinanceReview
+from data.domain.proposals import ProposalSelection, ProposalToken, SelectionReceipt
 from data.synthetic.rl001 import (
     OperationalSnapshot,
     build_rl001_evidence,
@@ -47,6 +52,7 @@ from services.persistence.finance_reviews import (
     SqlAlchemyFinanceReviewRepository,
     append_finance_review,
 )
+from services.persistence.proposals import StaleProposal
 from services.persistence.sqlite import sqlite_store
 from services.persistence.store import (
     ImmutableRecordConflict,
@@ -181,6 +187,81 @@ def _persist_analysis(store: SqlAlchemyStore) -> DecisionContext:
     )
 
 
+def _persist_proposal_analysis(store: SqlAlchemyStore) -> DecisionContext:
+    suffix = str(uuid4())
+    case, snapshot = instantiate_rl001(
+        case_id=f"RL-CASE-PROPOSAL-CONTRACT-{suffix}",
+        purpose=CasePurpose.AUTOMATED_TEST,
+        runtime_mode=store.runtime_mode,
+        workflow_version=WorkflowVersion.INDEPENDENT_FINANCE,
+    )
+    analysis_id = f"RL-ANALYSIS-PROPOSAL-CONTRACT-{suffix}"
+    started_at = datetime.fromisoformat("2026-09-01T09:01:00-05:00")
+    analysis = analyze_case(
+        AnalyzeCaseCommand(
+            analysis_id=analysis_id,
+            case=case,
+            corpus=CorpusScope.DEMO_CORPUS,
+            operational_snapshot=snapshot,
+            evidence_items=build_rl001_evidence(
+                snapshot, analysis_id=analysis_id, retrieved_at=started_at
+            ),
+            analysis_started_at=started_at,
+            created_at=started_at,
+            calculation_version="rl001-options-v1",
+        )
+    )
+    store.create_case(case, snapshot)
+    store.save_analysis(analysis)
+    return DecisionContext(store, case, snapshot, analysis, suffix)
+
+
+def _proposal_receipt(
+    context: DecisionContext, selection_id: str, expected: ProposalToken
+) -> SelectionReceipt:
+    option = next(
+        item
+        for item in context.analysis.response_options
+        if item.option_id == "RL-OPTION-TRANSFER"
+    )
+    assert option.predicted is not None
+    selection = ProposalSelection(
+        selection_id=selection_id,
+        proposal=FinanceProposal(
+            case_id=context.case.case_id,
+            analysis_id=context.analysis.analysis_id,
+            analysis_material_hash=context.analysis.material_hash,
+            option_id=option.option_id,
+            response_cost=option.predicted.response_cost,
+        ),
+        workflow_version=WorkflowVersion.INDEPENDENT_FINANCE,
+        submitted_by=_finance_actor("ALEX"),
+        submitted_at=datetime(2026, 9, 13, 12, tzinfo=UTC),
+        finance_review_id=None,
+    )
+    body = json.dumps(
+        {
+            "selection": selection.model_dump(mode="json"),
+            "expected": expected.model_dump(mode="json"),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return SelectionReceipt(
+        selection=selection,
+        expected=expected,
+        idempotency_key=f"contract:{selection_id}",
+        request_fingerprint=hashlib.sha256(body.encode()).hexdigest(),
+    )
+
+
+def _publish_proposal(context: DecisionContext, receipt: SelectionReceipt):
+    with context.store.uow_factory() as uow:
+        result = uow.proposals.publish(receipt)
+        uow.commit()
+        return result
+
+
 def _pending_finance_review(context: DecisionContext) -> FinanceReview:
     option = next(
         item
@@ -290,6 +371,164 @@ def _delete_finance_review(store: SqlAlchemyStore, review_id: str) -> None:
                 finance_review_revisions.c.review_id == review_id
             )
         )
+
+
+def _is_retryable_database_contention(error: BaseException) -> bool:
+    if not isinstance(error, OperationalError):
+        return False
+    original = error.orig
+    sqlite_code = getattr(original, "sqlite_errorcode", None)
+    if (
+        isinstance(original, sqlite3.OperationalError)
+        and isinstance(sqlite_code, int)
+        and (sqlite_code & 0xFF) in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED)
+    ):
+        return True
+    # SQL Server deadlock victims use native error 1205 / SQLSTATE 40001.
+    markers = " ".join(str(item) for item in getattr(original, "args", ())).lower()
+    return "1205" in markers or "40001" in markers or "deadlock victim" in markers
+
+
+def _capture_proposal_race(call):
+    try:
+        return call()
+    except Exception as error:
+        if isinstance(error, (StaleProposal, IntegrityError)):
+            return error
+        if _is_retryable_database_contention(error):
+            return error
+        raise
+
+
+def test_adapter_contention_classifier_is_database_specific():
+    assert not _is_retryable_database_contention(ValueError("database locked"))
+    unrelated = sqlite3.OperationalError("unrelated")
+    unrelated.sqlite_errorcode = sqlite3.SQLITE_ERROR
+    assert not _is_retryable_database_contention(
+        OperationalError("statement", {}, unrelated)
+    )
+    busy = sqlite3.OperationalError("busy")
+    busy.sqlite_errorcode = sqlite3.SQLITE_BUSY
+    assert _is_retryable_database_contention(OperationalError("statement", {}, busy))
+
+
+def test_adapter_concurrent_proposal_selections_have_one_winner(
+    store_factory: StoreFactory,
+):
+    context = _persist_proposal_analysis(store_factory())
+    with context.store.uow_factory() as uow:
+        expected = uow.proposals.get_state(context.case.case_id).token
+    receipts = tuple(
+        _proposal_receipt(
+            context, f"contract-selection-{index}-{context.suffix}", expected
+        )
+        for index in (1, 2)
+    )
+    barrier = Barrier(2)
+
+    def contender(receipt):
+        return _capture_proposal_race(
+            lambda: (barrier.wait(timeout=5), _publish_proposal(context, receipt))[1]
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(contender, receipt) for receipt in receipts]
+        results = [future.result(timeout=15) for future in futures]
+    assert sum(isinstance(item, ProposalSelection) for item in results) == 1
+    with context.store.uow_factory() as uow:
+        state = uow.proposals.get_state(context.case.case_id)
+    assert state.selection in tuple(
+        item for item in results if isinstance(item, ProposalSelection)
+    )
+
+
+def test_adapter_concurrent_proposal_guards_have_one_winner(
+    store_factory: StoreFactory,
+):
+    context = _persist_proposal_analysis(store_factory())
+    with context.store.uow_factory() as uow:
+        expected = uow.proposals.get_state(context.case.case_id).token
+    barrier = Barrier(2)
+
+    def contender():
+        def guard():
+            barrier.wait(timeout=5)
+            with context.store.uow_factory() as uow:
+                token = uow.proposals.guard_current(
+                    context.case.case_id, expected=expected
+                )
+                uow.commit()
+                return token
+
+        return _capture_proposal_race(guard)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(contender) for _ in range(2)]
+        results = [future.result(timeout=15) for future in futures]
+    assert sum(isinstance(item, ProposalToken) for item in results) == 1
+    with context.store.uow_factory() as uow:
+        assert (
+            uow.proposals.get_state(context.case.case_id).token.generation
+            == expected.generation + 1
+        )
+
+
+def test_adapter_concurrent_analysis_and_selection_have_valid_order(
+    store_factory: StoreFactory,
+):
+    context = _persist_proposal_analysis(store_factory())
+    with context.store.uow_factory() as uow:
+        expected = uow.proposals.get_state(context.case.case_id).token
+    receipt = _proposal_receipt(
+        context, f"contract-analysis-race-{context.suffix}", expected
+    )
+    replacement_id = f"RL-ANALYSIS-PROPOSAL-REPLACEMENT-{context.suffix}"
+    started_at = datetime.fromisoformat("2026-09-01T09:01:00-05:00")
+    replacement = analyze_case(
+        AnalyzeCaseCommand(
+            analysis_id=replacement_id,
+            case=context.case,
+            corpus=CorpusScope.DEMO_CORPUS,
+            operational_snapshot=context.snapshot,
+            evidence_items=build_rl001_evidence(
+                context.snapshot,
+                analysis_id=replacement_id,
+                retrieved_at=started_at,
+            ),
+            analysis_started_at=started_at,
+            created_at=started_at,
+            calculation_version="rl001-options-v1",
+        )
+    )
+    barrier = Barrier(2)
+
+    def select_contender():
+        return _capture_proposal_race(
+            lambda: (barrier.wait(timeout=5), _publish_proposal(context, receipt))[1]
+        )
+
+    def analysis_contender():
+        def publish_analysis():
+            barrier.wait(timeout=5)
+            context.store.save_analysis(replacement)
+            return replacement
+
+        return _capture_proposal_race(publish_analysis)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(select_contender),
+            executor.submit(analysis_contender),
+        ]
+        results = [future.result(timeout=15) for future in futures]
+    assert any(not isinstance(item, Exception) for item in results)
+    with context.store.uow_factory() as uow:
+        state = uow.proposals.get_state(context.case.case_id)
+    if state.token.analysis_id == replacement.analysis_id:
+        assert state.selection is None
+    else:
+        assert state.token.analysis_id == context.analysis.analysis_id
+        assert state.selection == receipt.selection
 
 
 def _decision_command(

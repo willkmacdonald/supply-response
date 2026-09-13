@@ -309,6 +309,15 @@ class SqlAlchemyProposalRepository:
         state = self.get_state(receipt.selection.proposal.case_id)
         if state.token != receipt.expected:
             raise StaleProposal("Case analysis or proposal changed")
+        if (
+            receipt.expected.analysis_id is None
+            or receipt.selection.proposal.analysis_id != receipt.expected.analysis_id
+            or receipt.selection.proposal.analysis_material_hash
+            != receipt.expected.analysis_material_hash
+        ):
+            raise PersistenceIntegrityError(
+                "selected proposal must bind the current Analysis Version"
+            )
         self._validate_binding(receipt)
         selection = receipt.selection
         if selection.finance_review_id is not None:
@@ -354,6 +363,11 @@ class SqlAlchemyProposalRepository:
         return selection
 
     def guard_current(self, case_id: str, *, expected: ProposalToken) -> ProposalToken:
+        case = self._store._stored_case(self._connection, case_id)
+        if case.effective_workflow_version is not WorkflowVersion.INDEPENDENT_FINANCE:
+            raise PersistenceIntegrityError(
+                "Case does not use independent Finance workflow"
+            )
         state = self.get_state(case_id)
         if state.token != expected:
             raise StaleProposal("Case analysis or proposal changed")

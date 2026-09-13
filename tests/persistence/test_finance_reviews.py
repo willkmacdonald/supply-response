@@ -5,19 +5,19 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import func, inspect, select, text, update
+from sqlalchemy import MetaData, func, inspect, select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from data.domain import CaseStatus, RuntimeMode
 from data.domain.analysis import AnalysisVersion
 from data.domain.decisions import (
+    Decision,
     DecisionKind,
     IdentitySnapshot,
     RecordDecisionCommand,
 )
 from data.domain.evidence import IdentitySource
 from data.domain.finance import FinanceProposal, FinanceReview, FinanceReviewStatus
-from services.decisions.service import DecisionService
 from services.persistence.finance_reviews import (
     FinanceReviewIdempotencyConflict,
     FinanceReviewRevisionConflict,
@@ -140,21 +140,64 @@ def test_finance_review_migration_is_frozen_and_downgrades_only_its_table(tmp_pa
     case, snapshot = fallback_rl001_case("RL-CASE-FINANCE-MIGRATION")
     analysis = fallback_rl001_analysis(case, snapshot, "RL-ANALYSIS-FINANCE-MIGRATION")
     store.create_case(case, snapshot)
-    store.save_analysis(analysis)
-    store.save_case_projection(
-        case.model_copy(update={"status": CaseStatus.AWAITING_DECISION})
+    reflected = MetaData()
+    reflected.reflect(bind=engine)
+    assert "proposal_generation" not in reflected.tables["case_projection"].c
+    command_model = RecordDecisionCommand(
+        case_id=case.case_id,
+        analysis_id=analysis.analysis_id,
+        selected_option_id=None,
+        kind=DecisionKind.REJECTED,
+        idempotency_key="migration-decision",
+        rejection_reason="Migration preservation fixture",
     )
-    decision = DecisionService(store.uow_factory, clock=lambda: NOW).record(
-        RecordDecisionCommand(
-            case_id=case.case_id,
-            analysis_id=analysis.analysis_id,
-            selected_option_id=None,
-            kind=DecisionKind.REJECTED,
-            idempotency_key="migration-decision",
-            rejection_reason="Migration preservation fixture",
-        ),
+    decision = Decision.from_command(
+        command_model,
         actor("ALEX"),
+        analysis,
+        (),
+        request_fingerprint="d" * 64,
+        decided_at=NOW,
     )
+    projected = case.model_copy(update={"status": CaseStatus.AWAITING_DECISION})
+    with engine.begin() as connection:
+
+        def put(name, model, **extra):
+            table = reflected.tables[name]
+            fields = {
+                **model.model_dump(mode="python"),
+                **extra,
+                "payload_json": serialize_model(model),
+            }
+            connection.execute(
+                table.insert().values(
+                    **{key: value for key, value in fields.items() if key in table.c}
+                )
+            )
+
+        put(
+            "analysis_versions",
+            analysis,
+            material_hash=analysis.material_hash,
+            runtime_mode=analysis.material.runtime_mode.value,
+        )
+        for evidence in analysis.evidence_items:
+            put("evidence_items", evidence, analysis_id=analysis.analysis_id)
+        for satisfaction in analysis.approval_satisfactions:
+            put("approval_satisfactions", satisfaction, decision_id=None)
+        put("decisions", decision)
+        connection.execute(
+            reflected.tables["case_projection"]
+            .update()
+            .where(reflected.tables["case_projection"].c.case_id == case.case_id)
+            .values(
+                status=projected.status.value,
+                current_analysis_id=analysis.analysis_id,
+                current_analysis_hash=analysis.material_hash,
+                current_decision_id=decision.decision_id,
+                payload_json=serialize_model(projected),
+            )
+        )
     with engine.connect() as connection:
         before = connection.execute(
             text(
