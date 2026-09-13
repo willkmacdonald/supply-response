@@ -1,16 +1,16 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "plant-filter",
+  "name": "saved-detail-chart",
   "position": {
-    "x": 328,
-    "y": 62,
-    "width": 292,
-    "height": 86,
-    "z": 2,
-    "tabOrder": 2
+    "x": 840,
+    "y": 164,
+    "width": 416,
+    "height": 388,
+    "z": 4,
+    "tabOrder": 4
   },
   "visual": {
-    "visualType": "slicer",
+    "visualType": "clusteredColumnChart",
     "visualContainerObjects": {
       "background": [
         {
@@ -96,14 +96,14 @@
             "show": {
               "expr": {
                 "Literal": {
-                  "Value": "false"
+                  "Value": "true"
                 }
               }
             },
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "''"
+                  "Value": "'Affected value by customer order'"
                 }
               }
             },
@@ -145,70 +145,48 @@
     },
     "query": {
       "queryState": {
-        "Values": {
+        "Category": {
           "projections": [
             {
               "field": {
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "OperationalRecords"
+                      "Entity": "SavedRecords"
                     }
                   },
-                  "Property": "plant_name"
+                  "Property": "customer_order_id"
                 }
               },
-              "queryRef": "OperationalRecords.plant_name",
-              "nativeQueryRef": "plant_name",
-              "displayName": "Plant name",
+              "queryRef": "SavedRecords.customer_order_id",
+              "nativeQueryRef": "customer_order_id",
+              "displayName": "Customer order id",
               "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "CaseCommandCenter"
+                    }
+                  },
+                  "Property": "Affected Revenue"
+                }
+              },
+              "queryRef": "CaseCommandCenter.Affected Revenue",
+              "nativeQueryRef": "Affected Revenue"
             }
           ]
         }
       }
     },
     "objects": {
-      "data": [
-        {
-          "properties": {
-            "mode": {
-              "expr": {
-                "Literal": {
-                  "Value": "'Dropdown'"
-                }
-              }
-            }
-          }
-        }
-      ],
-      "selection": [
-        {
-          "properties": {
-            "singleSelect": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "strictSingleSelect": {
-              "expr": {
-                "Literal": {
-                  "Value": "false"
-                }
-              }
-            },
-            "selectAllCheckboxEnabled": {
-              "expr": {
-                "Literal": {
-                  "Value": "true"
-                }
-              }
-            }
-          }
-        }
-      ],
-      "header": [
+      "labels": [
         {
           "properties": {
             "show": {
@@ -218,26 +196,25 @@
                 }
               }
             },
-            "text": {
+            "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "'Plant'"
+                  "Value": "10D"
                 }
               }
-            },
-            "textSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "11D"
-                }
-              }
-            },
-            "fontColor": {
+            }
+          }
+        }
+      ],
+      "dataPoint": [
+        {
+          "properties": {
+            "defaultColor": {
               "solid": {
                 "color": {
                   "expr": {
                     "Literal": {
-                      "Value": "'#183E35'"
+                      "Value": "'#187D78'"
                     }
                   }
                 }
@@ -246,24 +223,33 @@
           }
         }
       ],
-      "items": [
+      "categoryAxis": [
         {
           "properties": {
-            "textSize": {
+            "fontSize": {
               "expr": {
                 "Literal": {
                   "Value": "10D"
                 }
               }
+            }
+          }
+        }
+      ],
+      "valueAxis": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
             },
-            "fontColor": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "Literal": {
-                      "Value": "'#183E35'"
-                    }
-                  }
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "10D"
                 }
               }
             }
@@ -271,5 +257,60 @@
         }
       ]
     }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "customer-orders-saved-detail-chart-LockedOrderRowVisible",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "CaseCommandCenter"
+              }
+            },
+            "Property": "Order Row Visible"
+          }
+        },
+        "type": "Advanced",
+        "howCreated": "User",
+        "isHiddenInViewMode": true,
+        "isLockedInViewMode": true,
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "c",
+              "Entity": "CaseCommandCenter",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "Comparison": {
+                  "ComparisonKind": 0,
+                  "Left": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Source": "c"
+                        }
+                      },
+                      "Property": "Order Row Visible"
+                    }
+                  },
+                  "Right": {
+                    "Literal": {
+                      "Value": "1L"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
   }
 }

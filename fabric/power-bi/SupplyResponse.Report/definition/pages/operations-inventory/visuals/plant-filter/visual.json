@@ -2,9 +2,9 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
   "name": "plant-filter",
   "position": {
-    "x": 328,
+    "x": 272,
     "y": 62,
-    "width": 292,
+    "width": 232,
     "height": 86,
     "z": 2,
     "tabOrder": 2

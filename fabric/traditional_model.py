@@ -113,7 +113,11 @@ def install_measures(add, external) -> None:
         )
     add(
         "Supply Line Row Visible",
-        'INT(NOT ISBLANK([Selected Operational Dataset]) && SELECTEDVALUE(OperationalRecords[record_family]) IN {"purchase","shipment"})',
+        "VAR SelectedDatasetId = [Selected Operational Dataset] "
+        "VAR MatchingRows = COALESCE(CALCULATE(COUNTROWS(OperationalRecords), "
+        "KEEPFILTERS(TREATAS({SelectedDatasetId}, OperationalRecords[dataset_id])), "
+        'KEEPFILTERS(OperationalRecords[record_family] IN {"purchase","shipment"})),0) '
+        "RETURN INT(NOT ISBLANK(SelectedDatasetId) && MatchingRows > 0)",
         "int64",
         hidden=True,
         table=TABLE,

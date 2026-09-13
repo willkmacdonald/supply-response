@@ -335,7 +335,7 @@ def walkthrough_controls(page):
     return items
 
 
-def card(name, title, value, rect, accent=TEAL, size=14):
+def card(name, title, value, rect, accent=TEAL, size=14, table=CC):
     # Native card callouts truncate string measures even with textWrap enabled.
     # Microsoft's textbox authoring contract pairs a paragraph run selector with
     # objects.values[].properties.expr; bind the existing measure unchanged.
@@ -371,7 +371,7 @@ def card(name, title, value, rect, accent=TEAL, size=14):
         ),
         "values": [
             {
-                "properties": {"expr": {"expr": field("Measure", CC, value)}},
+                "properties": {"expr": {"expr": field("Measure", table, value)}},
                 "selector": selector,
             }
         ],
@@ -587,7 +587,7 @@ def detail(page):
         SR,
         fields,
         scope,
-        (24, 164, 1232, 388),
+        (24, 164, 800, 388),
     )
     if page == "available-stock":
         visual = supporting["visual"]
@@ -652,6 +652,49 @@ def detail(page):
             0, projection("Column", SR, "source_record_id", "Order line")
         )
     items.append(supporting)
+    chart_spec = {
+        "available-stock": ("plant_id", "Stock Usable Row", "Usable stock by plant"),
+        "supplier-shipment": (
+            "supplier_id",
+            "Record quantity",
+            "Shipment quantity by supplier",
+        ),
+        "plant-transfer": (
+            "destination_plant_id",
+            "Record quantity",
+            "Transfer quantity by destination",
+        ),
+        "supplier-qualification": (
+            "supplier_id",
+            "Record Row Visible",
+            "Qualification records by supplier",
+        ),
+        "customer-orders": (
+            "customer_order_id",
+            "Affected Revenue",
+            "Affected value by customer order",
+        ),
+    }
+    category, value, chart_title = chart_spec[page]
+    chart = base_visual(
+        "saved-detail-chart", "clusteredColumnChart", (840, 164, 416, 388), chart_title
+    )
+    category_projection = column(SR, category)
+    category_projection["active"] = True
+    chart["visual"]["query"] = {
+        "queryState": {
+            "Category": {"projections": [category_projection]},
+            "Y": {"projections": [measure(value, table=CC)]},
+        }
+    }
+    chart["visual"]["objects"] = {
+        "labels": obj({"show": literal(True), "fontSize": literal(10)}),
+        "dataPoint": obj({"defaultColor": color(TEAL)}),
+        "categoryAxis": obj({"fontSize": literal(10)}),
+        "valueAxis": obj({"show": literal(True), "fontSize": literal(10)}),
+    }
+    chart["filterConfig"] = {"filters": [gate(scope)]}
+    items.append(chart)
     items.append(
         table(
             "source-details",
@@ -902,6 +945,8 @@ def artifacts():
                 ],
             },
         }
+        if page in LEGACY_ORDER:
+            definition["visibility"] = "HiddenInViewMode"
         if page in OPERATIONAL_ORDER:
             filters = [
                 traditional_pages.dataset_filter(__import__(__name__, fromlist=["*"]))

@@ -143,20 +143,27 @@ def test_broad_pages_use_visible_slicers_dense_tables_and_native_charts():
             for path, value in artifacts.items()
             if path.startswith(prefix) and path.endswith("/visual.json")
         }
-        assert {
+        required = {
             "dataset-filter",
-            "plant-filter",
             "component-filter",
-            "supplier-filter",
-        } <= set(visuals)
+            "snapshot-filter",
+            "snapshot-context",
+        }
+        required |= (
+            {"source-plant-filter", "destination-plant-filter"}
+            if page == "operations-transfers"
+            else {"plant-filter", "supplier-filter"}
+        )
+        assert required <= set(visuals)
         assert all(
             visuals[name]["visual"]["visualType"] == "slicer"
-            for name in (
-                "dataset-filter",
-                "plant-filter",
-                "component-filter",
-                "supplier-filter",
-            )
+            for name in required - {"snapshot-context"}
+        )
+        context = visuals["snapshot-context"]
+        assert context["visual"]["objects"]["values"][0]["properties"]["expr"][
+            "expr"
+        ] == report_pages.field(
+            "Measure", "OperationalRecords", "Operational Snapshot Context"
         )
         table = visuals["operational-rows"]
         assert table["visual"]["visualType"] == "tableEx"
@@ -194,8 +201,10 @@ def test_saved_detail_pages_remain_exact_and_are_not_ai_prose_layouts():
         assert "supporting-records" in names
         assert not any(name.startswith("answer-") for name in names)
         assert "explanation" not in names
+        assert "saved-detail-chart" in names
         table = artifacts[prefix + "supporting-records/visual.json"]
         assert table["position"]["height"] >= 300
+        assert artifacts[f"pages/{page}/page.json"]["visibility"] == "HiddenInViewMode"
 
 
 def test_native_tom_validator_requires_the_explicit_six_table_contract():
@@ -208,6 +217,8 @@ def test_delivery_investigation_keeps_purchase_and_shipment_lines_distinct():
     measures = report_model.measures()["OperationalRecords"]
     gate = measures["Supply Line Row Visible"].expression
     assert '{"purchase","shipment"}' in gate
+    assert "COUNTROWS(OperationalRecords)" in gate
+    assert "SELECTEDVALUE(OperationalRecords[record_family])" not in gate
     count = measures["Supply Line Count"].expression
     assert '{"purchase","shipment"}' in count
     artifacts = report_pages.artifacts()
@@ -224,6 +235,20 @@ def test_delivery_investigation_keeps_purchase_and_shipment_lines_distinct():
         "filters"
     ]
     assert not any(item["name"].endswith("OperationalFamily") for item in page_filters)
+
+
+def test_transfer_page_filters_both_route_endpoints():
+    artifacts = report_pages.artifacts()
+    prefix = "pages/operations-transfers/visuals/"
+    refs = {
+        artifact["visual"]["query"]["queryState"]["Values"]["projections"][0][
+            "queryRef"
+        ]
+        for path, artifact in artifacts.items()
+        if path.startswith(prefix) and path.endswith("filter/visual.json")
+    }
+    assert "OperationalRecords.source_plant_name" in refs
+    assert "OperationalRecords.destination_plant_name" in refs
 
 
 def test_saved_snapshot_known_usd_columns_use_total_and_unit_formats():

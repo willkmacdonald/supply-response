@@ -2,9 +2,9 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
   "name": "supplier-filter",
   "position": {
-    "x": 936,
+    "x": 768,
     "y": 62,
-    "width": 320,
+    "width": 232,
     "height": 86,
     "z": 4,
     "tabOrder": 4

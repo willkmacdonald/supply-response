@@ -212,6 +212,31 @@ def page(page_id, rp):
         "production_order": "Production Demand Row Visible",
         "supply": "Supply Line Row Visible",
     }[family]
+    route_slicers = (
+        (
+            _slicer(
+                rp,
+                "source-plant-filter",
+                "Source plant",
+                "source_plant_name",
+                (272, 62, 232, 86),
+            ),
+            _slicer(
+                rp,
+                "destination-plant-filter",
+                "Destination plant",
+                "destination_plant_name",
+                (520, 62, 232, 86),
+            ),
+        )
+        if page_id == "operations-transfers"
+        else (
+            _slicer(rp, "plant-filter", "Plant", "plant_name", (272, 62, 232, 86)),
+            _slicer(
+                rp, "supplier-filter", "Supplier", "supplier_name", (768, 62, 232, 86)
+            ),
+        )
+    )
     items = [
         rp.text("page-title", title, (24, 12, 1232, 49), 25),
         _slicer(
@@ -219,12 +244,20 @@ def page(page_id, rp):
             "dataset-filter",
             "Dataset",
             "dataset_id",
-            (24, 62, 292, 86),
+            (24, 62, 232, 86),
             single=True,
         ),
-        _slicer(rp, "plant-filter", "Plant", "plant_name", (328, 62, 292, 86)),
-        _slicer(rp, "component-filter", "Component", "part_id", (632, 62, 292, 86)),
-        _slicer(rp, "supplier-filter", "Supplier", "supplier_name", (936, 62, 320, 86)),
+        *route_slicers,
+        _slicer(
+            rp,
+            "component-filter",
+            "Component",
+            "part_id",
+            (520 if page_id != "operations-transfers" else 768, 62, 232, 86),
+        ),
+        _slicer(
+            rp, "snapshot-filter", "Snapshot date", "effective_at", (1016, 62, 240, 86)
+        ),
         rp.table(
             "operational-rows",
             title + " — operational rows",
@@ -235,11 +268,13 @@ def page(page_id, rp):
             scope_table=TABLE,
         ),
         _chart(rp, category, measure_name, title + " — filtered view", scope),
-        rp.text(
-            "fictional-context",
-            "Fictional planning dataset · one selected snapshot · values are operational context, not execution history or a recommendation.",
-            (24, 630, 1232, 28),
-            12,
+        rp.card(
+            "snapshot-context",
+            "Selected fictional snapshot",
+            "Operational Snapshot Context",
+            (24, 622, 760, 90),
+            size=14,
+            table=TABLE,
         ),
     ]
     index = ORDER.index(page_id)

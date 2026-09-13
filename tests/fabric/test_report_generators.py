@@ -114,12 +114,17 @@ def test_business_cards_wrap_values_and_show_each_question_once():
         }, path
         expression = binding["properties"]["expr"]["expr"]
         assert set(expression) == {"Measure"}, path
+        expected_table = (
+            "OperationalRecords"
+            if path.endswith("snapshot-context/visual.json")
+            else report_pages.CC
+        )
         assert expression["Measure"]["Expression"] == {
-            "SourceRef": {"Entity": report_pages.CC}
+            "SourceRef": {"Entity": expected_table}
         }, path
         assert (
             expression["Measure"]["Property"]
-            in report_model.manifest()["tables"][report_pages.CC]["measures"]
+            in report_model.manifest()["tables"][expected_table]["measures"]
         ), path
         assert paragraph["horizontalTextAlignment"] == "left", path
         assert run["textStyle"]["fontSize"] == "14pt", path
