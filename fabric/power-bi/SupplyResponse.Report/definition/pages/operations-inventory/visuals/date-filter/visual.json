@@ -1,6 +1,6 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "snapshot-filter",
+  "name": "date-filter",
   "position": {
     "x": 1016,
     "y": 62,
@@ -221,7 +221,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Snapshot date'"
+                  "Value": "'Operational date'"
                 }
               }
             },

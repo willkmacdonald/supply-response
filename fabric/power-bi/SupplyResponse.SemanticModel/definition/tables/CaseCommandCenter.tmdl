@@ -786,6 +786,12 @@ table CaseCommandCenter
       RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK(SavedRecords[usable_inventory]) == 0,SUM(SavedRecords[usable_inventory])), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
     formatString: #,0
 
+  measure 'Affected Revenue Row' =
+      IF([Orders Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
+      VAR ScopeAnalysis = [Selected Analysis Key]
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK(SavedRecords[line_revenue]) == 0,SUM(SavedRecords[line_revenue])), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "customer_order_line"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+    formatString: $#,0
+
   measure 'Stock Explanation' =
       IF(NOT ISBLANK([Selected Analysis Key]),"Usable component stock = on hand − quality holds − protected allocations, for the disruption’s exact part and plant.")
 

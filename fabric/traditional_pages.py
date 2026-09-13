@@ -13,6 +13,15 @@ ORDER = (
     "operations-demand",
 )
 DATASET_ID = "TRADITIONAL-OPS-2026-09-V1"
+DATE_FIELDS = {
+    "operations-overview": "due_date",
+    "operations-inventory": "effective_at",
+    "operations-deliveries": "due_date",
+    "operations-transfers": "arrival_date",
+    "operations-qualification": "expected_decision_date",
+    "operations-orders": "due_date",
+    "operations-demand": "due_date",
+}
 
 PAGES = {
     "operations-overview": (
@@ -242,7 +251,7 @@ def page(page_id, rp):
         _slicer(
             rp,
             "dataset-filter",
-            "Dataset",
+            "Snapshot",
             "dataset_id",
             (24, 62, 232, 86),
             single=True,
@@ -256,7 +265,11 @@ def page(page_id, rp):
             (520 if page_id != "operations-transfers" else 768, 62, 232, 86),
         ),
         _slicer(
-            rp, "snapshot-filter", "Snapshot date", "effective_at", (1016, 62, 240, 86)
+            rp,
+            "date-filter",
+            "Operational date",
+            DATE_FIELDS[page_id],
+            (1016, 62, 240, 86),
         ),
         rp.table(
             "operational-rows",

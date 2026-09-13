@@ -870,6 +870,22 @@ def measures():
             "#,0",
         )
     add(
+        "Affected Revenue Row",
+        "IF([Orders Rows Valid] == 1,("
+        + scoped(
+            SR,
+            "IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK(SavedRecords[line_revenue]) == 0,SUM(SavedRecords[line_revenue]))",
+            family="customer_order_line",
+            extra=[
+                eq(SR, "in_disruption_scope", "TRUE()"),
+                eq(SR, "record_state", '"available"'),
+            ],
+        )
+        + "))",
+        "decimal",
+        "$#,0",
+    )
+    add(
         "Stock Explanation",
         'IF(NOT ISBLANK([Selected Analysis Key]),"Usable component stock = on hand − quality holds − protected allocations, for the disruption’s exact part and plant.")',
     )

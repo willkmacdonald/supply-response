@@ -671,7 +671,7 @@ def detail(page):
         ),
         "customer-orders": (
             "customer_order_id",
-            "Affected Revenue",
+            "Affected Revenue Row",
             "Affected value by customer order",
         ),
     }

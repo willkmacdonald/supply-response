@@ -146,7 +146,7 @@ def test_broad_pages_use_visible_slicers_dense_tables_and_native_charts():
         required = {
             "dataset-filter",
             "component-filter",
-            "snapshot-filter",
+            "date-filter",
             "snapshot-context",
         }
         required |= (
@@ -172,6 +172,20 @@ def test_broad_pages_use_visible_slicers_dense_tables_and_native_charts():
         chart = visuals["operational-chart"]
         assert chart["visual"]["visualType"] == "clusteredColumnChart"
         assert set(chart["visual"]["query"]["queryState"]) == {"Category", "Y"}
+
+    expected_dates = {
+        "operations-overview": "due_date",
+        "operations-inventory": "effective_at",
+        "operations-deliveries": "due_date",
+        "operations-transfers": "arrival_date",
+        "operations-qualification": "expected_decision_date",
+        "operations-orders": "due_date",
+        "operations-demand": "due_date",
+    }
+    for page, field_name in expected_dates.items():
+        slicer = artifacts[f"pages/{page}/visuals/date-filter/visual.json"]
+        projection = slicer["visual"]["query"]["queryState"]["Values"]["projections"][0]
+        assert projection["queryRef"] == f"OperationalRecords.{field_name}"
 
 
 def test_active_projection_metadata_is_only_on_categories_and_slicers():
@@ -256,3 +270,15 @@ def test_saved_snapshot_known_usd_columns_use_total_and_unit_formats():
         assert report_model.column_format("SavedRecords", name) == "$#,0"
     for name in ("incremental_cost_per_unit", "unit_revenue", "unit_margin"):
         assert report_model.column_format("SavedRecords", name) == "$#,0.00"
+
+
+def test_saved_order_chart_uses_row_scoped_revenue():
+    expression = report_model.measures()["CaseCommandCenter"][
+        "Affected Revenue Row"
+    ].expression
+    assert "ALL(SavedRecords)" not in expression
+    chart = report_pages.artifacts()[
+        "pages/customer-orders/visuals/saved-detail-chart/visual.json"
+    ]
+    projection = chart["visual"]["query"]["queryState"]["Y"]["projections"][0]
+    assert projection["queryRef"] == "CaseCommandCenter.Affected Revenue Row"

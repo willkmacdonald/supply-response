@@ -1,6 +1,6 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
-  "name": "snapshot-filter",
+  "name": "date-filter",
   "position": {
     "x": 1016,
     "y": 62,
@@ -155,12 +155,12 @@
                       "Entity": "OperationalRecords"
                     }
                   },
-                  "Property": "effective_at"
+                  "Property": "due_date"
                 }
               },
-              "queryRef": "OperationalRecords.effective_at",
-              "nativeQueryRef": "effective_at",
-              "displayName": "Effective at",
+              "queryRef": "OperationalRecords.due_date",
+              "nativeQueryRef": "due_date",
+              "displayName": "Due date",
               "active": true
             }
           ]
@@ -221,7 +221,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Snapshot date'"
+                  "Value": "'Operational date'"
                 }
               }
             },

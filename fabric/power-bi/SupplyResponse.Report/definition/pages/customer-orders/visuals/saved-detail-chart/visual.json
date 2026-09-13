@@ -175,11 +175,11 @@
                       "Entity": "CaseCommandCenter"
                     }
                   },
-                  "Property": "Affected Revenue"
+                  "Property": "Affected Revenue Row"
                 }
               },
-              "queryRef": "CaseCommandCenter.Affected Revenue",
-              "nativeQueryRef": "Affected Revenue"
+              "queryRef": "CaseCommandCenter.Affected Revenue Row",
+              "nativeQueryRef": "Affected Revenue Row"
             }
           ]
         }
