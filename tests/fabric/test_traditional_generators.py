@@ -89,7 +89,9 @@ def test_delivery_cost_is_blank_if_any_contributing_line_lacks_cost_inputs():
     assert "ISBLANK(OperationalRecords[quantity])" in expression
     assert "ISBLANK(OperationalRecords[incremental_cost_per_unit])" in expression
     assert "MissingCostInputs == 0" in expression
-    assert "COALESCE" not in expression
+    assert "COALESCE(CALCULATE(COUNTROWS(OperationalRecords)" in expression
+    assert "COALESCE(OperationalRecords[quantity]" not in expression
+    assert "COALESCE(OperationalRecords[incremental_cost_per_unit]" not in expression
 
 
 def test_operational_partition_uses_the_accepted_explicit_query():

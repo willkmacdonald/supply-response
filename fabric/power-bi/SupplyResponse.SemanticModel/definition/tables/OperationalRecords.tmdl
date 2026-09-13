@@ -291,11 +291,11 @@ table OperationalRecords
 
   measure 'Delivery Extended Cost' =
       VAR Dataset = [Selected Operational Dataset]
-              VAR MissingCostInputs = CALCULATE(COUNTROWS(OperationalRecords),
+              VAR MissingCostInputs = COALESCE(CALCULATE(COUNTROWS(OperationalRecords),
                   KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])),
                   KEEPFILTERS(OperationalRecords[record_family] == "shipment"),
                   FILTER(OperationalRecords, ISBLANK(OperationalRecords[quantity])
-                      || ISBLANK(OperationalRecords[incremental_cost_per_unit])))
+                      || ISBLANK(OperationalRecords[incremental_cost_per_unit]))), 0)
               RETURN IF(NOT ISBLANK(Dataset) && MissingCostInputs == 0,
                   CALCULATE(SUMX(OperationalRecords,
                       OperationalRecords[quantity] * OperationalRecords[incremental_cost_per_unit]),
