@@ -733,7 +733,7 @@ def measures():
             + ",("
             + scoped(
                 SR,
-                'IF(COUNTROWS(SavedRecords)>0 && COUNTROWS(FILTER(SavedRecords,SavedRecords[record_state] <> "available")) == 0,1,0)',
+                'IF(COUNTROWS(SavedRecords)>0 && COALESCE(COUNTROWS(FILTER(SavedRecords,SavedRecords[record_state] <> "available")),0) == 0,1,0)',
                 family=family,
                 clear=True,
             )
@@ -1066,7 +1066,7 @@ def measures():
         "IF([Overview inventory_complete] == TRUE(),("
         + scoped(
             SR,
-            'IF(COUNTROWS(SavedRecords)>0 && COUNTROWS(FILTER(SavedRecords,SavedRecords[record_state] <> "available")) == 0,1,0)',
+            'IF(COUNTROWS(SavedRecords)>0 && COALESCE(COUNTROWS(FILTER(SavedRecords,SavedRecords[record_state] <> "available")),0) == 0,1,0)',
             analysis="[Overview Analysis Key]",
             family="inventory",
             clear=True,

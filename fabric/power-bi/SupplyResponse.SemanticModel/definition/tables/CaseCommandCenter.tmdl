@@ -684,7 +684,7 @@ table CaseCommandCenter
   measure 'Stock Rows Valid' =
       IF([Selected inventory_complete] == TRUE(),(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Selected Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTROWS(FILTER(SavedRecords,SavedRecords[record_state] <> "available")) == 0,1,0), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory")))),0)
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COALESCE(COUNTROWS(FILTER(SavedRecords,SavedRecords[record_state] <> "available")),0) == 0,1,0), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory")))),0)
     isHidden
 
   measure 'Stock Row Visible' =
@@ -705,7 +705,7 @@ table CaseCommandCenter
   measure 'Orders Rows Valid' =
       IF([Selected production_orders_complete] == TRUE() && [Selected customer_orders_complete] == TRUE(),(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Selected Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTROWS(FILTER(SavedRecords,SavedRecords[record_state] <> "available")) == 0,1,0), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "customer_order_line")))),0)
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COALESCE(COUNTROWS(FILTER(SavedRecords,SavedRecords[record_state] <> "available")),0) == 0,1,0), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "customer_order_line")))),0)
     isHidden
 
   measure 'Order Row Visible' =
@@ -1111,7 +1111,7 @@ table CaseCommandCenter
   measure 'Overview Stock Rows Valid' =
       IF([Overview inventory_complete] == TRUE(),(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Overview Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTROWS(FILTER(SavedRecords,SavedRecords[record_state] <> "available")) == 0,1,0), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory")))),0)
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COALESCE(COUNTROWS(FILTER(SavedRecords,SavedRecords[record_state] <> "available")),0) == 0,1,0), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory")))),0)
     isHidden
 
   measure 'Overview Stock' =
