@@ -494,3 +494,13 @@ required demo deliverable, not a separate data-processing workflow.
 Self-review completed for scope, source provenance, immutable-history protection,
 missing-versus-zero behavior, case/decision lineage, navigation security, and
 test/release boundaries. Implementation planning follows user review of this spec.
+# Superseding Power BI requirement — September 12, 2026
+
+The user explicitly rejected the delivered Power BI experience and approved
+implementation of the correction in
+[Traditional operational reporting](2026-09-12-traditional-operational-reporting-design.md).
+That design takes precedence over this document's Power BI presentation and
+traditional-walkthrough sections. **Power BI is the traditional, manual planning
+experience: operational rows, charts and filters. It must not mirror the AI
+website's question-and-answer cards.** Exact supporting-record correlation,
+immutable analysis identity and honest provenance remain required.
