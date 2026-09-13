@@ -808,9 +808,9 @@ def measures():
     ):
         # A missing cell never becomes a fabricated zero subtotal.
         expression = (
-            "IF(COUNTROWS(SavedRecords) > 0 && COUNTBLANK("
+            "IF(COUNTROWS(SavedRecords) > 0 && COALESCE(COUNTBLANK("
             + col(SR, field)
-            + ") == 0, SUM("
+            + "),0) == 0, SUM("
             + col(SR, field)
             + "))"
         )
@@ -854,9 +854,9 @@ def measures():
             "IF([Stock Rows Valid] == 1,("
             + scoped(
                 SR,
-                "IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK("
+                "IF(COUNTROWS(SavedRecords)>0 && COALESCE(COUNTBLANK("
                 + col(SR, field)
-                + ") == 0,SUM("
+                + "),0) == 0,SUM("
                 + col(SR, field)
                 + "))",
                 family="inventory",
@@ -874,7 +874,7 @@ def measures():
         "IF([Orders Rows Valid] == 1,("
         + scoped(
             SR,
-            "IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK(SavedRecords[line_revenue]) == 0,SUM(SavedRecords[line_revenue]))",
+            "IF(COUNTROWS(SavedRecords)>0 && COALESCE(COUNTBLANK(SavedRecords[line_revenue]),0) == 0,SUM(SavedRecords[line_revenue]))",
             family="customer_order_line",
             extra=[
                 eq(SR, "in_disruption_scope", "TRUE()"),
@@ -1123,7 +1123,7 @@ def measures():
         "IF([Overview Stock Rows Valid] == 1,("
         + scoped(
             SR,
-            "IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK(SavedRecords[usable_inventory]) == 0,SUM(SavedRecords[usable_inventory]))",
+            "IF(COUNTROWS(SavedRecords)>0 && COALESCE(COUNTBLANK(SavedRecords[usable_inventory]),0) == 0,SUM(SavedRecords[usable_inventory]))",
             analysis="[Overview Analysis Key]",
             family="inventory",
             extra=[

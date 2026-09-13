@@ -670,9 +670,9 @@ def detail(page):
             "Qualification records by supplier",
         ),
         "customer-orders": (
-            "customer_order_id",
+            "source_record_id",
             "Affected Revenue Row",
-            "Affected value by customer order",
+            "Affected value by saved order line",
         ),
     }
     category, value, chart_title = chart_spec[page]

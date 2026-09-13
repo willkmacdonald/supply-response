@@ -726,7 +726,7 @@ table CaseCommandCenter
   measure 'Stock Usable' =
       IF([Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Selected Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) > 0 && COUNTBLANK(SavedRecords[usable_inventory]) == 0, SUM(SavedRecords[usable_inventory])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) > 0 && COALESCE(COUNTBLANK(SavedRecords[usable_inventory]),0) == 0, SUM(SavedRecords[usable_inventory])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
     isHidden
 
   measure 'Stock Usable Display' =
@@ -735,7 +735,7 @@ table CaseCommandCenter
   measure 'Stock Held' =
       IF([Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Selected Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) > 0 && COUNTBLANK(SavedRecords[quality_hold]) == 0, SUM(SavedRecords[quality_hold])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) > 0 && COALESCE(COUNTBLANK(SavedRecords[quality_hold]),0) == 0, SUM(SavedRecords[quality_hold])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
     isHidden
 
   measure 'Stock Held Display' =
@@ -744,7 +744,7 @@ table CaseCommandCenter
   measure 'Stock Protected' =
       IF([Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Selected Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) > 0 && COUNTBLANK(SavedRecords[protected_allocation]) == 0, SUM(SavedRecords[protected_allocation])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) > 0 && COALESCE(COUNTBLANK(SavedRecords[protected_allocation]),0) == 0, SUM(SavedRecords[protected_allocation])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
     isHidden
 
   measure 'Stock Protected Display' =
@@ -753,7 +753,7 @@ table CaseCommandCenter
   measure 'Affected Revenue' =
       IF([Orders Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Selected Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) > 0 && COUNTBLANK(SavedRecords[line_revenue]) == 0, SUM(SavedRecords[line_revenue])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "customer_order_line"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords) > 0 && COALESCE(COUNTBLANK(SavedRecords[line_revenue]),0) == 0, SUM(SavedRecords[line_revenue])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "customer_order_line"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
     isHidden
 
   measure 'Affected Revenue Display' =
@@ -765,31 +765,31 @@ table CaseCommandCenter
   measure 'Stock On Hand Row' =
       IF([Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Selected Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK(SavedRecords[on_hand]) == 0,SUM(SavedRecords[on_hand])), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COALESCE(COUNTBLANK(SavedRecords[on_hand]),0) == 0,SUM(SavedRecords[on_hand])), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
     formatString: #,0
 
   measure 'Stock Held Row' =
       IF([Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Selected Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK(SavedRecords[quality_hold]) == 0,SUM(SavedRecords[quality_hold])), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COALESCE(COUNTBLANK(SavedRecords[quality_hold]),0) == 0,SUM(SavedRecords[quality_hold])), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
     formatString: #,0
 
   measure 'Stock Protected Row' =
       IF([Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Selected Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK(SavedRecords[protected_allocation]) == 0,SUM(SavedRecords[protected_allocation])), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COALESCE(COUNTBLANK(SavedRecords[protected_allocation]),0) == 0,SUM(SavedRecords[protected_allocation])), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
     formatString: #,0
 
   measure 'Stock Usable Row' =
       IF([Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Selected Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK(SavedRecords[usable_inventory]) == 0,SUM(SavedRecords[usable_inventory])), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COALESCE(COUNTBLANK(SavedRecords[usable_inventory]),0) == 0,SUM(SavedRecords[usable_inventory])), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
     formatString: #,0
 
   measure 'Affected Revenue Row' =
       IF([Orders Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Selected Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK(SavedRecords[line_revenue]) == 0,SUM(SavedRecords[line_revenue])), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "customer_order_line"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COALESCE(COUNTBLANK(SavedRecords[line_revenue]),0) == 0,SUM(SavedRecords[line_revenue])), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "customer_order_line"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
     formatString: $#,0
 
   measure 'Stock Explanation' =
@@ -1123,7 +1123,7 @@ table CaseCommandCenter
   measure 'Overview Stock' =
       IF([Overview Stock Rows Valid] == 1,(VAR ScopeCase = [Selected Case Key]
       VAR ScopeAnalysis = [Overview Analysis Key]
-      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COUNTBLANK(SavedRecords[usable_inventory]) == 0,SUM(SavedRecords[usable_inventory])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
+      RETURN IF(NOT ISBLANK(ScopeCase) && NOT ISBLANK(ScopeAnalysis), CALCULATE(IF(COUNTROWS(SavedRecords)>0 && COALESCE(COUNTBLANK(SavedRecords[usable_inventory]),0) == 0,SUM(SavedRecords[usable_inventory])), REMOVEFILTERS(SavedRecords), KEEPFILTERS(TREATAS({ScopeCase}, SavedRecords[case_key])), KEEPFILTERS(TREATAS({ScopeAnalysis}, SavedRecords[analysis_key])), KEEPFILTERS(SavedRecords[record_family] == "inventory"), KEEPFILTERS(SavedRecords[in_disruption_scope] == TRUE()), KEEPFILTERS(SavedRecords[record_state] == "available")))))
     isHidden
 
   measure 'Overview disruption Supplier' =

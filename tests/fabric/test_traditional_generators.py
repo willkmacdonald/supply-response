@@ -282,3 +282,25 @@ def test_saved_order_chart_uses_row_scoped_revenue():
     ]
     projection = chart["visual"]["query"]["queryState"]["Y"]["projections"][0]
     assert projection["queryRef"] == "CaseCommandCenter.Affected Revenue Row"
+    category = chart["visual"]["query"]["queryState"]["Category"]["projections"][0]
+    assert category["queryRef"] == "SavedRecords.source_record_id"
+
+
+def test_saved_numeric_guards_normalize_empty_countblank_only():
+    measures = report_model.measures()["CaseCommandCenter"]
+    guarded = (
+        "Stock Usable",
+        "Stock Held",
+        "Stock Protected",
+        "Affected Revenue",
+        "Stock On Hand Row",
+        "Stock Held Row",
+        "Stock Protected Row",
+        "Stock Usable Row",
+        "Affected Revenue Row",
+        "Overview Stock",
+    )
+    for name in guarded:
+        expression = measures[name].expression
+        assert "COALESCE(COUNTBLANK(" in expression, name
+        assert "COALESCE(SUM(" not in expression, name

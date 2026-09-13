@@ -103,7 +103,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Affected value by customer order'"
+                  "Value": "'Affected value by saved order line'"
                 }
               }
             },
@@ -155,12 +155,12 @@
                       "Entity": "SavedRecords"
                     }
                   },
-                  "Property": "customer_order_id"
+                  "Property": "source_record_id"
                 }
               },
-              "queryRef": "SavedRecords.customer_order_id",
-              "nativeQueryRef": "customer_order_id",
-              "displayName": "Customer order id",
+              "queryRef": "SavedRecords.source_record_id",
+              "nativeQueryRef": "source_record_id",
+              "displayName": "Source record id",
               "active": true
             }
           ]

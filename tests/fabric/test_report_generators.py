@@ -1212,7 +1212,7 @@ def test_main_report_explanations_use_business_language():
     assert action_explanation == report_pages.literal("Decision and outcome context")
 
 
-def test_walkthrough_preserves_routes_replay_disclosure_and_read_only_rehearsal():
+def test_walkthrough_distinguishes_broad_investigation_and_exact_saved_evidence():
     walkthrough = (
         ROOT / "docs/demo/traditional-and-assisted-walkthrough.md"
     ).read_text(encoding="utf-8")
@@ -1220,22 +1220,25 @@ def test_walkthrough_preserves_routes_replay_disclosure_and_read_only_rehearsal(
     for required in (
         "Explore in Power BI",
         "Review with AI assistance",
-        "same case and analysis",
-        "Analysis source details",
-        "Analysis saved at",
-        "replays those saved records",
-        "shared saved calculation engine",
-        "RL-Supplier Alpha — Current supplier",
+        "TRADITIONAL-OPS-2026-09-V1",
+        "178 distinct records",
+        "exact records captured for that saved analysis",
+        "not a fresh retrieval or a substitute for saved evidence",
+        "4,500 on hand, 200 on quality hold, 300 protected allocation",
+        "leaving 4,000 usable component units",
+        "Supplier deliveries",
+        "Production demand",
+        "Customer orders",
+        "RL-Supplier Alpha",
         "RL-Supplier Beta — Alternate supplier",
-        "No option is highlighted as the recommendation",
-        "review and approval",
-        "Do not create",
-        "Do not approve",
-        "start a simulation",
-        "start playback",
-        "Presenter notes",
+        "not the application's saved option rankings",
+        "does not approve responses",
+        "execute actions",
+        "start simulations",
+        "Presenter safeguards",
     ):
         assert required in normalized
+    assert "Both routes use the same information from this analysis" not in normalized
 
 
 def test_overview_answers_bind_explicit_saved_prediction_bases():
