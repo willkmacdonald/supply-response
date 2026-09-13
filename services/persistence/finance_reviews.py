@@ -151,6 +151,25 @@ class SqlAlchemyFinanceReviewRepository:
             raise RecordNotFound(f"finance review does not exist: {review_id}")
         return self._from_row(row)
 
+    def get_revision(self, review_id: str, revision: int) -> FinanceReview:
+        if isinstance(revision, bool) or not isinstance(revision, int) or revision <= 0:
+            raise ValueError("revision must be a positive integer")
+        row = (
+            self._connection.execute(
+                select(finance_review_revisions).where(
+                    finance_review_revisions.c.review_id == review_id,
+                    finance_review_revisions.c.revision == revision,
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RecordNotFound(
+                f"finance review revision does not exist: {review_id}/{revision}"
+            )
+        return self._from_row(row)[0]
+
     def get_by_idempotency_key(
         self, idempotency_key: str
     ) -> tuple[FinanceReview, int, str] | None:

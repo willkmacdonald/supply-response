@@ -223,11 +223,14 @@ def test_persistence_rejects_cross_policy_analysis(
     store.engine.dispose()
 
 
-def test_frozen_legacy_rows_read_from_migrated_0007_database(tmp_path, raw):
+def test_frozen_legacy_rows_read_from_current_migrated_database(
+    tmp_path, raw, monkeypatch
+):
+    monkeypatch.delenv("SUPPLY_RESPONSE_DATABASE_URL", raising=False)
     url = f"sqlite:///{tmp_path / 'legacy.db'}"
     config = Config("migrations/alembic.ini")
     config.set_main_option("sqlalchemy.url", url)
-    alembic_command.upgrade(config, "0007_finance_review_revisions")
+    alembic_command.upgrade(config, "head")
     # Deliberately avoid sqlite_store/create_all: migration alone creates schema.
     engine = build_sqlite_engine(url)
     store = SqliteStore(engine, runtime_mode=RuntimeMode.FALLBACK)

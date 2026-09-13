@@ -145,6 +145,7 @@ def test_shared_metadata_defines_closed_loop_schema():
         "approval_satisfactions",
         "case_instances",
         "case_projection",
+        "case_proposal_selections",
         "decisions",
         "draft_artifacts",
         "evidence_items",
@@ -669,7 +670,7 @@ def test_alembic_upgrade_path_adds_pointer_foreign_keys_after_original_0001(
             connection.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-            == "0007_finance_review_revisions"
+            == "0008_case_proposal_selection"
         )
     head_foreign_keys = {
         tuple(item["constrained_columns"])

@@ -124,6 +124,35 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.finan
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.finance_review_revisions') AND name = N'ix_finance_review_revisions_recorded_at') CREATE INDEX ix_finance_review_revisions_recorded_at ON app.finance_review_revisions (recorded_at);
 GO
 
+IF OBJECT_ID(N'app.case_proposal_selections', N'U') IS NULL
+BEGIN
+CREATE TABLE app.case_proposal_selections (
+    selection_id nvarchar(128) NOT NULL, case_id nvarchar(128) NOT NULL,
+    analysis_id nvarchar(128) NOT NULL, analysis_material_hash nvarchar(64) NOT NULL,
+    workflow_version nvarchar(64) NOT NULL, finance_review_id nvarchar(128) NULL,
+    finance_review_revision int NULL, expected_generation int NOT NULL,
+    expected_selection_id nvarchar(128) NULL, idempotency_key nvarchar(256) NOT NULL,
+    request_fingerprint nvarchar(64) NOT NULL, submitted_at datetimeoffset(6) NOT NULL,
+    payload_json nvarchar(max) NOT NULL,
+    CONSTRAINT pk_case_proposal_selections PRIMARY KEY (selection_id),
+    CONSTRAINT uq_case_proposal_selections_idempotency_key UNIQUE (idempotency_key),
+    CONSTRAINT ck_case_proposal_selections_review_pair CHECK ((finance_review_id IS NULL AND finance_review_revision IS NULL) OR (finance_review_id IS NOT NULL AND finance_review_revision IS NOT NULL AND finance_review_revision = 1)),
+    CONSTRAINT ck_case_proposal_selections_generation_nonnegative CHECK (expected_generation >= 0),
+    CONSTRAINT ck_case_proposal_selections_policy CHECK (workflow_version = N'independent-finance-v1'),
+    CONSTRAINT ck_case_proposal_selections_payload_json CHECK (ISJSON(payload_json) = 1),
+    CONSTRAINT fk_case_proposal_selections_case_id_case_instances FOREIGN KEY (case_id) REFERENCES app.case_instances (case_id),
+    CONSTRAINT fk_case_proposal_selections_analysis_id_analysis_versions FOREIGN KEY (analysis_id) REFERENCES app.analysis_versions (analysis_id),
+    CONSTRAINT fk_case_proposal_selections_expected_selection_id_case_proposal_selections FOREIGN KEY (expected_selection_id) REFERENCES app.case_proposal_selections (selection_id),
+    CONSTRAINT fk_case_proposal_selections_finance_review FOREIGN KEY (finance_review_id, finance_review_revision) REFERENCES app.finance_review_revisions (review_id, revision)
+);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.case_proposal_selections') AND name = N'ix_case_proposal_selections_case_id') CREATE INDEX ix_case_proposal_selections_case_id ON app.case_proposal_selections (case_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.case_proposal_selections') AND name = N'ix_case_proposal_selections_analysis_id') CREATE INDEX ix_case_proposal_selections_analysis_id ON app.case_proposal_selections (analysis_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.case_proposal_selections') AND name = N'ix_case_proposal_selections_submitted_at') CREATE INDEX ix_case_proposal_selections_submitted_at ON app.case_proposal_selections (submitted_at);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.case_proposal_selections') AND name = N'uq_case_proposal_selections_finance_review_id') CREATE UNIQUE INDEX uq_case_proposal_selections_finance_review_id ON app.case_proposal_selections (finance_review_id) WHERE finance_review_id IS NOT NULL;
+GO
+
 IF OBJECT_ID(N'app.evidence_items', N'U') IS NULL
 BEGIN
 CREATE TABLE app.evidence_items (
@@ -459,6 +488,22 @@ CREATE TABLE app.case_projection (
     CONSTRAINT ck_case_projection_payload_json CHECK (ISJSON(payload_json) = 1)
 );
 END;
+GO
+
+IF COL_LENGTH(N'app.case_projection', N'proposal_generation') IS NULL
+    ALTER TABLE app.case_projection ADD proposal_generation int NOT NULL CONSTRAINT df_case_projection_proposal_generation DEFAULT (0) WITH VALUES;
+GO
+IF COL_LENGTH(N'app.case_projection', N'current_selection_id') IS NULL
+    ALTER TABLE app.case_projection ADD current_selection_id nvarchar(128) NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE parent_object_id = OBJECT_ID(N'app.case_projection') AND name = N'ck_case_projection_proposal_generation_nonnegative')
+    ALTER TABLE app.case_projection ADD CONSTRAINT ck_case_projection_proposal_generation_nonnegative CHECK (proposal_generation >= 0);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE parent_object_id = OBJECT_ID(N'app.case_projection') AND name = N'fk_case_projection_current_selection_id_case_proposal_selections')
+    ALTER TABLE app.case_projection ADD CONSTRAINT fk_case_projection_current_selection_id_case_proposal_selections FOREIGN KEY (current_selection_id) REFERENCES app.case_proposal_selections (selection_id);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.case_projection') AND name = N'ix_case_projection_current_selection_id')
+    CREATE INDEX ix_case_projection_current_selection_id ON app.case_projection (current_selection_id);
 GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.case_projection') AND name = N'ix_case_projection_purpose_status')

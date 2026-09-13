@@ -16,6 +16,12 @@ from data.domain.execution import (
     Playback,
 )
 from data.domain.finance import FinanceReview
+from data.domain.proposals import (
+    ProposalSelection,
+    ProposalState,
+    ProposalToken,
+    SelectionReceipt,
+)
 from data.synthetic.rl001 import OperationalSnapshot
 
 
@@ -74,6 +80,7 @@ class DecisionStore(Protocol):
 
 
 class FinanceReviewStore(Protocol):
+    def get_revision(self, review_id: str, revision: int) -> FinanceReview: ...
     def get_latest(self, review_id: str) -> tuple[FinanceReview, int]: ...
 
     def get_by_idempotency_key(
@@ -88,6 +95,16 @@ class FinanceReviewStore(Protocol):
         idempotency_key: str,
         request_fingerprint: str,
     ) -> tuple[FinanceReview, int]: ...
+
+
+class ProposalStore(Protocol):
+    def get_state(self, case_id: str) -> ProposalState: ...
+    def get_selection(self, selection_id: str) -> ProposalSelection: ...
+    def get_by_idempotency_key(self, key: str) -> SelectionReceipt | None: ...
+    def publish(self, receipt: SelectionReceipt) -> ProposalSelection: ...
+    def guard_current(
+        self, case_id: str, *, expected: ProposalToken
+    ) -> ProposalToken: ...
 
 
 class ExecutionStore(Protocol):
@@ -174,6 +191,7 @@ class UnitOfWork(Protocol):
     decisions: DecisionStore
     execution: ExecutionStore
     finance_reviews: FinanceReviewStore
+    proposals: ProposalStore
 
     def __enter__(self) -> "UnitOfWork": ...  # noqa: PYI034
 

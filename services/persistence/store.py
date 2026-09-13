@@ -545,6 +545,17 @@ class SqlAlchemyStore:
         """Insert an Analysis and advance its Case projection on one connection."""
         runtime_mode = analysis.material.runtime_mode
         self._require_analysis_provenance(connection, analysis)
+        stored_case = self._stored_case(connection, analysis.case_id)
+        proposal_state = None
+        if (
+            stored_case.effective_workflow_version
+            is WorkflowVersion.INDEPENDENT_FINANCE
+        ):
+            from services.persistence.proposals import SqlAlchemyProposalRepository
+
+            proposal_state = SqlAlchemyProposalRepository(self, connection).get_state(
+                analysis.case_id
+            )
         connection.execute(
             insert(analysis_versions).values(
                 analysis_id=analysis.analysis_id,
@@ -605,13 +616,13 @@ class SqlAlchemyStore:
         )
         if projection is None:
             raise RecordNotFound(f"case projection does not exist: {analysis.case_id}")
+        now = datetime.now(UTC)
         values = {
             "current_analysis_id": analysis.analysis_id,
             "current_analysis_hash": analysis.material_hash,
-            "updated_at": datetime.now(UTC),
+            "updated_at": now,
         }
         if projected_case is not None:
-            stored_case = self._stored_case(connection, analysis.case_id)
             self._require_case_projection_integrity(
                 {
                     **projection,
@@ -628,7 +639,11 @@ class SqlAlchemyStore:
         if (
             projection["current_decision_id"] is not None
             and projection["current_analysis_hash"] is not None
-            and projection["current_analysis_hash"] != analysis.material_hash
+            and (
+                projection["current_analysis_hash"] != analysis.material_hash
+                or stored_case.effective_workflow_version
+                is WorkflowVersion.INDEPENDENT_FINANCE
+            )
         ):
             changed_case = self._decode_case(
                 projection["payload_json"], record_name="case projection"
@@ -637,13 +652,35 @@ class SqlAlchemyStore:
                 status=CaseStatus.REANALYSIS_REQUIRED.value,
                 payload_json=serialize_model(changed_case),
             )
-        result = connection.execute(
-            update(case_projection)
-            .where(case_projection.c.case_id == analysis.case_id)
-            .values(**values)
-        )
-        if result.rowcount != 1:
-            raise RecordNotFound(f"case projection does not exist: {analysis.case_id}")
+        if proposal_state is None:
+            result = connection.execute(
+                update(case_projection)
+                .where(case_projection.c.case_id == analysis.case_id)
+                .values(**values)
+            )
+            if result.rowcount != 1:
+                raise RecordNotFound(
+                    f"case projection does not exist: {analysis.case_id}"
+                )
+        else:
+            from services.persistence.proposals import (
+                SqlAlchemyProposalRepository,
+                _cas_projection,
+            )
+
+            values["current_selection_id"] = None
+            _cas_projection(
+                connection,
+                case_id=analysis.case_id,
+                expected=proposal_state.token,
+                values=values,
+            )
+            SqlAlchemyProposalRepository(self, connection)._supersede(
+                proposal_state,
+                now=now,
+                key=f"analysis-supersede:{analysis.analysis_id}",
+                operation="analysis-supersede",
+            )
 
     def try_claim_analysis(
         self,
@@ -2429,6 +2466,7 @@ class SqlAlchemyUnitOfWork:
         from services.persistence.finance_reviews import (
             SqlAlchemyFinanceReviewRepository,
         )
+        from services.persistence.proposals import SqlAlchemyProposalRepository
 
         self._connection = self._store.engine.connect()
         self._transaction = self._connection.begin()
@@ -2446,6 +2484,7 @@ class SqlAlchemyUnitOfWork:
         self.finance_reviews = SqlAlchemyFinanceReviewRepository(
             self._store, self._connection
         )
+        self.proposals = SqlAlchemyProposalRepository(self._store, self._connection)
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

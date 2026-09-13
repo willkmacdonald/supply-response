@@ -4,6 +4,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     MetaData,
@@ -81,6 +82,60 @@ analysis_claims = Table(
     Column("claim_expires_at", DateTime(timezone=True), nullable=False, index=True),
 )
 
+case_proposal_selections = Table(
+    "case_proposal_selections",
+    metadata,
+    Column("selection_id", String(128), primary_key=True),
+    Column(
+        "case_id",
+        String(128),
+        ForeignKey("case_instances.case_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    ),
+    Column(
+        "analysis_id",
+        String(128),
+        ForeignKey("analysis_versions.analysis_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    ),
+    Column("analysis_material_hash", String(64), nullable=False),
+    Column("workflow_version", String(64), nullable=False),
+    Column("finance_review_id", String(128), nullable=True),
+    Column("finance_review_revision", Integer, nullable=True),
+    Column("expected_generation", Integer, nullable=False),
+    Column(
+        "expected_selection_id",
+        String(128),
+        ForeignKey("case_proposal_selections.selection_id", ondelete="RESTRICT"),
+        nullable=True,
+    ),
+    Column("idempotency_key", String(256), nullable=False, unique=True),
+    Column("request_fingerprint", String(64), nullable=False),
+    Column("submitted_at", DateTime(timezone=True), nullable=False, index=True),
+    Column("payload_json", Text, nullable=False),
+    ForeignKeyConstraint(
+        ["finance_review_id", "finance_review_revision"],
+        ["finance_review_revisions.review_id", "finance_review_revisions.revision"],
+        ondelete="RESTRICT",
+        name="fk_case_proposal_selections_finance_review",
+    ),
+    CheckConstraint(
+        "(finance_review_id IS NULL AND finance_review_revision IS NULL) OR (finance_review_id IS NOT NULL AND finance_review_revision IS NOT NULL AND finance_review_revision = 1)",
+        name="review_pair",
+    ),
+    CheckConstraint("expected_generation >= 0", name="generation_nonnegative"),
+    CheckConstraint("workflow_version = 'independent-finance-v1'", name="policy"),
+)
+Index(
+    "uq_case_proposal_selections_finance_review_id",
+    case_proposal_selections.c.finance_review_id,
+    unique=True,
+    sqlite_where=text("finance_review_id IS NOT NULL"),
+    mssql_where=text("finance_review_id IS NOT NULL"),
+)
+
 case_projection = Table(
     "case_projection",
     metadata,
@@ -104,6 +159,14 @@ case_projection = Table(
         index=True,
     ),
     Column("current_analysis_hash", String(128), nullable=True, index=True),
+    Column("proposal_generation", Integer, nullable=False, server_default=text("0")),
+    Column(
+        "current_selection_id",
+        String(128),
+        ForeignKey("case_proposal_selections.selection_id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    ),
     Column(
         "current_decision_id",
         String(128),
@@ -119,6 +182,7 @@ case_projection = Table(
         index=True,
     ),
     Column("payload_json", Text, nullable=False),
+    CheckConstraint("proposal_generation >= 0", name="proposal_generation_nonnegative"),
 )
 
 analysis_versions = Table(

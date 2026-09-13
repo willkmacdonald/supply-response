@@ -41,16 +41,21 @@ def _require_actor(
     )
 
 
-def submit_finance_review(
-    *, review_id: str, proposal: FinanceProposal, actor: IdentitySnapshot, now: datetime
-) -> FinanceReview:
-    _require_aware(now)
+def require_proposal_submitter(actor: IdentitySnapshot) -> None:
+    """Validate the pure identity shape allowed to submit a Finance proposal."""
     _require_actor(
         actor,
         persona="RL-PERSONA-ALEX",
         source="RL-ENTRA-ALEX",
         roles=("material_planner", "response_approver"),
     )
+
+
+def submit_finance_review(
+    *, review_id: str, proposal: FinanceProposal, actor: IdentitySnapshot, now: datetime
+) -> FinanceReview:
+    _require_aware(now)
+    require_proposal_submitter(actor)
     if not review_id.strip():
         raise FinanceReviewViolation("review_id must be nonblank")
     if not requires_finance_approval(proposal.response_cost):
