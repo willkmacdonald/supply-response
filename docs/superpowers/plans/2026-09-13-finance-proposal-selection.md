@@ -47,6 +47,11 @@ append(review: FinanceReview, *, expected_revision: int | None,
 - Create `services/persistence/proposals.py`: guarded selection journal and narrow SQL update primitive.
 - Modify `services/persistence/ports.py`: `ProposalStore`, UoW member, exact review revision lookup.
 - Modify `services/persistence/finance_reviews.py`: `get_revision` only, reusing existing `_from_row`.
+- Modify `services/policy/finance_review.py` only if needed to expose a narrow
+  shared `require_proposal_submitter` check reused by review submission and the
+  proposal repository. Low-cost selections must also validate Alex ENTRA
+  persona/source/exact roles and valid tenant/object UUIDs. Domain models must
+  not import service modules; configured runtime identity binding remains later.
 - Modify `services/persistence/tables.py`: journal table, projection columns/constraints/index.
 - Modify `services/persistence/store.py`: UoW wiring and new-workflow `_save_analysis_connection` integration.
 - Create `migrations/versions/0008_case_proposal_selection.py`: frozen table/projection migration, down revision `0007_finance_review_revisions`.

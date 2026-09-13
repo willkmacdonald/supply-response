@@ -125,6 +125,39 @@ rewrites were reverted; the implementer disclosed using the hook bypass after
 manual checks. Original Decimal spelling and canonical values remain unchanged.
 These baseline tooling issues are tracked separately, not claimed fixed.
 
+## Current proposal selection — locally accepted
+
+Initial implementation `1ae88d4` was not accepted despite 130 tests passing.
+Independent review found that a historical analysis could be published as the
+current selection using a newer token, and that the proposal guard could advance
+legacy cases. It also identified missing negative, concurrency and migration
+acceptance coverage. The parent's broader run exposed an older migration test
+that incorrectly used current repositories to seed a predecessor schema.
+
+Correction `42ee347` adds the analysis-pair and policy guards with RED/GREEN
+regressions, restores the historical test through reflected predecessor seeding,
+and adds the required replay, rollback, lineage, threshold, migration and adapter
+concurrency tests. The populated 0007-to-0008 upgrade/downgrade/re-upgrade test
+preserves frozen raw payloads, indexes and foreign keys; native Fabric behavior
+is still not established by these local tests or compiled SQL assertions.
+
+Fresh parent verification on the committed correction:
+
+```text
+uv run pytest tests/domain tests/finance tests/auth tests/persistence tests/integration/test_store_contract.py tests/api/test_case_lifecycle.py -q -m 'not fabric_live' -o addopts=''
+312 passed, 15 deselected, 1 existing Starlette/httpx warning in 18.85s
+```
+
+Independent re-review also required stricter race-error classification, a
+high-cost backward-clock rollback test and complete compiled CAS predicate
+assertions. The final correction includes all three. Final verdict at
+`42ee347`: spec compliant and quality approved, with no remaining Critical or
+Important findings. The intermediate review snapshot `6ebb0c1` was amended into
+this final correction; the original base remains `e0f6f4f`.
+
+Command service planning is prepared. This storage acceptance does not expose
+Taylor's review actions, activate the new workflow or authorize deployment.
+
 ## Remaining gates
 
 1. Native database acceptance for the locally tested durable Finance review log.
