@@ -1,6 +1,6 @@
 # Supply Response Roadmap
 
-**Last updated:** September 12, 2026 (America/Chicago).
+**Last updated:** September 13, 2026 (America/Chicago).
 **Deployed baseline:** website revision **ca-sr-demo--0000028**, deployed source
 `78a6bf5`; reviewed report/model artifacts through `fd53e99`.
 

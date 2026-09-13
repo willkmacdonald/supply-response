@@ -35,8 +35,9 @@ The implementer also recorded 56 focused Finance lifecycle tests passing and
 clean scoped Ruff/format/diff checks. Tests use fictional identity fixtures and
 local storage; there were no tenant calls or real approval actions.
 
-This does **not** yet authenticate a Taylor browser session, store reviews in the
-database, enforce a review at final Decision creation, or provide a Finance inbox.
+This lifecycle increment alone does **not** authenticate a Taylor browser session,
+enforce a review at final Decision creation, or provide a Finance inbox. The
+separate persistence increment below adds durable storage.
 Identity snapshots remain inputs owned by the future authenticated service layer.
 
 ## Five-stage navigation — local browser verification passed
@@ -50,6 +51,9 @@ The local browser check passed at 1440px and 390px: five exact tab labels,
 manual keyboard activation and wrapping, preserved selection, one visible panel,
 hidden/inert inactive panels, visible email/Teams source links, explicit execution
 prerequisites, no horizontal overflow and no operation requests from navigation.
+An extended rerun also verified loaded Outlook/Teams icons, `$955,000` revenue,
+`$328,000` margin, `$0` response cost, `$7.50` per component, and the recommendation
+overlay's values, dismissal and focus return at both widths.
 Screenshots are saved locally in `.artifacts/five-stage-navigation/`; the parent
 visually inspected desktop approval and phone execution views. The check's first
 post-change run used an obsolete exact approval-button label; the actual button
@@ -64,6 +68,26 @@ approved, with no remaining findings.
 Local preview data and source links are explicitly simulated; no live services
 or real case mutations were used. The approval panel still represents the legacy
 workflow until the independent Finance service/UI integration is implemented.
+
+## Finance review persistence — locally accepted
+
+Initial implementation commit: `5c939c7`. The implementer recorded 122 focused
+tests passing; the parent broader domain/auth/persistence regression passed 237
+tests in 16.50s. These passing suites did not establish complete acceptance.
+
+Independent review required fixes for a mismatch between the hashed analysis
+material and its outer response-option cost, incomplete immutable Case
+provenance validation, and missing historical Case/Analysis/Decision migration
+proof. The parent reproduced the cost mismatch in a disposable database: an
+outer cost of $21,000 was accepted while the hashed material still said $24,750.
+Correction `0f23db5` now rejects that mismatch and validates immutable Case
+provenance. Additional fixes cover the migrated check-constraint name and
+rereading all persisted review snapshots. The migration regression preserves
+historical Case, Analysis and Decision raw payloads and hashes across upgrade
+and downgrade. Parent rerun: 239 domain/auth/persistence tests passed in 16.48s;
+the original disposable-database cost reproduction is now correctly rejected.
+Independent re-review: spec compliant and quality approved, no remaining
+findings. Concurrent-writer tests remain a separate increment in progress.
 
 ## Remaining gates
 

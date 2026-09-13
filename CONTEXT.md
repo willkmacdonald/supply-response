@@ -132,6 +132,14 @@ _Avoid_: Response Approver, Quality Approver
 An independently authorized approval that a Response Option requires before the Response Approver may approve it.
 _Avoid_: Evidence reference, attestation
 
+**Finance Proposal**:
+The exact Response Option, evaluated cost and Analysis Version submitted by Alex for Taylor's spending review. A changed response or analysis is a different proposal, not an extension of an earlier approval.
+_Avoid_: Final Decision, selected response alone
+
+**Finance Review**:
+Taylor's independent assessment of a Finance Proposal, recorded as pending, approved, rejected or superseded. Approval applies only to that proposal and does not replace Alex's final Decision; supersession preserves the earlier review history.
+_Avoid_: Standing Authorization, automatic approval, Alex's approval
+
 **Standing Authorization**:
 A prior approval from an authorized persona that permits defined response types within stated limits, conditions, and an effective period.
 _Avoid_: Blanket approval, app-role assignment
