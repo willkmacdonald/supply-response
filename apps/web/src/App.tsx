@@ -1,7 +1,5 @@
 import {CaseHeader} from "./components/CaseHeader";
-import {ExecutionPanel} from "./components/ExecutionPanel";
 import {InvestigationFlow} from "./components/InvestigationFlow";
-import {OutcomePanel} from "./components/OutcomePanel";
 import {PlanningRoutes} from "./components/PlanningRoutes";
 import {ExistingCases} from "./components/ExistingCases";
 import {useAuth} from "./auth/AuthProvider";
@@ -48,25 +46,6 @@ function CaseWorkspace() {
       analysis={workspace.analysis}
     />
     <InvestigationFlow state={workspace} />
-    <ExecutionPanel
-      busy={workspace.operation !== null}
-      canRetryPlanning={workspace.caseInstance?.controls.retry_action_planning}
-      decision={workspace.decision}
-      actions={workspace.actions}
-      drafts={workspace.drafts}
-      retrying={workspace.operation === "planning"}
-      onRetry={workspace.retryPlanning}
-      onRetryAction={workspace.retryAction}
-    />
-    <OutcomePanel
-      disabled={workspace.operation !== null || !workspace.caseInstance?.controls.start_playback}
-      decision={workspace.decision}
-      actionCount={workspace.actions.length}
-      playback={workspace.playback}
-      observations={workspace.observations}
-      starting={workspace.operation === "playback"}
-      onStart={workspace.startPlayback}
-    />
   </main>;
 }
 

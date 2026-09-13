@@ -31,7 +31,7 @@ function outcomeValue(observation: OutcomeObservation, value: string) {
 export function OutcomePanel({decision, actionCount, playback, observations, starting, disabled = true, onStart}: OutcomePanelProps) {
   if (!decision || decision.kind !== "approved" || actionCount === 0) return null;
   return <section className="panel" aria-labelledby="outcomes-heading">
-    <p className="step">5. Review outcomes</p>
+    <p className="step">Review outcomes</p>
     <h2 id="outcomes-heading">{playback ? "Simulated results" : "Recorded results"}</h2>
     {!playback && <button type="button" onClick={onStart} disabled={disabled || starting || actionCount !== 5}>
       {starting ? "Starting simulated execution…" : "Start simulated execution"}

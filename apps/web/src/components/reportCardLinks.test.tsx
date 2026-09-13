@@ -106,7 +106,7 @@ function header(s: CaseWorkspaceState) {
   return <CaseHeader runtime={s.runtime} caseInstance={s.caseInstance} analysis={s.analysis}
     createPurpose="showcase" creating={false} analyzing={false} onCreate={s.create} onAnalyze={s.analyze} />;
 }
-async function selectStage(name: "2. Investigate responses" | "3. Make the decision") {
+async function selectStage(name: "2. Investigate responses" | "3. Choose a response") {
   await userEvent.click(screen.getByRole("tab", {name}));
 }
 it("mounts exact historical header context and hides missing or mismatched context", () => {
@@ -183,7 +183,7 @@ it("requires linked saved orders and preserves valid zero stock", () => {
 });
 it("preserves selected and recommended option identities independently", async () => {
   const s = fixture(); const {rerender} = render(<InvestigationFlow state={s} />);
-  await selectStage("3. Make the decision");
+  await selectStage("3. Choose a response");
   const optionA = `${exact} and SavedOptions/option_key eq '4F007000740069006F006E002D004100'`;
   const optionB = `${exact} and SavedOptions/option_key eq '4F007000740069006F006E002D004200'`;
   expectDestination("Explore response options in Power BI", "response-options", exact);
@@ -206,7 +206,8 @@ it("hides record links for wrong retrieval identity and all links for malformed 
   s.analysis!.material.operational_snapshot_json = "{"; rerender(<InvestigationFlow state={s} />);
   expect(screen.queryByRole("link", {name: /Power BI/})).not.toBeInTheDocument();
   expect(screen.getAllByRole("heading", {level: 3})).toHaveLength(3);
-  await selectStage("3. Make the decision");
+  await selectStage("3. Choose a response");
+  await userEvent.click(screen.getByRole("tab", {name: "4. Review and approve"}));
   expect(screen.getByRole("button", {name: "Approve selected response"})).toBeDisabled();
 });
 it("does not describe unavailable live reporting as fallback mode", () => {

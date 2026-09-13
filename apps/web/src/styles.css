@@ -118,7 +118,7 @@ h3 { margin: 0.75rem 0 0.45rem; }
 .investigation-flow { display: grid; gap: 1.5rem; margin-top: 1.5rem; }
 .analysis-context { padding: 0 0.4rem; color: #52645e; font-size: 0.85rem; }
 .analysis-context p { margin: 0.4rem 0; }
-.investigation-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; gap: 0.5rem; }
+.investigation-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); width: 100%; gap: 0.5rem; }
 .investigation-tabs button { min-width: 0; border: 1px solid #b8c8c1; border-radius: 0.75rem; background: #e3e8e3; color: #16211f; line-height: 1.35; white-space: normal; }
 .investigation-tabs button[aria-selected="true"] { border-color: #075d4b; background: #075d4b; color: #fff; }
 .investigation-panel { min-width: 0; }
@@ -162,7 +162,11 @@ h3 { margin: 0.75rem 0 0.45rem; }
 .investigation-cards details dt { color: #52645e; font-size: 0.85rem; }
 .investigation-cards details dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 .investigation-cards details details { padding-top: 0.5rem; border-top: 1px solid #d8dfd8; }
-@media (max-width: 560px) {
+@media (max-width: 1100px) {
+  .investigation-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .investigation-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .investigation-tabs { gap: 0.3rem; }
   .investigation-tabs button { padding-inline: 0.45rem; font-size: 0.82rem; }
 }

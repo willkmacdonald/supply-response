@@ -19,7 +19,7 @@ describe("ExecutionPanel", () => {
     expect(screen.getAllByText("Action type not recognized")).toHaveLength(2);
     expect(screen.getByText("Status not recognized")).toBeVisible();
     expect(screen.queryByText("mystery email action")).not.toBeInTheDocument();
-    expect(screen.getByText("4. Carry out approved actions")).toBeVisible();
+    expect(screen.getByText("5. Execute mitigation plan")).toBeVisible();
   });
 
   it("keeps drafts unsent and labels only proven draft kinds specifically", () => {

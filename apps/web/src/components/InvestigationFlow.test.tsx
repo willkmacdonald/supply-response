@@ -34,17 +34,42 @@ function state(): CaseWorkspaceState {
         approval_satisfactions: [], ranking, calculation_version: "v1", evidence_policy_version: "v1", approval_policy_version: "v1"}}};
 }
 async function selectDecisionStage() {
-  await userEvent.click(screen.getByRole("tab", {name: "3. Make the decision"}));
+  await userEvent.click(screen.getByRole("tab", {name: "3. Choose a response"}));
+}
+async function selectApprovalStage() {
+  await userEvent.click(screen.getByRole("tab", {name: "4. Review and approve"}));
+}
+async function selectExecutionStage() {
+  await userEvent.click(screen.getByRole("tab", {name: "5. Execute mitigation plan"}));
 }
 async function openRecommendation() {
   await userEvent.click(screen.getByRole("button", {name: "Click here to understand why"}));
   return screen.getByRole("dialog", {name: "Why this response is recommended"});
 }
-it("shows one approved three-card stage at a time", async () => {
+it("separates choosing, approving and executing without operations", async () => {
+  const input = state();
+  render(<InvestigationFlow state={input} />);
+  expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual([
+    "1. Understand the disruption", "2. Investigate responses", "3. Choose a response",
+    "4. Review and approve", "5. Execute mitigation plan",
+  ]);
+  await userEvent.click(screen.getByRole("tab", {name: "3. Choose a response"}));
+  expect(screen.getByRole("region", {name: "Compare the options."})).toBeVisible();
+  expect(screen.queryByRole("region", {name: "Review and approve."})).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("tab", {name: "4. Review and approve"}));
+  expect(screen.getByRole("region", {name: "Review and approve."})).toBeVisible();
+  await userEvent.click(screen.getByRole("tab", {name: "5. Execute mitigation plan"}));
+  expect(screen.getByText("Approve a response in Review and approve before starting its mitigation plan.")).toBeVisible();
+  for (const fn of [input.approve, input.reject, input.retryPlanning, input.retryAction, input.startPlayback]) {
+    expect(fn).not.toHaveBeenCalled();
+  }
+});
+it("shows one approved card group at a time", async () => {
   const user = userEvent.setup();
   render(<InvestigationFlow state={state()} />);
   expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual([
-    "1. Understand the disruption", "2. Investigate responses", "3. Make the decision",
+    "1. Understand the disruption", "2. Investigate responses", "3. Choose a response",
+    "4. Review and approve", "5. Execute mitigation plan",
   ]);
   expect(screen.getAllByRole("heading", {level: 3}).map(h => h.textContent)).toEqual([
     "What changed?", "What do we have available?", "What does that put at risk?",
@@ -57,11 +82,8 @@ it("shows one approved three-card stage at a time", async () => {
   expect(screen.getByText("Shipment details aren't available for this analysis")).toBeVisible();
   expect(screen.getByText("Plant transfer details aren't available for this analysis")).toBeVisible();
   expect(screen.getByText("Supplier qualification details aren't available for this analysis")).toBeVisible();
-  await user.click(screen.getByRole("tab", {name: "3. Make the decision"}));
-  expect(screen.getAllByRole("heading", {level: 3}).map(h => h.textContent)).toEqual([
-    "Compare the options.", "Review and approve.",
-  ]);
-  expect(screen.getByRole("button", {name: "Approve selected response"})).toBeDisabled();
+  await user.click(screen.getByRole("tab", {name: "3. Choose a response"}));
+  expect(screen.getAllByRole("heading", {level: 3}).map(h => h.textContent)).toEqual(["Compare the options."]);
   expect(screen.getByText("No option meets the planning requirements")).toBeVisible();
   expect(screen.getByText("Sample data — not a live retrieval")).toBeVisible();
   const comparison = screen.getByRole("region", {name: "Compare the options."});
@@ -76,14 +98,14 @@ it("uses manual keyboard activation with wrapping and stable panel associations"
   expect(tabs[0]).toHaveAttribute("aria-selected", "true");
   expect(screen.getByRole("tabpanel")).toHaveAccessibleName("1. Understand the disruption");
   tabs[0].focus(); await user.keyboard("{ArrowLeft}");
-  expect(tabs[2]).toHaveFocus(); expect(tabs[0]).toHaveAttribute("aria-selected", "true");
-  expect(tabs.map(tab => tab.tabIndex)).toEqual([-1, -1, 0]);
+  expect(tabs[4]).toHaveFocus(); expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+  expect(tabs.map(tab => tab.tabIndex)).toEqual([-1, -1, -1, -1, 0]);
   expect(tabs.filter(tab => tab.tabIndex === 0)).toHaveLength(1);
-  await user.keyboard("{Enter}"); expect(tabs[2]).toHaveAttribute("aria-selected", "true");
+  await user.keyboard("{Enter}"); expect(tabs[4]).toHaveAttribute("aria-selected", "true");
   await user.keyboard("{Home}"); expect(tabs[0]).toHaveFocus();
-  expect(tabs[2]).toHaveAttribute("aria-selected", "true");
+  expect(tabs[4]).toHaveAttribute("aria-selected", "true");
   await user.keyboard(" "); expect(tabs[0]).toHaveAttribute("aria-selected", "true");
-  await user.keyboard("{End}"); expect(tabs[2]).toHaveFocus();
+  await user.keyboard("{End}"); expect(tabs[4]).toHaveFocus();
   await user.keyboard("{ArrowRight}"); expect(tabs[0]).toHaveFocus();
   expect(fetch).not.toHaveBeenCalled(); expect(window.location.href).toBe(location);
   expect(input.selectOption).not.toHaveBeenCalled(); expect(input.approve).not.toHaveBeenCalled();
@@ -103,25 +125,75 @@ it("preserves the selected stage on same-case rerenders and resets for a differe
 });
 it("keeps rejection explicit and respects the existing blocked state", async () => {
   const user = userEvent.setup(); const input = state(); render(<InvestigationFlow state={input} />);
-  await user.click(screen.getByRole("tab", {name: "3. Make the decision"}));
+  await selectApprovalStage();
   const decision = screen.getByRole("region", {name: "Review and approve."});
   expect(within(decision).getByLabelText("Rejection reason")).toBeDisabled();
   expect(input.approve).not.toHaveBeenCalled(); expect(input.reject).not.toHaveBeenCalled();
   cleanup(); input.decisionBlocked = false; input.caseInstance!.controls.decide = true; render(<InvestigationFlow state={input} />);
-  await user.click(screen.getByRole("tab", {name: "3. Make the decision"}));
+  await selectApprovalStage();
   await user.type(screen.getByLabelText("Rejection reason"), "Wait for evidence");
   await user.click(screen.getByRole("tab", {name: "1. Understand the disruption"}));
-  await user.click(screen.getByRole("tab", {name: "3. Make the decision"}));
+  await selectApprovalStage();
   expect(screen.getByLabelText("Rejection reason")).toHaveValue("Wait for evidence");
   await user.click(screen.getByRole("button", {name: "Reject recommendation"}));
   expect(input.reject).toHaveBeenCalledWith("Wait for evidence");
   expect(input.approve).not.toHaveBeenCalled();
 });
+it("renders approved actions and results only in execution", async () => {
+  const input = state();
+  input.decision = {kind: "approved", action_planning_status: "complete", prerequisite_roles: [],
+    analysis_id: "a", selected_option_id: null, decision_id: "d", runtime_mode: "fallback"} as never;
+  input.actions = [{action_id: "action-1", kind: "prepare_alpha_recovery_draft", status: "planned"}] as never;
+  input.drafts = [{artifact_id: "draft-1", artifact_kind: "supplier_recovery_request", subject: "Recovery", body: null}] as never;
+  render(<InvestigationFlow state={input} />);
+  await selectApprovalStage();
+  expect(screen.getByRole("heading", {name: "Approved response"})).toBeVisible();
+  expect(screen.queryByRole("heading", {name: "Execution plan"})).not.toBeInTheDocument();
+  await selectExecutionStage();
+  expect(screen.getByRole("heading", {name: "Execution plan"})).toBeVisible();
+  expect(screen.getByText("Prepare supplier recovery draft")).toBeVisible();
+  expect(screen.getByText("Unsent draft")).toBeVisible();
+});
+it("blocks rejected execution explicitly", async () => {
+  const input = state();
+  input.decision = {kind: "rejected", rejection_reason: "Wait for evidence", action_planning_status: "not_applicable",
+    prerequisite_roles: [], analysis_id: "a", selected_option_id: null, decision_id: "d", runtime_mode: "fallback"} as never;
+  render(<InvestigationFlow state={input} />);
+  await selectExecutionStage();
+  expect(screen.getByText("This response was rejected. Choose a response and obtain approval before starting a mitigation plan.")).toBeVisible();
+  expect(screen.queryByRole("heading", {name: "Execution plan"})).not.toBeInTheDocument();
+});
+it("preserves approval input and selected option while switching stages", async () => {
+  const input = state(); input.decisionBlocked = false; input.caseInstance!.controls.decide = true;
+  const selected = {option_id: "selected", name: "Selected response", prerequisite_roles: []} as never;
+  input.selectedOption = selected;
+  render(<InvestigationFlow state={input} />);
+  await selectApprovalStage();
+  await userEvent.type(screen.getByLabelText("Rejection reason"), "Wait for evidence");
+  await selectDecisionStage();
+  expect(input.selectedOption).toBe(selected);
+  await selectApprovalStage();
+  expect(screen.getByLabelText("Rejection reason")).toHaveValue("Wait for evidence");
+});
+it("retains execution busy and server-control guards", async () => {
+  const input = state();
+  input.decision = {kind: "approved", action_planning_status: "failed", prerequisite_roles: [],
+    analysis_id: "a", selected_option_id: null, decision_id: "d", runtime_mode: "fallback"} as never;
+  input.actions = [{action_id: "failed-action", kind: "prepare_alpha_recovery_draft", status: "failed"}] as never;
+  input.operation = "planning";
+  render(<InvestigationFlow state={input} />);
+  await selectExecutionStage();
+  expect(screen.getByRole("button", {name: "Retrying action planning…"})).toBeDisabled();
+  expect(screen.getByRole("button", {name: "Retry prepare supplier recovery draft"})).toBeDisabled();
+  expect(input.retryPlanning).not.toHaveBeenCalled();
+  expect(input.retryAction).not.toHaveBeenCalled();
+  expect(input.startPlayback).not.toHaveBeenCalled();
+});
 it("reports historical and closed case state without inventing an awaiting decision", async () => {
   const input = state(); input.caseInstance!.status = "closed";
   input.caseInstance!.current_analysis_id = "newer";
   render(<InvestigationFlow state={input} />);
-  await selectDecisionStage();
+  await selectApprovalStage();
   expect(screen.getByText("Historical saved analysis. Case closed; no decision is shown for this analysis.")).toBeVisible();
   expect(screen.queryByText("Awaiting your explicit decision")).not.toBeInTheDocument();
 });

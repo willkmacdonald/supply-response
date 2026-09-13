@@ -38,7 +38,13 @@ function authenticatedClient(): AuthClient {
 }
 
 async function selectDecisionStage() {
-  await userEvent.click(await screen.findByRole("tab", {name: "3. Make the decision"}));
+  await userEvent.click(await screen.findByRole("tab", {name: "3. Choose a response"}));
+}
+async function selectApprovalStage() {
+  await userEvent.click(await screen.findByRole("tab", {name: "4. Review and approve"}));
+}
+async function selectExecutionStage() {
+  await userEvent.click(await screen.findByRole("tab", {name: "5. Execute mitigation plan"}));
 }
 
 const runtime = {
@@ -533,6 +539,7 @@ describe("reopening lifecycle and operation safety", () => {
     await act(async () => {await result.current[operation]();});
     expect(mock.mock.calls.every(([, init]) => !init?.method)).toBe(true);
     render(<App />);
+    await selectExecutionStage();
     expect(await screen.findByRole("button", {name: operation === "retryPlanning" ? "Retry action planning" : "Start simulated execution"})).toBeDisabled();
   });
 
@@ -672,8 +679,9 @@ describe("reopening lifecycle and operation safety", () => {
     await selectDecisionStage();
     await screen.findByText("Combined response");
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
-    expect(screen.getByRole("button", {name: "Approve combined response"})).toBeDisabled();
     expect(screen.getByRole("button", {name: "Select Combined response"})).toBeDisabled();
+    await selectApprovalStage();
+    expect(screen.getByRole("button", {name: "Approve combined response"})).toBeDisabled();
     await act(async () => resolveList(await response([])));
   });
 
@@ -735,7 +743,7 @@ describe("reopening lifecycle and operation safety", () => {
     await act(async () => { await result.current.approve(); await result.current.reject("no"); });
     expect(mock.mock.calls.every(([, init]) => !init?.method)).toBe(true);
     render(<App />);
-    await selectDecisionStage();
+    await selectApprovalStage();
     expect(await screen.findByRole("button", {name: "Approve combined response"})).toBeDisabled();
   });
 
@@ -746,6 +754,7 @@ describe("reopening lifecycle and operation safety", () => {
     window.history.replaceState(null, "", "/?caseId=RL-CASE-1&analysisId=RL-ANALYSIS-1");
     render(<App />);
     if (code === "PLAYBACK_NOT_FOUND") {
+      await selectExecutionStage();
       expect(await screen.findByRole("button", {name: "Start simulated execution"})).toBeDisabled();
     } else {
       expect(await screen.findByRole("alert")).toHaveTextContent("Unable to reopen");
@@ -844,9 +853,11 @@ describe("progressive Case workspace", () => {
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     await selectDecisionStage();
     expect(await screen.findByText("Combined response")).toBeVisible();
+    await selectApprovalStage();
     await userEvent.click(screen.getByRole("button", {name: "Approve combined response"}));
     expect(await screen.findByRole("heading", {name: "Approved response"})).toBeVisible();
     expect(within(screen.getByTestId("decision-receipt")).getByText("Combined response")).toBeVisible();
+    await selectExecutionStage();
     expect(await screen.findAllByTestId("execution-action")).toHaveLength(5);
     expect(screen.getByText("Unsent draft")).toBeVisible();
     await userEvent.click(screen.getByRole("button", {name: "Start simulated execution"}));
@@ -854,8 +865,10 @@ describe("progressive Case workspace", () => {
     expect(await screen.findAllByTestId("outcome-observation")).toHaveLength(10);
     expect(screen.queryByText("Actual outcomes")).not.toBeInTheDocument();
     expect(screen.getByRole("tab", {name: "1. Understand the disruption"})).toBeVisible();
+    await selectDecisionStage();
     expect(screen.getByRole("button", {name: "Click here to understand why"})).toBeVisible();
     expect(screen.queryByRole("heading", {name: "Recommended response—and why."})).not.toBeInTheDocument();
+    await selectApprovalStage();
     expect(screen.getByRole("heading", {name: "Review and approve."})).toBeVisible();
   });
 
@@ -899,6 +912,7 @@ describe("progressive Case workspace", () => {
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     await selectDecisionStage();
+    await selectApprovalStage();
     expect(await screen.findByText("A planning requirement is unresolved")).toBeVisible();
     expect(screen.getByText("Decision details").closest("details")).toHaveTextContent("REQUIRED_EVIDENCE_STALE");
     expect(screen.getByRole("button", {name: "Approve combined response"})).toBeDisabled();
@@ -919,6 +933,7 @@ describe("progressive Case workspace", () => {
     await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     await selectDecisionStage();
+    await selectApprovalStage();
     expect(await screen.findByText("Required evidence is stale")).toBeVisible();
     expect(screen.getByRole("button", {name: "Approve combined response"})).toBeDisabled();
     expect(screen.getByRole("button", {name: "Reject recommendation"})).toBeDisabled();
@@ -933,7 +948,9 @@ describe("progressive Case workspace", () => {
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     await selectDecisionStage();
     await screen.findByText("Combined response");
+    await selectApprovalStage();
     await userEvent.click(screen.getByRole("button", {name: "Approve combined response"}));
+    await selectExecutionStage();
     expect(await screen.findByText("Approved — action planning failed")).toBeVisible();
     await userEvent.click(screen.getByRole("button", {name: "Retry action planning"}));
     expect(await screen.findAllByTestId("execution-action")).toHaveLength(5);
@@ -948,7 +965,9 @@ describe("progressive Case workspace", () => {
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     await selectDecisionStage();
     await screen.findByText("Combined response");
+    await selectApprovalStage();
     await userEvent.click(screen.getByRole("button", {name: "Approve combined response"}));
+    await selectExecutionStage();
     const failedAction = await screen.findByTestId("execution-action-RL-ACTION-1");
     expect(within(failedAction).getByText("Failed")).toBeVisible();
     await userEvent.click(within(failedAction).getByRole("button", {name: "Retry prepare supplier recovery draft"}));
@@ -973,6 +992,7 @@ describe("progressive Case workspace", () => {
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     await selectDecisionStage();
     await screen.findByText("Combined response");
+    await selectApprovalStage();
     await userEvent.type(screen.getByLabelText("Rejection reason"), "Wait for refreshed supplier evidence.");
     await userEvent.click(screen.getByRole("button", {name: "Reject recommendation"}));
     expect(await screen.findByRole("heading", {name: "Recommendation rejected"})).toBeVisible();
@@ -989,7 +1009,9 @@ describe("progressive Case workspace", () => {
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     await selectDecisionStage();
     await screen.findByText("Combined response");
+    await selectApprovalStage();
     await userEvent.click(screen.getByRole("button", {name: "Approve combined response"}));
+    await selectExecutionStage();
     await screen.findAllByTestId("execution-action");
     const start = screen.getByRole("button", {name: "Start simulated execution"});
     start.click();
@@ -1132,8 +1154,9 @@ describe("progressive Case workspace", () => {
     await screen.findByText("Fictional scenario · Uses predefined sample data");
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     await userEvent.click(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"}));
-    await selectDecisionStage();
+    await selectApprovalStage();
     expect(await screen.findByRole("heading", {name: "Approved response"})).toBeVisible();
+    await selectExecutionStage();
     expect(screen.getAllByTestId("execution-action")).toHaveLength(5);
     expect(screen.getByText("Simulated results")).toBeVisible();
     expect(fetchMock.mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);

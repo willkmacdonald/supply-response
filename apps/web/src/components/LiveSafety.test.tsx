@@ -220,7 +220,7 @@ describe("live journey safety", () => {
     />);
     expect(screen.getByRole("heading", {name: "Simulated results"})).toBeVisible();
     expect(screen.getByText("Simulation in progress")).toBeVisible();
-    expect(screen.getByText("5. Review outcomes")).toBeVisible();
+    expect(screen.getByText("Review outcomes")).toBeVisible();
 
     rerender(<OutcomePanel
       decision={{kind: "approved"} as never}

@@ -5,6 +5,8 @@ import {InvestigationEvidence} from "./InvestigationEvidence";
 import {RequiredCitationWarning} from "./EvidenceSource";
 import {OptionComparison} from "./OptionComparison";
 import {DecisionPanel} from "./DecisionPanel";
+import {ExecutionPanel} from "./ExecutionPanel";
+import {OutcomePanel} from "./OutcomePanel";
 import {readPlannerSnapshot} from "./plannerSnapshot";
 import {instant} from "./plannerFormatting";
 export function InvestigationFlow({state}: {state: CaseWorkspaceState}) {
@@ -15,7 +17,9 @@ export function InvestigationFlow({state}: {state: CaseWorkspaceState}) {
 const stages = [
   {id: "understand", label: "1. Understand the disruption"},
   {id: "responses", label: "2. Investigate responses"},
-  {id: "decision", label: "3. Make the decision"},
+  {id: "decision", label: "3. Choose a response"},
+  {id: "approval", label: "4. Review and approve"},
+  {id: "execution", label: "5. Execute mitigation plan"},
 ] as const;
 
 function StagePanel({index, activeStage, children}: {index: number; activeStage: number; children: ReactNode}) {
@@ -67,6 +71,25 @@ function InvestigationPresentation({state}: {state: CaseWorkspaceState}) {
     </div>
     <StagePanel index={0} activeStage={activeStage}><InvestigationEvidence {...props} row="disruption" /></StagePanel>
     <StagePanel index={1} activeStage={activeStage}><InvestigationEvidence {...props} row="responses" /></StagePanel>
-    <StagePanel index={2} activeStage={activeStage}><OptionComparison disabled={state.operation !== null} analysis={analysis} selectedOption={state.selectedOption} onSelect={state.selectOption} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /><DecisionPanel state={state} onApprove={state.approve} onReject={state.reject} /></StagePanel>
+    <StagePanel index={2} activeStage={activeStage}><OptionComparison disabled={state.operation !== null} analysis={analysis} selectedOption={state.selectedOption} onSelect={state.selectOption} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /></StagePanel>
+    <StagePanel index={3} activeStage={activeStage}><DecisionPanel state={state} onApprove={state.approve} onReject={state.reject} /></StagePanel>
+    <StagePanel index={4} activeStage={activeStage}>
+      {!state.decision || state.decision.kind !== "approved" ? (
+        <section className="panel" aria-labelledby="execution-waiting-heading">
+          <h2 id="execution-waiting-heading">Execute mitigation plan</h2>
+          <p>{state.decision?.kind === "rejected"
+            ? "This response was rejected. Choose a response and obtain approval before starting a mitigation plan."
+            : "Approve a response in Review and approve before starting its mitigation plan."}</p>
+        </section>
+      ) : <>
+        <ExecutionPanel busy={state.operation !== null}
+          canRetryPlanning={state.caseInstance?.controls.retry_action_planning}
+          decision={state.decision} actions={state.actions} drafts={state.drafts}
+          retrying={state.operation === "planning"} onRetry={state.retryPlanning} onRetryAction={state.retryAction} />
+        <OutcomePanel disabled={state.operation !== null || !state.caseInstance?.controls.start_playback}
+          decision={state.decision} actionCount={state.actions.length} playback={state.playback}
+          observations={state.observations} starting={state.operation === "playback"} onStart={state.startPlayback} />
+      </>}
+    </StagePanel>
   </div>;
 }

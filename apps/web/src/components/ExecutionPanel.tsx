@@ -39,7 +39,7 @@ function draftName(kind: string): string {
 export function ExecutionPanel({decision, actions, drafts, retrying, busy, canRetryPlanning = false, onRetry, onRetryAction}: ExecutionPanelProps) {
   if (!decision || decision.kind !== "approved") return null;
   return <section className="panel" aria-labelledby="execution-heading">
-    <p className="step">4. Carry out approved actions</p>
+    <p className="step">5. Execute mitigation plan</p>
     <h2 id="execution-heading">Execution plan</h2>
     {decision.action_planning_status === "failed" && <div className="failure-banner">
       <strong>Approved — action planning failed</strong>
