@@ -1,6 +1,8 @@
-# Traditional reporting verification — in progress
+# Traditional reporting verification — released September 12
 
-This is an implementation record, not a completion or publication claim.
+This is a chronological implementation and release record. Earlier pending gates
+are resolved by the final acceptance and deployment sections below, unless explicitly
+listed as a remaining limitation.
 Approved scope: [traditional operational reporting design](../superpowers/specs/2026-09-12-traditional-operational-reporting-design.md).
 
 ## Existing supporting-data defect
@@ -185,5 +187,41 @@ Reporting activation is accepted for the controlling September 12 scope. Some
 native DirectQuery charts still load noticeably later than the row grids; instant
 rendering is not claimed. Populated execution outcomes, within-case multi-version
 history, Teams app handoff and finance-person interactive approval are not certified.
-The presenter walkthrough is committed. Website deployment and actual website
-link verification remain the final release steps.
+The presenter walkthrough is committed. Website release verification follows.
+
+## Website deployment and acceptance
+
+Deployed source 78a6bf5 through the existing guarded Azure release; ACR run ch1j
+succeeded and ca-sr-demo--0000028 is Healthy/Running with 100% traffic. Image:
+sha256:dd20b4659bb37a6154d7137829c845de3748d503e29bbb4ee4add679ba842c08.
+The artifact-bound receipt now enables saved-analysis-v1 in the live runtime.
+Health is live/Fabric SQL/schema12; post-release readiness smoke passed. Existing
+three Azure roles and scale 0–2 are unchanged. azd show and the actual app resource
+were read to verify the endpoint.
+
+Actual deployed UI, using Alex's existing session and the selected September 9
+case/analysis, confirmed:
+
+- Heading: Respond to supply disruptions with AI; three stage tabs retained.
+- Baseline currency: $955,000 revenue, $328,000 margin, $0 response cost.
+- Investigation unit prices: $7.50 and $1.50, with email and Teams source icons.
+- Recommendation explanation opens as a dialog with $955,000 → $375,000,
+  $328,000 → $125,000 and $0 → $24,750 comparisons; Close works.
+- Live inventory link emits available-stock with exact case/analysis filters.
+  Native destination visibly shows 4,500/200/300/4,000 and its saved source row.
+- Live affected-orders link emits customer-orders with the same identities.
+  Native destination shows RL-CO-DEMO-1 $375,000 and RL-CO-DEMO-2 $580,000 plus chart.
+- Live shipment link emits supplier-shipment plus exact shipment family/key.
+  Native destination shows 3,000 / September 6 / $7.50 and the original record ID.
+- Live broad Explore in Power BI URL points to operations-overview with only
+  OperationalRecords/dataset_id=TRADITIONAL-OPS-2026-09-V1, not saved case filters.
+  All seven broad native pages were separately inspected earlier in this release.
+
+Browser automation did not expose a newly opened tab after a target=_blank click;
+verification therefore navigated the inspected live anchor href in the existing
+native report tab. The browser connection later lost that tab during the final
+broad-entry revisit. Neither event is counted as successful automatic app/browser
+handoff, and neither invalidates the observed deployed href or native row parity.
+The Power BI launch/auth experience is still dependent on the browser session.
+No original communications were resent or altered; no case, analysis, decision,
+approval, simulation or execution mutation was used for this acceptance.

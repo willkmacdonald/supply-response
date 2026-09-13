@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — traditional operational reporting/navigation correction. Existing website remains c8a7c38 / ca-sr-demo--0000027 until the guarded release completes.
+> **Status:** Deployed — traditional operational reporting/navigation correction, validated and released as ca-sr-demo--0000028.
 
 ## Traditional operational reporting release — 2026-09-12
 
@@ -61,6 +61,28 @@ query results include unavailable output for mismatched identities. The
 azure-validate workflow completed ResolveErrors before this status was set.
 Receipt activation is accepted for September 12 traditional/exact-source reporting,
 not for populated execution outcomes or a separate finance-person login workflow.
+
+### Reporting release deployment proof
+
+Guarded deployment of 78a6bf5 completed September 12 around 21:55 America/Chicago.
+ACR run ch1j succeeded; image digest
+sha256:dd20b4659bb37a6154d7137829c845de3748d503e29bbb4ee4add679ba842c08.
+Revision ca-sr-demo--0000028 is Healthy/Running, Provisioned/Succeeded, latest-ready,
+with 100% traffic and unchanged scale 0–2. Two initial existing-health timeouts
+were retried by the guard; live health passed before deployment continued.
+Post-deployment --smoke passed Fabric/Foundry readiness without delegated retrieval.
+Runtime reports saved-analysis-v1 activation. Three exact existing roles remain
+AcrPull, Key Vault Secrets User and Foundry User; no role or SQL grant was added.
+
+azd show completed; this project intentionally has no separately declared services,
+so its output gives the resource-group link rather than an endpoint. The actual
+Container App read confirmed:
+https://ca-sr-demo.orangehill-337f5d48.eastus2.azurecontainerapps.io/.
+Actual browser acceptance as Alex used the existing September 9 case/analysis.
+Live DOM links and native Power BI destinations reconciled inventory, orders and
+shipment; broad navigation contains only the explicit fictional dataset filter.
+Header/tabs, USD totals and unit prices, source icons and explanation dialog passed.
+No cases, analyses, decisions, approvals or execution records were written.
 
 ## Presenter experience release — 2026-09-12
 
