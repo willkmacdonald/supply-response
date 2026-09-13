@@ -28,7 +28,18 @@ if (args.Length == 3 && args[1] == "--manifest")
             "dateTime" => DataType.DateTime,
             _ => throw new InvalidDataException($"unsupported type {value}")
         };
-        Require(expected.EnumerateObject().Count() == 5, "manifest must contain five tables");
+        var approvedTables = new[]
+        {
+            "CaseCommandCenter",
+            "ActionOutcomes",
+            "SavedAnalyses",
+            "SavedRecords",
+            "SavedOptions",
+            "OperationalRecords",
+        };
+        Require(expected.EnumerateObject().Count() == 6
+            && SameNames(expected.EnumerateObject().Select(t => t.Name), approvedTables),
+            "manifest must contain the six approved tables");
         Require(parsedDatabase.CompatibilityLevel >= 1400,
             $"grouping metadata requires compatibility level 1400+, got {parsedDatabase.CompatibilityLevel}");
         Require(SameNames(model.Tables.Select(t => t.Name),

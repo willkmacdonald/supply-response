@@ -119,7 +119,7 @@ table SavedRecords
     dataType: decimal
     sourceColumn: incremental_cost_per_unit
     summarizeBy: none
-    formatString: #,0.00
+    formatString: $#,0.00
 
   column status
     dataType: string
@@ -193,31 +193,31 @@ table SavedRecords
     dataType: decimal
     sourceColumn: customer_revenue
     summarizeBy: none
-    formatString: #,0.00
+    formatString: $#,0
 
   column customer_margin
     dataType: decimal
     sourceColumn: customer_margin
     summarizeBy: none
-    formatString: #,0.00
+    formatString: $#,0
 
   column unit_revenue
     dataType: decimal
     sourceColumn: unit_revenue
     summarizeBy: none
-    formatString: #,0.00
+    formatString: $#,0.00
 
   column unit_margin
     dataType: decimal
     sourceColumn: unit_margin
     summarizeBy: none
-    formatString: #,0.00
+    formatString: $#,0.00
 
   column line_revenue
     dataType: decimal
     sourceColumn: line_revenue
     summarizeBy: none
-    formatString: #,0.00
+    formatString: $#,0
 
   column original_quantity
     dataType: int64

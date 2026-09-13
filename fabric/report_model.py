@@ -248,6 +248,14 @@ DATE_ONLY = {
 
 def column_format(table, name):
     kind = TYPES[table][name]
+    if table == SR and name in {"line_revenue", "customer_revenue", "customer_margin"}:
+        return "$#,0"
+    if table == SR and name in {
+        "incremental_cost_per_unit",
+        "unit_revenue",
+        "unit_margin",
+    }:
+        return "$#,0.00"
     if table == OR and name == "incremental_cost_per_unit":
         return "$#,0.00"
     if table == OR and name in {"line_revenue", "line_margin"}:

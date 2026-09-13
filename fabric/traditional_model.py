@@ -70,11 +70,11 @@ def install_measures(add, external) -> None:
     """Install grain-safe measures through report_model's guarded registry."""
     external(
         "Selected Operational Dataset",
-        """VAR DatasetCount = CALCULATE(DISTINCTCOUNT(OperationalRecords[dataset_id]),
+        """VAR SelectedDatasetCount = CALCULATE(DISTINCTCOUNT(OperationalRecords[dataset_id]),
             ALLSELECTED(OperationalRecords))
         RETURN IF(ISFILTERED(OperationalRecords[dataset_id])
         && HASONEFILTER(OperationalRecords[dataset_id])
-        && DatasetCount == 1,
+        && SelectedDatasetCount == 1,
         SELECTEDVALUE(OperationalRecords[dataset_id]))""",
         TABLE,
         destination=TABLE,
@@ -111,6 +111,13 @@ def install_measures(add, external) -> None:
             hidden=True,
             table=TABLE,
         )
+    add(
+        "Supply Line Row Visible",
+        'INT(NOT ISBLANK([Selected Operational Dataset]) && SELECTEDVALUE(OperationalRecords[record_family]) IN {"purchase","shipment"})',
+        "int64",
+        hidden=True,
+        table=TABLE,
+    )
 
     def scoped(name, aggregate, family=None, kind="int64", fmt="#,0"):
         family_filter = (
@@ -120,10 +127,10 @@ def install_measures(add, external) -> None:
         )
         add(
             name,
-            "VAR Dataset = [Selected Operational Dataset] "
-            "RETURN IF(NOT ISBLANK(Dataset), CALCULATE("
+            "VAR SelectedDatasetId = [Selected Operational Dataset] "
+            "RETURN IF(NOT ISBLANK(SelectedDatasetId), CALCULATE("
             + aggregate
-            + ", KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id]))"
+            + ", KEEPFILTERS(TREATAS({SelectedDatasetId}, OperationalRecords[dataset_id]))"
             + family_filter
             + "))",
             kind,
@@ -134,13 +141,13 @@ def install_measures(add, external) -> None:
     def unit_scoped(name, aggregate, family):
         add(
             name,
-            "VAR Dataset = [Selected Operational Dataset] "
+            "VAR SelectedDatasetId = [Selected Operational Dataset] "
             "VAR PartKey = CALCULATE(SELECTEDVALUE(OperationalRecords[part_id]), "
-            "KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), "
+            "KEEPFILTERS(TREATAS({SelectedDatasetId}, OperationalRecords[dataset_id])), "
             + f'KEEPFILTERS(OperationalRecords[record_family] == "{family}")) '
-            "RETURN IF(NOT ISBLANK(Dataset) && NOT ISBLANK(PartKey), CALCULATE("
+            "RETURN IF(NOT ISBLANK(SelectedDatasetId) && NOT ISBLANK(PartKey), CALCULATE("
             + aggregate
-            + ", KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])), "
+            + ", KEEPFILTERS(TREATAS({SelectedDatasetId}, OperationalRecords[dataset_id])), "
             + f'KEEPFILTERS(OperationalRecords[record_family] == "{family}")))',
             "int64",
             "#,0",
@@ -148,6 +155,13 @@ def install_measures(add, external) -> None:
         )
 
     scoped("Operational Record Count", "COUNTROWS(OperationalRecords)")
+    add(
+        "Supply Line Count",
+        'VAR SelectedDatasetId = [Selected Operational Dataset] RETURN IF(NOT ISBLANK(SelectedDatasetId), CALCULATE(COUNTROWS(OperationalRecords), KEEPFILTERS(TREATAS({SelectedDatasetId}, OperationalRecords[dataset_id])), KEEPFILTERS(OperationalRecords[record_family] IN {"purchase","shipment"})))',
+        "int64",
+        "#,0",
+        table=TABLE,
+    )
     scoped("Inventory Position Count", "COUNTROWS(OperationalRecords)", "inventory")
     scoped("Delivery Line Count", "COUNTROWS(OperationalRecords)", "shipment")
     scoped("Transfer Line Count", "COUNTROWS(OperationalRecords)", "transfer")
@@ -179,16 +193,16 @@ def install_measures(add, external) -> None:
     unit_scoped("Delivery Units", "SUM(OperationalRecords[quantity])", "shipment")
     add(
         "Delivery Extended Cost",
-        """VAR Dataset = [Selected Operational Dataset]
+        """VAR SelectedDatasetId = [Selected Operational Dataset]
         VAR MissingCostInputs = COALESCE(CALCULATE(COUNTROWS(OperationalRecords),
-            KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])),
+            KEEPFILTERS(TREATAS({SelectedDatasetId}, OperationalRecords[dataset_id])),
             KEEPFILTERS(OperationalRecords[record_family] == "shipment"),
             FILTER(OperationalRecords, ISBLANK(OperationalRecords[quantity])
                 || ISBLANK(OperationalRecords[incremental_cost_per_unit]))), 0)
-        RETURN IF(NOT ISBLANK(Dataset) && MissingCostInputs == 0,
+        RETURN IF(NOT ISBLANK(SelectedDatasetId) && MissingCostInputs == 0,
             CALCULATE(SUMX(OperationalRecords,
                 OperationalRecords[quantity] * OperationalRecords[incremental_cost_per_unit]),
-                KEEPFILTERS(TREATAS({Dataset}, OperationalRecords[dataset_id])),
+                KEEPFILTERS(TREATAS({SelectedDatasetId}, OperationalRecords[dataset_id])),
                 KEEPFILTERS(OperationalRecords[record_family] == "shipment")))""",
         "decimal",
         "$#,0",
