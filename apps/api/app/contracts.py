@@ -16,6 +16,7 @@ from data.domain.cases import WorkflowVersion
 from data.domain.decisions import ApprovalSatisfaction
 from data.domain.evidence import EvidenceItem
 from data.domain.finance_decisions import ProposalApprovalEvidence
+from data.domain.inbound import SupplierEmailSource
 
 
 class StrictRequest(BaseModel):
@@ -86,6 +87,7 @@ class CaseResponse(BaseModel):
     projection_updated_at: datetime
     controls: CaseControls
     workflow_version: WorkflowVersion
+    supplier_email: SupplierEmailSource | None = None
 
 
 class AnalysisResponse(BaseModel):

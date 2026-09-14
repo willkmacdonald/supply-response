@@ -7,10 +7,11 @@ from datetime import datetime
 from typing import Final, Literal
 
 from apps.api.app.auth import AuthenticatedActor
+from data.domain.inbound import InboundEmailError, SupplierEmailSource
 
 from .async_obo import AsyncWorkIQOboExchange
 from .errors import WorkIQError, WorkIQProtocolError, WorkIQResponseLimitError
-from .inbox import InboxCheck, discover_inbox
+from .inbox import InboxCheck, discover_inbox, review_email
 from .mcp import WorkIQMcpClient
 from .message_evidence import evidence_from_message
 from .models import (
@@ -75,6 +76,100 @@ class WorkIQMcpEvidencePort:
         self._client = client
         self._obo = obo
         self._binding = binding
+
+    async def _review_inbound(
+        self,
+        *,
+        actor: AuthenticatedActor,
+        internet_message_id: str,
+        review_fingerprint: str,
+        checked_at: datetime,
+        case_id: str = "inbox-review",
+        analysis_id: str = "inbox-review",
+    ) -> tuple[SupplierEmailSource, WorkIQRetrieval]:
+        binding = self._binding
+        if (
+            not isinstance(actor, AuthenticatedActor)
+            or actor.tenant_id != binding.tenant_id
+            or actor.object_id != binding.alex_object_id
+        ):
+            raise InboundEmailError("INBOUND_EMAIL_UNAVAILABLE")
+        token = None
+        session = None
+        try:
+            async with asyncio.timeout(INBOX_TIMEOUT_SECONDS):
+                token = await self._obo.exchange(actor)
+                async with self._client.session(access_token=token.reveal()) as session:
+                    token = None
+                    source, evidence = await review_email(
+                        session,
+                        binding=binding,
+                        internet_message_id=internet_message_id,
+                        review_fingerprint=review_fingerprint,
+                        checked_at=checked_at,
+                        case_id=case_id,
+                        analysis_id=analysis_id,
+                    )
+                    return source, WorkIQRetrieval(
+                        evidence=(evidence,),
+                        lineage=WorkIQRetrievalLineage(
+                            context_id="",
+                            task_id="",
+                            artifact_ids=(),
+                            source_ids=(evidence.source_id,),
+                            protocol="mcp",
+                            request_ids=session.request_ids,
+                        ),
+                    )
+        except InboundEmailError:
+            raise
+        except Exception:  # noqa: BLE001 - discard provider details
+            _logger.warning("workiq_inbound_diagnostic reason=unavailable")
+        finally:
+            token = session = None
+        raise InboundEmailError("INBOUND_EMAIL_UNAVAILABLE") from None
+
+    async def review_inbound_email(
+        self,
+        *,
+        actor: AuthenticatedActor,
+        internet_message_id: str,
+        review_fingerprint: str,
+        checked_at: datetime,
+    ) -> SupplierEmailSource:
+        source, _ = await self._review_inbound(
+            actor=actor,
+            internet_message_id=internet_message_id,
+            review_fingerprint=review_fingerprint,
+            checked_at=checked_at,
+        )
+        return source
+
+    async def retrieve_bound_supplier_signal(
+        self,
+        *,
+        actor: AuthenticatedActor,
+        source: SupplierEmailSource,
+        case_id: str,
+        analysis_id: str,
+        retrieved_at: datetime,
+    ) -> WorkIQRetrieval:
+        if (
+            source.tenant_id != self._binding.tenant_id
+            or source.mailbox_object_id != self._binding.alex_object_id
+        ):
+            raise InboundEmailError("INBOUND_EMAIL_CONFLICT")
+        current, retrieval = await self._review_inbound(
+            actor=actor,
+            internet_message_id=source.internet_message_id,
+            review_fingerprint=source.review_fingerprint,
+            checked_at=retrieved_at,
+            case_id=case_id,
+            analysis_id=analysis_id,
+        )
+        if current.facts != source.facts:
+            raise InboundEmailError("INBOUND_EMAIL_CONFLICT")
+        return retrieval
 
     async def check_inbox(
         self, *, actor: AuthenticatedActor, checked_at: datetime

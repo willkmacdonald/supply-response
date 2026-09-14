@@ -210,6 +210,7 @@ def _live_app(tmp_path, work_iq):
     settings = Settings(
         runtime_mode=RuntimeMode.LIVE,
         allowed_tenant_id="11111111-1111-4111-8111-111111111111",
+        alex_object_id=actor.object_id,
         fabric_sql_server="fixture.database.fabric.microsoft.com",
         fabric_sql_database="fixture",
         credential_mode="managed_identity",

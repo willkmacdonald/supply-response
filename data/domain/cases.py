@@ -6,6 +6,7 @@ from typing import Any, Literal, Self
 from pydantic import SerializerFunctionWrapHandler, model_serializer
 
 from .common import CasePurpose, FrozenModel, RuntimeMode
+from .inbound import SupplierEmailSource
 
 
 class CaseStatus(StrEnum):
@@ -40,6 +41,7 @@ class CaseInstance(FrozenModel):
     scenario_timezone: Literal["America/Chicago"] = "America/Chicago"
     status: CaseStatus = CaseStatus.OPEN
     workflow_version: WorkflowVersion | None = None
+    supplier_email: SupplierEmailSource | None = None
 
     @property
     def effective_workflow_version(self) -> WorkflowVersion:
@@ -50,6 +52,8 @@ class CaseInstance(FrozenModel):
         payload = handler(self)
         if self.workflow_version is None:
             payload.pop("workflow_version", None)
+        if self.supplier_email is None:
+            payload.pop("supplier_email", None)
         return payload
 
     def model_copy(
@@ -62,6 +66,11 @@ class CaseInstance(FrozenModel):
         values = self.model_dump(mode="python")
         values.update(update or {})
         changed = type(self).model_validate(values)
+        if (
+            changed.supplier_email != self.supplier_email
+            and changed.case_id == self.case_id
+        ):
+            raise ValueError("supplier_email changes require a different case_id")
         if (
             changed.runtime_mode != self.runtime_mode
             and changed.case_id == self.case_id

@@ -31,6 +31,7 @@ from data.domain.evidence import (
     EvidenceSourceSystem,
     RetrievalHealth,
 )
+from data.domain.inbound import SupplierEmailSource, validate_supplier_facts
 from data.synthetic.rl001 import OperationalSnapshot
 from integrations.workiq.mcp_evidence import FailureStage, WorkIQSourceError
 from integrations.workiq.models import SourceKind, WorkIQRetrieval
@@ -98,6 +99,15 @@ class LiveSourceUnavailable(RuntimeError):
 
 
 class WorkIQPort(Protocol):
+    async def retrieve_bound_supplier_signal(
+        self,
+        *,
+        actor: AuthenticatedActor,
+        source: SupplierEmailSource,
+        case_id: str,
+        analysis_id: str,
+        retrieved_at: datetime,
+    ) -> WorkIQRetrieval: ...
     async def retrieve_supplier_signal(
         self,
         *,
@@ -317,6 +327,11 @@ class LiveAnalysisApplicationService:
             case = self._store.get_case(case_id)
             if case.runtime_mode is not RuntimeMode.LIVE:
                 raise RuntimeModeConflict("live analysis cannot access a fallback Case")
+            if case.supplier_email is not None and (
+                case.supplier_email.tenant_id != actor.tenant_id
+                or case.supplier_email.mailbox_object_id != actor.object_id
+            ):
+                raise ValueError("bound email is outside the authenticated mailbox")
             stage = "load_projection"
             projection = self._store.get_projection(case_id)
             if projection.current_analysis_id is not None:
@@ -356,6 +371,14 @@ class LiveAnalysisApplicationService:
                         case_id=case_id,
                         analysis_id=analysis_id,
                         retrieved_at=started_at,
+                    )
+                    if case.supplier_email is None
+                    else self._work_iq.retrieve_bound_supplier_signal(
+                        actor=actor,
+                        source=case.supplier_email,
+                        case_id=case_id,
+                        analysis_id=analysis_id,
+                        retrieved_at=started_at,
                     ),
                 ),
                 _diagnosed_retrieval(
@@ -370,6 +393,14 @@ class LiveAnalysisApplicationService:
                 ),
             )
             stage = "validate_operational"
+            supplier_source_id = self._supplier_source_id
+            if case.supplier_email is not None:
+                validate_supplier_facts(case.supplier_email.facts, operational.snapshot)
+                if len(supplier.evidence) != 1 or supplier.lineage.source_ids != (
+                    supplier.evidence[0].source_id,
+                ):
+                    raise ValueError("bound email retrieval has inconsistent lineage")
+                supplier_source_id = supplier.evidence[0].source_id
             if (
                 operational.case.case_id != case.case_id
                 or operational.case.purpose is not case.purpose
@@ -399,7 +430,7 @@ class LiveAnalysisApplicationService:
                 supplier.evidence,
                 system=EvidenceSourceSystem.WORK_IQ,
                 allowed_scopes={AuthorityScope.SUPPLIER_STATEMENT},
-                source_id=self._supplier_source_id,
+                source_id=supplier_source_id,
                 analysis_id=analysis_id,
                 case_id=case_id,
                 started_at=started_at,
@@ -434,7 +465,7 @@ class LiveAnalysisApplicationService:
                     citation_hosts=self._citation_hosts,
                 )
             for scope, source_id in (
-                (AuthorityScope.SUPPLIER_STATEMENT, self._supplier_source_id),
+                (AuthorityScope.SUPPLIER_STATEMENT, supplier_source_id),
                 (AuthorityScope.COLLABORATION_STATEMENT, self._quality_source_id),
             ):
                 _require_item(

@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from collections.abc import Mapping
 from dataclasses import replace
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Final, Protocol
 from urllib.parse import quote
 
 from pydantic import BaseModel, ConfigDict
+
+from data.domain.evidence import EvidenceItem
+from data.domain.inbound import (
+    InboundEmailError,
+    SupplierDisruptionFacts,
+    SupplierEmailSource,
+    parse_supplier_disruption,
+)
 
 from .locations import parse_location
 from .message_evidence import MessageValidationError, evidence_from_message
@@ -36,6 +47,10 @@ class InboxMessage(BaseModel):
     received_at: datetime
     excerpt: str
     citation_url: str
+    internet_message_id: str | None = None
+    review_fingerprint: str | None = None
+    facts: SupplierDisruptionFacts | None = None
+    creation_blocker: str | None = None
 
 
 class InboxCheck(BaseModel):
@@ -99,6 +114,124 @@ def _entity_data(payload: object) -> Mapping[str, Any]:
     ):
         raise ValueError("invalid inbox entity")
     return results[0]["data"]
+
+
+def _identity(value: object) -> str:
+    if (
+        not isinstance(value, str)
+        or not re.fullmatch(
+            r"<[^\s<>\x00-\x1f\x7f]{1,994}@[^\s<>\x00-\x1f\x7f]+>", value
+        )
+        or len(value) > 998
+    ):
+        raise InboundEmailError("INBOUND_EMAIL_UNAVAILABLE")
+    return value
+
+
+def _fingerprint(
+    entity: Mapping[str, Any], evidence: EvidenceItem, binding: SourceBinding
+) -> str:
+    # Provider locator and link may change on a folder move; content and mailbox may not.
+    assert evidence.source_timestamp is not None
+    values = {
+        "tenant": binding.tenant_id,
+        "mailbox": binding.alex_object_id,
+        "identity": _identity(entity.get("internetMessageId")),
+        "subject": entity["subject"],
+        "sender": _address(entity.get("sender")),
+        "from": _address(entity.get("from")),
+        "recipients": sorted(_recipients(entity.get("toRecipients")) or ()),
+        "received": evidence.source_timestamp.astimezone(UTC).isoformat(),
+        "body": evidence.claim,
+    }
+    return hashlib.sha256(
+        json.dumps(values, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+async def review_email(
+    session: FetchSession,
+    *,
+    binding: SourceBinding,
+    internet_message_id: str,
+    review_fingerprint: str,
+    checked_at: datetime,
+    case_id: str = "inbox-review",
+    analysis_id: str = "inbox-review",
+) -> tuple[SupplierEmailSource, EvidenceItem]:
+    """Resolve an Internet Message-ID in the bound mailbox and revalidate its entity."""
+    identity = _identity(internet_message_id)
+    escaped = identity.replace("'", "''")
+    query = quote(f"internetMessageId eq '{escaped}'", safe="")
+    data = _entity_data(
+        await session.fetch(
+            f"/me/messages?$filter={query}&$top={MAX_BODY_READS + 1}&"
+            "$select=id,internetMessageId,subject,sender,from,toRecipients,receivedDateTime"
+        )
+    )
+    rows = data.get("value")
+    if (
+        not isinstance(rows, list)
+        or not rows
+        or "@odata.nextLink" in data
+        or "nextLink" in data
+    ):
+        raise InboundEmailError("INBOUND_EMAIL_UNAVAILABLE")
+    if len(rows) != 1:
+        raise InboundEmailError("INBOUND_EMAIL_CONFLICT")
+    row = rows[0]
+    try:
+        if (
+            not isinstance(row, Mapping)
+            or row.get("internetMessageId") != identity
+            or not _metadata_candidate(row)
+        ):
+            raise ValueError()
+        locator = row.get("id")
+        if not isinstance(locator, str):
+            raise TypeError()
+        location = parse_location(f"/me/messages/{quote(locator, safe='')}")
+        if location is None:
+            raise ValueError()
+        entity = _entity_data(await session.fetch(location.fetch_path))
+        if entity.get("internetMessageId") != identity or not _metadata_candidate(
+            entity
+        ):
+            raise ValueError()
+        dynamic = replace(
+            binding, supplier_source_id=locator, supplier_sender=SUPPLIER_SENDER
+        )
+        evidence = evidence_from_message(
+            entity,
+            location=location,
+            binding=dynamic,
+            case_id=case_id,
+            analysis_id=analysis_id,
+            retrieved_at=checked_at,
+        )
+        if BODY_MARKER not in evidence.claim:
+            raise ValueError()
+    except (ValueError, TypeError, MessageValidationError):
+        raise InboundEmailError("INBOUND_EMAIL_CONFLICT") from None
+    fingerprint = _fingerprint(entity, evidence, binding)
+    if fingerprint != review_fingerprint:
+        raise InboundEmailError("INBOUND_EMAIL_CHANGED")
+    facts = parse_supplier_disruption(evidence.claim)
+    assert evidence.source_timestamp is not None and evidence.citation_url is not None
+    return SupplierEmailSource(
+        tenant_id=binding.tenant_id,
+        mailbox_object_id=binding.alex_object_id,
+        internet_message_id=identity,
+        review_fingerprint=fingerprint,
+        message_id=locator,
+        subject=entity["subject"],
+        sender=SUPPLIER_SENDER,
+        recipients=tuple(sorted(_recipients(entity["toRecipients"]) or ())),
+        received_at=evidence.source_timestamp,
+        reviewed_at=checked_at,
+        citation_url=evidence.citation_url,
+        facts=facts,
+    ), evidence
 
 
 async def discover_inbox(
@@ -168,6 +301,15 @@ async def discover_inbox(
             )
             if BODY_MARKER not in evidence.claim:
                 raise MessageValidationError()
+            assert evidence.source_timestamp is not None
+            assert evidence.citation_url is not None and evidence.excerpt is not None
+            identity_value = fingerprint = facts = blocker = None
+            try:
+                identity_value = _identity(entity.get("internetMessageId"))
+                fingerprint = _fingerprint(entity, evidence, binding)
+                facts = parse_supplier_disruption(evidence.claim)
+            except InboundEmailError as error:
+                blocker = error.code
             messages.append(
                 InboxMessage(
                     message_id=identity,
@@ -177,6 +319,10 @@ async def discover_inbox(
                     excerpt=evidence.excerpt[:4000]
                     + ("…" if len(evidence.excerpt) > 4000 else ""),
                     citation_url=evidence.citation_url,
+                    internet_message_id=identity_value,
+                    review_fingerprint=fingerprint,
+                    facts=facts,
+                    creation_blocker=blocker,
                 )
             )
         except Exception:  # noqa: BLE001 - an invalid candidate makes the scan partial
