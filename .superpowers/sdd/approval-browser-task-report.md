@@ -55,4 +55,22 @@ GREEN command: `npm test` — 24 files, 346 tests passed. `npm run build` — Ty
 
 Corrections bind the displayed case, analysis ID/hash, proposal selection, option and cost before commands; reconcile final receipts against a separately refreshed current state; retain Finance review ID/body/key as one retry intent; order list/detail/proposal reads by generation and selected target; clear actionability after definitive command failures; honor `/api/me.independent_finance_enabled`; preserve saved analysis/source provenance; and keep legacy execution controls hidden for every independent case, including after final approval.
 
-Local wide/narrow simulated browser capture was handed to the controller for the bounded presenter harness. It remains explicitly separate from real Microsoft two-session proof.
+## Local simulated browser proof
+
+The ignored harness imports the corrected production React components and uses two browser pages sharing one in-memory API fixture. It is explicitly labelled “Local simulated state — not Microsoft sign-in proof” and adds no production authentication bypass.
+
+Commands:
+
+- `npm run dev -- --host 127.0.0.1 --port 5191` from `apps/web`
+- `node .tmp/approval-browser.cjs` from the repository root
+
+Observed path: Alex submit → Taylor reject with “Reduce expedite cost” → Alex resubmit → Taylor approve → Alex final approval. The browser assertion also confirmed that independent execution remains unavailable and both 390px pages have no horizontal overflow.
+
+Screenshots:
+
+- `.artifacts/approval-browser/alex-final-wide-1440.png`
+- `.artifacts/approval-browser/alex-final-narrow-390.png`
+- `.artifacts/approval-browser/taylor-approved-wide-1440.png`
+- `.artifacts/approval-browser/taylor-approved-narrow-390.png`
+
+Visual inspection found and corrected invisible Finance inbox text caused by inherited white button text. The repeated capture shows readable inbox/detail cards, unqualified fictional-data warnings, source provenance, whole-dollar USD values, distinct Taylor/Alex outcomes and no cryptic or overflowing narrow state. This remains local simulated evidence; actual Microsoft sign-in/two-session proof is controller-owned.

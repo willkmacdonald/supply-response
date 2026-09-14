@@ -6,6 +6,7 @@
 }
 
 .account-strip,.finance-header{display:flex;align-items:center;justify-content:space-between;gap:1rem}.account-strip{max-width:1200px;margin:1rem auto 0;padding:0 1.5rem}.finance-layout{display:grid;grid-template-columns:minmax(16rem,.8fr) minmax(0,1.7fr);gap:1rem}.finance-list{display:grid;gap:.65rem}.finance-list button{display:grid;text-align:left;gap:.2rem;padding:.85rem;border:1px solid var(--border-color,#c8ced8);border-radius:.5rem;background:#fff}.finance-list button[aria-current="true"]{border-color:#315b8a;box-shadow:0 0 0 2px #d9e8f7}.finance-detail dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem}.finance-detail dl div{padding:.75rem;background:#f5f7fa;border-radius:.4rem}.finance-detail dt{font-weight:700}.finance-detail dd{margin:.25rem 0 0}.finance-cost{font-size:1.6rem;font-weight:700}.status-pill{display:inline-block;text-transform:capitalize;padding:.25rem .6rem;border-radius:999px;background:#e8edf3}.status-approved{background:#dcefe3}.status-rejected{background:#fae1e1}.finance-actions label{display:grid;gap:.4rem}.finance-actions textarea{min-height:6rem}.finance-actions>div{display:flex;gap:.65rem;margin-top:.75rem}
+.finance-list button{color:var(--ink,#17201e)}
 @media (max-width:760px){.finance-layout{grid-template-columns:1fr}.finance-header,.account-strip{align-items:flex-start;flex-direction:column}.finance-detail dl{grid-template-columns:1fr}}
 
 * { box-sizing: border-box; }
