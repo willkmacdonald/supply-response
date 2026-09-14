@@ -1,5 +1,52 @@
 # Supply Response Personal-Tenant Deployment Plan
 
+## Taylor evidence and Alex handoff release — 2026-09-14
+
+Status: Validated
+
+Scope: correct the Finance API presentation of saved analyses so Taylor sees
+the valid evidence status recorded for the reviewed response; replace the
+misleading completed-review message; and provide a presenter-controlled return
+to Alex's final approval using the exact reviewed case, analysis, and option.
+The handoff removes unrelated URL identifiers and opens tab 4 after the account
+switch. The existing evidence guard, authorization, currentness, retry, schema,
+roles, identities, data, email, and infrastructure remain unchanged.
+
+### All validation checks pass — Taylor evidence and Alex handoff
+
+- [x] 1. AZD Installation: 1.30.0
+- [x] 2. Schema Validation: official Azure/azure-dev v1.0 schema passed
+- [x] 3. Environment Setup: existing guarded personal-tenant profile passed
+- [x] 4. Authentication Check: authenticated Azure CLI and AZD environment passed
+- [x] 5. Subscription/Location Check: Azure Dev / East US 2, unchanged
+- [x] 6. Aspire Pre-Provisioning Checks: not applicable
+- [x] 7. Provision Preview: passed; no resources created or deleted
+- [x] 8. Build Verification: web, API, finance, infrastructure and lint checks passed
+- [x] 9. Docker Build Context Validation: required files present and context clean
+- [x] 10. Package Validation: guarded azd package passed
+- [x] 11. Azure Policy Validation: seven existing assignments; preview had no denial
+- [x] 12. Aspire Post-Provisioning Checks: not applicable
+
+### Validation Proof — Taylor evidence and Alex handoff
+
+The finance API regression tests prove both list and detail responses now expose
+the same complete analysis presentation as the planner workspace. Web tests
+prove verified live evidence renders without the false source-binding errors,
+the approved-state message is factual, stale reviews remain non-actionable, and
+the exact reviewed case, analysis and option survive the Taylor-to-Alex account
+handoff. A fresh Alex load restores that reviewed option on tab 4 and offers the
+final Alex approval without changing the existing authorization or evidence
+guards.
+
+Fresh verification passed: 369 web tests, the TypeScript/Vite production build,
+API and finance tests, 58 infrastructure tests, Ruff and `git diff --check`.
+Independent review of commits `8dde2d2..331ec0b` reported no critical,
+important or minor findings and marked the task deployable. Guarded Azure
+preflight verified the unchanged target, Foundry project and Fabric SQL
+database without modifying resources. The official Azure Developer CLI schema,
+Bicep compilation, no-create/no-delete provision preview, clean Docker build
+context, guarded package and seven existing policy assignments all passed.
+
 ## Hide completed case launcher — 2026-09-14
 
 Scope: once an analysis is loaded, remove the **Saved demos** launcher and its
