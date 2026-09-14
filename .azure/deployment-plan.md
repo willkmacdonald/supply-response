@@ -1,6 +1,6 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Validated — Alex/Taylor browser approval release passed azure-validate; not deployed. Existing revision ca-sr-demo--0000028 remains active.
+> **Status:** Deployed — Alex/Taylor browser approval release afbf8db is healthy on ca-sr-demo--0000029. Real Alex submission passed; Taylor password sign-in blocks remaining browser acceptance.
 
 ## Independent approval browser release — 2026-09-13
 
@@ -15,12 +15,30 @@ guarded deployment script; use this worktree's committed image and infrastructur
   setting through the supported Bicep/parameter/script path.
 - [x] Review API and browser integration and verify local journey, not just units.
 - [x] Check approval schema with read-only queries; review any required additive
-  migration and native acceptance before activation. No migration applied yet.
+  migration and native acceptance before activation. Additive migration applied.
 - [x] Resolve automatic action-planning compatibility for independent decisions;
   label operational execution and outgoing email as not delivered in this milestone.
 - [x] Complete azure-validate with fresh proof, guarded existing-target preview,
   build/package and role checks. Previous release proof below is historical only.
 - [ ] Deploy the reviewed exact image, verify health and real Alex/Taylor sessions.
+
+Deployment and health passed; the combined checkbox remains open for Taylor's
+real session. ACR run ch1k succeeded; image digest
+sha256:cc7716326e2758eaca834b531b81a679108ea4d4ad384580ff371af031b5661d.
+Revision29 is latest-ready, Healthy/Running/Provisioned with 100% traffic and
+unchanged scale 0–2. Guarded smoke passed live Fabric/Foundry readiness. `azd show`
+confirmed the existing named environment (no separately declared services).
+Taylor object binding and independent flag were read back from the deployed app.
+
+The reviewed operational migration retained schema version12 and identical
+payload hashes/counts for all 12 old cases, 8 analyses and 1 decision. Both Finance
+tables and projection columns exist with trusted constraints; no grants added.
+Subsequent browser acceptance deliberately created one fresh case, analyzed it
+through live services and submitted its $24,750 combined response as real Alex.
+The app displays Waiting for Taylor with an exact review link. Taylor's existing
+account reached the Microsoft password screen; no Taylor action or Alex final
+approval has been performed. Full evidence:
+docs/reviews/2026-09-13-approval-browser-release.md.
 
 Fresh read-only checks September 13: Azure Dev tenant and existing app target
 resolved; latest ready revision remains 0000028. Taylor Brooks (Finance) is
@@ -76,7 +94,7 @@ runner created and removed only its fresh disposable database. It proved legacy
 payload/version preservation, additive column defaults, repeat application,
 trusted foreign keys and filtered uniqueness. Operational SQL SHA-256:
 38b1656ad9acf79f5d69ebebc34e5be1ab09440cc354fd7f02e760f8da3f3b66.
-Independent schema review approved the bounded upgrade. No live migration yet.
+Independent schema review approved the bounded upgrade before live application.
 SSH host trust was restored by matching the public key fingerprint to
 https://exe.dev/docs/faq/host-key; verification was never disabled.
 

@@ -1,8 +1,8 @@
 # Supply Response Roadmap
 
 **Last updated:** September 13, 2026 (America/Chicago).
-**Deployed baseline:** website revision **ca-sr-demo--0000028**, deployed source
-`78a6bf5`; reviewed report/model artifacts through `fd53e99`.
+**Deployed baseline:** website revision **ca-sr-demo--0000029**, deployed source
+`afbf8db`; unchanged reviewed report/model artifacts through `fd53e99`.
 
 This roadmap distinguishes implemented code, configured identities, verified live
 behavior and work still missing. The September 12 release was deployed from
@@ -12,8 +12,12 @@ behavior and work still missing. The September 12 release was deployed from
 
 [Open the demo](https://ca-sr-demo.orangehill-337f5d48.eastus2.azurecontainerapps.io/).
 
-- Presenter header **Respond to supply disruptions with AI**, followed by three
-  tabs: **Understand the disruption**, **Investigate responses**, **Make the decision**.
+- Presenter header **Respond to supply disruptions with AI**, followed by five
+  tabs: **Understand the disruption**, **Investigate responses**, **Choose a response**,
+  **Review and approve**, **Execute mitigation plan**.
+- Independent Alex/Taylor approval workflow for new cases. Real Alex creation,
+  analysis and Finance submission passed; Taylor password sign-in is needed to
+  finish live acceptance. Independent execution/email remain unavailable.
 - Vertically arranged, planner-language cards with source details at the bottom,
   email/Teams icons, whole-dollar USD totals and two-decimal per-part costs.
 - **Click here to understand why** opens the recommendation explanation sheet.
@@ -34,7 +38,7 @@ cases/analyses. Exact saved evidence never falls back to wider reporting data.
 
 ## Verified release boundary
 
-The [release evidence](reviews/2026-09-12-traditional-reporting-verification.md)
+The September 12 [reporting release evidence](reviews/2026-09-12-traditional-reporting-verification.md)
 records native Power BI inspection as Alex, actual deployed website checks,
 SQL-to-model parity, publication review, negative identity checks and deployment.
 
@@ -69,13 +73,37 @@ Foundry explanation invocation, finance-person approval or downstream execution.
 | Fabric SQL | Live and verified | Schema12, canonical source, saved projections and isolated 178-record reporting dataset |
 | Power BI | Traditional and exact-source reporting published and accepted | Native rows/charts/filtering and selected current/older evidence parity; populated execution outcomes and within-case multi-version history are not certified |
 | Work IQ | Prior structured discovery/read/validation passed | Work IQ entity tools discover sources and read individual messages; configured IDs validate results, not lookup inputs. No direct Graph fallback. This release did not repeat discovery |
-| Alex identity | Interactive app sign-in verified | Deployed application binds the interactive actor to Alex |
-| Jordan and Taylor identities | Tenant identities/roles provisioned | Identity provisioning does not implement their interactive web workflows |
-| Finance review | Interactive workflow missing | Current analysis uses predefined Taylor standing authorization, not a Taylor login, inbox or case-specific approval |
+| Alex identity | Interactive app sign-in verified | Fresh live analysis and Finance submission passed on revision29 |
+| Jordan and Taylor identities | Existing tenant identities/roles retained | Exact Taylor app binding deployed; real Taylor password sign-in still needed |
+| Finance review | Interactive workflow implemented and deployed, acceptance incomplete | New cases use explicit Taylor review; old cases retain standing authorization. No real Taylor approve/reject or Alex final approval verified yet |
 | Foundry | Agents published and contract/readiness checks passed | Optional explanation invocation/evaluation remains a separate gate |
 | Complete live journey | Not complete | Live human approval, bounded downstream actions/observations and cross-service outcome parity remain unverified |
 
 ## Remaining work
+
+### Active delivery milestone — Alex → Taylor → Alex
+
+September 13: authenticated routes and browser screens are connected, reviewed
+and deployed on revision29. Alex's real sign-in, new case, live analysis and
+$24,750 submission passed. The request is waiting for Taylor; her separate
+Microsoft password sign-in is the current blocker. See the
+[release and exact resume links](reviews/2026-09-13-approval-browser-release.md).
+Local two-page browser verification covers Alex submitting, Taylor rejecting,
+Alex resubmitting, Taylor approving and Alex finalizing, with wide/phone layouts.
+Those browser responses are simulated; real separate Microsoft-account acceptance
+for Taylor on the deployed site is still pending. Current checks: 346 frontend tests/build;
+561 backend/API/auth/Finance/execution/persistence/deployment tests, 11 skips.
+The reviewed additive Finance SQL upgrade has been applied with identical saved
+case/analysis/decision payload hashes before and after. No grants were added.
+
+Independent decisions are saved without launching the legacy combined-response
+execution planner. Pending work is retained but not claimed, and the UI clearly
+says execution is unavailable for this milestone. Next visible milestone is a
+reviewed email from Alex to Will, followed by presenter-controlled inbound email
+discovery. Test counts alone do not close any of these live acceptance gates.
+
+The following September 13 increment notes describe earlier checkpoints, not the
+current local implementation status.
 
 The proposed [email-to-mitigation presenter journey](superpowers/specs/2026-09-12-email-to-mitigation-workflow-design.md)
 captures the next integrated increment: Will's real mailbox as Supplier Alpha,
