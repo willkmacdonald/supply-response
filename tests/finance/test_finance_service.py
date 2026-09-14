@@ -36,7 +36,7 @@ from services.persistence.proposals import (
     SqlAlchemyProposalRepository,
     StaleProposal,
 )
-from services.persistence.sqlite import sqlite_store
+from services.persistence.sqlite import SqliteStore, build_sqlite_engine, sqlite_store
 from services.persistence.tables import (
     case_proposal_selections,
     decisions,
@@ -167,6 +167,64 @@ def _finance_uow_factory(store) -> Callable[[], UnitOfWork]:
     # The concrete UoW satisfies the protocol at runtime. Its mutable repository
     # attributes prevent pyright from inferring structural compatibility.
     return cast(Callable[[], UnitOfWork], store.uow_factory)
+
+
+def _seed_pending_request(
+    ctx, *, suffix: str, tenant: str, alex_object: str, taylor_object: str
+):
+    case_id = f"RL-CASE-FOREIGN-{suffix}"
+    analysis_id = f"RL-ANALYSIS-FOREIGN-{suffix}"
+    case, snapshot = instantiate_rl001(
+        case_id=case_id,
+        purpose=CasePurpose.AUTOMATED_TEST,
+        runtime_mode=RuntimeMode.FALLBACK,
+        workflow_version=WorkflowVersion.INDEPENDENT_FINANCE,
+    )
+    analysis = analyze_case(
+        AnalyzeCaseCommand(
+            analysis_id=analysis_id,
+            case=case,
+            corpus=CorpusScope.DEMO_CORPUS,
+            operational_snapshot=snapshot,
+            evidence_items=build_rl001_evidence(
+                snapshot, analysis_id=analysis_id, retrieved_at=START
+            ),
+            analysis_started_at=START,
+            created_at=START,
+            calculation_version="rl001-options-v1",
+        )
+    )
+    ctx.store.create_case(case, snapshot)
+    ctx.store.save_analysis(analysis)
+    actors = BoundFinanceActors(
+        tenant_id=UUID(tenant),
+        alex_object_id=UUID(alex_object),
+        taylor_object_id=UUID(taylor_object),
+    )
+    alex = IdentitySnapshot(
+        persona_id="RL-PERSONA-ALEX",
+        source_id="RL-ENTRA-ALEX",
+        identity_source=IdentitySource.ENTRA,
+        tenant_id=tenant,
+        object_id=alex_object,
+        effective_roles=("material_planner", "response_approver"),
+    )
+    service = FinanceService(
+        _finance_uow_factory(ctx.store), actors=actors, clock=lambda: SUBMITTED
+    )
+    with ctx.store.uow_factory() as uow:
+        token = uow.proposals.get_state(case_id).token
+    result = service.submit(
+        SubmitProposalCommand(
+            case_id=case_id,
+            option_id="RL-OPTION-COMBINED",
+            expected=token,
+            idempotency_key=f"foreign-{suffix}",
+        ),
+        alex,
+    )
+    assert result.review is not None
+    return result
 
 
 def test_original_submit_and_resolution_replay_after_supersession(ctx):
@@ -607,3 +665,193 @@ def test_exact_cost_threshold_comes_from_persisted_analysis(
     assert result.selection.proposal.response_cost == Decimal(target_cost)
     assert (result.review is not None) is requires_review
     store.engine.dispose()
+
+
+def test_pending_list_and_exact_historical_detail(ctx):
+    first = ctx.service.submit(submission(ctx), ctx.alex)
+    assert first.review is not None
+    listed = ctx.service.list_pending(ctx.taylor)
+    assert [detail.review.review_id for detail in listed] == [first.review.review_id]
+    assert listed[0].is_current
+
+    ctx.service.resolve(resolution(ctx), ctx.taylor)
+    assert ctx.service.list_pending(ctx.taylor) == ()
+    second = ctx.service.submit(submission(ctx, key="submit-2"), ctx.alex)
+    assert second.review is not None
+    assert [
+        detail.review.review_id for detail in ctx.service.list_pending(ctx.taylor)
+    ] == [second.review.review_id]
+
+    historical = ctx.service.detail(first.review.review_id, ctx.taylor)
+    assert historical.review.review_id == first.review.review_id
+    assert historical.selection == first.selection
+    assert historical.option.option_id == first.selection.proposal.option_id
+    assert historical.analysis.analysis_id == first.selection.proposal.analysis_id
+    assert historical.review.reason == "Budget 10000"
+    assert historical.review.status.value == "superseded"
+    assert not historical.is_current
+    assert historical.current_token.selection_id == second.selection.selection_id
+    assert historical.review.review_id != second.review.review_id
+
+
+@pytest.mark.parametrize("approved", (True, False))
+def test_latest_terminal_review_is_not_pending(ctx, approved):
+    result = ctx.service.submit(submission(ctx), ctx.alex)
+    assert result.review is not None
+    ctx.service.resolve(
+        resolution(ctx, approved=approved, reason=None if approved else "declined"),
+        ctx.taylor,
+    )
+    assert ctx.service.list_pending(ctx.taylor) == ()
+
+
+def test_current_status_and_pending_queries_are_read_only(ctx):
+    ctx.service.submit(submission(ctx), ctx.alex)
+    ctx.service.resolve(resolution(ctx), ctx.taylor)
+    transfer = ctx.service.submit(
+        submission(ctx, "RL-OPTION-TRANSFER", "transfer"), ctx.alex
+    )
+    before_state, before_rows = current(ctx), rows(ctx)
+
+    assert (
+        ctx.service.status(ctx.case.case_id, ctx.alex).selection == transfer.selection
+    )
+    assert ctx.service.list_pending(ctx.taylor) == ()
+    assert current(ctx) == before_state
+    assert rows(ctx) == before_rows
+
+
+def test_status_rejects_legacy_workflow_without_mutation(ctx):
+    legacy, snapshot = instantiate_rl001(
+        case_id="RL-CASE-FINANCE-LEGACY-STATUS",
+        purpose=CasePurpose.AUTOMATED_TEST,
+        runtime_mode=RuntimeMode.FALLBACK,
+        workflow_version=WorkflowVersion.LEGACY,
+    )
+    ctx.store.create_case(legacy, snapshot)
+    before_rows = rows(ctx)
+
+    with pytest.raises(FinanceRequestInvalid):
+        ctx.service.status(legacy.case_id, ctx.alex)
+
+    assert rows(ctx) == before_rows
+    with ctx.store.uow_factory() as uow:
+        assert uow.proposals.get_state(legacy.case_id).token.generation == 0
+
+
+@pytest.mark.parametrize(
+    ("method", "actor"),
+    (
+        ("list_pending", "alex"),
+        ("detail", "alex"),
+        ("status", "taylor"),
+        ("list_pending", "bad_taylor"),
+        ("status", "bad_alex"),
+    ),
+)
+def test_query_authorization_precedes_data_access(ctx, method, actor):
+    def forbidden() -> Never:
+        raise AssertionError("unauthorized query opened a UoW")
+
+    service = FinanceService(forbidden, actors=ctx.actors)
+    identities = {
+        "alex": ctx.alex,
+        "taylor": ctx.taylor,
+        "bad_taylor": ctx.taylor.model_copy(update={"effective_roles": ()}),
+        "bad_alex": ctx.alex.model_copy(
+            update={"effective_roles": ("material_planner",)}
+        ),
+    }
+    arguments = {
+        "list_pending": (identities[actor],),
+        "detail": ("known-review-id", identities[actor]),
+        "status": (ctx.case.case_id, identities[actor]),
+    }
+
+    with pytest.raises(FinancePermissionDenied):
+        getattr(service, method)(*arguments[method])
+
+
+def test_queries_survive_store_reopen_without_mutation(ctx):
+    result = ctx.service.submit(submission(ctx), ctx.alex)
+    assert result.review is not None
+    expected = ctx.service.detail(result.review.review_id, ctx.taylor)
+    before_state, before_rows = current(ctx), rows(ctx)
+    url = str(ctx.store.engine.url)
+    ctx.store.engine.dispose()
+    reopened = SqliteStore(build_sqlite_engine(url), runtime_mode=RuntimeMode.FALLBACK)
+    try:
+        service = FinanceService(_finance_uow_factory(reopened), actors=ctx.actors)
+        assert service.detail(result.review.review_id, ctx.taylor) == expected
+        assert service.list_pending(ctx.taylor) == (expected,)
+        assert service.status(ctx.case.case_id, ctx.alex).selection == result.selection
+        with reopened.uow_factory() as uow:
+            assert uow.proposals.get_state(ctx.case.case_id) == before_state
+        with reopened.engine.connect() as connection:
+            assert (
+                tuple(
+                    connection.scalar(select(func.count()).select_from(table))
+                    for table in (
+                        case_proposal_selections,
+                        finance_review_revisions,
+                        decisions,
+                        outbox_events,
+                    )
+                )
+                == before_rows
+            )
+    finally:
+        reopened.engine.dispose()
+
+
+def test_pending_and_detail_enforce_exact_persisted_submitter(ctx):
+    own = ctx.service.submit(submission(ctx), ctx.alex)
+    assert own.review is not None
+    other_tenant = _seed_pending_request(
+        ctx,
+        suffix="TENANT",
+        tenant="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        alex_object="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        taylor_object="cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    )
+    other_alex = _seed_pending_request(
+        ctx,
+        suffix="ALEX",
+        tenant=str(ctx.actors.tenant_id),
+        alex_object="dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        taylor_object=str(ctx.actors.taylor_object_id),
+    )
+    before_rows = rows(ctx)
+    own_state = current(ctx)
+
+    assert [
+        detail.review.review_id for detail in ctx.service.list_pending(ctx.taylor)
+    ] == [own.review.review_id]
+    for foreign in (other_tenant, other_alex):
+        assert foreign.review is not None
+        with pytest.raises(FinancePermissionDenied):
+            ctx.service.detail(foreign.review.review_id, ctx.taylor)
+
+    assert rows(ctx) == before_rows
+    assert current(ctx) == own_state
+
+
+def test_historical_detail_read_does_not_advance_generation_or_rows(ctx):
+    first = ctx.service.submit(submission(ctx), ctx.alex)
+    assert first.review is not None
+    rejected = ctx.service.resolve(resolution(ctx), ctx.taylor)
+    replacement = ctx.service.submit(
+        submission(ctx, "RL-OPTION-TRANSFER", "replacement"), ctx.alex
+    )
+    before_state, before_rows = current(ctx), rows(ctx)
+
+    detail = ctx.service.detail(first.review.review_id, ctx.taylor)
+
+    assert detail.selection == first.selection
+    assert detail.review.review_id == rejected.review.review_id
+    assert detail.review.status.value == "superseded"
+    assert detail.review.reason == "Budget 10000"
+    assert detail.analysis == ctx.analysis
+    assert detail.current_token.selection_id == replacement.selection.selection_id
+    assert current(ctx) == before_state
+    assert rows(ctx) == before_rows

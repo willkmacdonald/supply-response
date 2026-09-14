@@ -10,6 +10,7 @@ from pydantic import (
     model_validator,
 )
 
+from data.domain.analysis import AnalysisVersion, ResponseOption
 from data.domain.common import FrozenModel
 from data.domain.finance import FinanceReview
 from data.domain.proposals import ProposalSelection, ProposalToken
@@ -81,3 +82,13 @@ class SubmissionResult(FrozenModel):
 class ResolutionResult(FrozenModel):
     review: FinanceReview
     review_revision: int
+
+
+class FinanceReviewDetail(FrozenModel):
+    selection: ProposalSelection
+    review: FinanceReview
+    review_revision: int
+    analysis: AnalysisVersion
+    option: ResponseOption
+    is_current: bool
+    current_token: ProposalToken

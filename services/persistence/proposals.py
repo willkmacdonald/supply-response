@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import ValidationError
-from sqlalchemy import Connection, insert, select, update
+from sqlalchemy import Connection, and_, func, insert, select, update
 
 from data.domain.analysis import AnalysisResponseOptionMaterial
 from data.domain.cases import WorkflowVersion
@@ -26,7 +26,11 @@ from services.persistence.store import (
     SqlAlchemyCaseRepository,
     serialize_model,
 )
-from services.persistence.tables import case_projection, case_proposal_selections
+from services.persistence.tables import (
+    case_projection,
+    case_proposal_selections,
+    finance_review_revisions,
+)
 from services.policy.finance_review import (
     FinanceReviewViolation,
     require_proposal_submitter,
@@ -230,6 +234,56 @@ class SqlAlchemyProposalRepository:
         if row is None:
             raise RecordNotFound(f"proposal selection does not exist: {selection_id}")
         return self._decode(row).selection
+
+    def get_selection_for_review(self, review_id: str) -> ProposalSelection:
+        row = (
+            self._connection.execute(
+                select(case_proposal_selections.c.selection_id).where(
+                    case_proposal_selections.c.finance_review_id == review_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RecordNotFound(f"Finance review does not exist: {review_id}")
+        return self.get_selection(row["selection_id"])
+
+    def list_pending_case_ids(self) -> tuple[str, ...]:
+        latest = (
+            select(
+                finance_review_revisions.c.review_id.label("review_id"),
+                func.max(finance_review_revisions.c.revision).label("revision"),
+            )
+            .group_by(finance_review_revisions.c.review_id)
+            .subquery()
+        )
+        query = (
+            select(case_projection.c.case_id)
+            .select_from(
+                case_projection.join(
+                    case_proposal_selections,
+                    case_projection.c.current_selection_id
+                    == case_proposal_selections.c.selection_id,
+                )
+                .join(
+                    latest,
+                    latest.c.review_id == case_proposal_selections.c.finance_review_id,
+                )
+                .join(
+                    finance_review_revisions,
+                    and_(
+                        finance_review_revisions.c.review_id == latest.c.review_id,
+                        finance_review_revisions.c.revision == latest.c.revision,
+                    ),
+                )
+            )
+            .where(finance_review_revisions.c.status == "pending")
+            .order_by(
+                case_proposal_selections.c.submitted_at, case_projection.c.case_id
+            )
+        )
+        return tuple(self._connection.scalars(query))
 
     def get_by_idempotency_key(self, key: str) -> SelectionReceipt | None:
         row = (

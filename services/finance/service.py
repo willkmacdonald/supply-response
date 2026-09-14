@@ -9,15 +9,20 @@ from sqlalchemy.exc import IntegrityError
 from data.domain.analysis import AnalysisResponseOptionMaterial
 from data.domain.cases import WorkflowVersion
 from data.domain.decisions import IdentitySnapshot
-from data.domain.finance import FinanceProposal
-from data.domain.proposals import ProposalSelection, SelectionReceipt
+from data.domain.finance import FinanceProposal, FinanceReviewStatus
+from data.domain.proposals import ProposalSelection, ProposalState, SelectionReceipt
 from services.finance.contracts import (
+    FinanceReviewDetail,
     ResolutionResult,
     ResolveFinanceCommand,
     SubmissionResult,
     SubmitProposalCommand,
 )
-from services.finance.identity import BoundFinanceActors, authority_material
+from services.finance.identity import (
+    BoundFinanceActors,
+    FinancePermissionDenied,
+    authority_material,
+)
 from services.persistence.finance_reviews import (
     FinanceReviewIdempotencyConflict,
     FinanceReviewRevisionConflict,
@@ -74,6 +79,94 @@ class FinanceService:
         if now.tzinfo is None or now.utcoffset() is None:
             raise FinanceRequestInvalid("Server clock must be timezone-aware")
         return now
+
+    def status(self, case_id: str, actor: IdentitySnapshot) -> ProposalState:
+        self._actors.require_alex(actor)
+        with self._uow_factory() as uow:
+            state = uow.proposals.get_state(case_id)
+            case = uow.cases.get_projection(case_id).case
+            if (
+                case.effective_workflow_version
+                is not WorkflowVersion.INDEPENDENT_FINANCE
+            ):
+                raise FinanceRequestInvalid("Independent Finance workflow is required")
+            if state.selection is not None:
+                self._actors.require_alex(state.selection.submitted_by)
+            return state
+
+    def _detail(self, uow, review_id: str) -> FinanceReviewDetail:
+        selection = uow.proposals.get_selection_for_review(review_id)
+        self._actors.require_alex(selection.submitted_by)
+        state = uow.proposals.get_state(selection.proposal.case_id)
+        review, revision = uow.finance_reviews.get_latest(review_id)
+        self._actors.require_alex(review.submitted_by)
+        if review.reviewed_by is not None:
+            self._actors.require_taylor(review.reviewed_by)
+        if (
+            review.proposal != selection.proposal
+            or selection.finance_review_id != review_id
+        ):
+            raise PersistenceIntegrityError(
+                "Historical review and selection binding differ"
+            )
+        analysis = uow.cases.get_analysis(selection.proposal.analysis_id)
+        option = next(
+            (
+                item
+                for item in analysis.response_options
+                if item.option_id == selection.proposal.option_id
+            ),
+            None,
+        )
+        if (
+            option is None
+            or analysis.material_hash != selection.proposal.analysis_material_hash
+            or option.predicted is None
+            or option.predicted.response_cost != selection.proposal.response_cost
+        ):
+            raise PersistenceIntegrityError(
+                "Historical review material differs from analysis"
+            )
+        if uow.proposals.get_state(selection.proposal.case_id).token != state.token:
+            raise StaleProposal("Review state changed while reading")
+        return FinanceReviewDetail(
+            selection=selection,
+            review=review,
+            review_revision=revision,
+            analysis=analysis,
+            option=option,
+            is_current=state.token.selection_id == selection.selection_id,
+            current_token=state.token,
+        )
+
+    def detail(self, review_id: str, actor: IdentitySnapshot) -> FinanceReviewDetail:
+        self._actors.require_taylor(actor)
+        with self._uow_factory() as uow:
+            return self._detail(uow, review_id)
+
+    def list_pending(self, actor: IdentitySnapshot) -> tuple[FinanceReviewDetail, ...]:
+        self._actors.require_taylor(actor)
+        with self._uow_factory() as uow:
+            results = []
+            for case_id in uow.proposals.list_pending_case_ids():
+                state = uow.proposals.get_state(case_id)
+                if (
+                    state.selection is None
+                    or state.review is None
+                    or state.review.status is not FinanceReviewStatus.PENDING
+                ):
+                    continue
+                try:
+                    self._actors.require_alex(state.selection.submitted_by)
+                except FinancePermissionDenied:
+                    continue
+                detail = self._detail(uow, state.review.review_id)
+                if (
+                    detail.is_current
+                    and detail.review.status is FinanceReviewStatus.PENDING
+                ):
+                    results.append(detail)
+            return tuple(results)
 
     def _submission_replay(self, uow, key, fingerprint):
         stored = uow.proposals.get_by_idempotency_key(key)
