@@ -42,8 +42,9 @@ def case_response(
     projection = _projection(services, case_id)
     case = projection.case
     planning_failed = projection.display_status is not None
+    execution_available = case.effective_workflow_version is WorkflowVersion.LEGACY
     return CaseResponse(
-        **case.model_dump(),
+        **case.model_dump(exclude={"workflow_version"}),
         current_analysis_id=projection.current_analysis_id,
         current_decision_id=projection.current_decision_id,
         display_status=projection.display_status,
@@ -57,8 +58,10 @@ def case_response(
                 CaseStatus.REANALYSIS_REQUIRED,
             },
             decide=case.status is CaseStatus.AWAITING_DECISION,
-            retry_action_planning=planning_failed,
-            start_playback=case.status is CaseStatus.EXECUTING,
+            retry_action_planning=planning_failed and execution_available,
+            start_playback=(
+                case.status is CaseStatus.EXECUTING and execution_available
+            ),
         ),
         workflow_version=case.effective_workflow_version,
     )

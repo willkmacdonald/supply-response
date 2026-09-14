@@ -17,6 +17,7 @@ from apps.api.app.dependencies import (
     get_services,
 )
 from apps.api.app.routes.decisions import _decision, _require_role
+from data.domain.cases import WorkflowVersion
 from data.domain.decisions import IdentitySnapshot
 from services.execution.currentness import ExecutionProposalStale
 from services.execution.playback import (
@@ -36,6 +37,14 @@ def _action_response(services, decision, action) -> ActionResponse:
         scenario_effective_time=decision.scenario_effective_time,
         projection_updated_at=services.action_projection_updated_at(action.action_id),
     )
+
+
+def _require_execution_available(decision) -> None:
+    if decision.approval_policy_version == WorkflowVersion.INDEPENDENT_FINANCE.value:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "INDEPENDENT_EXECUTION_DEFERRED"},
+        )
 
 
 @router.get("/{decision_id}/actions", response_model=list[ActionResponse])
@@ -61,6 +70,7 @@ def retry_failed_action(
 ) -> ActionResponse:
     _require_role(actor, "response_approver")
     decision = _decision(services, decision_id)
+    _require_execution_available(decision)
     execution = ExecutionService(services.uow_factory, clock=services.clock)
     try:
         with services.uow_factory() as uow:
@@ -121,6 +131,7 @@ def start_playback(
     actor: IdentitySnapshot = Depends(get_decision_identity),
 ) -> PlaybackResponse:
     decision = _decision(services, decision_id)
+    _require_execution_available(decision)
     try:
         playback = services.playback_service.start(decision_id, actor)
     except PlaybackAuthorizationError:

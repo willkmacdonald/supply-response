@@ -11,13 +11,20 @@ import pytest
 from sqlalchemy import select, update
 from sqlalchemy.exc import OperationalError
 
-from data.domain import CasePurpose, RuntimeMode
+from data.domain import CasePurpose, CaseStatus, RuntimeMode
 from data.domain.cases import WorkflowVersion
-from data.domain.decisions import CorpusScope, DecisionKind, IdentitySnapshot
+from data.domain.decisions import (
+    CorpusScope,
+    DecisionKind,
+    IdentitySnapshot,
+    RecordDecisionCommand,
+    StandingAuthorization,
+)
 from data.domain.evidence import IdentitySource
 from data.domain.execution import OutboxClaimStatus
 from data.synthetic.rl001 import build_rl001_evidence, instantiate_rl001
 from services.analysis.service import AnalyzeCaseCommand, analyze_case
+from services.decisions.service import DecisionService
 from services.execution import worker as worker_module
 from services.execution.currentness import ExecutionProposalStale
 from services.execution.planner import plan_actions
@@ -265,6 +272,86 @@ def test_current_planning_commits_one_guard_and_exact_plan(ctx):
         )
     assert planning_worker.process_next_outbox() is False
     assert snapshot(ctx) == after
+
+
+@pytest.mark.parametrize(
+    "method",
+    (
+        "process_next_outbox",
+        "process_next_unattempted_outbox",
+        "process_decision_outbox",
+    ),
+)
+def test_legacy_only_worker_defers_independent_outbox_without_mutation(ctx, method):
+    before = snapshot(ctx)
+    worker = ActionPlanningWorker(
+        ctx.factory, processable_workflow_versions=(WorkflowVersion.LEGACY,)
+    )
+    args = (ctx.decision.decision_id,) if method == "process_decision_outbox" else ()
+
+    assert getattr(worker, method)(*args) is False
+    assert snapshot(ctx) == before
+    restarted = ActionPlanningWorker(
+        ctx.factory, processable_workflow_versions=(WorkflowVersion.LEGACY,)
+    )
+    assert restarted.process_next_unattempted_outbox() is False
+    assert snapshot(ctx) == before
+
+
+def test_legacy_only_worker_skips_older_independent_event_and_processes_legacy(ctx):
+    case, source = instantiate_rl001(
+        case_id="RL-CASE-LEGACY-BEHIND-DEFERRED",
+        purpose=CasePurpose.AUTOMATED_TEST,
+        runtime_mode=RuntimeMode.FALLBACK,
+    )
+    analysis = analyze_case(
+        AnalyzeCaseCommand(
+            analysis_id="RL-ANALYSIS-LEGACY-BEHIND-DEFERRED",
+            case=case,
+            corpus=CorpusScope.DEMO_CORPUS,
+            operational_snapshot=source,
+            evidence_items=build_rl001_evidence(
+                source,
+                analysis_id="RL-ANALYSIS-LEGACY-BEHIND-DEFERRED",
+                retrieved_at=NOW,
+            ),
+            standing_authorizations=(StandingAuthorization.taylor_rl001(),),
+            analysis_started_at=NOW,
+            created_at=NOW,
+            calculation_version="rl001-options-v1",
+        )
+    )
+    ctx.store.create_case(case, source)
+    ctx.store.save_analysis(analysis)
+    ctx.store.save_case_projection(
+        case.model_copy(update={"status": CaseStatus.AWAITING_DECISION})
+    )
+    legacy = DecisionService(
+        ctx.factory, clock=lambda: NOW + timedelta(minutes=10)
+    ).record(
+        RecordDecisionCommand(
+            case_id=case.case_id,
+            analysis_id=analysis.analysis_id,
+            selected_option_id="RL-OPTION-COMBINED",
+            kind=DecisionKind.APPROVED,
+            idempotency_key="legacy-behind-deferred",
+        ),
+        IdentitySnapshot(
+            persona_id="RL-PERSONA-ALEX",
+            effective_roles=("material_planner", "response_approver"),
+            identity_source=IdentitySource.ENTRA,
+            source_id="RL-ENTRA-ALEX",
+        ),
+    )
+    independent_before = event_state(ctx)
+    worker = ActionPlanningWorker(
+        ctx.factory, processable_workflow_versions=(WorkflowVersion.LEGACY,)
+    )
+
+    assert worker.process_next_unattempted_outbox() is True
+    assert event_state(ctx) == independent_before
+    with ctx.factory() as uow:
+        assert len(uow.execution.list_actions(decision_id=legacy.decision_id)) == 5
 
 
 def test_replacement_between_failed_attempt_and_recovery_preserves_new_case(ctx):

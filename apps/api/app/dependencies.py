@@ -30,6 +30,7 @@ from apps.api.app.settings import Settings
 from apps.api.app.test_support import AutomatedTestFaults
 from data.domain import RuntimeMode
 from data.domain.analysis import AnalysisVersion
+from data.domain.cases import WorkflowVersion
 from data.domain.decisions import DecisionKind, IdentitySnapshot
 from data.domain.evidence import IdentitySource
 from data.domain.execution import PlaybackStatus
@@ -233,6 +234,7 @@ def build_composition(
         planning_worker=ActionPlanningWorker(
             uow_factory,
             planner=test_faults.wrap(planner),
+            processable_workflow_versions=(WorkflowVersion.LEGACY,),
             after_plan=lambda decision, actions: test_faults.after_plan(
                 decision,
                 actions,
@@ -537,9 +539,16 @@ def require_planner(
 ) -> AuthenticatedActor | None:
     if actor is None:
         return None
+    try:
+        configured_tenant = str(UUID(services.settings.allowed_tenant_id or ""))
+        configured_alex = str(UUID(services.settings.alex_object_id or ""))
+    except ValueError:
+        raise HTTPException(
+            status_code=403, detail={"code": "PLANNER_ACCESS_REQUIRED"}
+        ) from None
     expected = (
-        services.settings.allowed_tenant_id,
-        services.settings.alex_object_id,
+        configured_tenant,
+        configured_alex,
         "RL-PERSONA-ALEX",
         "RL-ENTRA-ALEX",
         ("material_planner", "response_approver"),

@@ -4,6 +4,7 @@ from typing import Protocol, runtime_checkable
 
 from data.domain import CaseInstance, CasePurpose
 from data.domain.analysis import AnalysisVersion
+from data.domain.cases import WorkflowVersion
 from data.domain.decisions import ApprovalSatisfaction, CaseProjection, Decision
 from data.domain.execution import (
     ActionPlanningRequested,
@@ -133,17 +134,23 @@ class ExecutionStore(Protocol):
     def claim_next_outbox(
         self,
         event_type: str,
+        *,
+        workflow_versions: tuple[WorkflowVersion, ...] | None = None,
     ) -> OutboxClaim | None: ...
 
     def claim_next_unattempted_outbox(
         self,
         event_type: str,
+        *,
+        workflow_versions: tuple[WorkflowVersion, ...] | None = None,
     ) -> OutboxClaim | None: ...
 
     def claim_outbox_for_decision(
         self,
         event_type: str,
         decision_id: str,
+        *,
+        workflow_versions: tuple[WorkflowVersion, ...] | None = None,
     ) -> OutboxClaim | None: ...
 
     def validate_claimed_outbox(

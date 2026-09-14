@@ -44,10 +44,12 @@ class ActionPlanningWorker:
         *,
         planner: Planner = plan_actions,
         after_plan: AfterPlan | None = None,
+        processable_workflow_versions: tuple[WorkflowVersion, ...] | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._planner = planner
         self._after_plan = after_plan
+        self._processable_workflow_versions = processable_workflow_versions
 
     def process_next_outbox(self) -> bool:
         return self._process_outbox(decision_id=None, unattempted_only=False)
@@ -69,14 +71,20 @@ class ActionPlanningWorker:
             with self._uow_factory() as uow:
                 claim = (
                     uow.execution.claim_outbox_for_decision(
-                        "ActionPlanningRequested", decision_id
+                        "ActionPlanningRequested",
+                        decision_id,
+                        workflow_versions=self._processable_workflow_versions,
                     )
                     if decision_id is not None
                     else uow.execution.claim_next_unattempted_outbox(
-                        "ActionPlanningRequested"
+                        "ActionPlanningRequested",
+                        workflow_versions=self._processable_workflow_versions,
                     )
                     if unattempted_only
-                    else uow.execution.claim_next_outbox("ActionPlanningRequested")
+                    else uow.execution.claim_next_outbox(
+                        "ActionPlanningRequested",
+                        workflow_versions=self._processable_workflow_versions,
+                    )
                 )
                 if claim is None:
                     return False

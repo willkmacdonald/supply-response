@@ -91,7 +91,7 @@ def test_verified_session_and_planner_boundary(tmp_path):
         fabric_sql_server="fixture",
         fabric_sql_database="fixture",
         api_client_id=CLIENT,
-        alex_object_id=ALEX,
+        alex_object_id=ALEX.upper(),
         taylor_object_id=TAYLOR,
         independent_finance_enabled=True,
         automated_test_faults_enabled=True,
@@ -230,3 +230,17 @@ def test_verified_session_and_planner_boundary(tmp_path):
         assert (
             final.json()["proposal_approval_evidence"]["review"]["status"] == "approved"
         )
+        decision_id = final.json()["decision_id"]
+        controls = client.get("/api/cases/RL-CASE-HTTP", headers=alex).json()[
+            "controls"
+        ]
+        assert controls["retry_action_planning"] is False
+        assert controls["start_playback"] is False
+        retry = client.post(
+            f"/api/decisions/{decision_id}/actions/retry", headers=alex, json={}
+        )
+        assert retry.status_code == 409
+        assert retry.json()["detail"]["code"] == "ACTION_PLANNING_RETRY_NOT_AVAILABLE"
+        playback = client.post(f"/api/decisions/{decision_id}/playback", headers=alex)
+        assert playback.status_code == 409
+        assert playback.json()["detail"]["code"] == "INDEPENDENT_EXECUTION_DEFERRED"

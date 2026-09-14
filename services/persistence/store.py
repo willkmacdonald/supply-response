@@ -1623,32 +1623,41 @@ class SqlAlchemyExecutionRepository:
     def claim_next_outbox(
         self,
         event_type: str,
+        *,
+        workflow_versions: tuple[WorkflowVersion, ...] | None = None,
     ) -> OutboxClaim | None:
         return self._claim_outbox(
             event_type,
             decision_id=None,
             include_failed=True,
+            workflow_versions=workflow_versions,
         )
 
     def claim_next_unattempted_outbox(
         self,
         event_type: str,
+        *,
+        workflow_versions: tuple[WorkflowVersion, ...] | None = None,
     ) -> OutboxClaim | None:
         return self._claim_outbox(
             event_type,
             decision_id=None,
             include_failed=False,
+            workflow_versions=workflow_versions,
         )
 
     def claim_outbox_for_decision(
         self,
         event_type: str,
         decision_id: str,
+        *,
+        workflow_versions: tuple[WorkflowVersion, ...] | None = None,
     ) -> OutboxClaim | None:
         return self._claim_outbox(
             event_type,
             decision_id=decision_id,
             include_failed=True,
+            workflow_versions=workflow_versions,
         )
 
     def _claim_outbox(
@@ -1657,6 +1666,7 @@ class SqlAlchemyExecutionRepository:
         *,
         decision_id: str | None,
         include_failed: bool,
+        workflow_versions: tuple[WorkflowVersion, ...] | None,
     ) -> OutboxClaim | None:
         if event_type != "ActionPlanningRequested":
             raise ValueError("unsupported outbox event type")
@@ -1683,25 +1693,31 @@ class SqlAlchemyExecutionRepository:
             filters.append(outbox_events.c.decision_id == decision_id)
         if not include_failed:
             filters.append(outbox_events.c.last_error.is_(None))
-        candidate = (
-            self._connection.execute(
-                select(
-                    outbox_events.c.event_id,
-                    outbox_events.c.decision_id,
-                    outbox_events.c.event_type,
-                    decisions.c.case_id,
-                    decisions.c.analysis_id,
-                )
-                .join(
-                    decisions,
-                    decisions.c.decision_id == outbox_events.c.decision_id,
-                )
-                .where(*filters)
-                .order_by(outbox_events.c.available_at, outbox_events.c.event_id)
-                .limit(1)
+        candidates = self._connection.execute(
+            select(
+                outbox_events.c.event_id,
+                outbox_events.c.decision_id,
+                outbox_events.c.event_type,
+                decisions.c.case_id,
+                decisions.c.analysis_id,
+                case_instances.c.payload_json.label("case_payload_json"),
             )
-            .mappings()
-            .one_or_none()
+            .join(decisions, decisions.c.decision_id == outbox_events.c.decision_id)
+            .join(case_instances, case_instances.c.case_id == decisions.c.case_id)
+            .where(*filters)
+            .order_by(outbox_events.c.available_at, outbox_events.c.event_id)
+        ).mappings()
+        candidate = next(
+            (
+                row
+                for row in candidates
+                if workflow_versions is None
+                or self._store._decode_case(
+                    row["case_payload_json"], record_name="outbox Case"
+                ).effective_workflow_version
+                in workflow_versions
+            ),
+            None,
         )
         if candidate is None:
             return None
