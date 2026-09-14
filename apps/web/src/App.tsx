@@ -10,7 +10,7 @@ import type {SessionInfo} from "./types";
 import {FinanceWorkspace} from "./finance/FinanceWorkspace";
 import "./styles.css";
 
-function CaseWorkspace() {
+function CaseWorkspace({independentFinanceEnabled = true}: {independentFinanceEnabled?: boolean}) {
   const workspace = useCaseWorkspace();
   const createPurpose = new URLSearchParams(window.location.search).get("purpose") === "automated_test"
     ? "automated_test"
@@ -49,7 +49,7 @@ function CaseWorkspace() {
       caseInstance={workspace.caseInstance}
       analysis={workspace.analysis}
     />
-    <InvestigationFlow state={workspace} />
+    <InvestigationFlow state={workspace} independentFinanceEnabled={independentFinanceEnabled} />
   </main>;
 }
 
@@ -71,7 +71,7 @@ function VerifiedWorkspace() {
   useEffect(() => {let active = true; setSession(null); setError(null); void api.me().then(value => {if (active) setSession(value);}).catch(caught => {if (active) setError(`Your signed-in role could not be verified. ${safeErrorMessage(caught)} Switch account or sign in again.`);}); return () => {active = false;};}, [auth.account?.homeAccountId]);
   if (error) return <main className="case-workspace"><h1>Supply Response</h1><p role="alert" className="error">{error}</p><button onClick={() => void auth.switchAccount()}>Switch Microsoft account</button></main>;
   if (!session) return <main className="case-workspace"><p role="status">Verifying your Supply Response access…</p></main>;
-  if (session.persona_id === "RL-PERSONA-TAYLOR") return <FinanceWorkspace displayName={session.display_name} onSwitchAccount={auth.switchAccount} />;
-  if (session.persona_id === "RL-PERSONA-ALEX") return <><div className="account-strip"><span>Signed in as {session.display_name ?? "Alex"}</span><button onClick={() => void auth.switchAccount()}>Switch Microsoft account</button></div><CaseWorkspace /></>;
+  if (session.persona_id === "RL-PERSONA-TAYLOR") return <FinanceWorkspace displayName={session.display_name} onSwitchAccount={auth.switchAccount} independentFinanceEnabled={session.independent_finance_enabled} />;
+  if (session.persona_id === "RL-PERSONA-ALEX") return <><div className="account-strip"><span>Signed in as {session.display_name ?? "Alex"}</span><button onClick={() => void auth.switchAccount()}>Switch Microsoft account</button></div><CaseWorkspace independentFinanceEnabled={session.independent_finance_enabled} /></>;
   return <main className="case-workspace"><h1>Supply Response</h1><p role="alert">This account is not authorized for a Supply Response workspace.</p><button onClick={() => void auth.switchAccount()}>Switch Microsoft account</button></main>;
 }

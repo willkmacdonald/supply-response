@@ -15,16 +15,21 @@ const identity = {persona_id: "RL-PERSONA-ALEX", effective_roles: ["material_pla
 const option = {option_id: "option-1", option_kind: "combined", name: "Combined response", executable: true, active_mitigation: true,
   predicted: {uncovered_part_demand: 2, otif_loss_percentage: 10, revenue_at_risk: "100.00", margin_at_risk: "50.00", response_cost: "24750.00", protected_customer_order_ids: []}, assumptions: ["Recovery date remains unconfirmed"], evidence_ids: ["evidence-1"], evidence_requirements: [], blocking_codes: [], prerequisite_roles: ["finance_approver"], source_data_lineage: ["evidence-1"], approval_burden: 1, execution_risk: 1, requested_side_effects: []};
 const detail: any = {selection: {selection_id: "selection-1", proposal: {case_id: "case-1", analysis_id: "analysis-1", analysis_material_hash: "a".repeat(64), option_id: "option-1", response_cost: "24750.00"}, workflow_version: "independent-finance-v1", submitted_by: identity, submitted_at: "2026-09-13T10:00:00Z", finance_review_id: "review-1"}, review: {review_id: "review-1", proposal: {case_id: "case-1", analysis_id: "analysis-1", analysis_material_hash: "a".repeat(64), option_id: "option-1", response_cost: "24750.00"}, submitted_by: identity, submitted_at: "2026-09-13T10:00:00Z", status: "pending", reviewed_by: null, reviewed_at: null, reason: null, superseded_at: null}, review_revision: 1, analysis: {analysis_id: "analysis-1", evidence_items: [{evidence_id: "evidence-1", claim: "Supplier recovery evidence", source_system: "work_iq"}]}, option, is_current: true, current_token: token};
+detail.analysis = {
+  case_id: "case-1", analysis_id: "analysis-1", runtime_mode: "fallback", analysis_started_at: "2026-09-13T09:00:00Z", retrieval_window_ends_at: "2026-09-13T09:02:00Z", created_at: "2026-09-13T09:02:00Z", material: {corpus: "demo_corpus"},
+  evidence_validation: {blocking_codes: [], global_blocking_codes: [], item_results: [{evidence_id: "evidence-1", requirement: "required_authoritative", validated_authority_scope: ["supplier_statement"], freshness: "current", business_validity: "valid", uncertainty_state: "certain", retrieval_health: "healthy", authoritative: true, blocking_codes: []}]},
+  evidence_items: [{evidence_id: "evidence-1", case_id: "case-1", kind: "source_statement", authority_scope: ["supplier_statement"], source_system: "work_iq", source_id: "outlook.message/recovery", source_timestamp: "2026-09-13T09:00:00Z", retrieved_at: "2026-09-13T09:01:00Z", retrieved_for_analysis_id: "analysis-1", retrieval_health: "healthy", effective_at: null, expires_at: null, claim: "Supplier recovery evidence", excerpt: "Recovery remains unconfirmed.", citation_url: null, runtime_mode: "fallback", synthetic: true, requirement: "required_authoritative", uncertainty_state: "certain"}],
+};
 
 afterEach(() => {cleanup(); vi.clearAllMocks(); window.history.replaceState(null, "", "/");});
 
 it("shows Taylor the pending detail and requires a reason to reject", async () => {
   vi.mocked(api.financeReviews).mockResolvedValue([detail]); vi.mocked(api.financeReview).mockResolvedValue(detail);
   window.history.replaceState(null, "", "/?financeReviewId=review-1");
-  render(<FinanceWorkspace displayName="Taylor" onSwitchAccount={vi.fn()} />);
+  render(<FinanceWorkspace displayName="Taylor" onSwitchAccount={vi.fn()} independentFinanceEnabled />);
   expect(await screen.findByRole("heading", {name: "Combined response"})).toBeVisible();
   expect(screen.getByText("$24,750")).toBeVisible();
-  expect(screen.getByText("Supplier recovery evidence")).toBeVisible();
+  expect(screen.getByText(/saved source claim/i)).toHaveTextContent("Supplier recovery evidence");
   expect(screen.getByRole("button", {name: "Reject spending"})).toBeDisabled();
   await userEvent.type(screen.getByLabelText("Rejection reason"), "Reduce expedite cost");
   vi.mocked(api.resolveFinanceReview).mockResolvedValue({review: {...detail.review, status: "rejected", reason: "Reduce expedite cost"}, review_revision: 2} as never);
@@ -36,9 +41,34 @@ it("shows Taylor the pending detail and requires a reason to reject", async () =
 it("keeps resolved and superseded reviews readable but not actionable", async () => {
   const resolved = {...detail, is_current: false, review: {...detail.review, status: "superseded", superseded_at: "2026-09-13T11:00:00Z"}} as never;
   vi.mocked(api.financeReviews).mockResolvedValue([resolved]); vi.mocked(api.financeReview).mockResolvedValue(resolved);
-  render(<FinanceWorkspace displayName="Taylor" onSwitchAccount={vi.fn()} />);
+  render(<FinanceWorkspace displayName="Taylor" onSwitchAccount={vi.fn()} independentFinanceEnabled />);
   const row = await screen.findByRole("button", {name: /combined response/i}); await userEvent.click(row);
   expect(screen.getAllByText(/superseded/i)).not.toHaveLength(0);
   expect(screen.queryByRole("button", {name: "Approve spending"})).not.toBeInTheDocument();
   expect(within(screen.getByRole("main")).getAllByText(/historical/i)).not.toHaveLength(0);
+});
+
+it("creates a new retry intent when Taylor moves from review A to review B", async () => {
+  const reviewB = {...detail, selection: {...detail.selection, selection_id: "selection-2", finance_review_id: "review-2", proposal: {...detail.selection.proposal, option_id: "option-2"}}, review: {...detail.review, review_id: "review-2", proposal: {...detail.review.proposal, option_id: "option-2"}}, option: {...detail.option, option_id: "option-2", name: "Expedite response"}, current_token: {...token, selection_id: "selection-2"}};
+  vi.mocked(api.financeReviews).mockResolvedValue([detail, reviewB]);
+  vi.mocked(api.financeReview).mockImplementation(async id => id === "review-1" ? detail : reviewB);
+  vi.mocked(api.resolveFinanceReview).mockRejectedValue(new Error("timeout"));
+  window.history.replaceState(null, "", "/?financeReviewId=review-1");
+  render(<FinanceWorkspace displayName="Taylor" onSwitchAccount={vi.fn()} independentFinanceEnabled />);
+  await userEvent.click(await screen.findByRole("button", {name: "Approve spending"}));
+  await screen.findByText(/Finance decision was not completed/i);
+  await userEvent.click(screen.getByRole("button", {name: /expedite response/i}));
+  await userEvent.click(await screen.findByRole("button", {name: "Approve spending"}));
+  const calls = vi.mocked(api.resolveFinanceReview).mock.calls;
+  expect(calls[0][0]).toBe("review-1"); expect(calls[1][0]).toBe("review-2");
+  expect(calls[1][2]).not.toBe(calls[0][2]);
+});
+
+it("qualifies fictional data and preserves saved evidence provenance", async () => {
+  vi.mocked(api.financeReviews).mockResolvedValue([detail]); vi.mocked(api.financeReview).mockResolvedValue(detail);
+  window.history.replaceState(null, "", "/?financeReviewId=review-1");
+  render(<FinanceWorkspace displayName="Taylor" onSwitchAccount={vi.fn()} independentFinanceEnabled />);
+  expect(await screen.findByText(/demo corpus.*fictional/i)).toBeVisible();
+  expect(screen.getAllByText(/sample data.*not a live retrieval/i)).not.toHaveLength(0);
+  expect(screen.getAllByText(/source record/i)).not.toHaveLength(0);
 });

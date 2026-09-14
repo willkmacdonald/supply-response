@@ -46,3 +46,13 @@ Final production build: `npm run build` — TypeScript and Vite completed succes
 - Real Microsoft sign-in, two-browser-session proof, wide/narrow browser inspection and deployment are Task 3/controller work and were intentionally not claimed here.
 - The fixed list endpoint returns pending requests. Historical resolved/superseded requests remain accessible through their exact detail links, consistent with the fixed HTTP contract.
 - No live calls, real sign-in, deployment, fake persona selector, email, or execution/playback mutation was performed.
+
+## Integrated review correction
+
+RED command: `npx vitest run src/finance/FinanceWorkspace.test.tsx src/finance/IndependentApprovalPanel.test.tsx src/components/InvestigationFlow.test.tsx` — 6 expected failures covering same-option/new-analysis mismatch, stale final receipts, disabled session commands, cross-review retry targeting, missing provenance, and independent execution controls.
+
+GREEN command: `npm test` — 24 files, 346 tests passed. `npm run build` — TypeScript and Vite passed, 203 modules transformed.
+
+Corrections bind the displayed case, analysis ID/hash, proposal selection, option and cost before commands; reconcile final receipts against a separately refreshed current state; retain Finance review ID/body/key as one retry intent; order list/detail/proposal reads by generation and selected target; clear actionability after definitive command failures; honor `/api/me.independent_finance_enabled`; preserve saved analysis/source provenance; and keep legacy execution controls hidden for every independent case, including after final approval.
+
+Local wide/narrow simulated browser capture was handed to the controller for the bounded presenter harness. It remains explicitly separate from real Microsoft two-session proof.

@@ -808,7 +808,7 @@ describe("progressive Case workspace", () => {
     render(<AuthProvider config={entraConfig} client={client}><App /></AuthProvider>);
 
     expect(await screen.findByRole("heading", {name: "Finance requests"})).toBeVisible();
-    expect(screen.getByText("No Finance requests are waiting.")).toBeVisible();
+    expect(await screen.findByText("No Finance requests are waiting.")).toBeVisible();
     expect(fetchMock.mock.calls.map(([input]) => new URL(String(input), "http://localhost").pathname)).toEqual([
       "/api/me", "/api/finance/reviews",
     ]);

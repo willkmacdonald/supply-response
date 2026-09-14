@@ -154,6 +154,15 @@ it("renders approved actions and results only in execution", async () => {
   expect(screen.getByText("Prepare supplier recovery draft")).toBeVisible();
   expect(screen.getByText("Unsent draft")).toBeVisible();
 });
+it("never mounts legacy execution controls for an approved independent case", async () => {
+  const input = state(); input.caseInstance!.workflow_version = "independent-finance-v1";
+  input.decision = {kind: "approved", action_planning_status: "complete", prerequisite_roles: [], analysis_id: "a", selected_option_id: null, decision_id: "d", runtime_mode: "fallback"} as never;
+  render(<InvestigationFlow state={input} independentFinanceEnabled />);
+  await selectExecutionStage();
+  expect(screen.getByText(/execution is not available in this milestone/i)).toBeVisible();
+  expect(screen.queryByRole("heading", {name: "Execution plan"})).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", {name: /start simulated execution|retry action planning/i})).not.toBeInTheDocument();
+});
 it("blocks rejected execution explicitly", async () => {
   const input = state();
   input.decision = {kind: "rejected", rejection_reason: "Wait for evidence", action_planning_status: "not_applicable",

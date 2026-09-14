@@ -10,9 +10,9 @@ import {ExecutionPanel} from "./ExecutionPanel";
 import {OutcomePanel} from "./OutcomePanel";
 import {readPlannerSnapshot} from "./plannerSnapshot";
 import {instant} from "./plannerFormatting";
-export function InvestigationFlow({state}: {state: CaseWorkspaceState}) {
+export function InvestigationFlow({state, independentFinanceEnabled = true}: {state: CaseWorkspaceState; independentFinanceEnabled?: boolean}) {
   const {caseInstance, analysis} = state; if (!analysis) return null; if (!caseInstance) return <p className="warning">Case details aren't available for this analysis</p>;
-  return <InvestigationPresentation key={caseInstance.case_id} state={state} />;
+  return <InvestigationPresentation key={caseInstance.case_id} state={state} independentFinanceEnabled={independentFinanceEnabled} />;
 }
 
 const stages = [
@@ -32,7 +32,7 @@ function StagePanel({index, activeStage, children}: {index: number; activeStage:
   </section>;
 }
 
-function InvestigationPresentation({state}: {state: CaseWorkspaceState}) {
+function InvestigationPresentation({state, independentFinanceEnabled}: {state: CaseWorkspaceState; independentFinanceEnabled: boolean}) {
   const {caseInstance, analysis} = state;
   const [activeStage, setActiveStage] = useState(0);
   const [focusedStage, setFocusedStage] = useState(0);
@@ -74,15 +74,15 @@ function InvestigationPresentation({state}: {state: CaseWorkspaceState}) {
     <StagePanel index={1} activeStage={activeStage}><InvestigationEvidence {...props} row="responses" /></StagePanel>
     <StagePanel index={2} activeStage={activeStage}><OptionComparison disabled={state.operation !== null} analysis={analysis} selectedOption={state.selectedOption} onSelect={state.selectOption} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /></StagePanel>
     <StagePanel index={3} activeStage={activeStage}>{caseInstance.workflow_version === "independent-finance-v1"
-      ? <IndependentApprovalPanel caseId={caseInstance.case_id} selectedOption={state.selectedOption} finalDecision={state.decision} onFinalDecision={state.acceptFinalDecision ?? (() => undefined)} />
+      ? <IndependentApprovalPanel caseId={caseInstance.case_id} displayedAnalysis={analysis} selectedOption={state.selectedOption} finalDecision={state.decision} onFinalDecision={state.acceptFinalDecision ?? (() => undefined)} independentFinanceEnabled={independentFinanceEnabled} />
       : <DecisionPanel state={state} onApprove={state.approve} onReject={state.reject} />}</StagePanel>
     <StagePanel index={4} activeStage={activeStage}>
-      {!state.decision || state.decision.kind !== "approved" ? (
+      {caseInstance.workflow_version === "independent-finance-v1" ? <section className="panel" aria-labelledby="execution-waiting-heading">
+        <h2 id="execution-waiting-heading">Execute mitigation plan</h2><p>Execution is not available in this milestone until independent action planning is enabled after Alex's final approval.</p>
+      </section> : !state.decision || state.decision.kind !== "approved" ? (
         <section className="panel" aria-labelledby="execution-waiting-heading">
           <h2 id="execution-waiting-heading">Execute mitigation plan</h2>
-          <p>{caseInstance.workflow_version === "independent-finance-v1"
-            ? "Execution is not available in this milestone until independent action planning is enabled after Alex's final approval."
-            : state.decision?.kind === "rejected"
+          <p>{state.decision?.kind === "rejected"
             ? "This response was rejected. Choose a response and obtain approval before starting a mitigation plan."
             : "Approve a response in Review and approve before starting its mitigation plan."}</p>
         </section>
