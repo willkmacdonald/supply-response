@@ -2,6 +2,8 @@
 
 ## Outcome and scope
 
+Implementation commit: `d9d3143`.
+
 Implemented the bounded execution-currentness helper only:
 
 - `check_execution_current` performs a read-only exact binding check for an approved Decision.
