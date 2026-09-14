@@ -20,4 +20,4 @@
 - [x] Update ExistingCases, App wiring, CaseHeader copy and localized styling.
 - [x] Update existing UI test selectors for the renamed button and disclosure; run `npm test` and `npm run build` (351 tests pass).
 - [x] Verify responsive browser rendering and exact case navigation; review the diff (1440px/390px checks pass; independent review clear).
-- [ ] Validate and deploy to the existing Azure target, then verify the live launcher without creating or deleting cases.
+- [x] Validate and deploy to the existing Azure target, then verify the live launcher without creating or deleting cases (revision31; exact case and analysis opened as Alex; twelve other cases retained).

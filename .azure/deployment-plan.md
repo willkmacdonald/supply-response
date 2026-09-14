@@ -33,7 +33,19 @@ New tests failed before implementation; 351 web tests and production build pass.
 1440px/390px local browser checks pass: collapsed list, exact featured case
 navigation, twelve other fixture cases retained, no overflow or page errors.
 Screenshots in `.tmp/launcher-proof/` inspected; fixture explicitly simulated.
-Independent read-only review found no actionable issues. Live proof pending.
+Independent read-only review found no actionable issues.
+
+Release source `d14b2d5`, ACR run `ch1n`, revision `ca-sr-demo--0000031`:
+latest-ready, Healthy/Running, 100% traffic, unchanged scale 0–2. Immutable image
+`sha256:b58cca6e109e52b93181d3585bf2ace79d294bea0cbb53220274e174a5b5cadb`.
+Guarded live Fabric/Foundry readiness passed; `azd show` confirmed the existing
+environment. All three runtime resource-scoped roles remain unchanged.
+Live Alex browser verified the new launcher, collapsed older cases, all twelve
+other records retained, and Resume navigating to case
+`RL-CASE-bcbb8740-c770-42fd-aa67-981d08b66383` with saved analysis
+`RL-ANALYSIS-aa9e5be1-6d28-491e-a179-0eb4752bf00c`. The existing supplier email
+and analysis display correctly. No case, analysis, approval or email was created
+or deleted. Returned browser to the launcher for the presenter.
 
 ## Response selection feedback release — 2026-09-14 UTC
 
@@ -75,7 +87,7 @@ Restored Combined and verified its original waiting-for-Taylor review remained.
 No submission, approval, mail, execution, new case, or new analysis was performed.
 Prior revision29 approval acceptance below is historical.
 
-> **Status:** Validated — simplified demo launcher; fresh validation proof above. Existing revision30 retained until release.
+> **Status:** Deployed — simplified demo launcher source d14b2d5 is live on revision31; live browser verification passed.
 
 ## Independent approval browser release — 2026-09-13
 
