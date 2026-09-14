@@ -112,11 +112,13 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     if (valid(token)) { activeOperation.current = null; setOperation(null); }
   }, [valid]);
 
-  const replaceWorkspaceUrl = useCallback((nextCase: CaseInstance, nextAnalysis: AnalysisVersion | null) => {
+  const replaceWorkspaceUrl = useCallback((nextCase: CaseInstance, nextAnalysis: AnalysisVersion | null, optionId?: string | null) => {
     const url = new URL(window.location.href);
     url.searchParams.set("caseId", nextCase.case_id);
     if (nextAnalysis) url.searchParams.set("analysisId", nextAnalysis.analysis_id);
     else url.searchParams.delete("analysisId");
+    if (optionId) url.searchParams.set("optionId", optionId);
+    else url.searchParams.delete("optionId");
     window.history.replaceState(window.history.state, "", url);
   }, []);
 
@@ -137,8 +139,8 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     finally { finish(token); }
   }, [begin, valid, finish]);
 
-  const reopen = useCallback((caseId: string, expectedAnalysisId?: string | null): Promise<void> => {
-    const key = JSON.stringify([caseId, expectedAnalysisId]);
+  const reopen = useCallback((caseId: string, expectedAnalysisId?: string | null, expectedOptionId?: string | null): Promise<void> => {
+    const key = JSON.stringify([caseId, expectedAnalysisId, expectedOptionId]);
     if (restoration.current && restorationKey.current === key) return restoration.current;
     const version = begin("reopening");
     if (version === null) return Promise.resolve();
@@ -211,12 +213,15 @@ export function useCaseWorkspace(): CaseWorkspaceState {
           || confirmedCase.current_decision_id !== firstCase.current_decision_id
           || confirmedCase.projection_updated_at !== firstCase.projection_updated_at) throw new Error("case changed during restoration");
         if (!mounted.current || version !== restorationVersion.current) return;
-        setCaseInstance(confirmedCase); setAnalysis(nextAnalysis); setDecision(nextDecision);
-        setSelectedOption(nextDecision?.selected_option_id
+        const nextSelectedOption = nextDecision?.selected_option_id
           ? nextAnalysis?.response_options.find(option => option.option_id === nextDecision!.selected_option_id) ?? null
-          : nextDecision ? null : nextAnalysis?.recommendation ?? null);
+          : nextDecision ? null : (expectedOptionId
+            ? nextAnalysis?.response_options.find(option => option.option_id === expectedOptionId && option.executable) ?? nextAnalysis?.recommendation ?? null
+            : nextAnalysis?.recommendation ?? null);
+        setCaseInstance(confirmedCase); setAnalysis(nextAnalysis); setDecision(nextDecision);
+        setSelectedOption(nextSelectedOption);
         setActions(nextActions); setDrafts(nextDrafts); setPlayback(nextPlayback); setObservations(nextObservations);
-        replaceWorkspaceUrl(confirmedCase, nextAnalysis);
+        replaceWorkspaceUrl(confirmedCase, nextAnalysis, expectedOptionId === nextSelectedOption?.option_id ? expectedOptionId : null);
         setExistingCases(null); setExistingCasesError(null);
       } catch (caught) {
         if (!mounted.current || version !== restorationVersion.current) return;
@@ -267,9 +272,10 @@ export function useCaseWorkspace(): CaseWorkspaceState {
         const parameters = new URLSearchParams(window.location.search);
         const caseId = parameters.get("caseId");
         const analysisId = parameters.get("analysisId");
+        const optionId = parameters.get("optionId");
         if (analysisId && !caseId) throw new Error("Analysis bookmark is missing its case ID.");
         finish(token);
-        if (caseId) await reopen(caseId, analysisId);
+        if (caseId) await reopen(caseId, analysisId, optionId);
       })
       .catch((caught) => { if (valid(token)) setError(`Unable to initialize the Case workspace. ${safeErrorMessage(caught)}`); })
       .finally(() => finish(token));

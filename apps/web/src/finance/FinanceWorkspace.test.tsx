@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import {cleanup, render, screen, waitFor, within} from "@testing-library/react";
+import {cleanup, render, screen, waitFor} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {afterEach, expect, it, vi} from "vitest";
 import {FinanceWorkspace} from "./FinanceWorkspace";
@@ -38,14 +38,14 @@ it("shows Taylor the pending detail and requires a reason to reject", async () =
   expect(api.financeReview).toHaveBeenCalledTimes(2);
 });
 
-it("keeps resolved and superseded reviews readable but not actionable", async () => {
+it("keeps superseded reviews readable with their state-specific explanation", async () => {
   const resolved = {...detail, is_current: false, review: {...detail.review, status: "superseded", superseded_at: "2026-09-13T11:00:00Z"}} as never;
   vi.mocked(api.financeReviews).mockResolvedValue([resolved]); vi.mocked(api.financeReview).mockResolvedValue(resolved);
   render(<FinanceWorkspace displayName="Taylor" onSwitchAccount={vi.fn()} independentFinanceEnabled />);
   const row = await screen.findByRole("button", {name: /combined response/i}); await userEvent.click(row);
   expect(screen.getAllByText(/superseded/i)).not.toHaveLength(0);
   expect(screen.queryByRole("button", {name: "Approve spending"})).not.toBeInTheDocument();
-  expect(within(screen.getByRole("main")).getAllByText(/historical/i)).not.toHaveLength(0);
+  expect(screen.getByText("This request was superseded by a newer proposal and remains readable but not actionable.")).toBeVisible();
 });
 
 it("keeps a rejected request readable without implying a next action", async () => {
@@ -64,7 +64,8 @@ it("returns a current approved live review to Alex using the reviewed analysis",
       evidence_items: [{...detail.analysis.evidence_items[0], runtime_mode: "live", synthetic: false}],
     },
   } as never;
-  const onSwitchAccount = vi.fn().mockResolvedValue(undefined);
+  let switchLocation: string | null = null;
+  const onSwitchAccount = vi.fn(async () => { switchLocation = window.location.href; });
   vi.mocked(api.financeReviews).mockResolvedValue([approvedLive]); vi.mocked(api.financeReview).mockResolvedValue(approvedLive);
   window.history.replaceState(null, "", "/?financeReviewId=review-1&caseId=stale-case&analysisId=stale-analysis&stage=understand");
   render(<FinanceWorkspace displayName="Taylor" onSwitchAccount={onSwitchAccount} independentFinanceEnabled />);
@@ -76,12 +77,24 @@ it("returns a current approved live review to Alex using the reviewed analysis",
     expect(screen.queryByText(warning)).not.toBeInTheDocument();
   }
   await userEvent.click(screen.getByRole("button", {name: "Return to Alex for final approval"}));
-  const parameters = new URLSearchParams(window.location.search);
+  expect(switchLocation).not.toBeNull();
+  const parameters = new URL(switchLocation!).searchParams;
   expect(parameters.get("caseId")).toBe("case-1");
   expect(parameters.get("analysisId")).toBe("analysis-1");
+  expect(parameters.get("optionId")).toBe("option-1");
   expect(parameters.get("stage")).toBe("approval");
   expect(parameters.has("financeReviewId")).toBe(false);
   expect(onSwitchAccount).toHaveBeenCalledOnce();
+});
+
+it("keeps a current approved review factual when Finance commands are disabled", async () => {
+  const approved = {...detail, review: {...detail.review, status: "approved", reviewed_by: {...identity, persona_id: "RL-PERSONA-TAYLOR", display_name: "Taylor Brooks"}, reviewed_at: "2026-09-13T10:30:00Z"}} as never;
+  vi.mocked(api.financeReviews).mockResolvedValue([approved]); vi.mocked(api.financeReview).mockResolvedValue(approved);
+  render(<FinanceWorkspace displayName="Taylor" onSwitchAccount={vi.fn()} independentFinanceEnabled={false} />);
+  await userEvent.click(await screen.findByRole("button", {name: /combined response/i}));
+  expect(screen.getByText("Taylor Brooks approved the spending on Sep 13, 2026, 5:30 AM. Independent Finance commands are disabled; this request remains readable and does not provide a handoff.")).toBeVisible();
+  expect(screen.queryByText(/Alex can now complete final approval/i)).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", {name: "Return to Alex for final approval"})).not.toBeInTheDocument();
 });
 
 it("creates a new retry intent when Taylor moves from review A to review B", async () => {

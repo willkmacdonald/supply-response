@@ -456,6 +456,27 @@ function savedReads(overrides: Record<string, unknown> = {}) {
 }
 
 describe("reopening lifecycle and operation safety", () => {
+  it("restores Taylor's reviewed non-recommended option at Alex's approval deep link", async () => {
+    const reviewedOption = {...combinedOption, option_id: "RL-OPTION-EXPEDITE", option_kind: "expedite", name: "Expedite the partial shipment"};
+    const reviewedAnalysis = {...analysis, response_options: [combinedOption, reviewedOption], material: {...analysis.material,
+      response_options: [combinedOption, reviewedOption].map(({name: _name, ...option}) => option)}, recommendation: combinedOption};
+    const reviewedCase = {...caseInstance, current_analysis_id: reviewedAnalysis.analysis_id, workflow_version: "independent-finance-v1"};
+    const reviewedProposal = {case_id: reviewedCase.case_id, analysis_id: reviewedAnalysis.analysis_id,
+      analysis_material_hash: reviewedAnalysis.material_hash, option_id: reviewedOption.option_id,
+      response_cost: reviewedOption.predicted.response_cost};
+    const proposalState = {token: {generation: 1, analysis_id: reviewedAnalysis.analysis_id,
+      analysis_material_hash: reviewedAnalysis.material_hash, selection_id: "selection-reviewed"},
+    selection: {selection_id: "selection-reviewed", proposal: reviewedProposal, finance_review_id: "review-approved"},
+    review: {review_id: "review-approved", proposal: reviewedProposal, status: "approved", reviewed_at: "2026-09-13T10:30:00Z"}, review_revision: 2};
+    savedReads({"/api/cases/RL-CASE-1": reviewedCase, "/api/cases/RL-CASE-1/analysis": reviewedAnalysis,
+      "/api/cases/RL-CASE-1/proposal": proposalState});
+    window.history.replaceState(null, "", "/?caseId=RL-CASE-1&analysisId=RL-ANALYSIS-1&optionId=RL-OPTION-EXPEDITE&stage=approval");
+    render(<App />);
+    const approval = await screen.findByRole("tabpanel", {name: "4. Review and approve"});
+    expect(within(approval).getByRole("heading", {name: "Expedite the partial shipment"})).toBeVisible();
+    expect(await within(approval).findByRole("button", {name: "Give final Alex approval"})).toBeVisible();
+  });
+
   it.each(["approved", "rejected"])("reopens a newer analysis without attaching its retained earlier %s decision", async kind => {
     const savedCase = {...caseInstance, status: "awaiting_decision", current_analysis_id: analysis.analysis_id,
       current_decision_id: decision.decision_id, controls: {...caseInstance.controls, decide: true}};
