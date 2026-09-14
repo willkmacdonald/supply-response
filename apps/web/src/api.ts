@@ -19,6 +19,10 @@ export const API_BASE = "";
 const SAFE_ERROR_MESSAGES = new Map<string, string>([
   ["INBOX_CHECK_UNAVAILABLE", "Email checking is not available right now. Try again shortly."],
   ["INBOX_CHECK_FAILED", "Work IQ could not complete the email check. Please try again."],
+  ["INBOUND_EMAIL_CHANGED", "The email changed since you reviewed it. Check email again before creating its case."],
+  ["INBOUND_EMAIL_UNSUPPORTED", "This email does not contain a complete, supported disruption. Review its delivery quantity, dates, component, and partial-shipment offer."],
+  ["INBOUND_EMAIL_CONFLICT", "The supplier email conflicts with the planning records or the email already used for this case. Review the source details before continuing."],
+  ["INBOUND_EMAIL_UNAVAILABLE", "Work IQ could not verify this email. Check email again and retry."],
   ["LIVE_SOURCE_UNAVAILABLE", "The information needed for this analysis could not be retrieved."],
   ["FINANCE_WORKFLOW_DISABLED", "Independent Finance review is not enabled for new commands."],
   ["STALE_PROPOSAL", "The proposal changed. Refresh and reselect the response before continuing."],
@@ -87,6 +91,8 @@ async function post<T>(path: string, body: object, headers: Record<string, strin
 
 export const api = {
   checkInbox: (): Promise<InboxCheckResult> => post("/api/inbox/check", {}),
+  createCaseFromEmail: (internetMessageId: string, reviewFingerprint: string): Promise<CaseInstance> =>
+    post("/api/inbox/cases", {internet_message_id: internetMessageId, review_fingerprint: reviewFingerprint}),
   me: (): Promise<SessionInfo> => get("/api/me"),
   runtime: (): Promise<RuntimeStatus> => get("/api/runtime"),
   cases: (): Promise<CaseInstance[]> => get("/api/cases"),

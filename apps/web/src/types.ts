@@ -40,6 +40,7 @@ export interface CaseInstance {
   projection_updated_at: string;
   controls: CaseControls;
   workflow_version?: WorkflowVersion;
+  supplier_email?: {sender: string; subject: string; received_at: string} | null;
 }
 
 export interface CaseControls {
@@ -476,15 +477,33 @@ export interface OutcomeObservation {
   display_label: string;
   runtime_mode: RuntimeMode;
 }
+export interface SupplierDisruptionFacts {
+  original_quantity: number;
+  part_id: string;
+  plant_name: string;
+  original_due_date: string;
+  partial_quantity: number;
+  partial_due_date: string;
+  additional_cost_per_unit: string;
+  remaining_quantity: number;
+  recovery_date: string | null;
+}
+
+export interface InboxMessage {
+  message_id: string;
+  subject: string;
+  sender: string;
+  received_at: string;
+  excerpt: string;
+  citation_url: string;
+  internet_message_id?: string | null;
+  review_fingerprint?: string | null;
+  facts?: SupplierDisruptionFacts | null;
+  creation_blocker?: string | null;
+}
+
 export interface InboxCheckResult {
   checked_at: string;
   incomplete: boolean;
-  messages: {
-    message_id: string;
-    subject: string;
-    sender: string;
-    received_at: string;
-    excerpt: string;
-    citation_url: string;
-  }[];
+  messages: InboxMessage[];
 }

@@ -8,6 +8,15 @@ import {editSnapshot, recordFixture} from "./supportingRecord.fixture";
 import {InvestigationEvidence} from "./InvestigationEvidence";
 afterEach(() => {cleanup(); vi.unstubAllGlobals();});
 
+it("shows the actual inbound sender and subject on the disruption source", () => {
+  const input = fixture();
+  input.caseInstance.supplier_email = {sender: "will@willmacdonald.com", subject: "Demo run 0914-A", received_at: "2026-09-14T05:10:43Z"};
+  render(<InvestigationEvidence {...input} row="disruption" />);
+  expect(screen.getByText("From will@willmacdonald.com")).toBeInTheDocument();
+  expect(screen.getByText("Demo run 0914-A")).toBeInTheDocument();
+  expect(screen.getByText(/Email received:/)).toBeInTheDocument();
+});
+
 function fixture(): {caseInstance: CaseInstance; analysis: AnalysisVersion} {
   const input = recordFixture(); const a = input.analysis; const at = a.created_at;
   const ranking = {policy_version: "v1", eligible_option_ids: [], infeasible_option_ids: [],

@@ -8,6 +8,14 @@ afterEach(() => {
 });
 
 describe("API client", () => {
+  it("creates from the reviewed email identity without submitting copied facts or message text", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ok:true,json:async()=>({case_id:"email-case"})});
+    vi.stubGlobal("fetch", fetchMock);
+    await api.createCaseFromEmail("<email@example.com>", "a".repeat(64));
+    expect(fetchMock).toHaveBeenCalledWith("/api/inbox/cases", expect.objectContaining({
+      method:"POST",body:JSON.stringify({internet_message_id:"<email@example.com>",review_fingerprint:"a".repeat(64)}),
+    }));
+  });
   it("maps live source failures to safe display copy without leaking diagnostics", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       detail: {

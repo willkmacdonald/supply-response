@@ -191,6 +191,12 @@ export function InvestigationEvidence({
             ) : (
               <p>Disruption details aren't available for this analysis</p>
             )}
+            {caseInstance.supplier_email && <details>
+              <summary>Inbound supplier email details</summary>
+              <p>From {caseInstance.supplier_email.sender}</p>
+              <p>{caseInstance.supplier_email.subject}</p>
+              <p>Email received: {new Date(caseInstance.supplier_email.received_at).toLocaleString()}</p>
+            </details>}
             {supplierItems.length ? (
               sources(
                 supplierItems,
