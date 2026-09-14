@@ -239,9 +239,42 @@ the first captured RED; that process deviation is documented, not described as
 test-first. The subsequent missing-selection correction did capture its failing
 test before the narrow production change.
 
-Execution still needs to check that approval is current at each advancing
-transaction. The prepared helper plan is a separate increment; a helper alone
-will not establish enforcement or authorize activation.
+Subsequent broader verification exposed an earlier parent test assertion using
+`rejected` rather than the domain's `decision_rejected` status when final
+rejection won a race. Test-only correction `2731943` now explicitly schedules
+both resolution outcomes and uses the domain status enum. The old expectation
+failed deterministically before correction; the full finalization file then
+passed 61 tests. Independent review approved the correction; no production
+behavior changed.
+
+## Individual execution safeguards — locally accepted
+
+Helper `d9d3143` (report `72ee91e`) checks exact current Decision, analysis,
+selection and Finance review bindings. It advances one fresh proposal generation
+in the caller's transaction and does not commit by itself. Historical reads and
+legacy proposal generations remain unchanged. Independent review approved both
+spec compliance and code quality; parent regression passed 464 tests.
+
+Service wiring `d1c3fe1`, with test-only strengthening `7de52e1`, applies the
+guard to new action creation, start, retry and completion. Identical existing
+creation receipts remain readable without writing; they do not authorize new
+work. Failure/cancellation cleanup stays confined to the exact old action and
+attempt. Real two-connection tests cover competition with response replacement
+and prove that losing transactions leave no durable changes.
+
+Independent review requested stronger assertions for unaffected sibling actions
+in cleanup tests. The correction proves those rows unchanged, preserves prior
+events and verifies the exact new target event and canonical payloads. Final
+spec and quality verdicts are approved, with no remaining findings. The normal
+commit hook initially blocked on an inherited warning in the untouched planning
+worker; a disclosed one-command bypass followed manual scoped checks without
+changing the global hook configuration.
+
+Parent verification on committed `7de52e1`: **497 passed, 11 intentional skips,
+15 live tests deselected**, one inherited Starlette/httpx warning, in 27.55s.
+These guards do not yet cover queued planning, simulated playback or real email,
+and do not supply Taylor's browser workflow or authorize activation. The next
+adopted increment addresses planning transactions and stale queued events.
 
 ## Remaining gates
 
