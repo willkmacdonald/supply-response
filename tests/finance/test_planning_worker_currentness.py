@@ -9,6 +9,7 @@ from uuid import UUID
 
 import pytest
 from sqlalchemy import select, update
+from sqlalchemy.engine import MappingResult
 from sqlalchemy.exc import OperationalError
 
 from data.domain import CasePurpose, CaseStatus, RuntimeMode
@@ -296,6 +297,23 @@ def test_legacy_only_worker_defers_independent_outbox_without_mutation(ctx, meth
     )
     assert restarted.process_next_unattempted_outbox() is False
     assert snapshot(ctx) == before
+
+
+def test_eligible_claim_closes_candidate_result_before_followup_sql(ctx, monkeypatch):
+    closed = []
+    original = MappingResult.close
+
+    def close(result):
+        closed.append(result)
+        return original(result)
+
+    monkeypatch.setattr(MappingResult, "close", close)
+    worker = ActionPlanningWorker(
+        ctx.factory, processable_workflow_versions=(WorkflowVersion.LEGACY,)
+    )
+
+    assert worker.process_next_unattempted_outbox() is False
+    assert closed
 
 
 def test_legacy_only_worker_skips_older_independent_event_and_processes_legacy(ctx):

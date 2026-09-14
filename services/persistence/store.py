@@ -1707,18 +1707,21 @@ class SqlAlchemyExecutionRepository:
             .where(*filters)
             .order_by(outbox_events.c.available_at, outbox_events.c.event_id)
         ).mappings()
-        candidate = next(
-            (
-                row
-                for row in candidates
-                if workflow_versions is None
-                or self._store._decode_case(
-                    row["case_payload_json"], record_name="outbox Case"
-                ).effective_workflow_version
-                in workflow_versions
-            ),
-            None,
-        )
+        try:
+            candidate = next(
+                (
+                    row
+                    for row in candidates
+                    if workflow_versions is None
+                    or self._store._decode_case(
+                        row["case_payload_json"], record_name="outbox Case"
+                    ).effective_workflow_version
+                    in workflow_versions
+                ),
+                None,
+            )
+        finally:
+            candidates.close()
         if candidate is None:
             return None
         row = (

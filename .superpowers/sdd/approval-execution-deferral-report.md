@@ -20,6 +20,7 @@
 - `.venv/bin/python -m pytest tests/api tests/auth tests/execution tests/finance tests/persistence -m 'not fabric_live' -o addopts='' -q` — 496 passed, 11 skipped; one existing Starlette/httpx deprecation warning.
 - Ruff on all changed implementation/test files — clean.
 - Changed-file Pyright — 0 errors, 0 warnings.
+- Candidate-result close regression: RED showed no explicit close; GREEN 5 focused deferral/result-lifecycle tests passed. The streamed result is now closed before the claim update, preserving SQL Server operation without MARS/busy-result dependence.
 
 ## Files changed
 
