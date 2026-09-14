@@ -1,6 +1,46 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed — Alex/Taylor browser approval release afbf8db is healthy on ca-sr-demo--0000029. Real Alex submission passed; Taylor password sign-in blocks remaining browser acceptance.
+## Response selection feedback release — 2026-09-14 UTC
+
+Scope: approved visible selected-card feedback and navigation to approval only.
+Existing Azure Dev / East US 2 / rg-supply-response-demo / ca-sr-demo target is
+unchanged. No backend, schema, RBAC, identity, mail, or execution changes.
+
+### Section 7: Validation Proof — selection feedback
+
+- `npm test`: 348 passed across 24 files; regression tests failed on the missing
+  selected state before implementation and now pass.
+- `npm run build`: TypeScript and Vite production build passed.
+- Browser checks at 1440px and 390px: selected outline/text, continuation to tab4,
+  focus, retained selection, no overflow, no page errors, no mutation requests.
+  Screenshots inspected in `.tmp/selection-proof/` (simulated local data).
+- Independent read-only review: no actionable findings.
+- Existing-target guarded preflight passed. AZD 1.30.0 installed, existing named
+  environment verified, authenticated interactive Will identity confirmed.
+- Official Microsoft azure.yaml JSON schema validation passed.
+- Guarded `azd provision --preview --no-prompt` passed; same existing resource
+  group, app, insights and vault; no creates/deletes. Existing metadata/secret
+  reference reconciliation only, no intended infrastructure changes.
+- `azd package --no-prompt` passed (no declared services); supported image path
+  remains guarded ACR build with four exact Entra arguments, not AZD packaging.
+  Dockerfile and lockfile verified; no build-context dependency changes.
+- Azure Policy assignment inventory unchanged; exact preview passed.
+- Static role review: app identity retains exact ACR Pull, vault Secrets User,
+  Foundry project Azure AI User scopes. No privilege changes.
+- Aspire pre/post checks and EF migrations: not applicable; no SQL changes.
+
+Release verified: ACR run ch1m succeeded; revision30 is latest-ready with 100%
+traffic and unchanged scale0–2. Image digest:
+`sha256:e269e7160d40b916b0761a715424b8f6cc6a80f5446bd7649bf46d7f6ddf96b1`.
+Guarded live Fabric/Foundry readiness passed. `azd show` confirmed the existing
+environment; exact three resource-scoped runtime roles remain unchanged.
+Live Alex browser: selected Expedite, visibly verified outline and ✓ Selected,
+continued to tab4 with focus and separate Submit for Finance review control.
+Restored Combined and verified its original waiting-for-Taylor review remained.
+No submission, approval, mail, execution, new case, or new analysis was performed.
+Prior revision29 approval acceptance below is historical.
+
+> **Status:** Deployed — response selection feedback source0347765 is live on ca-sr-demo--0000030. Live Alex selection and continuation browser checks passed.
 
 ## Independent approval browser release — 2026-09-13
 
