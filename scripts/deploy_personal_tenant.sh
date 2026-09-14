@@ -134,6 +134,9 @@ for setting in "${required_runtime_settings[@]}"; do
 done
 # Acceptance is external to deployment; blank explicitly deactivates new links.
 safe_run azd-setting-SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT azd env set SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT "${SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT:-}"
+# Recognition and workflow activation are distinct. Legacy deployments stay off.
+safe_run azd-setting-SUPPLY_RESPONSE_TAYLOR_OBJECT_ID azd env set SUPPLY_RESPONSE_TAYLOR_OBJECT_ID "${SUPPLY_RESPONSE_TAYLOR_OBJECT_ID:-}"
+safe_run azd-setting-SUPPLY_RESPONSE_INDEPENDENT_FINANCE_ENABLED azd env set SUPPLY_RESPONSE_INDEPENDENT_FINANCE_ENABLED "${SUPPLY_RESPONSE_INDEPENDENT_FINANCE_ENABLED:-false}"
 uuid_pattern='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 [[ "${SUPPLY_RESPONSE_API_CLIENT_ID}" =~ $uuid_pattern ]] || { printf 'SUPPLY_RESPONSE_API_CLIENT_ID must be a UUID.\n' >&2; exit 1; }
 [[ "${SUPPLY_RESPONSE_WEB_CLIENT_ID:-}" =~ $uuid_pattern ]] || { printf 'SUPPLY_RESPONSE_WEB_CLIENT_ID must be a UUID.\n' >&2; exit 1; }

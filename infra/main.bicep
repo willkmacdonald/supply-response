@@ -21,6 +21,8 @@ param imageName string = ''
 param foundryProjectResourceId string = ''
 param apiClientId string
 param alexObjectId string
+param taylorObjectId string = ''
+param independentFinanceEnabled bool = false
 param fabricSqlServer string
 param fabricSqlDatabase string
 param workIqSupplierSourceId string
@@ -103,6 +105,8 @@ module app 'modules/container-apps.bicep' = {
     runtimeSettings: {
       apiClientId: apiClientId
       alexObjectId: alexObjectId
+      taylorObjectId: taylorObjectId
+      independentFinanceEnabled: independentFinanceEnabled
       fabricSqlServer: fabricSqlServer
       fabricSqlDatabase: fabricSqlDatabase
       workIqSupplierSourceId: workIqSupplierSourceId

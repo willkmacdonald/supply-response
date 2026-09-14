@@ -18,6 +18,8 @@
     "foundryProjectResourceId": { "value": "${SUPPLY_RESPONSE_FOUNDRY_PROJECT_RESOURCE_ID}" },
     "apiClientId": { "value": "${SUPPLY_RESPONSE_API_CLIENT_ID}" },
     "alexObjectId": { "value": "${SUPPLY_RESPONSE_ALEX_OBJECT_ID}" },
+    "taylorObjectId": { "value": "${SUPPLY_RESPONSE_TAYLOR_OBJECT_ID=}" },
+    "independentFinanceEnabled": { "value": "${SUPPLY_RESPONSE_INDEPENDENT_FINANCE_ENABLED=false}" },
     "fabricSqlServer": { "value": "${SUPPLY_RESPONSE_FABRIC_SQL_SERVER}" },
     "fabricSqlDatabase": { "value": "${SUPPLY_RESPONSE_FABRIC_SQL_DATABASE}" },
     "workIqSupplierSourceId": { "value": "${SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SOURCE_ID}" },

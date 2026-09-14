@@ -43,6 +43,8 @@ var finalEnvironment = [
   { name: 'SUPPLY_RESPONSE_FRONTEND_ORIGIN', value: 'https://${appName}.${environment.properties.defaultDomain}' }
   { name: 'SUPPLY_RESPONSE_API_CLIENT_ID', value: runtimeSettings.apiClientId }
   { name: 'SUPPLY_RESPONSE_ALEX_OBJECT_ID', value: runtimeSettings.alexObjectId }
+  { name: 'SUPPLY_RESPONSE_TAYLOR_OBJECT_ID', value: runtimeSettings.taylorObjectId }
+  { name: 'SUPPLY_RESPONSE_INDEPENDENT_FINANCE_ENABLED', value: string(runtimeSettings.independentFinanceEnabled) }
   { name: 'SUPPLY_RESPONSE_FABRIC_SQL_SERVER', value: runtimeSettings.fabricSqlServer }
   { name: 'SUPPLY_RESPONSE_FABRIC_SQL_DATABASE', value: runtimeSettings.fabricSqlDatabase }
   { name: 'SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SOURCE_ID', value: runtimeSettings.workIqSupplierSourceId }
