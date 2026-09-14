@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from threading import Barrier, local
+from threading import Barrier, Event, local
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID
@@ -18,7 +18,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 import services.persistence.proposals as proposals_module
 from data.domain import CasePurpose, RuntimeMode
 from data.domain.analysis import AnalysisResponseOptionMaterial, AnalysisVersion
-from data.domain.cases import WorkflowVersion
+from data.domain.cases import CaseStatus, WorkflowVersion
 from data.domain.decisions import (
     ApprovalSatisfaction,
     ApprovalTarget,
@@ -1086,11 +1086,18 @@ def _sqlite_lock_or_raise(error: OperationalError) -> str:
 
 
 @pytest.mark.parametrize(
-    "operation",
-    ("identical", "different_key", "proposal_publish", "analysis_save", "resolve"),
+    ("operation", "preferred_winner"),
+    (
+        ("identical", None),
+        ("different_key", None),
+        ("proposal_publish", None),
+        ("analysis_save", None),
+        ("resolve", 0),
+        ("resolve", 1),
+    ),
 )
 def test_file_sqlite_finalization_races_at_first_state_read(
-    final_ctx, monkeypatch, operation
+    final_ctx, monkeypatch, operation, preferred_winner
 ):
     later: AnalysisVersion | None = None
     if operation == "resolve":
@@ -1146,6 +1153,7 @@ def test_file_sqlite_finalization_races_at_first_state_read(
 
     baseline = journal_snapshot(final_ctx)
     barrier = Barrier(2, timeout=5)
+    winner_finished = Event()
     thread_state = local()
     crossed: set[int] = set()
     original_get_state = proposals_module.SqlAlchemyProposalRepository.get_state
@@ -1156,6 +1164,10 @@ def test_file_sqlite_finalization_races_at_first_state_read(
             thread_state.first = False
             crossed.add(id(repository._connection))
             barrier.wait()
+            if preferred_winner is not None and thread_state.index != preferred_winner:
+                # Both transactions observed the old state. Hold the losing
+                # reader before any write so each resolution ordering is tested.
+                assert winner_finished.wait(timeout=5), "winner did not finish"
         return value
 
     monkeypatch.setattr(
@@ -1164,9 +1176,10 @@ def test_file_sqlite_finalization_races_at_first_state_read(
         synchronized_state,
     )
 
-    def invoke(call):
+    def invoke(index, call):
         try:
             thread_state.first = True
+            thread_state.index = index
             return call()
         except OperationalError as error:
             return _sqlite_lock_or_raise(error)
@@ -1180,12 +1193,17 @@ def test_file_sqlite_finalization_races_at_first_state_read(
         except BaseException:
             barrier.abort()
             raise
+        finally:
+            if index == preferred_winner:
+                winner_finished.set()
 
     calls = (lambda: final_ctx.finalizer.finalize(primary, final_ctx.alex), other_call)
     with ThreadPoolExecutor(max_workers=2) as pool:
-        futures = [pool.submit(invoke, item) for item in calls]
+        futures = [pool.submit(invoke, index, item) for index, item in enumerate(calls)]
         results = [future.result(timeout=15) for future in futures]
     assert len(crossed) == 2
+    if preferred_winner is not None:
+        assert isinstance(results[preferred_winner], (Decision, ResolutionResult))
     monkeypatch.undo()
     with final_ctx.store.uow_factory() as uow:
         stored = uow.decisions.list_for_case(final_ctx.case.case_id)
@@ -1228,11 +1246,11 @@ def test_file_sqlite_finalization_races_at_first_state_read(
         == durable_state.token.selection_id
     )
     expected_status = (
-        "action_planning"
+        CaseStatus.ACTION_PLANNING.value
         if stored and stored[0].kind is DecisionKind.APPROVED
-        else "rejected"
+        else CaseStatus.DECISION_REJECTED.value
         if stored
-        else "open"
+        else CaseStatus.OPEN.value
     )
     assert durable["projection"]["status"] == expected_status
     durable_payload = json.loads(durable["projection"]["payload_json"])
