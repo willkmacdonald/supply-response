@@ -2424,9 +2424,12 @@ class SqlAlchemyExecutionRepository:
             raise ImmutableRecordConflict(
                 "Playback update may only record one terminal result"
             )
-        self._connection.execute(
+        result = self._connection.execute(
             update(playbacks)
-            .where(playbacks.c.playback_id == playback.playback_id)
+            .where(
+                playbacks.c.playback_id == playback.playback_id,
+                playbacks.c.status == PlaybackStatus.IN_PROGRESS.value,
+            )
             .values(
                 status=playback.status.value,
                 completed_at=playback.completed_at,
@@ -2435,6 +2438,8 @@ class SqlAlchemyExecutionRepository:
                 payload_json=serialize_model(playback),
             )
         )
+        if result.rowcount != 1:
+            raise ImmutableRecordConflict("Playback already has a terminal result")
 
     @staticmethod
     def _decode_observation(payload: str) -> OutcomeObservation:

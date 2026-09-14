@@ -19,6 +19,7 @@ from data.domain.execution import (
     PlaybackStatus,
     PlaybackStep,
 )
+from services.execution.currentness import guard_execution_current
 from services.execution.worker import ExecutionService
 from services.persistence.ports import UnitOfWork
 
@@ -165,8 +166,10 @@ class PlaybackService:
                 actor=actor,
                 started_at=self._clock.now(),
             )
-            uow.execution.insert_playback_if_absent(playback)
-            uow.commit()
+            inserted = uow.execution.insert_playback_if_absent(playback)
+            if inserted:
+                guard_execution_current(uow, decision.decision_id)
+                uow.commit()
         with self._uow_factory() as uow:
             canonical = uow.execution.get_playback_for_decision(decision_id)
             if canonical is None or canonical.playback_id != playback.playback_id:
@@ -249,6 +252,10 @@ class PlaybackService:
             filled = shell.model_copy(
                 update={"subject": _DRAFT_SUBJECT, "body": _DRAFT_BODY}
             )
+            if shell.subject is not None:
+                uow.execution.fill_draft_artifact(filled)
+                return
+            guard_execution_current(uow, shell.decision_id)
             uow.execution.fill_draft_artifact(filled)
             uow.commit()
 
@@ -258,18 +265,55 @@ class PlaybackService:
         actions: tuple[ExecutionAction, ...],
         clock: PlaybackClock,
     ) -> Playback:
-        recorded_at = clock.now()
-        action_ids = {action.kind: action.action_id for action in actions}
         alpha_metrics = {
             "alpha_expedited_quantity",
             "remaining_alpha_recovery_date",
         }
         with self._uow_factory() as uow:
             current = uow.execution.get_playback(playback.playback_id)
-            if current.status is PlaybackStatus.COMPLETED:
+            normalized = playback.model_copy(
+                update={
+                    "status": current.status,
+                    "completed_at": current.completed_at,
+                    "failed_at": current.failed_at,
+                    "error_code": current.error_code,
+                }
+            )
+            if normalized != current:
+                raise PlaybackStateError(
+                    "Playback identity differs from canonical record"
+                )
+            if current.status is not PlaybackStatus.IN_PROGRESS:
                 return current
-            decision = uow.decisions.get(playback.decision_id)
-            case = uow.cases.get_case(playback.case_id)
+            canonical_actions = uow.execution.list_actions(
+                decision_id=current.decision_id
+            )
+            expected_kinds = tuple(step.action_kind for step in PRODUCTION_STEPS)
+            if (
+                tuple(action.kind.value for action in canonical_actions)
+                != expected_kinds
+                or len({action.action_id for action in canonical_actions})
+                != len(expected_kinds)
+                or any(
+                    action.status is not ExecutionStatus.COMPLETED
+                    for action in canonical_actions
+                )
+                or tuple(
+                    action.model_copy(update={"status": ExecutionStatus.PLANNED})
+                    for action in actions
+                )
+                != tuple(
+                    action.model_copy(update={"status": ExecutionStatus.PLANNED})
+                    for action in canonical_actions
+                )
+            ):
+                raise PlaybackStateError(
+                    "Playback requires the exact completed Decision action set"
+                )
+            decision = guard_execution_current(uow, current.decision_id)
+            case = uow.cases.get_case(current.case_id)
+            recorded_at = clock.now()
+            action_ids = {action.kind: action.action_id for action in canonical_actions}
             for metric, predicted, observed, unit in _OUTCOMES:
                 if metric in alpha_metrics:
                     action_kind = ExecutionActionKind.COORDINATE_ALPHA_EXPEDITED_PARTIAL
