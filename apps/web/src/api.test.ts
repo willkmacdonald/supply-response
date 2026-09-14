@@ -431,4 +431,33 @@ describe("API client", () => {
     expect(request.body).toBe(JSON.stringify({template_id: "RL-001", purpose: "rehearsal"}));
     expect(request.body).not.toContain("runtime_mode");
   });
+
+  it("uses the authenticated Finance journey contracts without changing command intent", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ok: true, json: async () => ({})});
+    vi.stubGlobal("fetch", fetchMock);
+    const expected = {generation: 3, analysis_id: "analysis-1", analysis_material_hash: "a".repeat(64), selection_id: "selection-1"};
+
+    await api.me();
+    await api.proposal("case/1");
+    await api.submitProposal("case/1", {option_id: "option-1", expected}, "submit-key");
+    await api.financeReviews();
+    await api.financeReview("review/1");
+    await api.resolveFinanceReview("review/1", {expected, expected_review_revision: 2, approved: false, reason: "Revise cost"}, "resolve-key");
+    await api.finalizeProposal("case/1", {expected, kind: "approved"}, "final-key");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/me", undefined);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/cases/case%2F1/proposal", undefined);
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/cases/case%2F1/proposals", expect.objectContaining({
+      method: "POST", headers: {"Content-Type": "application/json", "Idempotency-Key": "submit-key"},
+      body: JSON.stringify({option_id: "option-1", expected}),
+    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(6, "/api/finance/reviews/review%2F1/resolutions", expect.objectContaining({
+      method: "POST", headers: {"Content-Type": "application/json", "Idempotency-Key": "resolve-key"},
+      body: JSON.stringify({expected, expected_review_revision: 2, approved: false, reason: "Revise cost"}),
+    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(7, "/api/cases/case%2F1/proposal-decisions", expect.objectContaining({
+      method: "POST", headers: {"Content-Type": "application/json", "Idempotency-Key": "final-key"},
+      body: JSON.stringify({expected, kind: "approved"}),
+    }));
+  });
 });

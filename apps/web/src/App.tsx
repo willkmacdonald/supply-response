@@ -4,6 +4,10 @@ import {PlanningRoutes} from "./components/PlanningRoutes";
 import {ExistingCases} from "./components/ExistingCases";
 import {useAuth} from "./auth/AuthProvider";
 import {useCaseWorkspace} from "./hooks/useCaseWorkspace";
+import {useEffect, useState} from "react";
+import {api, safeErrorMessage} from "./api";
+import type {SessionInfo} from "./types";
+import {FinanceWorkspace} from "./finance/FinanceWorkspace";
 import "./styles.css";
 
 function CaseWorkspace() {
@@ -54,9 +58,20 @@ export default function App() {
   if (auth.mode === "entra" && auth.account === null) {
     return <main className="case-workspace">
       <h1>Supply Response</h1>
-      <p>Sign in with the Alex demo account to open the live Case workspace.</p>
-      <button type="button" onClick={() => void auth.signIn()}>Sign in as Alex</button>
+      <p>Sign in with your Microsoft account to open your authorized workspace.</p>
+      <button type="button" onClick={() => void auth.signIn()}>Sign in</button>
     </main>;
   }
-  return <CaseWorkspace />;
+  if (auth.mode === "fallback") return <CaseWorkspace />;
+  return <VerifiedWorkspace key={auth.account!.homeAccountId} />;
+}
+
+function VerifiedWorkspace() {
+  const auth = useAuth(); const [session, setSession] = useState<SessionInfo | null>(null); const [error, setError] = useState<string | null>(null);
+  useEffect(() => {let active = true; setSession(null); setError(null); void api.me().then(value => {if (active) setSession(value);}).catch(caught => {if (active) setError(`Your signed-in role could not be verified. ${safeErrorMessage(caught)} Switch account or sign in again.`);}); return () => {active = false;};}, [auth.account?.homeAccountId]);
+  if (error) return <main className="case-workspace"><h1>Supply Response</h1><p role="alert" className="error">{error}</p><button onClick={() => void auth.switchAccount()}>Switch Microsoft account</button></main>;
+  if (!session) return <main className="case-workspace"><p role="status">Verifying your Supply Response access…</p></main>;
+  if (session.persona_id === "RL-PERSONA-TAYLOR") return <FinanceWorkspace displayName={session.display_name} onSwitchAccount={auth.switchAccount} />;
+  if (session.persona_id === "RL-PERSONA-ALEX") return <><div className="account-strip"><span>Signed in as {session.display_name ?? "Alex"}</span><button onClick={() => void auth.switchAccount()}>Switch Microsoft account</button></div><CaseWorkspace /></>;
+  return <main className="case-workspace"><h1>Supply Response</h1><p role="alert">This account is not authorized for a Supply Response workspace.</p><button onClick={() => void auth.switchAccount()}>Switch Microsoft account</button></main>;
 }

@@ -5,6 +5,7 @@ import {InvestigationEvidence} from "./InvestigationEvidence";
 import {RequiredCitationWarning} from "./EvidenceSource";
 import {OptionComparison} from "./OptionComparison";
 import {DecisionPanel} from "./DecisionPanel";
+import {IndependentApprovalPanel} from "../finance/IndependentApprovalPanel";
 import {ExecutionPanel} from "./ExecutionPanel";
 import {OutcomePanel} from "./OutcomePanel";
 import {readPlannerSnapshot} from "./plannerSnapshot";
@@ -72,12 +73,16 @@ function InvestigationPresentation({state}: {state: CaseWorkspaceState}) {
     <StagePanel index={0} activeStage={activeStage}><InvestigationEvidence {...props} row="disruption" /></StagePanel>
     <StagePanel index={1} activeStage={activeStage}><InvestigationEvidence {...props} row="responses" /></StagePanel>
     <StagePanel index={2} activeStage={activeStage}><OptionComparison disabled={state.operation !== null} analysis={analysis} selectedOption={state.selectedOption} onSelect={state.selectOption} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /></StagePanel>
-    <StagePanel index={3} activeStage={activeStage}><DecisionPanel state={state} onApprove={state.approve} onReject={state.reject} /></StagePanel>
+    <StagePanel index={3} activeStage={activeStage}>{caseInstance.workflow_version === "independent-finance-v1"
+      ? <IndependentApprovalPanel caseId={caseInstance.case_id} selectedOption={state.selectedOption} finalDecision={state.decision} onFinalDecision={state.acceptFinalDecision ?? (() => undefined)} />
+      : <DecisionPanel state={state} onApprove={state.approve} onReject={state.reject} />}</StagePanel>
     <StagePanel index={4} activeStage={activeStage}>
       {!state.decision || state.decision.kind !== "approved" ? (
         <section className="panel" aria-labelledby="execution-waiting-heading">
           <h2 id="execution-waiting-heading">Execute mitigation plan</h2>
-          <p>{state.decision?.kind === "rejected"
+          <p>{caseInstance.workflow_version === "independent-finance-v1"
+            ? "Execution is not available in this milestone until independent action planning is enabled after Alex's final approval."
+            : state.decision?.kind === "rejected"
             ? "This response was rejected. Choose a response and obtain approval before starting a mitigation plan."
             : "Approve a response in Review and approve before starting its mitigation plan."}</p>
         </section>

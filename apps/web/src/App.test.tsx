@@ -367,6 +367,7 @@ function mockFallbackCaseLifecycle(overrides: {
         ? response({detail: {code: "UNKNOWN_FAILURE", exception: "DatabaseError: password=secret"}}, 503)
         : response(runtime);
     }
+    if (path === "/api/me" && method === "GET") return response({mode: "entra", persona_id: "RL-PERSONA-ALEX", display_name: "Alex", independent_finance_enabled: true});
     if (path === "/api/cases" && method === "POST") return response(caseInstance, 201);
     if (path === "/api/cases/RL-CASE-1/analysis" && method === "POST") {
       if (overrides.analysis instanceof Promise) return overrides.analysis;
@@ -771,7 +772,7 @@ describe("progressive Case workspace", () => {
 
     render(<AuthProvider config={entraConfig} client={client}><App /></AuthProvider>);
 
-    const signIn = await screen.findByRole("button", {name: "Sign in as Alex"});
+    const signIn = await screen.findByRole("button", {name: "Sign in"});
     expect(fetchMock).not.toHaveBeenCalled();
     await userEvent.click(signIn);
     expect(client.loginRedirect).toHaveBeenCalledWith({
@@ -788,10 +789,30 @@ describe("progressive Case workspace", () => {
     render(<AuthProvider config={entraConfig} client={client}><App /></AuthProvider>);
 
     expect(await screen.findByText("Fictional scenario · Uses predefined sample data")).toBeVisible();
-    expect(screen.queryByRole("button", {name: "Sign in as Alex"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", {name: "Sign in"})).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/api/runtime", {
       headers: {Authorization: "Bearer test-api-token"},
     });
+  });
+
+  it("verifies Taylor before mounting only the Finance inbox", async () => {
+    const client = authenticatedClient();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      if (path === "/api/me") return response({mode: "entra", persona_id: "RL-PERSONA-TAYLOR", display_name: "Taylor", independent_finance_enabled: true});
+      if (path === "/api/finance/reviews") return response([]);
+      throw new Error(`Taylor must not request planner data: ${path}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AuthProvider config={entraConfig} client={client}><App /></AuthProvider>);
+
+    expect(await screen.findByRole("heading", {name: "Finance requests"})).toBeVisible();
+    expect(screen.getByText("No Finance requests are waiting.")).toBeVisible();
+    expect(fetchMock.mock.calls.map(([input]) => new URL(String(input), "http://localhost").pathname)).toEqual([
+      "/api/me", "/api/finance/reviews",
+    ]);
+    expect(screen.queryByRole("button", {name: "Create showcase case"})).not.toBeInTheDocument();
   });
 
   it("shows session recovery instead of a misleading workspace failure", async () => {
@@ -805,7 +826,7 @@ describe("progressive Case workspace", () => {
     expect(await screen.findByRole("alert", {name: "Sign-in required"})).toHaveTextContent(
       "We couldn't renew your sign-in. Sign in again to continue.",
     );
-    await waitFor(() => expect(screen.getByText(/Unable to initialize the Case workspace/)).not.toBeVisible());
+    await waitFor(() => expect(screen.getByText(/signed-in role could not be verified/)).not.toBeVisible());
     expect(screen.queryByText("raw renewal timeout")).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });

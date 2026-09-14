@@ -49,6 +49,7 @@ export interface CaseWorkspaceState {
   retryPlanning: () => Promise<void>;
   retryAction: (actionId: string) => Promise<void>;
   startPlayback: () => Promise<void>;
+  acceptFinalDecision?: (decision: Decision) => void;
 }
 
 const POLL_INTERVAL_MS = 250;
@@ -123,6 +124,9 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     setCaseInstance(null); setAnalysis(null); setSelectedOption(null); setDecision(null);
     setActions([]); setDrafts([]); setPlayback(null); setObservations([]);
   }, []);
+  const acceptFinalDecision = useCallback((next: Decision) => {
+    if (mounted.current && next.case_id === caseInstance?.case_id && next.analysis_id === analysis?.analysis_id) setDecision(next);
+  }, [analysis?.analysis_id, caseInstance?.case_id]);
 
   const loadExistingCases = useCallback(async () => {
     const token = begin("listing");
@@ -531,6 +535,6 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     reject,
     retryPlanning,
     retryAction,
-    startPlayback,
+    startPlayback, acceptFinalDecision,
   };
 }

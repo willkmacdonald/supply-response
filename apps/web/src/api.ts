@@ -9,12 +9,19 @@ import type {
   OutcomeObservation,
   Playback,
   RuntimeStatus,
+  SessionInfo, ProposalState, SubmissionResult, FinanceReviewDetail, ResolutionResult,
+  SubmitProposalInput, ResolveFinanceInput, FinalizeProposalInput,
 } from "./types";
 
 export const API_BASE = "";
 
 const SAFE_ERROR_MESSAGES = new Map<string, string>([
   ["LIVE_SOURCE_UNAVAILABLE", "The information needed for this analysis could not be retrieved."],
+  ["FINANCE_WORKFLOW_DISABLED", "Independent Finance review is not enabled for new commands."],
+  ["STALE_PROPOSAL", "The proposal changed. Refresh and reselect the response before continuing."],
+  ["FINANCE_COMMAND_CONFLICT", "This Finance command conflicts with the current request. Refresh before continuing."],
+  ["FINANCE_FINALIZATION_CONFLICT", "Final approval conflicts with the current proposal. Refresh before continuing."],
+  ["ACTION_PLANNING_RETRY_NOT_AVAILABLE", "Independent action planning is not enabled for retry."],
 ]);
 const GENERIC_ERROR_MESSAGE = "The request could not be completed.";
 
@@ -76,6 +83,7 @@ async function post<T>(path: string, body: object, headers: Record<string, strin
 }
 
 export const api = {
+  me: (): Promise<SessionInfo> => get("/api/me"),
   runtime: (): Promise<RuntimeStatus> => get("/api/runtime"),
   cases: (): Promise<CaseInstance[]> => get("/api/cases"),
   case: (caseId: string): Promise<CaseInstance> => get(`/api/cases/${encodeURIComponent(caseId)}`),
@@ -103,4 +111,15 @@ export const api = {
     get(`/api/decisions/${decisionId}/playback`),
   observations: (decisionId: string): Promise<OutcomeObservation[]> =>
     get(`/api/decisions/${decisionId}/observations`),
+  proposal: (caseId: string): Promise<ProposalState> =>
+    get(`/api/cases/${encodeURIComponent(caseId)}/proposal`),
+  submitProposal: (caseId: string, input: SubmitProposalInput, key: string): Promise<SubmissionResult> =>
+    post(`/api/cases/${encodeURIComponent(caseId)}/proposals`, input, {"Idempotency-Key": key}),
+  financeReviews: (): Promise<FinanceReviewDetail[]> => get("/api/finance/reviews"),
+  financeReview: (reviewId: string): Promise<FinanceReviewDetail> =>
+    get(`/api/finance/reviews/${encodeURIComponent(reviewId)}`),
+  resolveFinanceReview: (reviewId: string, input: ResolveFinanceInput, key: string): Promise<ResolutionResult> =>
+    post(`/api/finance/reviews/${encodeURIComponent(reviewId)}/resolutions`, input, {"Idempotency-Key": key}),
+  finalizeProposal: (caseId: string, input: FinalizeProposalInput, key: string): Promise<Decision> =>
+    post(`/api/cases/${encodeURIComponent(caseId)}/proposal-decisions`, input, {"Idempotency-Key": key}),
 };

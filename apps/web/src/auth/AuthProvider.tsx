@@ -11,7 +11,7 @@ export interface AuthClient {
   getAllAccounts(): AuthAccount[];
   getActiveAccount(): AuthAccount | null;
   setActiveAccount(account: AuthAccount | null): void;
-  loginRedirect(request: {scopes: string[]; redirectStartPage?: string}): Promise<void>;
+  loginRedirect(request: {scopes: string[]; redirectStartPage?: string; prompt?: "select_account"}): Promise<void>;
   acquireTokenSilent(request: {account: AuthAccount; scopes: string[]}): Promise<{accessToken: string}>;
   acquireTokenRedirect(request: {account: AuthAccount; scopes: string[]; redirectStartPage?: string}): Promise<void>;
 }
@@ -20,6 +20,7 @@ interface AuthContextValue {
   mode: "fallback" | "entra";
   account: AuthAccount | null;
   signIn(): Promise<void>;
+  switchAccount(): Promise<void>;
   getAccessToken(): Promise<string | null>;
 }
 
@@ -27,6 +28,7 @@ const fallbackValue: AuthContextValue = {
   mode: "fallback",
   account: null,
   signIn: async () => undefined,
+  switchAccount: async () => undefined,
   getAccessToken: async () => null,
 };
 
@@ -143,6 +145,16 @@ export function AuthProvider({
     }
   }, [client, config]);
 
+  const switchAccount = useCallback(async () => {
+    if (!client || !config || interactiveRedirect.current) return;
+    recoveryRequired.current = true;
+    setAuthRecovery(true);
+    interactiveRedirect.current = client.loginRedirect({
+      scopes: [config.apiScope], prompt: "select_account", redirectStartPage: window.location.href,
+    }).finally(() => { interactiveRedirect.current = null; });
+    try { await interactiveRedirect.current; } catch { setAuthFailure(true); setReady(false); }
+  }, [client, config]);
+
   const recoverSignIn = useCallback(async () => {
     if (!client || !config) return;
     if (!interactiveRedirect.current) {
@@ -171,8 +183,9 @@ export function AuthProvider({
     mode: "entra",
     account,
     signIn,
+    switchAccount,
     getAccessToken,
-  } : fallbackValue, [account, config, getAccessToken, signIn]);
+  } : fallbackValue, [account, config, getAccessToken, signIn, switchAccount]);
 
   return <AuthContext.Provider value={value}>
     {authFailure

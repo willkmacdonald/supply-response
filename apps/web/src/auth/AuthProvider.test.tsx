@@ -22,6 +22,7 @@ function Consumer() {
     <span data-testid="mode">{auth.mode}</span>
     <span data-testid="name">{auth.account?.name ?? "anonymous"}</span>
     <button onClick={() => void auth.signIn()}>Sign in</button>
+    <button onClick={() => void auth.switchAccount()}>Switch account</button>
     <button onClick={() => void auth.getAccessToken().then((token) => {
       document.body.dataset.token = token ?? "none";
     }).catch(() => undefined)}>Get token</button>
@@ -174,6 +175,18 @@ describe("AuthProvider", () => {
     expect(client.loginRedirect).toHaveBeenCalledWith({
       scopes: [entraConfig.apiScope],
       redirectStartPage: "http://localhost:3000/",
+    });
+  });
+
+  it("uses real account selection and preserves an exact Finance review deep link", async () => {
+    window.history.replaceState(null, "", "/?financeReviewId=review%2F1&from=inbox");
+    const client = fakeClient();
+    render(<AuthProvider config={entraConfig} client={client}><Consumer /></AuthProvider>);
+    await screen.findByTestId("name");
+    await userEvent.click(screen.getByRole("button", {name: "Switch account"}));
+    expect(client.loginRedirect).toHaveBeenCalledWith({
+      scopes: [entraConfig.apiScope], prompt: "select_account",
+      redirectStartPage: "http://localhost:3000/?financeReviewId=review%2F1&from=inbox",
     });
   });
 

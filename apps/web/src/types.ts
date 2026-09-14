@@ -10,6 +10,7 @@ export type CaseStatus =
   | "closed";
 
 export type RuntimeMode = "live" | "fallback";
+export type WorkflowVersion = "standing-authorization-v1" | "independent-finance-v1";
 export type CasePurpose = "automated_test" | "rehearsal" | "showcase";
 export type CorpusScope = "demo_corpus" | "real_business" | "unspecified";
 export type ExternalSideEffect =
@@ -38,6 +39,7 @@ export interface CaseInstance {
   recorded_at: string;
   projection_updated_at: string;
   controls: CaseControls;
+  workflow_version?: WorkflowVersion;
 }
 
 export interface CaseControls {
@@ -111,6 +113,36 @@ export interface ActorProvenance {
   identity_source: "entra";
   source_id: string;
 }
+
+export interface IdentitySnapshot {
+  persona_id: string;
+  effective_roles: string[];
+  identity_source: "entra";
+  source_id: string;
+  tenant_id: string | null;
+  object_id: string | null;
+  display_name: string | null;
+  user_principal_name: string | null;
+}
+
+export interface SessionInfo {
+  mode: "entra" | "fallback";
+  persona_id: string | null;
+  display_name: string | null;
+  independent_finance_enabled: boolean;
+}
+
+export interface ProposalToken { generation: number; analysis_id: string | null; analysis_material_hash: string | null; selection_id: string | null }
+export interface FinanceProposal { case_id: string; analysis_id: string; analysis_material_hash: string; option_id: string; response_cost: string }
+export interface ProposalSelection { selection_id: string; proposal: FinanceProposal; workflow_version: WorkflowVersion; submitted_by: IdentitySnapshot; submitted_at: string; finance_review_id: string | null }
+export interface FinanceReview { review_id: string; proposal: FinanceProposal; submitted_by: IdentitySnapshot; submitted_at: string; status: "pending" | "approved" | "rejected" | "superseded"; reviewed_by: IdentitySnapshot | null; reviewed_at: string | null; reason: string | null; superseded_at: string | null }
+export interface ProposalState { token: ProposalToken; selection: ProposalSelection | null; review: FinanceReview | null; review_revision: number | null }
+export interface SubmissionResult { selection: ProposalSelection; review: FinanceReview | null; review_revision: number | null }
+export interface ResolutionResult { review: FinanceReview; review_revision: number }
+export interface FinanceReviewDetail { selection: ProposalSelection; review: FinanceReview; review_revision: number; analysis: AnalysisVersion; option: ResponseOption; is_current: boolean; current_token: ProposalToken }
+export interface SubmitProposalInput { option_id: string; expected: ProposalToken }
+export interface ResolveFinanceInput { expected: ProposalToken; expected_review_revision: number; approved: boolean; reason?: string }
+export interface FinalizeProposalInput { expected: ProposalToken; kind: "approved" | "rejected"; rejection_reason?: string }
 
 export interface ResponseOptionEvidenceRequirement {
   evidence_id: string;
@@ -381,6 +413,7 @@ export interface Decision {
   projection_updated_at: string;
   action_planning_status: "not_applicable" | "pending" | "failed" | "complete";
   new_analysis_available: boolean;
+  proposal_approval_evidence?: {selection: ProposalSelection; review: FinanceReview | null; review_revision: number | null} | null;
 }
 
 export interface ExecutionAction {
