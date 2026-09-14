@@ -2,7 +2,7 @@ import json
 import sqlite3
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from threading import Barrier, local
@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 
 import services.persistence.proposals as proposals_module
 from data.domain import CasePurpose, RuntimeMode
-from data.domain.analysis import AnalysisResponseOptionMaterial
+from data.domain.analysis import AnalysisResponseOptionMaterial, AnalysisVersion
 from data.domain.cases import WorkflowVersion
 from data.domain.decisions import (
     ApprovalSatisfaction,
@@ -31,8 +31,9 @@ from data.domain.decisions import (
 )
 from data.domain.evidence import IdentitySource
 from data.domain.execution import ActionPlanningRequested
-from data.domain.finance import FinanceReviewStatus
+from data.domain.finance import FinanceReview, FinanceReviewStatus
 from data.domain.finance_decisions import ProposalApprovalEvidence
+from data.domain.proposals import SelectionReceipt
 from data.synthetic.rl001 import build_rl001_evidence, instantiate_rl001
 from services.analysis.service import AnalyzeCaseCommand, analyze_case
 from services.decisions.service import (
@@ -1091,6 +1092,7 @@ def _sqlite_lock_or_raise(error: OperationalError) -> str:
 def test_file_sqlite_finalization_races_at_first_state_read(
     final_ctx, monkeypatch, operation
 ):
+    later: AnalysisVersion | None = None
     if operation == "resolve":
         submit(final_ctx)
         primary = command(final_ctx, DecisionKind.REJECTED, key="race-reject")
@@ -1346,6 +1348,124 @@ def test_file_sqlite_finalization_races_at_first_state_read(
         else:
             assert isinstance(winner, ResolutionResult)
             assert winner.review == durable_state.review
+
+    # Every journal is append-only. Constrain the entire delta, regardless of
+    # which side won; branch-local counts cannot prove losing writes rolled back.
+    added: dict[str, tuple[dict[str, Any], ...]] = {}
+    for name in baseline.keys() - {"projection"}:
+        assert all(row in durable[name] for row in baseline[name]), name
+        added[name] = tuple(row for row in durable[name] if row not in baseline[name])
+
+    assert len(stored) <= 1
+    assert len(added["decisions"]) == len(stored)
+    if stored:
+        assert (
+            tuple(
+                Decision.model_validate_json(row["payload_json"])
+                for row in added["decisions"]
+            )
+            == stored
+        )
+        assert stored == (
+            results[0] if isinstance(results[0], Decision) else results[1],
+        )
+        assert added["decisions"][0]["decision_id"] == stored[0].decision_id
+        assert len(added["satisfactions"]) == int(
+            stored[0].kind is DecisionKind.APPROVED
+        )
+        assert {row["payload_json"] for row in added["satisfactions"]} == {
+            serialize_model(item) for item in stored[0].approval_satisfactions
+        }
+        assert all(
+            row["decision_id"] == stored[0].decision_id
+            for row in added["satisfactions"]
+        )
+        assert len(added["events"]) == int(stored[0].kind is DecisionKind.APPROVED)
+        for row in added["events"]:
+            event = ActionPlanningRequested.model_validate_json(row["payload_json"])
+            assert event == ActionPlanningRequested(
+                event_id=row["event_id"],
+                decision_id=stored[0].decision_id,
+                case_id=stored[0].case_id,
+                analysis_id=stored[0].analysis_id,
+                created_at=stored[0].decided_at,
+                available_at=stored[0].decided_at,
+            )
+            assert row["decision_id"] == stored[0].decision_id
+    else:
+        assert added["decisions"] == added["satisfactions"] == added["events"] == ()
+
+    publication_won = operation == "proposal_publish" and not stored
+    analysis_won = operation == "analysis_save" and not stored
+    if publication_won:
+        assert isinstance(results[1], SubmissionResult)
+        assert len(added["selections"]) == 1
+        receipt = SelectionReceipt.model_validate_json(
+            added["selections"][0]["payload_json"]
+        )
+        assert receipt.selection == results[1].selection
+        assert receipt.expected == primary.expected
+        assert receipt.idempotency_key == "finance-submit:race-publish"
+        assert added["selections"][0]["selection_id"] == receipt.selection.selection_id
+    else:
+        assert added["selections"] == ()
+    if analysis_won:
+        assert later is not None
+        assert len(added["analyses"]) == 1
+        assert added["analyses"][0]["analysis_id"] == later.analysis_id
+        assert added["analyses"][0]["payload_json"] == serialize_model(later)
+        assert len(added["evidence"]) == len(later.evidence_items)
+        assert {
+            (row["analysis_id"], row["evidence_id"], row["payload_json"])
+            for row in added["evidence"]
+        } == {
+            (later.analysis_id, item.evidence_id, serialize_model(item))
+            for item in later.evidence_items
+        }
+        assert projection.current_analysis_hash == later.material_hash
+    else:
+        assert added["analyses"] == added["evidence"] == ()
+        assert projection.current_analysis_id == primary.expected.analysis_id
+        assert (
+            projection.current_analysis_hash == primary.expected.analysis_material_hash
+        )
+
+    review_changed = publication_won or analysis_won or operation == "resolve"
+    assert len(added["reviews"]) == int(review_changed)
+    if review_changed:
+        prior_row = max(baseline["reviews"], key=lambda row: row["revision"])
+        prior_review = FinanceReview.model_validate_json(prior_row["payload_json"])
+        if operation == "resolve" and not stored:
+            assert isinstance(results[1], ResolutionResult)
+            expected_review = results[1].review
+            expected_key = "finance-resolve:race-resolve"
+        else:
+            if publication_won:
+                assert isinstance(results[1], SubmissionResult)
+                superseded_at = results[1].selection.submitted_at
+                expected_key = (
+                    f"selection-supersede:{results[1].selection.selection_id}"
+                )
+            elif analysis_won:
+                assert later is not None
+                superseded_at = durable["projection"]["updated_at"].replace(tzinfo=UTC)
+                expected_key = f"analysis-supersede:{later.analysis_id}"
+            else:
+                superseded_at = stored[0].decided_at
+                expected_key = f"decision-withdraw:{stored[0].decision_id}"
+            expected_review = prior_review.model_copy(
+                update={
+                    "status": FinanceReviewStatus.SUPERSEDED,
+                    "superseded_at": superseded_at,
+                }
+            )
+        revision = added["reviews"][0]
+        assert revision["review_id"] == prior_review.review_id
+        assert revision["revision"] == prior_row["revision"] + 1
+        assert revision["status"] == expected_review.status.value
+        assert revision["payload_json"] == serialize_model(expected_review)
+        assert revision["idempotency_key"] == expected_key
+
     approved_count = sum(item.kind is DecisionKind.APPROVED for item in stored)
     counts = row_counts(final_ctx)
     assert counts[1] == approved_count
