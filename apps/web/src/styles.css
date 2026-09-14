@@ -150,6 +150,12 @@ h3 { margin: 0.75rem 0 0.45rem; }
 .source-footers .evidence-footer { padding-top: 0.5rem; }
 .saved-analysis-footer { margin-top: auto; border-top: 1px solid #dde4dd; padding-top: 0.9rem; font-size: 0.8rem; color: #52645e; }
 .existing-case-list { display: grid; gap: .75rem; padding: 0; list-style: none; }
+.featured-demo { padding: 1rem; border: 1px solid #a8c6b9; border-radius: .9rem; background: #edf8f2; }
+.featured-demo h3 { margin-top: 0; }
+.other-saved-cases { margin-top: 1.2rem; }
+.new-demo-note { margin-top: 0; color: #d4e6df; }
+.existing-case-list li { flex-wrap: wrap; }
+.existing-case-list .case-id { overflow-wrap: anywhere; }
 .existing-case-list li { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .9rem; border: 1px solid #dde4dd; border-radius: .75rem; }
 .existing-case-list li div { display: grid; gap: .25rem; }
 .reopen-note { color: #52645e; font-size: .9rem; }

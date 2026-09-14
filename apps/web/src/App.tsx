@@ -38,6 +38,7 @@ function CaseWorkspace({independentFinanceEnabled = true}: {independentFinanceEn
       onAnalyze={workspace.analyze}
     />
     <ExistingCases cases={workspace.existingCases} error={workspace.existingCasesError}
+      featuredCaseId={workspace.runtime?.runtime_mode === "live" ? "RL-CASE-bcbb8740-c770-42fd-aa67-981d08b66383" : undefined}
       busy={workspace.operation !== null}
       loading={workspace.operation === "listing"} reopening={workspace.operation === "reopening"}
       onLoad={workspace.loadExistingCases} onReopen={workspace.reopen} />

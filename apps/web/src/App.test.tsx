@@ -40,6 +40,10 @@ function authenticatedClient(): AuthClient {
 async function selectDecisionStage() {
   await userEvent.click(await screen.findByRole("tab", {name: "3. Choose a response"}));
 }
+async function openOtherSavedCases() {
+  const summary = screen.getByText("Other saved cases");
+  if (!summary.closest("details")?.open) await userEvent.click(summary);
+}
 async function selectApprovalStage() {
   await userEvent.click(await screen.findByRole("tab", {name: "4. Review and approve"}));
 }
@@ -647,9 +651,10 @@ describe("reopening lifecycle and operation safety", () => {
     const mock = savedReads({"/api/cases": new Promise<Response>(r => {resolveList = r;})});
     render(<App />);
     await screen.findByText("Fictional scenario · Uses predefined sample data");
+    await openOtherSavedCases();
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     expect(screen.getByRole("button", {name: "Finding existing cases…"})).toBeDisabled();
-    expect(screen.getByRole("button", {name: "Create showcase case"})).toBeDisabled();
+    expect(screen.getByRole("button", {name: "Start a new demo"})).toBeDisabled();
     expect(screen.queryByText("Creating Case workspace…")).not.toBeInTheDocument();
     expect(screen.queryByText("Analyzing disruption…")).not.toBeInTheDocument();
     await act(async () => resolveList(await response({detail: {code: "READ_FAILED"}}, 503)));
@@ -679,6 +684,7 @@ describe("reopening lifecycle and operation safety", () => {
     render(<App />);
     await selectDecisionStage();
     await screen.findByText("Combined response");
+    await openOtherSavedCases();
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     expect(screen.getByRole("button", {name: "Selected: Combined response"})).toBeDisabled();
     expect(screen.getByRole("button", {name: "Continue to review and approve"})).toBeDisabled();
@@ -693,7 +699,8 @@ describe("reopening lifecycle and operation safety", () => {
     render(<StrictMode><App /></StrictMode>);
     if (!bookmark) {
       await waitFor(() => expect(screen.getByRole("button", {name: "Find existing cases"})).toBeEnabled());
-      await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
+      await openOtherSavedCases();
+    await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
       await userEvent.click(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"}));
     }
     await selectDecisionStage();
@@ -813,7 +820,7 @@ describe("progressive Case workspace", () => {
     expect(fetchMock.mock.calls.map(([input]) => new URL(String(input), "http://localhost").pathname)).toEqual([
       "/api/me", "/api/finance/reviews",
     ]);
-    expect(screen.queryByRole("button", {name: "Create showcase case"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", {name: "Start a new demo"})).not.toBeInTheDocument();
   });
 
   it("shows session recovery instead of a misleading workspace failure", async () => {
@@ -846,7 +853,7 @@ describe("progressive Case workspace", () => {
     render(<App />);
     expect(await screen.findByText("Fictional scenario · Uses predefined sample data")).toBeVisible();
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
-    await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
+    await userEvent.click(screen.getByRole("button", {name: "Start a new demo"}));
     expect(await screen.findByRole("status")).toHaveTextContent("Creating Case workspace…");
     await act(async () => resolveCase(await response(caseInstance, 201)));
     expect(await screen.findByText(/RL-CASE-1/)).toBeInTheDocument();
@@ -856,7 +863,7 @@ describe("progressive Case workspace", () => {
     const fetchMock = mockFallbackCaseLifecycle();
     render(<StrictMode><App /></StrictMode>);
     await screen.findByText("Fictional scenario · Uses predefined sample data");
-    await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
+    await userEvent.click(screen.getByRole("button", {name: "Start a new demo"}));
     await screen.findByText(/RL-CASE-1/);
     const createCalls = fetchMock.mock.calls.filter(([input, init]) =>
       new URL(String(input), "http://localhost").pathname === "/api/cases" && init?.method === "POST"
@@ -868,7 +875,7 @@ describe("progressive Case workspace", () => {
     mockFallbackCaseLifecycle();
     render(<App />);
     expect(await screen.findByText("Fictional scenario · Uses predefined sample data")).toBeVisible();
-    await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
+    await userEvent.click(screen.getByRole("button", {name: "Start a new demo"}));
     await screen.findByText(/RL-CASE-1/);
     expect(screen.getByText("Scenario time: Sep 1, 2026, 9:00 AM CDT")).toBeVisible();
     expect(screen.getByText("Power BI unavailable in fallback")).toBeVisible();
@@ -900,7 +907,7 @@ describe("progressive Case workspace", () => {
     mockFallbackCaseLifecycle({analysis: delayedAnalysis});
     render(<App />);
     await screen.findByText("Fictional scenario · Uses predefined sample data");
-    await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
+    await userEvent.click(screen.getByRole("button", {name: "Start a new demo"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     expect(await screen.findByRole("status")).toHaveTextContent("Analysis in progress. Source retrieval and evidence checks will be shown when the analysis completes.");
     await act(async () => resolveAnalysis(await response(analysis, 201)));
@@ -912,7 +919,7 @@ describe("progressive Case workspace", () => {
     mockFallbackCaseLifecycle();
     render(<App />);
     await screen.findByText("Fictional scenario · Uses predefined sample data");
-    await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
+    await userEvent.click(screen.getByRole("button", {name: "Start a new demo"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     await selectDecisionStage();
     const beta = await screen.findByRole("article", {name: "Use the alternate supplier"});
@@ -931,7 +938,7 @@ describe("progressive Case workspace", () => {
     mockFallbackCaseLifecycle({analysis: blockedAnalysis});
     render(<App />);
     await screen.findByText("Fictional scenario · Uses predefined sample data");
-    await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
+    await userEvent.click(screen.getByRole("button", {name: "Start a new demo"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     await selectDecisionStage();
     await selectApprovalStage();
@@ -952,7 +959,7 @@ describe("progressive Case workspace", () => {
     mockFallbackCaseLifecycle({analysis: staleAnalysis});
     render(<App />);
     await screen.findByText("Fictional scenario · Uses predefined sample data");
-    await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
+    await userEvent.click(screen.getByRole("button", {name: "Start a new demo"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     await selectDecisionStage();
     await selectApprovalStage();
@@ -966,7 +973,7 @@ describe("progressive Case workspace", () => {
     mockFallbackCaseLifecycle({decision: failedDecision, retryDecision: decision});
     render(<App />);
     await screen.findByText("Fictional scenario · Uses predefined sample data");
-    await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
+    await userEvent.click(screen.getByRole("button", {name: "Start a new demo"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     await selectDecisionStage();
     await screen.findByText("Combined response");
@@ -983,7 +990,7 @@ describe("progressive Case workspace", () => {
     mockFallbackCaseLifecycle({actions: [{...actions[0], status: "failed"}, ...actions.slice(1)]});
     render(<App />);
     await screen.findByText("Fictional scenario · Uses predefined sample data");
-    await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
+    await userEvent.click(screen.getByRole("button", {name: "Start a new demo"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     await selectDecisionStage();
     await screen.findByText("Combined response");
@@ -1010,7 +1017,7 @@ describe("progressive Case workspace", () => {
     mockFallbackCaseLifecycle({decision: rejectedDecision});
     render(<App />);
     await screen.findByText("Fictional scenario · Uses predefined sample data");
-    await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
+    await userEvent.click(screen.getByRole("button", {name: "Start a new demo"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     await selectDecisionStage();
     await screen.findByText("Combined response");
@@ -1027,7 +1034,7 @@ describe("progressive Case workspace", () => {
     const fetchMock = mockFallbackCaseLifecycle();
     render(<App />);
     await screen.findByText("Fictional scenario · Uses predefined sample data");
-    await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
+    await userEvent.click(screen.getByRole("button", {name: "Start a new demo"}));
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     await selectDecisionStage();
     await screen.findByText("Combined response");
@@ -1069,7 +1076,7 @@ describe("progressive Case workspace", () => {
     const fetchMock = mockFallbackCaseLifecycle();
     render(<App />);
     await screen.findByText("Fictional scenario · Uses predefined sample data");
-    await userEvent.click(screen.getByRole("button", {name: "Create showcase case"}));
+    await userEvent.click(screen.getByRole("button", {name: "Start a new demo"}));
     await screen.findByText(/RL-CASE-1/);
     await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
     await screen.findByText("Combined response");
@@ -1098,6 +1105,7 @@ describe("progressive Case workspace", () => {
 
     render(<App />);
     await screen.findByText("Fictional scenario · Uses predefined sample data");
+    await openOtherSavedCases();
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     expect(await screen.findByText(/Awaiting decision/)).toBeVisible();
     expect(screen.getByText(/RL-CASE-1/)).toBeVisible();
@@ -1112,6 +1120,7 @@ describe("progressive Case workspace", () => {
     expect(new URL(window.location.href).searchParams.get("caseId")).toBe("RL-CASE-1");
     expect(new URL(window.location.href).searchParams.get("analysisId")).toBe("RL-ANALYSIS-1");
     expect(new URL(window.location.href).searchParams.get("view")).toBe("planner");
+    await openOtherSavedCases();
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     expect(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"})).toBeEnabled();
     expect(screen.getByText("Combined response")).toBeVisible();
@@ -1130,6 +1139,7 @@ describe("progressive Case workspace", () => {
     window.history.replaceState(null, "", "/");
     render(<App />);
     await screen.findByText("Fictional scenario · Uses predefined sample data");
+    await openOtherSavedCases();
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     await userEvent.click(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"}));
     expect(await screen.findByRole("button", {name: "Analyze disruption"})).toBeEnabled();
@@ -1174,6 +1184,7 @@ describe("progressive Case workspace", () => {
     window.history.replaceState(null, "", "/");
     render(<App />);
     await screen.findByText("Fictional scenario · Uses predefined sample data");
+    await openOtherSavedCases();
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     await userEvent.click(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"}));
     await selectApprovalStage();
@@ -1202,6 +1213,7 @@ describe("progressive Case workspace", () => {
     window.history.replaceState(null, "", "/");
     render(<App />);
     await screen.findByText("Fictional scenario · Uses predefined sample data");
+    await openOtherSavedCases();
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
     await userEvent.click(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"}));
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to reopen this case");

@@ -1,6 +1,7 @@
 import type {CaseInstance} from "../types";
 
 interface Props {
+  featuredCaseId?: string;
   cases: CaseInstance[] | null;
   loading: boolean;
   reopening: boolean;
@@ -21,22 +22,32 @@ function recordedLabel(value: string): string {
     .format(new Date(value));
 }
 
-export function ExistingCases({cases, loading, reopening, busy, error, onLoad, onReopen}: Props) {
+export function ExistingCases({cases, loading, reopening, busy, error, onLoad, onReopen, featuredCaseId}: Props) {
+  const otherCases = cases?.filter(item => item.case_id !== featuredCaseId);
   return <section className="panel existing-cases" aria-labelledby="existing-cases-heading">
-    <h2 id="existing-cases-heading">Reopen existing case</h2>
-    <p>Open saved planning work without creating a case or refreshing its evidence.</p>
+    <h2 id="existing-cases-heading">{featuredCaseId ? "Resume your demo" : "Saved demos"}</h2>
+    {featuredCaseId && <div className="featured-demo">
+      <h3>Supplier Alpha delay</h3>
+      <p>The supplier email and analysis are already saved. Resume the disruption review and approval workflow.</p>
+      <button type="button" disabled={busy || loading || reopening} onClick={() => onReopen(featuredCaseId)}>Resume the analyzed disruption</button>
+      <p className="saved-analysis-footer">This opens an existing case. It does not check for a new email or run a new analysis.</p>
+    </div>}
+    {error && <p className="error" role="alert">{error}</p>}
+    <details className="other-saved-cases"><summary>Other saved cases</summary>
+    <p>Older saved work is kept here. Opening it does not create a case or refresh its evidence.</p>
     <button type="button" className="secondary" disabled={busy || loading || reopening} onClick={onLoad}>
       {loading ? "Finding existing cases…" : error ? "Try finding cases again" : "Find existing cases"}
     </button>
-    {error && <p className="error" role="alert">{error}</p>}
     {cases?.length === 0 && <p>No existing cases are available.</p>}
-    {cases && cases.length > 0 && <ul className="existing-case-list">
-      {cases.map(item => <li key={item.case_id}>
+    {cases && cases.length > 0 && otherCases?.length === 0 && <p>No other saved cases are available.</p>}
+    {otherCases && otherCases.length > 0 && <ul className="existing-case-list">
+      {otherCases.map(item => <li key={item.case_id}>
         <div><strong>{statusLabels[item.status]}</strong><span>Recorded {recordedLabel(item.recorded_at)}</span>
           <span className="case-id">{item.case_id}</span></div>
         <button type="button" disabled={busy || loading || reopening} onClick={() => onReopen(item.case_id)}
           aria-label={`Reopen case ${item.case_id}`}>Reopen</button>
       </li>)}
     </ul>}
+    </details>
   </section>;
 }

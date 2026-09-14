@@ -1,5 +1,40 @@
 # Supply Response Personal-Tenant Deployment Plan
 
+## Simplified demo launcher release — 2026-09-14 UTC
+
+Scope: user-approved featured resume for the verified analyzed disruption,
+collapsed older cases, and separate honest new-demo copy. No records deleted;
+no API, schema, identity, approval, mail, or infrastructure design changes.
+Same approved Azure Dev / East US 2 / rg-supply-response-demo / ca-sr-demo target.
+
+### All validation checks pass — launcher
+
+- [x] 1. AZD Installation: 1.30.0.
+- [x] 2. Schema Validation: official Microsoft azure.yaml JSON schema passed.
+- [x] 3. Environment Setup: existing supply-response-personal profile verified.
+- [x] 4. Authentication Check: interactive Will account authenticated.
+- [x] 5. Subscription/Location Check: guarded exact-target preflight passed.
+- [x] 6. Aspire Pre-Provisioning Checks: not applicable.
+- [x] 7. Provision Preview: passed, existing resources only; no creates/deletes.
+- [x] 8. Build Verification: TypeScript/Vite passed; 351 web tests passed.
+- [x] 9. Docker Build Context Validation: unchanged Dockerfile/four Entra args,
+  package-lock present; supported guarded ACR build path unchanged.
+- [x] 10. Package Validation: azd package passed (no declared services).
+- [x] 11. Azure Policy Validation: existing seven assignments, preview passed.
+- [x] 12. Aspire Post-Provisioning Checks: not applicable.
+
+### Section 7: Validation Proof — launcher
+
+Fresh checks above executed 2026-09-14 UTC with `.tmp/approval_release.py`
+preflight/preview/package. Static review confirms exact resource-scoped app
+AcrPull, Key Vault Secrets User and Foundry project User roles unchanged;
+live assignments also verified. No SQL migration/grant required.
+New tests failed before implementation; 351 web tests and production build pass.
+1440px/390px local browser checks pass: collapsed list, exact featured case
+navigation, twelve other fixture cases retained, no overflow or page errors.
+Screenshots in `.tmp/launcher-proof/` inspected; fixture explicitly simulated.
+Independent read-only review found no actionable issues. Live proof pending.
+
 ## Response selection feedback release — 2026-09-14 UTC
 
 Scope: approved visible selected-card feedback and navigation to approval only.
@@ -40,7 +75,7 @@ Restored Combined and verified its original waiting-for-Taylor review remained.
 No submission, approval, mail, execution, new case, or new analysis was performed.
 Prior revision29 approval acceptance below is historical.
 
-> **Status:** Deployed — response selection feedback source0347765 is live on ca-sr-demo--0000030. Live Alex selection and continuation browser checks passed.
+> **Status:** Validated — simplified demo launcher; fresh validation proof above. Existing revision30 retained until release.
 
 ## Independent approval browser release — 2026-09-13
 
