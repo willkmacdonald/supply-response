@@ -85,12 +85,13 @@ Its written design was approved September 13; none of these additions is claimed
 deployed by this roadmap update. Historical cases keep their original evidence.
 
 September 13 local progress: independent Finance rules, durable review history,
-versioned case policy, current-proposal storage, submission/review commands and
-current/historical queries have passed independent review. The query checkpoint
-passes 357 backend tests (15 live tests excluded). Five-stage navigation
+versioned case policy, current-proposal storage, submission/review commands,
+current/historical queries and proposal-bound final Decisions have passed
+independent review. The final-Decision checkpoint passes 417 backend tests
+(15 live tests excluded). Five-stage navigation
 passes 331 frontend tests, the production build, and local desktop/phone browser
-checks. Taylor's authenticated inbox, final-decision enforcement and the new
-email workflow are not connected or enabled yet; see the
+checks. Taylor's authenticated inbox, application-route integration, execution
+safeguards and the new email workflow are not connected or enabled yet; see the
 [increment evidence and remaining gates](reviews/2026-09-13-email-workflow-progress.md).
 
 ### 1. Separate finance-person review workflow

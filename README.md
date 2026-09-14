@@ -8,7 +8,7 @@ The project combines a deterministic supply-response core with a FastAPI applica
 
 > **Not yet a completed end-to-end live demo:** Taylor's separate Finance Approver identity is provisioned, but an interactive Taylor sign-in/review/approval workflow is not implemented. The current app uses a predefined standing authorization. Teams app handoff/browser authentication remains an open issue, and live approval, execution and outcome acceptance remain separate. See the [roadmap](docs/ROADMAP.md).
 
-> **Local work, September 13 — not deployed:** Five-stage navigation now separates choosing a response, reviewing/approving, and executing. It passes 331 frontend tests and desktop/phone browser checks. Independent Finance rules, durable history, versioned case policy, proposal storage, submission/review commands and current/historical queries have passed local tests and independent review. Taylor's sign-in screen, final-decision enforcement and email workflow are not connected yet. See the [increment evidence](docs/reviews/2026-09-13-email-workflow-progress.md).
+> **Local work, September 13 — not deployed:** Five-stage navigation passes 331 frontend tests and desktop/phone browser checks. Independent Finance rules, durable history, proposal submission/review and Alex's proposal-bound final approval have passed local tests and independent review; the backend checkpoint passes 417 tests. Taylor's sign-in screen, authenticated workflow routes, execution safeguards and email workflow are not connected or enabled yet. See the [increment evidence](docs/reviews/2026-09-13-email-workflow-progress.md).
 
 ## Presenting the comparison
 

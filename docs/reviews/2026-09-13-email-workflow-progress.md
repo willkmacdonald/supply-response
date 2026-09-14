@@ -207,11 +207,48 @@ These are application services, not yet Taylor's browser inbox. Final Alex
 Decision binding and authenticated API/UI composition remain required before
 the new workflow can be used in the app.
 
+## Proposal-bound final Decision — locally accepted
+
+Implementation `6732953`, integrity/coverage correction `9a45336`, report
+`860ccb8`, and parent test-only correction `75558c5` add Alex's final approval
+or withdrawal against the exact current proposal. Spending above $20,000
+requires the exact approved Taylor revision; standing Finance authorization
+cannot replace it. The immutable Decision preserves its original approval
+evidence after later changes. Legacy records and their serialized bytes remain
+unchanged. No new application routes or activation were added.
+
+Approval writes the Decision, material-planner satisfaction, background planning
+event and current pointer in one transaction with one proposal guard. Withdrawal
+clears the current submission and supersedes any Finance review atomically;
+it creates no execution event. Repeated requests return the original receipt,
+and a different request cannot reuse its key or finalize the same selection
+again, even when a rejection is the current Decision pointer.
+
+Independent review required a missing-selection integrity-error correction and
+additional authorization, withdrawal, history and race assertions. The parent
+completed the final test-only correction to prove exact winning records and no
+losing changes across five two-connection races. Final independent verdicts:
+spec compliance approved and code quality approved, all findings closed.
+
+Final parent verification on committed `75558c5`: 60 focused tests passed;
+417 broad non-live tests passed, 15 live tests deselected, one existing
+Starlette/httpx warning in 22.41s. Scoped Pyright, Ruff, format and commit hooks
+passed. This proves local behavior, not native Fabric concurrency or browser
+authentication. The initial implementer wrote a production skeleton before
+the first captured RED; that process deviation is documented, not described as
+test-first. The subsequent missing-selection correction did capture its failing
+test before the narrow production change.
+
+Execution still needs to check that approval is current at each advancing
+transaction. The prepared helper plan is a separate increment; a helper alone
+will not establish enforcement or authorize activation.
+
 ## Remaining gates
 
 1. Native database acceptance for the locally tested durable Finance review log.
-2. Authenticated submission/status/review APIs and final Alex Decision enforcement;
-   only then activate the locally tested new-case policy in application routes.
+2. Authenticated submission/status/review/final-Decision APIs, execution
+   currentness safeguards and supported-option execution; only then activate
+   the locally tested new-case policy in application routes.
 3. Finance cross-session UI integration and final five-stage workflow verification.
 4. Presenter-controlled Work IQ discovery of a new email from Will, exact
    case-specific source binding and duplicate-safe case creation.
