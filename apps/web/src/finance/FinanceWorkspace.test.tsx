@@ -48,6 +48,42 @@ it("keeps resolved and superseded reviews readable but not actionable", async ()
   expect(within(screen.getByRole("main")).getAllByText(/historical/i)).not.toHaveLength(0);
 });
 
+it("keeps a rejected request readable without implying a next action", async () => {
+  const rejected = {...detail, review: {...detail.review, status: "rejected", reviewed_at: "2026-09-13T10:30:00Z", reason: "Reduce expedite cost"}} as never;
+  vi.mocked(api.financeReviews).mockResolvedValue([rejected]); vi.mocked(api.financeReview).mockResolvedValue(rejected);
+  render(<FinanceWorkspace displayName="Taylor" onSwitchAccount={vi.fn()} independentFinanceEnabled />);
+  await userEvent.click(await screen.findByRole("button", {name: /combined response/i}));
+  expect(screen.getByText("This request was rejected and remains readable but not actionable.")).toBeVisible();
+  expect(screen.queryByRole("button", {name: /approve spending|reject spending|return to alex/i})).not.toBeInTheDocument();
+});
+
+it("returns a current approved live review to Alex using the reviewed analysis", async () => {
+  const approvedLive = {...detail,
+    review: {...detail.review, status: "approved", reviewed_by: {...identity, persona_id: "RL-PERSONA-TAYLOR", display_name: "Taylor Brooks"}, reviewed_at: "2026-09-13T10:30:00Z"},
+    analysis: {...detail.analysis, runtime_mode: "live", material: {...detail.analysis.material, corpus: "real_business", runtime_mode: "live"},
+      evidence_items: [{...detail.analysis.evidence_items[0], runtime_mode: "live", synthetic: false}],
+    },
+  } as never;
+  const onSwitchAccount = vi.fn().mockResolvedValue(undefined);
+  vi.mocked(api.financeReviews).mockResolvedValue([approvedLive]); vi.mocked(api.financeReview).mockResolvedValue(approvedLive);
+  window.history.replaceState(null, "", "/?financeReviewId=review-1&caseId=stale-case&analysisId=stale-analysis&stage=understand");
+  render(<FinanceWorkspace displayName="Taylor" onSwitchAccount={onSwitchAccount} independentFinanceEnabled />);
+  const approvalMessage = await screen.findByText(/Taylor Brooks approved the spending/i);
+  expect(approvalMessage).toHaveTextContent("Sep 13, 2026, 5:30 AM");
+  expect(screen.getByText(/Retrieved for this analysis/)).toBeVisible();
+  expect(screen.getByText("Required checks passed")).toBeVisible();
+  for (const warning of ["Source does not belong to this analysis", "Retrieval not verified for this analysis", "Check result unavailable"]) {
+    expect(screen.queryByText(warning)).not.toBeInTheDocument();
+  }
+  await userEvent.click(screen.getByRole("button", {name: "Return to Alex for final approval"}));
+  const parameters = new URLSearchParams(window.location.search);
+  expect(parameters.get("caseId")).toBe("case-1");
+  expect(parameters.get("analysisId")).toBe("analysis-1");
+  expect(parameters.get("stage")).toBe("approval");
+  expect(parameters.has("financeReviewId")).toBe(false);
+  expect(onSwitchAccount).toHaveBeenCalledOnce();
+});
+
 it("creates a new retry intent when Taylor moves from review A to review B", async () => {
   const reviewB = {...detail, selection: {...detail.selection, selection_id: "selection-2", finance_review_id: "review-2", proposal: {...detail.selection.proposal, option_id: "option-2"}}, review: {...detail.review, review_id: "review-2", proposal: {...detail.review.proposal, option_id: "option-2"}}, option: {...detail.option, option_id: "option-2", name: "Expedite response"}, current_token: {...token, selection_id: "selection-2"}};
   vi.mocked(api.financeReviews).mockResolvedValue([detail, reviewB]);

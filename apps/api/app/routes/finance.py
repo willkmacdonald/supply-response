@@ -4,7 +4,7 @@
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import ValidationError
 
-from apps.api.app.contracts import DecisionResponse
+from apps.api.app.contracts import DecisionResponse, FinanceReviewDetailResponse
 from apps.api.app.dependencies import (
     ApplicationServices,
     get_services,
@@ -16,6 +16,7 @@ from apps.api.app.finance_contracts import (
     ResolveFinanceRequest,
     SubmitProposalRequest,
 )
+from apps.api.app.routes.cases import analysis_response
 from apps.api.app.routes.decisions import decision_response
 from data.domain.decisions import DecisionKind, IdentitySnapshot
 from data.domain.proposals import ProposalState
@@ -94,6 +95,20 @@ def _map(error: Exception, *, operation: str) -> HTTPException:
     raise error
 
 
+def finance_review_detail_response(
+    detail: FinanceReviewDetail,
+) -> FinanceReviewDetailResponse:
+    return FinanceReviewDetailResponse(
+        selection=detail.selection,
+        review=detail.review,
+        review_revision=detail.review_revision,
+        analysis=analysis_response(detail.analysis),
+        option=detail.option,
+        is_current=detail.is_current,
+        current_token=detail.current_token,
+    )
+
+
 @router.get("/api/cases/{case_id}/proposal", response_model=ProposalState)
 def proposal_status(
     case_id: str,
@@ -134,25 +149,32 @@ def submit_proposal(
         raise _map(error, operation="submit") from None
 
 
-@router.get("/api/finance/reviews", response_model=list[FinanceReviewDetail])
+@router.get("/api/finance/reviews", response_model=list[FinanceReviewDetailResponse])
 def list_reviews(
     services: ApplicationServices = Depends(get_services),
     actor: IdentitySnapshot = Depends(require_finance_actor),
-) -> tuple[FinanceReviewDetail, ...]:
+) -> tuple[FinanceReviewDetailResponse, ...]:
     try:
-        return _service(services).list_pending(actor)
+        return tuple(
+            finance_review_detail_response(detail)
+            for detail in _service(services).list_pending(actor)
+        )
     except _MAPPED_ERRORS as error:
         raise _map(error, operation="list") from None
 
 
-@router.get("/api/finance/reviews/{review_id}", response_model=FinanceReviewDetail)
+@router.get(
+    "/api/finance/reviews/{review_id}", response_model=FinanceReviewDetailResponse
+)
 def review_detail(
     review_id: str,
     services: ApplicationServices = Depends(get_services),
     actor: IdentitySnapshot = Depends(require_finance_actor),
-) -> FinanceReviewDetail:
+) -> FinanceReviewDetailResponse:
     try:
-        return _service(services).detail(review_id, actor)
+        return finance_review_detail_response(
+            _service(services).detail(review_id, actor)
+        )
     except _MAPPED_ERRORS as error:
         raise _map(error, operation="detail") from None
 

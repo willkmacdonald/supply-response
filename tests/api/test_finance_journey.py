@@ -209,6 +209,9 @@ def test_verified_session_and_planner_boundary(tmp_path):
         )
         assert second.status_code == 201
         review = second.json()["review"]
+        finance_reviews = client.get("/api/finance/reviews", headers=taylor)
+        assert finance_reviews.status_code == 200, finance_reviews.text
+        finance_list_analysis = finance_reviews.json()[0]["analysis"]
         state = client.get("/api/cases/RL-CASE-HTTP/proposal", headers=alex).json()
         approved = client.post(
             f"/api/finance/reviews/{review['review_id']}/resolutions",
@@ -220,6 +223,22 @@ def test_verified_session_and_planner_boundary(tmp_path):
             },
         )
         assert approved.status_code == 201
+        finance_detail = client.get(
+            f"/api/finance/reviews/{review['review_id']}", headers=taylor
+        )
+        assert finance_detail.status_code == 200, finance_detail.text
+        finance_detail_analysis = finance_detail.json()["analysis"]
+        for analysis in (finance_list_analysis, finance_detail_analysis):
+            assert analysis["runtime_mode"] == "live"
+            assert analysis["runtime_mode"] == analysis["material"]["runtime_mode"]
+            assert (
+                analysis["scenario_effective_time"]
+                == analysis["material"]["scenario_effective_time"]
+            )
+            assert (
+                analysis["recommendation"]["option_id"]
+                == analysis["ranking"]["recommended_option_id"]
+            )
         state = client.get("/api/cases/RL-CASE-HTTP/proposal", headers=alex).json()
         final = client.post(
             "/api/cases/RL-CASE-HTTP/proposal-decisions",

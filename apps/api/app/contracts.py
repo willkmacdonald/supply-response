@@ -15,8 +15,10 @@ from data.domain.analysis import (
 from data.domain.cases import WorkflowVersion
 from data.domain.decisions import ApprovalSatisfaction
 from data.domain.evidence import EvidenceItem
+from data.domain.finance import FinanceReview
 from data.domain.finance_decisions import ProposalApprovalEvidence
 from data.domain.inbound import SupplierEmailSource
+from data.domain.proposals import ProposalSelection, ProposalToken
 
 
 class StrictRequest(BaseModel):
@@ -106,6 +108,16 @@ class AnalysisResponse(BaseModel):
     approval_satisfactions: tuple[ApprovalSatisfaction, ...]
     ranking: RankingResult
     recommendation: ResponseOption | None
+
+
+class FinanceReviewDetailResponse(BaseModel):
+    selection: ProposalSelection
+    review: FinanceReview
+    review_revision: int
+    analysis: AnalysisResponse
+    option: ResponseOption
+    is_current: bool
+    current_token: ProposalToken
 
 
 class DecisionResponse(BaseModel):

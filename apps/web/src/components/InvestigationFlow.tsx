@@ -23,6 +23,12 @@ const stages = [
   {id: "execution", label: "5. Execute mitigation plan"},
 ] as const;
 
+function stageFromLocation(): number {
+  const stage = new URLSearchParams(window.location.search).get("stage");
+  const index = stages.findIndex(candidate => candidate.id === stage);
+  return index >= 0 ? index : 0;
+}
+
 function StagePanel({index, activeStage, children}: {index: number; activeStage: number; children: ReactNode}) {
   const stage = stages[index]; const active = activeStage === index;
   return <section role="tabpanel" aria-labelledby={`investigation-tab-${stage.id}`}
@@ -34,8 +40,8 @@ function StagePanel({index, activeStage, children}: {index: number; activeStage:
 
 function InvestigationPresentation({state, independentFinanceEnabled}: {state: CaseWorkspaceState; independentFinanceEnabled: boolean}) {
   const {caseInstance, analysis} = state;
-  const [activeStage, setActiveStage] = useState(0);
-  const [focusedStage, setFocusedStage] = useState(0);
+  const [activeStage, setActiveStage] = useState(stageFromLocation);
+  const [focusedStage, setFocusedStage] = useState(stageFromLocation);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   if (!analysis || !caseInstance) return null;
   const props = {caseInstance, analysis, runtime: state.runtime, tenantSharePointHost: state.runtime?.deployment_contract?.tenant_sharepoint_host}; const snapshot = readPlannerSnapshot(props);

@@ -65,7 +65,25 @@ export function FinanceWorkspace({displayName, onSwitchAccount, independentFinan
     } finally {setBusy(false);}
   }
 
+  async function returnToAlex() {
+    if (!detail) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("caseId", detail.analysis.case_id);
+    url.searchParams.set("analysisId", detail.analysis.analysis_id);
+    url.searchParams.set("stage", "approval");
+    url.searchParams.delete("financeReviewId");
+    window.history.replaceState(window.history.state, "", url);
+    await onSwitchAccount();
+  }
+
   const evidence = detail?.option.evidence_ids.map(id => detail.analysis.evidence_items.find(item => item.evidence_id === id)).filter(item => item !== undefined) ?? [];
+  const approvedCurrent = detail?.review.status === "approved" && detail.is_current;
+  const reviewerName = detail?.review.reviewed_by?.display_name?.trim() || displayName?.trim() || "Taylor";
+  const readOnlyMessage = !independentFinanceEnabled ? "Independent Finance commands are disabled. This request remains readable and is not actionable."
+    : !detail?.is_current ? "This request is no longer current and remains readable but not actionable."
+    : detail?.review.status === "rejected" ? "This request was rejected and remains readable but not actionable."
+    : detail?.review.status === "superseded" ? "This request was superseded by a newer proposal and remains readable but not actionable."
+    : "This request remains readable and is not actionable.";
   return <main className="case-workspace finance-workspace">
     <header className="finance-header"><div><p className="eyebrow">Finance review</p><h1>Supply Response</h1><p>Signed in as {displayName ?? "Taylor"}. Review proposed spending independently from Alex's final response approval.</p></div><button type="button" onClick={() => void onSwitchAccount()}>Switch Microsoft account</button></header>
     {!independentFinanceEnabled && <p className="error" role="alert">Independent Finance commands are not enabled. Existing review history remains readable.</p>}
@@ -86,7 +104,9 @@ export function FinanceWorkspace({displayName, onSwitchAccount, independentFinan
           <h3>Expected impact</h3>{detail.option.predicted ? <ul><li>Uncovered demand: {detail.option.predicted.uncovered_part_demand.toLocaleString()} units</li><li>Revenue at risk: {usd(detail.option.predicted.revenue_at_risk)}</li><li>Margin at risk: {usd(detail.option.predicted.margin_at_risk)}</li></ul> : <p>Impact prediction is unavailable.</p>}
           <h3>Evidence and constraints</h3>{evidence.map(item => <EvidenceSource key={item.evidence_id} item={item} analysis={detail.analysis} label="Source record" />)}<ul>{detail.option.assumptions.map(item => <li key={item}>{item}</li>)}</ul>{evidence.length > 0 && <EvidenceFooters items={evidence} analysis={detail.analysis} />}
           {detail.review.reason && <p><strong>Reason:</strong> {detail.review.reason}</p>}
-          {detail.review.status === "pending" && detail.is_current && independentFinanceEnabled ? <div className="finance-actions"><label>Rejection reason<textarea value={reason} onChange={event => {setReason(event.target.value); pending.current = null;}} /></label><div><button disabled={busy} onClick={() => void resolve(true)}>Approve spending</button><button disabled={busy || !reason.trim()} onClick={() => void resolve(false)}>Reject spending</button></div></div> : <p>This historical, resolved, or disabled request remains readable and is not actionable.</p>}
+          {detail.review.status === "pending" && detail.is_current && independentFinanceEnabled ? <div className="finance-actions"><label>Rejection reason<textarea value={reason} onChange={event => {setReason(event.target.value); pending.current = null;}} /></label><div><button disabled={busy} onClick={() => void resolve(true)}>Approve spending</button><button disabled={busy || !reason.trim()} onClick={() => void resolve(false)}>Reject spending</button></div></div>
+            : approvedCurrent ? <><p>{reviewerName} approved the spending on {time(detail.review.reviewed_at)}. Alex can now complete final approval.</p>{independentFinanceEnabled ? <div className="finance-actions"><button type="button" onClick={() => void returnToAlex()}>Return to Alex for final approval</button></div> : <p>{readOnlyMessage}</p>}</>
+            : <p>{readOnlyMessage}</p>}
           <details><summary>Request details</summary><p>Review {detail.review.review_id}</p><p>Revision {detail.review_revision}</p></details>
         </>}
       </section>

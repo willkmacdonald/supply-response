@@ -45,6 +45,14 @@ it("keeps analysis timestamps collapsed instead of above the tabs", async () => 
   await userEvent.click(screen.getByText("Analysis source details"));
   expect(timestamp).toBeVisible();
 });
+it("opens an approval stage deep link and safely defaults invalid stages", () => {
+  window.history.replaceState(null, "", "/?stage=approval");
+  const {rerender} = render(<InvestigationFlow state={state()} />);
+  expect(screen.getByRole("tabpanel")).toHaveAccessibleName("4. Review and approve");
+  window.history.replaceState(null, "", "/?stage=not-a-stage");
+  rerender(<InvestigationFlow state={{...state(), caseInstance: {...state().caseInstance!, case_id: "different-case"}, analysis: {...state().analysis!, case_id: "different-case"}}} />);
+  expect(screen.getByRole("tabpanel")).toHaveAccessibleName("1. Understand the disruption");
+});
 function selectionFixture() {
   const input = state();
   const combined: ResponseOption = {option_id: "combined", option_kind: "combined", name: "Combined response",
