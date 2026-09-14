@@ -35,6 +35,21 @@ Actual App browser checks at 1440px and 390px, using explicitly simulated
 responses, passed: loaded-case email check, immediate message text, existing
 analysis reuse, collapsed metadata, no overflow or page errors.
 
+### Deployment proof — email entry correction
+
+Source `61b8fa5`, ACR run `ch1r` succeeded; revision `ca-sr-demo--0000034` is
+latest-ready with 100% traffic. Immutable image:
+`sha256:c7f34a20704951ab06cf231315bc5b306672a8693b7173f8ef8c33f74960cd83`.
+Guarded Fabric/Foundry smoke and HTTP health passed; `azd show` confirmed the
+existing environment. Post-release role query confirmed the same three scoped
+assignments. Live Alex browser showed the email check with the existing case
+open, no three-line metadata block, and Work IQ found the real 0914-A email with
+its actual text and Outlook link. No email sent or approval submitted.
+The live Analyze this disruption action then completed and reopened identical
+case `RL-INBOUND-48f48fb45f22d0f5a0c30e4c301aaf887daae09dacfad264b7e4322f75b3105c`
+and analysis `RL-ANALYSIS-b50702a5-5e6c-4655-963b-86c89ce8d993`.
+The mailbox result remained visible and its check button remained enabled.
+
 ## Reviewed inbound email to case release — 2026-09-14 UTC
 
 Scope: explicit reviewed Will-to-Alex email creates an email-bound case and
@@ -216,7 +231,7 @@ Restored Combined and verified its original waiting-for-Taylor review remained.
 No submission, approval, mail, execution, new case, or new analysis was performed.
 Prior revision29 approval acceptance below is historical.
 
-> **Status:** Validated — email-entry visibility correction passed fresh validation; previous source974d4a1 remains live pending release.
+> **Status:** Deployed — email-entry visibility correction source61b8fa5 is live on revision34; live discovery and presentation verified.
 
 ## Independent approval browser release — 2026-09-13
 
