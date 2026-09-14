@@ -2,6 +2,10 @@
 
 ## Inbox-check increment — September 14, 2026
 
+**Deployed and live-verified:** revision32, source `736c339`. Work IQ found the
+presenter's newly sent `Demo run 0914-A` email in Alex's mailbox and retrieved
+the revised FYI body (8,000 affected; 3,000 partial at $7.50 extra; 5,000 unknown).
+
 The new **Check email for disruptions** action searches Alex's mailbox through
 Work IQ for the presenter's Supplier Alpha email from `will@willmacdonald.com`
 to `agent@willmacdonald.com`. It displays the actual subject, received time,
@@ -10,7 +14,7 @@ presenter-controlled; old saved cases remain collapsed and recoverable.
 
 This increment does **not** yet create a case from the discovered email. That
 requires message-bound case creation and duplicate prevention; opening a saved
-case is not a substitute. Deployment and live-email acceptance are tracked in
+case is not a substitute. Deployment and live-email acceptance are recorded in
 [the inbox-check plan](docs/superpowers/plans/2026-09-14-inbox-check.md).
 
 Supply Response is a decision-support demonstration for managing a fictional supplier disruption from detection through analysis, human approval, bounded execution, and outcome observation.

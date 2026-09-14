@@ -4,6 +4,14 @@ Supply Response is the domain of evaluating a supply disruption, recording a hum
 
 ## Language
 
+**Supplier Email Check**:
+A presenter-initiated search for supplier communications that may describe a supply disruption. Finding a message does not itself create a Disruption Case or run an analysis.
+_Avoid_: Resume case, automatic monitoring, new disruption detected
+
+**Reviewed Supplier Email**:
+A supplier message whose sender, recipient, content and original-message citation have been checked and made available to the planner for review. It is not case evidence until explicitly bound to a Disruption Case and its analysis.
+_Avoid_: Approved response, newly received email without a verified received time
+
 **Disruption Case**:
 A tracked supply disruption whose evidence, analyses, decisions, execution actions, and outcome observations share one runtime-mode provenance.
 _Avoid_: Run, incident run

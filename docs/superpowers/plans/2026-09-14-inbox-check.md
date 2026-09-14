@@ -6,6 +6,18 @@
 
 **Tech Stack:** Existing Python Work IQ MCP/OBO client, FastAPI, React, Vitest, pytest.
 
+## Completion evidence — September 14, 2026
+
+Tasks 1–3 complete for this read-only increment. Release `736c339`, revision32,
+ACR build ch1p. 355 web tests/build and 108 API/Work IQ tests passed; independent
+review findings addressed and tested. Desktop/mobile browser checks passed.
+Real Alex session found Will's newly sent `Demo run 0914-A` through Work IQ;
+the body begins FYI and matches 8,000 affected, 3,000 partial at $7.50 extra and
+5,000 without a date. The original-message citation opened that exact email
+in Alex's Outlook mailbox. Returned to the demo with preview expanded.
+Live Fabric/Foundry health passed; no case, analysis, approval or mail sent by
+the check. Fresh email-to-case binding remains the next separate increment.
+
 ## Constraints
 
 - Supplier sender: will@willmacdonald.com; recipient: agent@willmacdonald.com.

@@ -6,8 +6,9 @@ Implemented and locally verified: **Check email for disruptions** → Work IQ
 mailbox discovery → validated supplier email preview and Outlook citation.
 Only Alex may check; sender is Will, recipient is Alex, and the message must
 match the approved scenario markers. No email is sent or case created by a check.
-Deployment/live retrieval acceptance is in progress; prior release notes below
-remain historical. Next: bind a reviewed message to a new case atomically with
+Deployed as revision32 (`736c339`); Alex's real browser found and read Will's
+new `Demo run 0914-A` email through Work IQ on September 14. Prior release notes
+below remain historical. Next: bind a reviewed message to a new case atomically with
 duplicate prevention, then continue the existing analysis/approval journey.
 
 **Last updated:** September 13, 2026 (America/Chicago).

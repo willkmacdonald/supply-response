@@ -34,7 +34,18 @@ Review fixes simplify the search to subject:RL-001 with strict local markers
 and limit the sanitized preview to 4,000 characters plus ellipsis.
 Static roles: unchanged app AcrPull on ACR, Secrets User on vault, Azure AI User
 on Foundry project. No new permission or SQL migration is needed. Actual live
-retrieval of the presenter's email remains unverified until after deployment.
+retrieval was verified after deployment: real Alex browser found Will's
+`Demo run 0914-A`, received 2026-09-14 05:10:43 UTC, on a check started at
+05:24:34 UTC. Expanded preview matches the revised FYI body and exact quantities
+and per-unit price. No seeded-message substitution, case creation, approval or
+mail send occurred. Live screenshot and accessibility trace captured in task.
+
+Release source `736c339`, ACR run `ch1p`, revision `ca-sr-demo--0000032`,
+latest-ready with 100% traffic, unchanged scale 0–2. Immutable image digest:
+`sha256:0bb30064c74fbed94da3f9472769913900fa6172556276dc74e31c9553b8ac38`.
+Guarded live Fabric/Foundry readiness and `azd show` passed.
+The returned citation opened the exact new message in Alex's Outlook account,
+with matching sender, subject and body. Runtime roles remain unchanged.
 
 ## Simplified demo launcher release — 2026-09-14 UTC
 
@@ -123,7 +134,7 @@ Restored Combined and verified its original waiting-for-Taylor review remained.
 No submission, approval, mail, execution, new case, or new analysis was performed.
 Prior revision29 approval acceptance below is historical.
 
-> **Status:** Validated — read-only inbox check passed azure-validate on September 14, 2026. Revision31 remains live until release.
+> **Status:** Deployed — read-only inbox check source 736c339 is live on revision32; actual Alex/Work IQ new-email discovery and body retrieval verified.
 
 ## Independent approval browser release — 2026-09-13
 
