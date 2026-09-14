@@ -91,7 +91,7 @@ export function IndependentApprovalPanel({caseId, displayedAnalysis, selectedOpt
       {analysisCurrent && proposalState?.selection && !selectionCurrent && <p>The saved approval belongs to a different response. This selection needs a fresh submission.</p>}
       {selectionCurrent && proposalState?.review?.status === "pending" && <p>Waiting for Taylor to review the proposed spending. <a href={`?financeReviewId=${encodeURIComponent(proposalState.review.review_id)}`}>Open Taylor review</a></p>}
       {selectionCurrent && proposalState?.review?.status === "rejected" && <p>Taylor rejected this spending{proposalState.review.reason ? `: ${proposalState.review.reason}` : "."} Revise or explicitly resubmit the response.</p>}
-      {selectionCurrent && proposalState?.review?.status === "approved" && <p>Taylor approved the proposed spending at {time(proposalState.review.reviewed_at)}. Alex's final approval is still required.</p>}
+      {selectionCurrent && proposalState?.review?.status === "approved" && <p>Taylor approved the proposed spending at {time(proposalState.review.reviewed_at)}.{!receipt && " Alex's final approval is still required."}</p>}
       {error && <p className="error" role="alert">{error}</p>}
       {!receipt && independentFinanceEnabled && analysisCurrent && (!selectionCurrent || proposalState?.review?.status === "rejected") && <button disabled={busy || !proposalState || !selectedOption.executable} onClick={() => void submit()}>{busy ? "Submitting…" : requiresFinance ? "Submit for Finance review" : "Submit response"}</button>}
       {!receipt && independentFinanceEnabled && financeSatisfied && <button disabled={busy} onClick={() => void finalize()}>{busy ? "Recording final approval…" : "Give final Alex approval"}</button>}

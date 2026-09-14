@@ -1,6 +1,84 @@
 # Supply Response Personal-Tenant Deployment Plan
 
-> **Status:** Deployed — traditional operational reporting/navigation correction, validated and released as ca-sr-demo--0000028.
+> **Status:** Validated — Alex/Taylor browser approval release passed azure-validate; not deployed. Existing revision ca-sr-demo--0000028 remains active.
+
+## Independent approval browser release — 2026-09-13
+
+User approved connecting and deploying Alex → Taylor → Alex, with real separate
+identity browser verification. Preserve the existing Azure Dev subscription,
+East US 2, resource group rg-supply-response-demo and Container App ca-sr-demo.
+No new resources, app roles, identities, consent, mail, report publication, scale
+changes or destructive data operations. Recipe remains AZD via the existing
+guarded deployment script; use this worktree's committed image and infrastructure.
+
+- [x] Connect exact existing Taylor identity and default-off independent workflow
+  setting through the supported Bicep/parameter/script path.
+- [x] Review API and browser integration and verify local journey, not just units.
+- [x] Check approval schema with read-only queries; review any required additive
+  migration and native acceptance before activation. No migration applied yet.
+- [x] Resolve automatic action-planning compatibility for independent decisions;
+  label operational execution and outgoing email as not delivered in this milestone.
+- [x] Complete azure-validate with fresh proof, guarded existing-target preview,
+  build/package and role checks. Previous release proof below is historical only.
+- [ ] Deploy the reviewed exact image, verify health and real Alex/Taylor sessions.
+
+Fresh read-only checks September 13: Azure Dev tenant and existing app target
+resolved; latest ready revision remains 0000028. Taylor Brooks (Finance) is
+already assigned the API's finance_approver app role. The running app has no
+Taylor object-ID or independent-Finance environment setting. The existing app's
+read-only database check confirmed version 12 but missing Finance tables and
+proposal columns. Its identity has no CREATE TABLE/ALTER permission; no privilege
+changes are needed or planned. Direct administrator connectivity was then verified
+outside the restricted local network sandbox.
+
+### All validation checks pass
+
+- [x] 1. AZD Installation
+- [x] 2. Schema Validation
+- [x] 3. Environment Setup
+- [x] 4. Authentication Check
+- [x] 5. Subscription/Location Check
+- [x] 6. Aspire Pre-Provisioning Checks (not applicable)
+- [x] 7. Provision Preview
+- [x] 8. Build Verification
+- [x] 9. Docker Build Context Validation
+- [x] 10. Package Validation
+- [x] 11. Azure Policy Validation
+- [x] 12. Aspire Post-Provisioning Checks (not applicable)
+- [x] Static and pre-deployment live role verification
+
+### Validation proof — approval milestone
+
+September 13, approximately 22:00–22:15 America/Chicago: AZD 1.30.0,
+`azd auth login --check-status` (Will), named environment and exact existing
+subscription/location passed. Official Azure/azure-dev JSON schema validated
+azure.yaml. `.tmp/approval_release.py preflight`, `preview`, and `package`
+passed. Preview reconciles existing Container App/Application Insights provider
+properties; no resource creation/deletion, role expansion or scale change.
+Seven existing policy assignments were inspected; preview had no policy denial.
+Dockerfile, lockfiles and four required frontend build arguments were reviewed.
+This project's azure.yaml intentionally has no services: azd package is a no-op;
+the guarded release builds the real image with ACR and all required arguments.
+
+Parent backend/API/auth/Finance/execution/persistence/deployment regression:
+561 passed, 11 skipped, one inherited warning; all fabric_live tests excluded.
+Fresh `npm test -- --run`: 346 passed across 24 files. `npm run build` passed.
+Local two-page browser proof covers rejection/resubmission/approval/finalization,
+desktop and phone layouts, using explicitly labeled simulated API responses.
+This is not real Microsoft-session proof. Final approval wording regression was
+observed failing then passing. Static Bicep and live role listing agree on only
+resource-scoped AcrPull, Key Vault Secrets User and Foundry User for the existing
+app principal; no grants were added.
+
+Native SQL Server 2022 upgrade test passed on the
+existing private supply-response-test VM: 1 passed in 0.91 seconds. The guarded
+runner created and removed only its fresh disposable database. It proved legacy
+payload/version preservation, additive column defaults, repeat application,
+trusted foreign keys and filtered uniqueness. Operational SQL SHA-256:
+38b1656ad9acf79f5d69ebebc34e5be1ab09440cc354fd7f02e760f8da3f3b66.
+Independent schema review approved the bounded upgrade. No live migration yet.
+SSH host trust was restored by matching the public key fingerprint to
+https://exe.dev/docs/faq/host-key; verification was never disabled.
 
 ## Traditional operational reporting release — 2026-09-12
 

@@ -46,6 +46,7 @@ it("keeps Alex final approval distinct and reports execution as unavailable", as
   await userEvent.click(await screen.findByRole("button", {name: "Give final Alex approval"}));
   expect(api.finalizeProposal).toHaveBeenCalledWith("case-1", {expected: current.token, kind: "approved"}, expect.any(String));
   expect(await screen.findByText(/execution is not available in this milestone/i)).toBeVisible();
+  expect(screen.queryByText(/Alex's final approval is still required/)).not.toBeInTheDocument();
 });
 
 it("retries a timed-out submission with the original body and key", async () => {
