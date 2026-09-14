@@ -2,6 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import {cleanup, render, screen, within} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import {useState} from "react";
 import {afterEach, beforeEach, expect, it, vi} from "vitest";
 import type {ResponseOption} from "../types";
 import type {CaseWorkspaceState} from "../hooks/useCaseWorkspace";
@@ -36,6 +37,63 @@ function state(): CaseWorkspaceState {
 async function selectDecisionStage() {
   await userEvent.click(screen.getByRole("tab", {name: "3. Choose a response"}));
 }
+function selectionFixture() {
+  const input = state();
+  const combined: ResponseOption = {option_id: "combined", option_kind: "combined", name: "Combined response",
+    executable: true, active_mitigation: true,
+    predicted: {uncovered_part_demand: 2300, otif_loss_percentage: 50, revenue_at_risk: "375000.00",
+      margin_at_risk: "125000.00", response_cost: "24750.00", protected_customer_order_ids: []},
+    assumptions: [], evidence_ids: [], evidence_requirements: [], blocking_codes: [],
+    prerequisite_roles: [], source_data_lineage: [], approval_burden: 0, execution_risk: 0, requested_side_effects: []};
+  input.analysis!.response_options = [combined,
+    {...combined, option_id: "expedite", option_kind: "expedite"},
+    {...combined, option_id: "baseline", option_kind: "no_mitigation", executable: false}];
+  return input;
+}
+it("visibly acknowledges selection, replaces it, and continues to approval without performing an operation", async () => {
+  const input = selectionFixture(); const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+  function Harness() {
+    const [selectedOption, setSelectedOption] = useState<ResponseOption | null>(null);
+    return <InvestigationFlow state={{...input, selectedOption, selectOption: option => {
+      input.selectOption(option); setSelectedOption(option);
+    }}} />;
+  }
+  render(<Harness />); await selectDecisionStage();
+  expect(screen.queryByRole("button", {name: "Continue to review and approve"})).not.toBeInTheDocument();
+  const combined = screen.getByRole("article", {name: "Combined response"});
+  await userEvent.click(within(combined).getByRole("button", {name: "Select Combined response"}));
+  expect(combined).toHaveClass("selected");
+  expect(within(combined).getByRole("button", {name: "Selected: Combined response"})).toHaveTextContent("✓ Selected");
+  expect(within(combined).getByRole("button", {name: "Selected: Combined response"})).toHaveAttribute("aria-pressed", "true");
+  expect(within(combined).getByRole("status")).toHaveTextContent("Selected: Combined response. Selecting a response does not submit it for approval.");
+  const expedite = screen.getByRole("article", {name: "Expedite the partial shipment"});
+  await userEvent.click(within(expedite).getByRole("button", {name: "Select Expedite the partial shipment"}));
+  expect(combined).not.toHaveClass("selected");
+  expect(within(combined).getByRole("button", {name: "Select Combined response"})).toHaveAttribute("aria-pressed", "false");
+  expect(expedite).toHaveClass("selected");
+  expect(screen.getAllByRole("button", {name: "Continue to review and approve"})).toHaveLength(1);
+  await userEvent.click(screen.getByRole("button", {name: "Continue to review and approve"}));
+  expect(screen.getByRole("tabpanel")).toHaveAccessibleName("4. Review and approve");
+  expect(screen.getByRole("tab", {name: "4. Review and approve"})).toHaveFocus();
+  await selectDecisionStage();
+  expect(screen.getByRole("button", {name: "Selected: Expedite the partial shipment"})).toBeVisible();
+  for (const fn of [input.approve, input.reject, input.retryPlanning, input.retryAction, input.startPlayback, fetch]) {
+    expect(fn).not.toHaveBeenCalled();
+  }
+});
+it("keeps blocked options unselectable and disables continuation during an operation", async () => {
+  const input = selectionFixture(); input.selectedOption = input.analysis!.response_options[0];
+  input.operation = "listing";
+  const {rerender} = render(<InvestigationFlow state={input} />); await selectDecisionStage();
+  expect(screen.getByRole("button", {name: "Select Do nothing — baseline"})).toBeDisabled();
+  expect(screen.getByRole("button", {name: "Selected: Combined response"})).toBeDisabled();
+  const next = screen.getByRole("button", {name: "Continue to review and approve"});
+  expect(next).toBeDisabled(); await userEvent.click(next);
+  expect(screen.getByRole("tabpanel")).toHaveAccessibleName("3. Choose a response");
+  expect(input.selectOption).not.toHaveBeenCalled();
+  rerender(<InvestigationFlow state={{...input, selectedOption: input.analysis!.response_options[2]}} />);
+  expect(screen.queryByRole("button", {name: "Continue to review and approve"})).not.toBeInTheDocument();
+});
 async function selectApprovalStage() {
   await userEvent.click(screen.getByRole("tab", {name: "4. Review and approve"}));
 }

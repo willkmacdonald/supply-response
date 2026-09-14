@@ -55,6 +55,11 @@ function InvestigationPresentation({state, independentFinanceEnabled}: {state: C
     setFocusedStage(next);
     tabRefs.current[next]?.focus();
   }
+  function continueToApproval() {
+    setActiveStage(3);
+    setFocusedStage(3);
+    tabRefs.current[3]?.focus();
+  }
   return <div id="assisted-review" className="investigation-flow"><div className="analysis-context">
     <p>{analysis.material.corpus === "demo_corpus" ? "Demo corpus — fictional" : "Fictional provenance not established for this analysis"}</p>
     <p>Snapshot used for this analysis · In this scenario, as of {instant(analysis.scenario_effective_time)}</p><p>Analysis saved at {instant(analysis.created_at)}. Sources are not monitored continuously.</p>
@@ -72,7 +77,7 @@ function InvestigationPresentation({state, independentFinanceEnabled}: {state: C
     </div>
     <StagePanel index={0} activeStage={activeStage}><InvestigationEvidence {...props} row="disruption" /></StagePanel>
     <StagePanel index={1} activeStage={activeStage}><InvestigationEvidence {...props} row="responses" /></StagePanel>
-    <StagePanel index={2} activeStage={activeStage}><OptionComparison disabled={state.operation !== null} analysis={analysis} selectedOption={state.selectedOption} onSelect={state.selectOption} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /></StagePanel>
+    <StagePanel index={2} activeStage={activeStage}><OptionComparison disabled={state.operation !== null} analysis={analysis} selectedOption={state.selectedOption} onSelect={state.selectOption} onContinue={continueToApproval} snapshot={snapshot} runtime={state.runtime} reportContext={reportContext} /></StagePanel>
     <StagePanel index={3} activeStage={activeStage}>{caseInstance.workflow_version === "independent-finance-v1"
       ? <IndependentApprovalPanel caseId={caseInstance.case_id} displayedAnalysis={analysis} selectedOption={state.selectedOption} finalDecision={state.decision} onFinalDecision={state.acceptFinalDecision ?? (() => undefined)} independentFinanceEnabled={independentFinanceEnabled} />
       : <DecisionPanel state={state} onApprove={state.approve} onReject={state.reject} />}</StagePanel>

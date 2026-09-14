@@ -680,7 +680,8 @@ describe("reopening lifecycle and operation safety", () => {
     await selectDecisionStage();
     await screen.findByText("Combined response");
     await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
-    expect(screen.getByRole("button", {name: "Select Combined response"})).toBeDisabled();
+    expect(screen.getByRole("button", {name: "Selected: Combined response"})).toBeDisabled();
+    expect(screen.getByRole("button", {name: "Continue to review and approve"})).toBeDisabled();
     await selectApprovalStage();
     expect(screen.getByRole("button", {name: "Approve combined response"})).toBeDisabled();
     await act(async () => resolveList(await response([])));

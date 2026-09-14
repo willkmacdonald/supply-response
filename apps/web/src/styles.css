@@ -66,6 +66,10 @@ h3 { margin: 0.75rem 0 0.45rem; }
 .option-card { display: flex; flex-direction: column; }
 .option-card button { margin-top: auto; }
 .option-card.blocked { border-style: dashed; background: #f7f5f1; }
+.option-card.selected { border-color: #075d4b; box-shadow: inset 0 0 0 2px #075d4b; background: #edf8f2; }
+.option-selection-status { color: #075d4b; font-weight: 650; }
+.option-selection-status:empty { display: none; }
+.option-card .option-continue { margin-top: 0.4rem; background: #fff; color: #075d4b; border: 1px solid #075d4b; }
 .card-labels { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .compact-list { display: grid; gap: 0.5rem; margin: 1rem 0; }
 .compact-list div { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #e8ece7; padding-bottom: 0.35rem; }
