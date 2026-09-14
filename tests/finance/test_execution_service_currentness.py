@@ -463,12 +463,59 @@ def test_historical_cleanup_stays_exact_target_and_never_guards(
         "execution_events",
     }:
         assert after[name] == before[name]
-    assert len(after["execution_events"]) == len(before["execution_events"]) + 1
+    for name in ("action_projection", "execution_attempts", "execution_events"):
+        outside_before = tuple(
+            row
+            for row in before[name]
+            if row._mapping["action_id"] != ctx.action.action_id
+        )
+        outside_after = tuple(
+            row
+            for row in after[name]
+            if row._mapping["action_id"] != ctx.action.action_id
+        )
+        assert outside_after == outside_before
+    assert all(row in after["execution_events"] for row in before["execution_events"])
+    added_events = [
+        row._mapping
+        for row in after["execution_events"]
+        if row not in before["execution_events"]
+    ]
+    assert len(added_events) == 1
     with ctx.factory() as uow:
+        stored = uow.execution.get_action(ctx.action.action_id)
         attempts = uow.execution.list_attempts(ctx.action.action_id)
+        event = uow.execution.list_status_events(ctx.action.action_id)[-1]
+        assert stored == result
         assert len(attempts) == 1
         assert attempts[0].attempt_id == ctx.attempt.attempt_id
         assert attempts[0].status is result.status
+        assert event.action_id == ctx.action.action_id
+        assert event.decision_id == ctx.decision.decision_id
+        assert event.attempt_id == ctx.attempt.attempt_id
+        assert event.from_status is ExecutionStatus.IN_PROGRESS
+        assert event.to_status is expected
+        assert event.error_code == ("STOPPED" if operation == "fail" else None)
+    target_projection = next(
+        row._mapping
+        for row in after["action_projection"]
+        if row._mapping["action_id"] == ctx.action.action_id
+    )
+    target_attempt = next(
+        row._mapping
+        for row in after["execution_attempts"]
+        if row._mapping["attempt_id"] == ctx.attempt.attempt_id
+    )
+    assert target_projection["decision_id"] == ctx.decision.decision_id
+    assert target_projection["status"] == expected.value
+    assert target_projection["payload_json"] == serialize_model(result)
+    assert target_attempt["action_id"] == ctx.action.action_id
+    assert target_attempt["decision_id"] == ctx.decision.decision_id
+    assert target_attempt["status"] == expected.value
+    assert target_attempt["payload_json"] == serialize_model(attempts[0])
+    assert added_events[0]["action_id"] == ctx.action.action_id
+    assert added_events[0]["decision_id"] == ctx.decision.decision_id
+    assert added_events[0]["payload_json"] == serialize_model(event)
 
 
 def test_invalid_transition_and_wrong_attempt_leave_every_row_unchanged(ctx):

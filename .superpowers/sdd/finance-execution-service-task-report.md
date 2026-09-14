@@ -86,3 +86,14 @@ ignored.
 The guard is called exactly once only for advancing transactions that will commit. It reuses the existing Unit of Work and owns no commit, connection, savepoint, or retry. Insert-before-guard is limited to new transaction-local creation so stale inserts roll back. Validation remains before guard where specified, and exact replay returns before guard/commit.
 
 No known concerns remain in this bounded increment. This does not activate independent execution and does not guard `ActionPlanningWorker`, playback, or external effects; those remain separate required gates.
+
+## Independent-review correction
+
+The test-only follow-up at base `2731943` tightened
+`test_historical_cleanup_stays_exact_target_and_never_guards`: it now compares
+all sibling action projection, attempt, and event rows exactly; proves the prior
+event journal is an immutable prefix; requires exactly one new target event with
+the exact action, Decision, attempt, transition, and failure-code fields; and
+compares the target projection and attempt canonical payloads with the returned
+domain values. Production code was unchanged. The corrected focused suite passed
+`32 passed, 8 skipped in 3.05s`.
