@@ -1,58 +1,72 @@
 # Supply Response
 
-## Email-to-case increment — deployed and live-verified
-
-Implemented: review the discovered email and its delivery facts, explicitly
-create its case, then use the existing Analyze disruption action. The case keeps
-the actual sender, subject and stable mailbox-scoped message identity. Repeated
-creation returns the same case; changed or ambiguous source content blocks.
-Revision 33, source `974d4a1`, is live. Alex's browser created a case from Will's
-0914-A email and completed live analysis using that exact message. The Outlook
-citation opened it correctly; repeated creation reopened the identical case and
-analysis. No mail was sent or Finance decision performed. 360 web tests and
-661 backend tests passed (18 live-setting skips). See the
-[release evidence](docs/reviews/2026-09-14-email-to-case-release.md).
-
-## Earlier inbox-check increment — September 14, 2026
-
-**Deployed and live-verified:** revision32, source `736c339`. Work IQ found the
-presenter's newly sent `Demo run 0914-A` email in Alex's mailbox and retrieved
-the revised FYI body (8,000 affected; 3,000 partial at $7.50 extra; 5,000 unknown).
-
-The new **Check email for disruptions** action searches Alex's mailbox through
-Work IQ for the presenter's Supplier Alpha email from `will@willmacdonald.com`
-to `agent@willmacdonald.com`. It displays the actual subject, received time,
-bounded message preview and validated Outlook link. Checks are read-only and
-presenter-controlled; old saved cases remain collapsed and recoverable.
-
-This increment does **not** yet create a case from the discovered email. That
-requires message-bound case creation and duplicate prevention; opening a saved
-case is not a substitute. Deployment and live-email acceptance are recorded in
-[the inbox-check plan](docs/superpowers/plans/2026-09-14-inbox-check.md).
-
 Supply Response is a decision-support demonstration for managing a fictional supplier disruption from detection through analysis, human approval, bounded execution, and outcome observation.
 
 The project combines a deterministic supply-response core with a FastAPI application, a React decision console, durable SQLite or Fabric SQL persistence, and a Power BI project. Microsoft 365 and Azure integrations are added through explicit adapters so the complete live demonstration can use Work IQ, Microsoft Fabric, Microsoft Foundry, Microsoft Agent Framework, Entra ID, and Power BI without coupling the business logic to those services.
 
-> **Deployed September 13, 2026:** [Open the demo](https://ca-sr-demo.orangehill-337f5d48.eastus2.azurecontainerapps.io/). Revision **ca-sr-demo--0000029**, source `afbf8db`, adds five stages and independent Alex/Taylor approval screens. Real Alex sign-in, fresh case creation, live analysis and a $24,750 Finance submission passed. Taylor's password sign-in is the remaining blocker to real rejection/approval/finalization acceptance. See the [approval release evidence](docs/reviews/2026-09-13-approval-browser-release.md).
+> **Live demo:** [Open Supply Response](https://ca-sr-demo.orangehill-337f5d48.eastus2.azurecontainerapps.io/). The latest verified release passed 364 web tests, production build, desktop/mobile browser checks, guarded Fabric/Foundry readiness, and live Alex acceptance. The current revision, immutable image, and release proof are recorded in the [deployment plan](.azure/deployment-plan.md).
 
-> **Not yet a completed end-to-end live demo:** New cases require independent Taylor review for spending above $20,000, followed by Alex's separate final approval. Historical cases keep their original standing-authorization policy. Taylor's workflow is implemented and deployed but not yet accepted in her real browser session. Execution and email are explicitly unavailable for independent-approval cases. Teams handoff remains a separate open issue. See the [roadmap](docs/ROADMAP.md).
+## Current presenter journey
 
-> **Verification boundary:** Local browser proof demonstrates rejection, resubmission, Finance approval and Alex's separate final approval with explicitly simulated API responses; it is not live-account acceptance. Current checks: 346 web tests plus production build; 561 backend/API/deployment tests (11 skips). The additive live database upgrade preserved existing cases, analyses and decisions. The existing traditional Power BI reporting release is unchanged; see its [release evidence](docs/reviews/2026-09-12-traditional-reporting-verification.md).
+The live entry point is a presenter-controlled supplier-email check:
+
+1. The presenter sends the fictional RL-001 disruption email from
+   `will@willmacdonald.com` to Alex at `agent@willmacdonald.com`.
+2. Alex selects **Check email for disruptions**. Work IQ searches Alex's mailbox
+   for the approved scenario message; this is an explicit check, not continuous
+   monitoring.
+3. The page shows the actual sender, subject, received time, message text, and an
+   Outlook link. Alex reviews the extracted delivery facts before continuing.
+4. **Analyze this disruption** creates a source-bound case when necessary and
+   runs or reopens its analysis. The email's stable mailbox-scoped identity
+   prevents duplicate cases; changed or ambiguous content fails closed.
+5. After the analysis loads successfully, the email-entry panel, saved-demo
+   launcher, and recovery note disappear. The page continues directly into the
+   analyzed case. The entry controls remain available if analysis fails so the
+   presenter can retry.
+6. The presenter compares traditional Power BI investigation with the five-stage
+   AI-assisted workflow: **Understand the disruption**, **Investigate responses**,
+   **Choose a response**, **Review and approve**, and **Execute mitigation plan**.
+
+This path was live-verified as Alex using Will's `Demo run 0914-A` email. The
+Outlook citation opened the exact message, and repeated analysis reopened the
+same case and analysis. No outbound email, approval, or execution action was
+performed during that acceptance.
+
+## Current acceptance boundary
+
+- **Live and accepted:** Alex sign-in; presenter-controlled Work IQ email
+  discovery; reviewed email-to-case creation; duplicate prevention; live case
+  analysis; Outlook citation; traditional Power BI investigation; exact
+  card-to-report links; and the five-stage planner workspace.
+- **Implemented and deployed, but not accepted with Taylor's real session:**
+  separate Finance review, rejection/approval, and Alex's subsequent final
+  decision for new cases whose spending exceeds $20,000.
+- **Not yet a complete live demonstration:** option-specific mitigation
+  execution, reviewed outbound email received by Will, populated execution
+  outcomes in Power BI, and a reliable Teams desktop/web handoff still require
+  end-to-end acceptance. Historical cases retain their saved approval policy.
+
+The demo uses live Microsoft services with fictional business data. A healthy
+deployment, a saved analysis, or a passing unit test does not by itself prove an
+unaccepted cross-service step. See the [roadmap](docs/ROADMAP.md) for the detailed
+status and remaining work.
 
 ## Presenting the comparison
 
-Reopen a known analyzed case for a repeatable walkthrough; create a showcase case
-when deliberately demonstrating a fresh case and analysis. Reopening saved work
-does not retrieve sources again or approve a response.
+For the complete story, start with **Check email for disruptions**. Reopen a
+known analyzed case only when a repeatable walkthrough is preferable to a fresh
+mailbox check. Reopening saved work does not retrieve sources again or approve a
+response.
 
 - **Explore in Power BI** starts a traditional investigation across 178 fictional
   operational records: inventory, deliveries, transfers, qualification, production
   demand and customer orders. The presenter uses rows, charts and filters to reason
   through the disruption.
-- **Review with AI assistance** organizes the case into **Understand the disruption**,
-  **Investigate responses**, and **Make the decision**. Authoritative calculations
-  and recommendation ranking remain deterministic.
+- **Review with AI assistance** organizes the case into five stages from
+  understanding the disruption through mitigation execution. Authoritative
+  calculations and recommendation ranking remain deterministic; Finance review
+  and Alex's final decision remain human actions.
 - **A card's supporting-data link** opens the exact saved records used by that
   analysis—not the broad dataset or an unrelated case count. The inventory view
   reconciles 4,500 on hand − 200 held − 300 protected = 4,000 available components.
@@ -112,16 +126,31 @@ The Decision is the immutable pivot between analysis and downstream activity. Au
 - Append-only, idempotent Decisions and transactional outbox processing.
 - Exactly five bounded Execution Actions with durable attempt history.
 - Explicit, idempotent Simulated Execution with permanently labeled observations.
-- Presenter-focused React workspace with five stage tabs, source links/icons, bottom-of-card provenance, whole-dollar USD totals, two-decimal unit prices and an accessible recommendation explanation sheet.
+- Presenter-focused React workspace with a reviewed email entry, five stage tabs,
+  source links/icons, bottom-of-card provenance, whole-dollar USD totals,
+  two-decimal unit prices, immediate option-selection feedback, and an accessible
+  recommendation explanation sheet.
 - Durable fallback persistence through SQLite and a complete browser end-to-end gate.
 - Opt-in Fabric SQL persistence, Entra token authentication, schema health checks, and read-only analytics views.
 - Guarded, insert-only canonical RL-001 source loading with full stored-data readback and timezone-preserving SQL binding. Live retrieval freshness is separate from fictional business dates, so the corpus does not require daily regeneration. See the [loader procedure](docs/deployment/personal-tenant.md#load-the-canonical-rl-001-operational-source).
 - A published DirectQuery Power BI project with seven broad traditional pages and eight exact saved-context pages. The isolated reporting dataset contains 178 records without changing saved analyses or the canonical operational source. Native tables/charts/filter checks, current/older saved inventory and order parity, and mismatched-identity safeguards passed. Artifact-bound acceptance enables the website links; populated execution outcomes remain unverified.
 - Single-tenant Entra authentication with exact Alex/Taylor identity and role bindings. Authenticated Finance inbox/detail and approve/reject routes are deployed. Alex's real session passed; Taylor's interactive acceptance awaits password sign-in. No replacement identity or new permission was created.
-- A delegated Work IQ OBO client and bounded MCP integration with strict source-statement validation. A narrow email query and named Team/channel lookup through Work IQ entity tools are followed by individual message reads. This is structured discovery, not Copilot semantic search. Microsoft Graph backs Work IQ resource paths; the application has no direct Graph client. Configured message IDs remain validation checks, never lookup inputs or fallback fetch targets. Prior live analysis verified both sources and the user opened the intended messages; the later Teams handoff/authentication-loop report remains unresolved. The September 12 UX release reopened saved evidence and did not repeat discovery.
+- A delegated Work IQ OBO client and bounded MCP integration with strict
+  source-statement validation. The live presenter action discovers the approved
+  supplier email, reads that individual message, validates its source facts and
+  citation, and binds it to an idempotent case. Named Team/channel discovery uses
+  the same structured Work IQ path. This is structured discovery, not Copilot
+  semantic search; the application has no direct Graph client. Configured message
+  IDs validate results and are never lookup inputs or fallback fetch targets. The
+  supplier-email path is accepted; the Teams handoff/authentication-loop report
+  remains unresolved.
 - Microsoft Agent Framework orchestration that preserves deterministic decision authority, plus fail-closed Foundry publication and verification tooling.
 - Three immutable Foundry prompt agents—signal, context, and decision—published as version `1` and verified against their committed contracts on `gpt-5.6-luna`.
-- Personal-tenant Azure infrastructure deployed in East US 2 through the guarded workflow. Revision29 is healthy with unchanged reporting activation, resource-scoped roles and scale. This release created one fresh live approval-verification case and analysis, and submitted its response for Taylor; no operational action or email was executed.
+- Personal-tenant Azure infrastructure deployed in East US 2 through the guarded
+  workflow. Revision35 is healthy with unchanged reporting activation,
+  resource-scoped roles and scale. The current release verified the actual
+  email-to-analysis transition without creating a duplicate case or performing
+  an outbound email, approval, or operational action.
 
 Live Microsoft service integration is not yet complete. Published or configured cloud prerequisites do not count as live acceptance until their approval-gated invocation, data, browser, and cross-service consistency gates pass. The [roadmap](docs/ROADMAP.md) records the verified boundary between implemented, configured, and pending work.
 
@@ -232,6 +261,8 @@ Cloud deployment and live tests are intentionally approval-gated because they au
 - [Approved traditional reporting correction](docs/superpowers/specs/2026-09-12-traditional-operational-reporting-design.md) — traditional investigation versus exact supporting-data links
 - [Presenter header and planning tabs](docs/superpowers/specs/2026-09-12-presenter-header-and-stage-tabs-design.md)
 - [Recommendation explanation sheet](docs/superpowers/specs/2026-09-12-recommendation-explanation-sheet-design.md)
+- [Email-to-mitigation presenter journey](docs/superpowers/specs/2026-09-12-email-to-mitigation-workflow-design.md)
+- [Reviewed email-to-case release evidence](docs/reviews/2026-09-14-email-to-case-release.md)
 - [Roadmap and current status](docs/ROADMAP.md)
 - [Canonical domain language](CONTEXT.md)
 - [Architecture decisions](docs/adr/)
