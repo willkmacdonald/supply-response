@@ -435,3 +435,53 @@ class SqlAlchemyProposalRepository:
             },
         )
         return expected.model_copy(update={"generation": expected.generation + 1})
+
+    def withdraw_current(
+        self,
+        case_id: str,
+        *,
+        expected: ProposalToken,
+        now: datetime,
+        operation_id: str,
+    ) -> ProposalToken:
+        case = self._store._stored_case(self._connection, case_id)
+        if case.effective_workflow_version is not WorkflowVersion.INDEPENDENT_FINANCE:
+            raise PersistenceIntegrityError(
+                "Case does not use independent Finance workflow"
+            )
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("Withdrawal time must be timezone-aware")
+        if not operation_id.strip():
+            raise ValueError("Withdrawal operation_id must be nonblank")
+        state = self.get_state(case_id)
+        if state.token != expected:
+            raise StaleProposal("Case analysis or proposal changed")
+        if state.selection is not None and now < state.selection.submitted_at:
+            raise ValueError("Withdrawal cannot precede proposal submission")
+        _cas_projection(
+            self._connection,
+            case_id=case_id,
+            expected=expected,
+            values={"current_selection_id": None, "updated_at": now},
+        )
+        if state.review is not None:
+            superseded = supersede_finance_review(review=state.review, now=now)
+            material = {
+                "operation": "decision-withdraw",
+                "decision_id": operation_id,
+                "prior_review_id": state.review.review_id,
+                "prior_revision": state.review_revision,
+                "superseded_at": now.isoformat(),
+            }
+            fingerprint = hashlib.sha256(
+                json.dumps(material, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+            self._finance.append(
+                superseded,
+                expected_revision=state.review_revision,
+                idempotency_key=f"decision-withdraw:{operation_id}",
+                request_fingerprint=fingerprint,
+            )
+        return expected.model_copy(
+            update={"generation": expected.generation + 1, "selection_id": None}
+        )

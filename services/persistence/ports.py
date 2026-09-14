@@ -1,3 +1,4 @@
+from datetime import datetime
 from types import TracebackType
 from typing import Protocol, runtime_checkable
 
@@ -106,6 +107,15 @@ class ProposalStore(Protocol):
     def publish(self, receipt: SelectionReceipt) -> ProposalSelection: ...
     def guard_current(
         self, case_id: str, *, expected: ProposalToken
+    ) -> ProposalToken: ...
+
+    def withdraw_current(
+        self,
+        case_id: str,
+        *,
+        expected: ProposalToken,
+        now: datetime,
+        operation_id: str,
     ) -> ProposalToken: ...
 
 

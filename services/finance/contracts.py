@@ -12,6 +12,7 @@ from pydantic import (
 
 from data.domain.analysis import AnalysisVersion, ResponseOption
 from data.domain.common import FrozenModel
+from data.domain.decisions import DecisionKind
 from data.domain.finance import FinanceReview
 from data.domain.proposals import ProposalSelection, ProposalToken
 
@@ -92,3 +93,40 @@ class FinanceReviewDetail(FrozenModel):
     option: ResponseOption
     is_current: bool
     current_token: ProposalToken
+
+
+class FinalizeProposalCommand(FrozenModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    case_id: Identifier
+    expected: ProposalToken
+    kind: DecisionKind
+    idempotency_key: CommandKey
+    rejection_reason: Annotated[StrictStr, Field(max_length=4000)] | None = None
+
+    @field_validator("case_id", "idempotency_key")
+    @classmethod
+    def nonblank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value must be nonblank")
+        return value
+
+    @field_validator("rejection_reason")
+    @classmethod
+    def normalize_reason(cls, value: str | None) -> str | None:
+        return (value.strip() or None) if value is not None else None
+
+    @model_validator(mode="after")
+    def request_shape(self) -> "FinalizeProposalCommand":
+        if (
+            self.expected.analysis_id is None
+            or self.expected.analysis_material_hash is None
+        ):
+            raise ValueError("finalization requires a current analysis")
+        if self.kind is DecisionKind.APPROVED:
+            if self.expected.selection_id is None:
+                raise ValueError("approval requires a current proposal selection")
+            if self.rejection_reason is not None:
+                raise ValueError("approval cannot include rejection_reason")
+        elif self.rejection_reason is None:
+            raise ValueError("rejection requires a nonblank rejection_reason")
+        return self

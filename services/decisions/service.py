@@ -4,11 +4,12 @@ import hashlib
 import json
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import ClassVar
 
 from sqlalchemy.exc import IntegrityError
 
 from data.domain.analysis import AnalysisResponseOptionMaterial, AnalysisVersion
-from data.domain.cases import CaseInstance
+from data.domain.cases import CaseInstance, WorkflowVersion
 from data.domain.decisions import (
     ApprovalSatisfaction,
     ApprovalTarget,
@@ -68,7 +69,7 @@ def _request_fingerprint(
 
 
 class DecisionPolicy:
-    _ROLE_PERSONAS = {
+    _ROLE_PERSONAS: ClassVar[dict[str, str]] = {
         "finance_approver": "RL-PERSONA-TAYLOR",
         "quality_approver": "RL-PERSONA-JORDAN",
     }
@@ -226,21 +227,26 @@ class DecisionPolicy:
         case: CaseInstance,
         analysis: AnalysisVersion,
         option,
+        excluded_roles: frozenset[str] = frozenset(),
     ) -> tuple[ApprovalSatisfaction, ...]:
         option_satisfactions = tuple(
             item
             for item in analysis.approval_satisfactions
-            if item.option_id == option.option_id
+            if item.option_id == option.option_id and item.role not in excluded_roles
         )
         if any(not item.satisfied for item in option_satisfactions):
             raise DecisionPolicyViolation(
                 "Selected option contains an unsatisfied approval prerequisite"
             )
 
-        required_roles = set(option.prerequisite_roles) - {
-            "material_planner",
-            "response_approver",
-        }
+        required_roles = (
+            set(option.prerequisite_roles)
+            - {
+                "material_planner",
+                "response_approver",
+            }
+            - excluded_roles
+        )
         accepted: list[ApprovalSatisfaction] = []
         for role in sorted(required_roles):
             expected_persona = self._ROLE_PERSONAS.get(role)
@@ -340,6 +346,39 @@ class DecisionPolicy:
         )
         return tuple(sorted((*existing, material), key=lambda item: item.role))
 
+    def authorize_independent_and_materialize(
+        self,
+        command: RecordDecisionCommand,
+        actor: IdentitySnapshot,
+        case: CaseInstance,
+        projection,
+        analysis: AnalysisVersion,
+        proposal_approval,
+    ) -> tuple[ApprovalSatisfaction, ...]:
+        self._authorize_actor(command, actor)
+        self._require_current_analysis(command, case, projection, analysis)
+        if command.kind is DecisionKind.REJECTED:
+            if proposal_approval is not None:
+                raise DecisionPolicyViolation(
+                    "Rejection cannot contain proposal evidence"
+                )
+            return ()
+        if proposal_approval is None:
+            raise DecisionPolicyViolation("Approval requires proposal evidence")
+        option = self._selected_option(command, analysis)
+        if proposal_approval.selection.proposal.option_id != option.option_id:
+            raise DecisionPolicyViolation("Option differs from current proposal")
+        existing = self._revalidate_existing_satisfactions(
+            case=case,
+            analysis=analysis,
+            option=option,
+            excluded_roles=frozenset({"finance_approver"}),
+        )
+        material = self._alex_material_planner_satisfaction(
+            actor=actor, case=case, analysis=analysis, option=option
+        )
+        return tuple(sorted((*existing, material), key=lambda item: item.role))
+
 
 class DecisionService:
     def __init__(
@@ -358,6 +397,14 @@ class DecisionService:
         existing: Decision,
         request_fingerprint: str,
     ) -> Decision:
+        if (
+            existing.approval_policy_version
+            == WorkflowVersion.INDEPENDENT_FINANCE.value
+        ):
+            raise DecisionPolicyViolation(
+                "INDEPENDENT_FINANCE_REQUIRED: use FinanceDecisionService",
+                code="INDEPENDENT_FINANCE_REQUIRED",
+            )
         if existing.request_fingerprint != request_fingerprint:
             raise IdempotencyKeyConflict(
                 "idempotency key was already used for a different request"
@@ -389,6 +436,14 @@ class DecisionService:
 
                 projection = uow.cases.get_projection(command.case_id)
                 case = projection.case
+                if (
+                    case.effective_workflow_version
+                    is WorkflowVersion.INDEPENDENT_FINANCE
+                ):
+                    raise DecisionPolicyViolation(
+                        "INDEPENDENT_FINANCE_REQUIRED: use FinanceDecisionService",
+                        code="INDEPENDENT_FINANCE_REQUIRED",
+                    )
                 analysis = uow.cases.get_analysis(command.analysis_id)
                 satisfactions = self._policy.authorize_and_materialize(
                     command,

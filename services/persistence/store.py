@@ -19,6 +19,7 @@ from data.domain.decisions import (
     ApprovalSatisfaction,
     CaseProjection,
     Decision,
+    DecisionKind,
 )
 from data.domain.execution import (
     ALLOWED_TRANSITIONS,
@@ -1118,6 +1119,7 @@ class SqlAlchemyDecisionRepository:
             raise PersistenceIntegrityError(
                 "Decision comparator trace conflicts with its immutable Analysis Version"
             )
+        self._require_proposal_lineage(decision)
         if decision.kind.value == "rejected":
             return
         option = next(
@@ -1140,6 +1142,55 @@ class SqlAlchemyDecisionRepository:
                 "Decision selected option conflicts with its immutable Analysis Version"
             )
         self._require_derived_satisfactions(decision, analysis, option)
+
+    def _require_proposal_lineage(self, decision: Decision) -> None:
+        evidence = decision.proposal_approval
+        independent = (
+            decision.approval_policy_version
+            == WorkflowVersion.INDEPENDENT_FINANCE.value
+        )
+        if decision.kind is DecisionKind.REJECTED:
+            if evidence is not None:
+                raise PersistenceIntegrityError(
+                    "Rejected Decision has proposal evidence"
+                )
+            return
+        if independent != (evidence is not None):
+            raise PersistenceIntegrityError(
+                "Decision proposal evidence conflicts with policy"
+            )
+        if evidence is None:
+            return
+        from services.persistence.finance_reviews import (
+            SqlAlchemyFinanceReviewRepository,
+        )
+        from services.persistence.proposals import SqlAlchemyProposalRepository
+
+        selection = SqlAlchemyProposalRepository(
+            self._store, self._connection
+        ).get_selection(evidence.selection.selection_id)
+        if selection != evidence.selection:
+            raise PersistenceIntegrityError(
+                "Decision selection snapshot differs from journal"
+            )
+        if evidence.review is None:
+            if evidence.review_revision is not None:
+                raise PersistenceIntegrityError("Low-cost evidence has review revision")
+            return
+        if evidence.review_revision is None:
+            raise PersistenceIntegrityError("Finance evidence lacks revision")
+        try:
+            review = SqlAlchemyFinanceReviewRepository(
+                self._store, self._connection
+            ).get_revision(evidence.review.review_id, evidence.review_revision)
+        except RecordNotFound as error:
+            raise PersistenceIntegrityError(
+                "Decision Finance revision is absent from journal"
+            ) from error
+        if review != evidence.review:
+            raise PersistenceIntegrityError(
+                "Decision Finance snapshot differs from revision"
+            )
 
     def _require_outbox_cardinality(self, decision: Decision) -> None:
         event_types = (
@@ -1210,6 +1261,11 @@ class SqlAlchemyDecisionRepository:
         option,
     ) -> None:
         required_roles = set(option.prerequisite_roles) - {"response_approver"}
+        if (
+            decision.approval_policy_version
+            == WorkflowVersion.INDEPENDENT_FINANCE.value
+        ):
+            required_roles.discard("finance_approver")
         actual_by_role = {item.role: item for item in decision.approval_satisfactions}
         if set(actual_by_role) != required_roles:
             raise PersistenceIntegrityError(
@@ -1329,17 +1385,7 @@ class SqlAlchemyDecisionRepository:
             raise RuntimeModeConflict(
                 "Decision runtime_mode must match its immutable Case Instance"
             )
-        analysis = SqlAlchemyCaseRepository(self._store, self._connection).get_analysis(
-            decision.analysis_id
-        )
-        if (
-            analysis.case_id != decision.case_id
-            or analysis.material_hash != decision.analysis_material_hash
-            or analysis.material.runtime_mode is not decision.runtime_mode
-        ):
-            raise PersistenceIntegrityError(
-                "Decision provenance must match its persisted Analysis Version"
-            )
+        self._require_analysis_lineage(decision)
         self._connection.execute(
             insert(decisions).values(
                 decision_id=decision.decision_id,

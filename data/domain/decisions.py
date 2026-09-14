@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from pydantic import Field, TypeAdapter, field_validator, model_validator
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    TypeAdapter,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
-from .cases import CaseInstance
+from .cases import CaseInstance, WorkflowVersion
 from .common import (
     CasePurpose,
     FrozenModel,
@@ -73,7 +79,7 @@ class StandingAuthorization(FrozenModel):
                     ResponseOptionKind.EXPEDITE,
                     ResponseOptionKind.COMBINED,
                 ),
-                maximum_response_cost=Decimal("25000"),
+                maximum_response_cost=Decimal(25000),
                 allowed_corpora=(CorpusScope.DEMO_CORPUS,),
                 allowed_template_ids=("RL-001",),
                 allowed_case_purposes=tuple(CasePurpose),
@@ -219,6 +225,7 @@ class Decision(FrozenModel):
     runtime_mode: RuntimeMode
     scenario_effective_time: datetime
     approval_satisfactions: tuple[ApprovalSatisfaction, ...]
+    proposal_approval: Any | None = None
     actor: IdentitySnapshot
     rejection_reason: str | None
     decided_at: datetime
@@ -252,8 +259,29 @@ class Decision(FrozenModel):
         # numeric strings from option identifiers.
         return RankingResult.model_validate_json(json.dumps(value, default=str))
 
+    @field_validator("proposal_approval", mode="before")
+    @classmethod
+    def decode_proposal_approval(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        from .finance_decisions import ProposalApprovalEvidence
+
+        return ProposalApprovalEvidence.model_validate(value)
+
+    @model_serializer(mode="wrap")
+    def omit_absent_proposal_approval(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, Any]:
+        payload = handler(self)
+        if self.proposal_approval is None:
+            payload.pop("proposal_approval", None)
+        return payload
+
     @model_validator(mode="after")
     def validate_immutable_shape(self) -> Decision:
+        independent = (
+            self.approval_policy_version == WorkflowVersion.INDEPENDENT_FINANCE.value
+        )
         if self.kind is DecisionKind.REJECTED:
             if (
                 self.selected_option_id is not None
@@ -264,6 +292,7 @@ class Decision(FrozenModel):
                 or self.prerequisite_roles
                 or self.comparator_trace is None
                 or self.approval_satisfactions
+                or self.proposal_approval is not None
                 or self.rejection_reason is None
                 or not self.rejection_reason.strip()
             ):
@@ -308,6 +337,47 @@ class Decision(FrozenModel):
             ):
                 raise ValueError("Decision Approval Satisfaction is inconsistent")
             seen_roles.add(satisfaction.role)
+        if independent != (self.proposal_approval is not None):
+            raise ValueError("Decision policy conflicts with proposal evidence")
+        if self.proposal_approval is not None:
+            evidence = self.proposal_approval
+            selection = evidence.selection
+            if (
+                selection.proposal.case_id != self.case_id
+                or selection.proposal.analysis_id != self.analysis_id
+                or selection.proposal.analysis_material_hash
+                != self.analysis_material_hash
+                or selection.proposal.option_id != self.selected_option_id
+                or self.selected_option is None
+                or self.selected_option.predicted is None
+                or selection.proposal.response_cost
+                != self.selected_option.predicted.response_cost
+                or self.decided_at < selection.submitted_at
+            ):
+                raise ValueError("Decision conflicts with proposal evidence")
+            try:
+                final_actor = (
+                    UUID(self.actor.tenant_id or ""),
+                    UUID(self.actor.object_id or ""),
+                )
+                submitter = (
+                    UUID(selection.submitted_by.tenant_id or ""),
+                    UUID(selection.submitted_by.object_id or ""),
+                )
+            except (ValueError, TypeError, AttributeError) as error:
+                raise ValueError("Decision requires exact Alex identity") from error
+            if final_actor != submitter:
+                raise ValueError("Final Alex differs from proposal submitter")
+            if evidence.review is not None:
+                reviewed_at = evidence.review.reviewed_at
+                if reviewed_at is None or self.decided_at < reviewed_at:
+                    raise ValueError("Decision time precedes Finance approval")
+            if any(
+                item.role == "finance_approver" for item in self.approval_satisfactions
+            ):
+                raise ValueError(
+                    "Independent Decision cannot use standing Finance satisfaction"
+                )
         return self
 
     @classmethod
@@ -320,6 +390,7 @@ class Decision(FrozenModel):
         *,
         request_fingerprint: str,
         decided_at: datetime | None = None,
+        proposal_approval: Any | None = None,
     ) -> Decision:
         option = next(
             (
@@ -353,6 +424,7 @@ class Decision(FrozenModel):
             runtime_mode=analysis.material.runtime_mode,
             scenario_effective_time=analysis.material.scenario_effective_time,
             approval_satisfactions=satisfactions,
+            proposal_approval=proposal_approval,
             actor=actor,
             rejection_reason=command.rejection_reason,
             decided_at=decided_at or datetime.now(UTC),
