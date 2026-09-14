@@ -13,6 +13,7 @@ from data.domain.execution import (
     ExecutionStatus,
     ExecutionStatusEvent,
 )
+from services.execution.currentness import guard_execution_current
 from services.execution.planner import plan_actions
 from services.persistence.ports import UnitOfWork
 
@@ -113,7 +114,10 @@ class ExecutionService:
 
     def create(self, action: ExecutionAction) -> ExecutionAction:
         with self._uow_factory() as uow:
-            uow.execution.insert_action_if_absent(action)
+            inserted = uow.execution.insert_action_if_absent(action)
+            if not inserted:
+                return uow.execution.get_action(action.action_id)
+            guard_execution_current(uow, action.decision_id)
             created = uow.execution.get_action(action.action_id)
             uow.commit()
             return created
@@ -144,6 +148,7 @@ class ExecutionService:
                     f"current status is {action.status.value}"
                 )
             self._require_transition(action, ExecutionStatus.IN_PROGRESS)
+            guard_execution_current(uow, action.decision_id)
             attempts = uow.execution.list_attempts(action_id)
             attempt = ExecutionAttempt(
                 attempt_id=f"RL-ATTEMPT-{uuid4()}",
@@ -199,6 +204,8 @@ class ExecutionService:
                 raise IllegalExecutionTransition(
                     "transition requires the action's in-progress attempt"
                 )
+            if to_status is ExecutionStatus.COMPLETED:
+                guard_execution_current(uow, action.decision_id)
             now = self._clock()
             finished_attempt = attempt.model_copy(
                 update={
