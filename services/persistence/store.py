@@ -1166,9 +1166,14 @@ class SqlAlchemyDecisionRepository:
         )
         from services.persistence.proposals import SqlAlchemyProposalRepository
 
-        selection = SqlAlchemyProposalRepository(
-            self._store, self._connection
-        ).get_selection(evidence.selection.selection_id)
+        try:
+            selection = SqlAlchemyProposalRepository(
+                self._store, self._connection
+            ).get_selection(evidence.selection.selection_id)
+        except RecordNotFound as error:
+            raise PersistenceIntegrityError(
+                "Decision proposal selection is absent from journal"
+            ) from error
         if selection != evidence.selection:
             raise PersistenceIntegrityError(
                 "Decision selection snapshot differs from journal"
