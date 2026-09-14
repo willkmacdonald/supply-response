@@ -155,14 +155,63 @@ assertions. The final correction includes all three. Final verdict at
 Important findings. The intermediate review snapshot `6ebb0c1` was amended into
 this final correction; the original base remains `e0f6f4f`.
 
-Command service planning is prepared. This storage acceptance does not expose
-Taylor's review actions, activate the new workflow or authorize deployment.
+This storage acceptance does not expose Taylor's review actions, activate the
+new workflow or authorize deployment.
+
+## Submission and review commands — locally accepted
+
+Initial implementation `73f59d5` checks the exact configured Alex/Taylor identity
+before persistence access, uses evaluated cost rather than caller-provided cost,
+and commits each submission or review atomically. Repeating the original command
+returns its original recorded result, even after a later review or selection.
+Current status is intentionally a separate query, not a rewritten command receipt.
+
+The parent's fresh initial regression passed 343 tests (15 live tests excluded).
+Independent review found no production defect but required an existing-receipt
+unauthorized replay test before acceptance. It also identified bounded test typing
+cleanup and a baseline-option coverage claim that needed correction. Test-only
+correction `a81f8e4` closes all findings; independent re-review approved both spec
+compliance and code quality. Production behavior did not change in the correction.
+
+Parent fresh non-live regression: 344 passed, 15 deselected, one existing
+Starlette/httpx warning in 19.77s. Combined service/test Pyright reports zero
+errors and warnings with the project interpreter. A direct invocation without
+that interpreter initially failed import resolution; explicitly passing
+`.venv/bin/python` resolved the environment issue. The `uv` cache was restricted
+on that final check, so no cache permissions or dependencies were changed.
+
+This layer accepts server-owned identity snapshots. It does not verify browser
+tokens or add routes, Taylor's inbox, final Alex Decision enforcement or mail.
+
+## Current and historical Finance queries — locally accepted
+
+Commit `6dcfe5f` adds Alex's current proposal status and Taylor's pending-request
+list and exact historical request detail. A historical link keeps its original
+selection, analysis, option and review reason; currentness is reported separately.
+Pending candidates require the current selection and latest pending revision,
+not merely the existence of an older pending row. Direct lookup of another
+configured submitter's request is denied; the pending list excludes it.
+
+The initial query tests failed because the three service methods were missing.
+The completed service file passes 45 tests, including wrong-caller denial before
+database access, foreign tenant/object exclusion, terminal-status filtering and
+unchanged rows/generation across queries and file-store reopen.
+
+Parent fresh committed-snapshot regression: 357 passed, 15 live tests deselected,
+one existing Starlette/httpx warning in 20.31s. Scoped service/repository/port/test
+Pyright with the project interpreter reports zero errors and warnings. Independent
+review approved spec compliance and code quality with no actionable findings.
+Commands, database schema, routes and activation are unchanged by this increment.
+
+These are application services, not yet Taylor's browser inbox. Final Alex
+Decision binding and authenticated API/UI composition remain required before
+the new workflow can be used in the app.
 
 ## Remaining gates
 
 1. Native database acceptance for the locally tested durable Finance review log.
-2. Versioned new-case policy, independent Taylor authentication and API access,
-   current-proposal checks, and final Alex Decision enforcement.
+2. Authenticated submission/status/review APIs and final Alex Decision enforcement;
+   only then activate the locally tested new-case policy in application routes.
 3. Finance cross-session UI integration and final five-stage workflow verification.
 4. Presenter-controlled Work IQ discovery of a new email from Will, exact
    case-specific source binding and duplicate-safe case creation.
