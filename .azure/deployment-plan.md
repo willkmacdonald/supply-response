@@ -34,6 +34,19 @@ the email review for retry.
 Guarded preflight, official schema validation, AZD authentication, Azure policy
 listing, provision preview, packaging, and live role verification all passed.
 
+### Deployment proof — completed email step
+
+Source `9ecb912`; ACR run `ch1s` succeeded. Revision
+`ca-sr-demo--0000035` is latest-ready with 100% traffic on immutable image
+`sha256:9ce005afcbb4a242dcb33fb1bf1ad8b0b0e74d9eb099ff33ca7ae802339e139f`.
+Guarded Fabric/Foundry readiness and application smoke checks passed. The
+post-release role query confirmed the existing AcrPull, Key Vault Secrets User,
+and Foundry User assignments. In the live Alex browser, Work IQ found the real
+0914-A supplier email, **Analyze this disruption** completed on the same saved
+case and analysis, and the entire **Supplier email** region disappeared. The
+analyzed case remained visible; no duplicate case, outbound email, or approval
+was created.
+
 ## Email entry visibility correction — 2026-09-14
 
 Scope: keep inbox discovery available with an open case; show found email text
