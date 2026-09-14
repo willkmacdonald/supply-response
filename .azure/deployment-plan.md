@@ -34,7 +34,23 @@ directly from the header to planning routes and the analysis tabs with no email
 panel, saved-demo launcher, recovery note, overflow or page error. Fresh guarded
 preflight, AZD authentication, package validation, policy listing, no-create/
 no-delete provision preview, Docker context review and static role review passed.
-Deployment proof is recorded below when completed.
+Deployment proof follows.
+
+### Deployment proof — completed case launcher
+
+Source `a0ae4f3`; ACR run `ch1t` succeeded. Revision
+`ca-sr-demo--0000036` is latest-ready and running with 100% traffic on immutable
+image `sha256:f51aae0146eb29aa2f4c170e9c3b4d16098024d9c9949d53def9230eed794d0f`.
+Guarded application, Fabric and Foundry readiness checks passed. Live role
+verification confirmed AcrPull on the shared registry, Key Vault Secrets User
+on the application vault and Foundry User on the project.
+
+In the live Alex browser, Work IQ found Will's `Demo run 0914-A` email. After
+**Analyze this disruption** completed, the entire **Supplier email** panel, the
+**Saved demos** launcher and the saved-results recovery note were absent. The
+page continued directly to planning routes and the five analysis stages on the
+same case and analysis. No duplicate case, outbound email, approval or execution
+action was created.
 
 ## Hide completed email-discovery step — 2026-09-14
 
@@ -314,7 +330,7 @@ Restored Combined and verified its original waiting-for-Taylor review remained.
 No submission, approval, mail, execution, new case, or new analysis was performed.
 Prior revision29 approval acceptance below is historical.
 
-> **Status:** Validated — completed-case-launcher correction passed fresh validation; revision35 remains live pending this release.
+> **Status:** Deployed — completed-case-launcher correction is live and browser-verified on revision36.
 
 ## Independent approval browser release — 2026-09-13
 

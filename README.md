@@ -147,7 +147,7 @@ The Decision is the immutable pivot between analysis and downstream activity. Au
 - Microsoft Agent Framework orchestration that preserves deterministic decision authority, plus fail-closed Foundry publication and verification tooling.
 - Three immutable Foundry prompt agents—signal, context, and decision—published as version `1` and verified against their committed contracts on `gpt-5.6-luna`.
 - Personal-tenant Azure infrastructure deployed in East US 2 through the guarded
-  workflow. Revision35 is healthy with unchanged reporting activation,
+  workflow. Revision36 is healthy with unchanged reporting activation,
   resource-scoped roles and scale. The current release verified the actual
   email-to-analysis transition without creating a duplicate case or performing
   an outbound email, approval, or operational action.
