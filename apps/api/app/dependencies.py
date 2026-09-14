@@ -38,6 +38,9 @@ from services.decisions.service import DecisionService, UnitOfWorkFactory
 from services.execution.planner import plan_actions
 from services.execution.playback import PlaybackClock, PlaybackService, RealClock
 from services.execution.worker import ActionPlanningWorker, ExecutionService
+from services.finance.decisions import FinanceDecisionService
+from services.finance.identity import BoundFinanceActors
+from services.finance.service import FinanceService
 from services.persistence.fabric_sql import fabric_store
 from services.persistence.sqlite import sqlite_store
 from services.persistence.store import SqlAlchemyStore
@@ -85,6 +88,9 @@ class ApplicationServices:
     async_resources: tuple[Any, ...] = ()
     live_operational_data: Any | None = None
     readiness: ReadinessPort = field(default_factory=FallbackReadiness)
+    finance_actors: BoundFinanceActors | None = None
+    finance_service: FinanceService | None = None
+    finance_decision_service: FinanceDecisionService | None = None
 
     @property
     def uow_factory(self) -> UnitOfWorkFactory:
@@ -256,6 +262,21 @@ def build_composition(
         ),
         readiness=readiness,
     )
+    if settings.runtime_mode is RuntimeMode.LIVE and all(
+        (settings.allowed_tenant_id, settings.alex_object_id, settings.taylor_object_id)
+    ):
+        actors = BoundFinanceActors(
+            tenant_id=UUID(cast(str, settings.allowed_tenant_id)),
+            alex_object_id=UUID(cast(str, settings.alex_object_id)),
+            taylor_object_id=UUID(cast(str, settings.taylor_object_id)),
+        )
+        services.finance_actors = actors
+        services.finance_service = FinanceService(
+            services.uow_factory, actors=actors, clock=now
+        )
+        services.finance_decision_service = FinanceDecisionService(
+            services.uow_factory, actors=actors, clock=now
+        )
     return services
 
 
@@ -370,7 +391,18 @@ def build_live_components(
     auth_service = AuthService(
         tenant_id=tenant_id,
         audience=client_id,
-        bindings=(PersonaBinding.alex(tenant_id, values["alex_object_id"]),),
+        bindings=tuple(
+            binding
+            for binding in (
+                PersonaBinding.alex(tenant_id, values["alex_object_id"]),
+                (
+                    PersonaBinding.taylor(tenant_id, settings.taylor_object_id)
+                    if settings.taylor_object_id
+                    else None
+                ),
+            )
+            if binding is not None
+        ),
     )
     credential = build_credential(settings)
     store = fabric_store(settings, credential)
@@ -497,3 +529,51 @@ def get_decision_identity(
     if actor is None:
         return services.identity
     return actor.to_identity_snapshot()
+
+
+def require_planner(
+    services: ApplicationServices = Depends(get_services),
+    actor: AuthenticatedActor | None = Depends(get_actor),
+) -> AuthenticatedActor | None:
+    if actor is None:
+        return None
+    expected = (
+        services.settings.allowed_tenant_id,
+        services.settings.alex_object_id,
+        "RL-PERSONA-ALEX",
+        "RL-ENTRA-ALEX",
+        ("material_planner", "response_approver"),
+    )
+    actual = (
+        actor.tenant_id,
+        actor.object_id,
+        actor.persona_id,
+        actor.source_id,
+        actor.effective_roles,
+    )
+    if actual != expected:
+        raise HTTPException(status_code=403, detail={"code": "PLANNER_ACCESS_REQUIRED"})
+    return actor
+
+
+def require_finance_actor(
+    services: ApplicationServices = Depends(get_services),
+    actor: AuthenticatedActor | None = Depends(get_actor),
+) -> IdentitySnapshot:
+    if actor is None or services.finance_actors is None:
+        raise HTTPException(status_code=403, detail={"code": "FINANCE_ACCESS_REQUIRED"})
+    identity = actor.to_identity_snapshot()
+    try:
+        services.finance_actors.require_taylor(identity)
+    except PermissionError:
+        raise HTTPException(
+            status_code=403, detail={"code": "FINANCE_ACCESS_REQUIRED"}
+        ) from None
+    return identity
+
+
+def require_alex_identity(
+    planner: AuthenticatedActor | None = Depends(require_planner),
+    services: ApplicationServices = Depends(get_services),
+) -> IdentitySnapshot:
+    return services.identity if planner is None else planner.to_identity_snapshot()

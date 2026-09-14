@@ -12,8 +12,10 @@ from data.domain.analysis import (
     RankingResult,
     ResponseOption,
 )
+from data.domain.cases import WorkflowVersion
 from data.domain.decisions import ApprovalSatisfaction
 from data.domain.evidence import EvidenceItem
+from data.domain.finance_decisions import ProposalApprovalEvidence
 
 
 class StrictRequest(BaseModel):
@@ -83,6 +85,7 @@ class CaseResponse(BaseModel):
     recorded_at: datetime
     projection_updated_at: datetime
     controls: CaseControls
+    workflow_version: WorkflowVersion
 
 
 class AnalysisResponse(BaseModel):
@@ -126,6 +129,7 @@ class DecisionResponse(BaseModel):
     projection_updated_at: datetime
     action_planning_status: Literal["not_applicable", "pending", "failed", "complete"]
     new_analysis_available: bool
+    proposal_approval_evidence: ProposalApprovalEvidence | None = None
 
 
 class ActionResponse(BaseModel):

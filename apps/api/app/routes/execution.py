@@ -18,6 +18,7 @@ from apps.api.app.dependencies import (
 )
 from apps.api.app.routes.decisions import _decision, _require_role
 from data.domain.decisions import IdentitySnapshot
+from services.execution.currentness import ExecutionProposalStale
 from services.execution.playback import (
     PlaybackAuthorizationError,
     PlaybackStateError,
@@ -78,6 +79,11 @@ def retry_failed_action(
         raise HTTPException(
             status_code=409,
             detail={"code": "ACTION_RETRY_NOT_AVAILABLE", "message": str(error)},
+        ) from None
+    except ExecutionProposalStale:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "EXECUTION_PROPOSAL_STALE"},
         ) from None
     return _action_response(services, decision, retried)
 

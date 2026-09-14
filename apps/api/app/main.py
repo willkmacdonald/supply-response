@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -13,12 +13,15 @@ from apps.api.app.dependencies import (
     ApplicationServices,
     build_composition,
     default_settings,
+    require_planner,
 )
 from apps.api.app.routes.cases import router as cases_router
 from apps.api.app.routes.dashboard import router as dashboard_router
 from apps.api.app.routes.decisions import router as decisions_router
 from apps.api.app.routes.execution import router as execution_router
+from apps.api.app.routes.finance import router as finance_router
 from apps.api.app.routes.health import router as health_router
+from apps.api.app.routes.session import router as session_router
 from apps.api.app.routes.test_support import router as test_support_router
 from apps.api.app.runtime import RuntimeProgression
 from apps.api.app.settings import Settings
@@ -61,12 +64,15 @@ def create_app(
     )
     api.state.services = active_services
     api.include_router(health_router)
-    api.include_router(cases_router)
-    api.include_router(decisions_router)
-    api.include_router(execution_router)
-    api.include_router(dashboard_router)
+    api.include_router(session_router)
+    planner_dependencies = [Depends(require_planner)]
+    api.include_router(cases_router, dependencies=planner_dependencies)
+    api.include_router(decisions_router, dependencies=planner_dependencies)
+    api.include_router(execution_router, dependencies=planner_dependencies)
+    api.include_router(dashboard_router, dependencies=planner_dependencies)
+    api.include_router(finance_router)
     if active_services.settings.automated_test_faults_enabled:
-        api.include_router(test_support_router)
+        api.include_router(test_support_router, dependencies=planner_dependencies)
 
     distribution = static_directory or Path(__file__).resolve().parents[1] / "static"
     index = distribution / "index.html"

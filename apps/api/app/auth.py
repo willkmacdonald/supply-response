@@ -46,11 +46,11 @@ def _uuid(value: str, label: str) -> str:
 
 class PersonaBinding:
     __slots__ = (
-        "tenant_id",
+        "allowed_roles",
         "object_id",
         "persona_id",
-        "allowed_roles",
         "source_id",
+        "tenant_id",
     )
 
     def __init__(
@@ -86,11 +86,21 @@ class PersonaBinding:
             source_id="RL-ENTRA-ALEX",
         )
 
+    @classmethod
+    def taylor(cls, tenant_id: str, object_id: str) -> PersonaBinding:
+        return cls(
+            tenant_id=tenant_id,
+            object_id=object_id,
+            persona_id="RL-PERSONA-TAYLOR",
+            allowed_roles=("finance_approver",),
+            source_id="RL-ENTRA-TAYLOR",
+        )
+
 
 class UserAssertion:
     """Opaque bearer assertion for downstream OBO; never serializes or displays."""
 
-    __slots__ = ("__token", "__auth_service_capability")
+    __slots__ = ("__auth_service_capability", "__token")
 
     def __init__(self, token: str, **kwargs: Any) -> None:
         del token, kwargs
@@ -125,17 +135,17 @@ class UserAssertion:
 
 class AuthenticatedActor:
     __slots__ = (
-        "tenant_id",
-        "object_id",
-        "persona_id",
-        "effective_roles",
-        "display_name",
-        "user_principal_name",
-        "source_id",
-        "delegated_scopes",
-        "downstream_user_assertion",
         "__auth_service_capability",
         "_sealed",
+        "delegated_scopes",
+        "display_name",
+        "downstream_user_assertion",
+        "effective_roles",
+        "object_id",
+        "persona_id",
+        "source_id",
+        "tenant_id",
+        "user_principal_name",
     )
 
     def __init__(
@@ -229,7 +239,7 @@ JsonFetcher = Callable[[str], Mapping[str, Any]]
 
 def _http_get_json(url: str) -> Mapping[str, Any]:
     request = Request(url, headers={"Accept": "application/json"})
-    with urlopen(request, timeout=5) as response:  # noqa: S310 - fixed Entra URLs only
+    with urlopen(request, timeout=5) as response:
         body = response.read(_MAX_DOCUMENT_BYTES + 1)
     if len(body) > _MAX_DOCUMENT_BYTES:
         raise AuthenticationError("identity metadata response is too large")

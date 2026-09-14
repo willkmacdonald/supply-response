@@ -18,6 +18,7 @@ from apps.api.app.contracts import (
 from apps.api.app.dependencies import ApplicationServices, get_actor, get_services
 from apps.api.app.live import LiveSourceUnavailable
 from data.domain import CaseStatus, RuntimeMode
+from data.domain.cases import CaseInstance, WorkflowVersion
 from data.synthetic.rl001 import instantiate_rl001
 from services.persistence.store import RecordNotFound
 
@@ -59,6 +60,7 @@ def case_response(
             retry_action_planning=planning_failed,
             start_playback=case.status is CaseStatus.EXECUTING,
         ),
+        workflow_version=case.effective_workflow_version,
     )
 
 
@@ -102,6 +104,13 @@ async def create_case(
                 retrieved_at=services.clock(),
             )
             case, snapshot = live.case, live.snapshot
+            if services.settings.independent_finance_enabled:
+                case = CaseInstance.model_validate(
+                    {
+                        **case.model_dump(),
+                        "workflow_version": WorkflowVersion.INDEPENDENT_FINANCE,
+                    }
+                )
         except Exception:  # noqa: BLE001 - live source errors are intentionally bounded
             raise HTTPException(
                 status_code=503,

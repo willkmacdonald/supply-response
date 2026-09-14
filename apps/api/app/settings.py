@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     api_client_id: str | None = None
     entra_client_secret: str | None = None
     alex_object_id: str | None = None
+    taylor_object_id: str | None = None
+    independent_finance_enabled: bool = False
     workiq_supplier_source_id: str | None = None
     workiq_quality_source_id: str | None = None
     workiq_supplier_sender: str | None = None
@@ -52,6 +54,8 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_mode_specific_settings(self) -> "Settings":
         if self.runtime_mode is RuntimeMode.FALLBACK:
+            if self.independent_finance_enabled:
+                raise ValueError("independent Finance requires live mode")
             if not self.database_url:
                 raise ValueError("fallback mode requires SUPPLY_RESPONSE_DATABASE_URL")
             return self
@@ -67,4 +71,16 @@ class Settings(BaseSettings):
             missing.append("SUPPLY_RESPONSE_CREDENTIAL_MODE")
         if missing:
             raise ValueError(f"live mode requires {', '.join(missing)}")
+        if self.independent_finance_enabled:
+            identity_values = (
+                self.allowed_tenant_id,
+                self.alex_object_id,
+                self.taylor_object_id,
+            )
+            if not all(identity_values):
+                raise ValueError(
+                    "independent Finance requires tenant, Alex, and Taylor IDs"
+                )
+            if self.alex_object_id == self.taylor_object_id:
+                raise ValueError("Alex and Taylor must be different people")
         return self

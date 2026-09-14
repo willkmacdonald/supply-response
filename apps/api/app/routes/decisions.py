@@ -76,6 +76,7 @@ def decision_response(
             decision.kind,
         ),
         new_analysis_available=decision.kind is DecisionKind.REJECTED,
+        proposal_approval_evidence=decision.proposal_approval,
     )
 
 
@@ -194,5 +195,9 @@ def retry_action_planning(
             status_code=409,
             detail={"code": "ACTION_PLANNING_RETRY_NOT_AVAILABLE"},
         )
-    services.planning_worker.process_decision_outbox(decision_id)
+    if not services.planning_worker.process_decision_outbox(decision_id):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "ACTION_PLANNING_RETRY_NOT_AVAILABLE"},
+        )
     return decision_response(services, decision)
