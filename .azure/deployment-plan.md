@@ -1,5 +1,41 @@
 # Supply Response Personal-Tenant Deployment Plan
 
+## Hide completed case launcher — 2026-09-14
+
+Scope: once an analysis is loaded, remove the **Saved demos** launcher and its
+saved-results recovery note from the active workspace. Keep both available
+before analysis so a presenter can reopen a saved case or retry an unfinished
+case. This extends the completed email-step cleanup; the analysis, source links,
+planning routes and five stage tabs remain unchanged. Same approved Azure
+target; no data, identity, role, schema, configuration or infrastructure changes.
+
+### All validation checks pass — completed case launcher
+
+- [x] 1. AZD Installation: 1.30.0
+- [x] 2. Schema Validation: unchanged validated azure.yaml
+- [x] 3. Environment Setup: existing guarded profile
+- [x] 4. Authentication Check: existing authenticated environment
+- [x] 5. Subscription/Location Check: Azure Dev / East US 2, unchanged
+- [x] 6. Aspire Pre-Provisioning Checks: not applicable
+- [x] 7. Provision Preview: passed; no resources created or deleted
+- [x] 8. Build Verification: 364 web tests and production build passed
+- [x] 9. Docker Build Context Validation: unchanged
+- [x] 10. Package Validation: guarded azd package passed
+- [x] 11. Azure Policy Validation: seven existing assignments; preview passed
+- [x] 12. Aspire Post-Provisioning Checks: not applicable
+
+### Validation Proof — completed case launcher
+
+The regression test first failed because the analyzed page still contained the
+**Saved demos** heading. It passed after launcher visibility was bound to the
+absence of an analysis. The full web suite (364 tests), TypeScript/Vite build,
+and local browser checks at 1440px and 390px passed. Both browser views continue
+directly from the header to planning routes and the analysis tabs with no email
+panel, saved-demo launcher, recovery note, overflow or page error. Fresh guarded
+preflight, AZD authentication, package validation, policy listing, no-create/
+no-delete provision preview, Docker context review and static role review passed.
+Deployment proof is recorded below when completed.
+
 ## Hide completed email-discovery step — 2026-09-14
 
 Scope: after a reviewed supplier email successfully opens its completed
@@ -278,7 +314,7 @@ Restored Combined and verified its original waiting-for-Taylor review remained.
 No submission, approval, mail, execution, new case, or new analysis was performed.
 Prior revision29 approval acceptance below is historical.
 
-> **Status:** Validated — completed-email-step correction passed fresh validation; revision34 remains live pending this release.
+> **Status:** Validated — completed-case-launcher correction passed fresh validation; revision35 remains live pending this release.
 
 ## Independent approval browser release — 2026-09-13
 

@@ -696,21 +696,14 @@ describe("reopening lifecycle and operation safety", () => {
     expect(window.location.search).toBe("");
   });
 
-  it("keeps every mutation control and picker disabled during a listing", async () => {
-    let resolveList!: (value: Response) => void;
-    savedReads({"/api/cases/RL-CASE-1": {...caseInstance, current_analysis_id: analysis.analysis_id, controls: {...caseInstance.controls, decide: true}},
-      "/api/cases": new Promise<Response>(r => {resolveList = r;})});
+  it("does not expose the saved-case picker once an analysis is loaded", async () => {
+    savedReads({"/api/cases/RL-CASE-1": {...caseInstance, current_analysis_id: analysis.analysis_id, controls: {...caseInstance.controls, decide: true}}});
     window.history.replaceState(null, "", "/?caseId=RL-CASE-1");
     render(<App />);
     await selectDecisionStage();
     await screen.findByText("Combined response");
-    await openOtherSavedCases();
-    await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
-    expect(screen.getByRole("button", {name: "Selected: Combined response"})).toBeDisabled();
-    expect(screen.getByRole("button", {name: "Continue to review and approve"})).toBeDisabled();
-    await selectApprovalStage();
-    expect(screen.getByRole("button", {name: "Approve combined response"})).toBeDisabled();
-    await act(async () => resolveList(await response([])));
+    expect(screen.queryByRole("heading", {name: "Saved demos"})).not.toBeInTheDocument();
+    expect(screen.queryByText("Other saved cases")).not.toBeInTheDocument();
   });
 
   it.each([false, true])("restores under StrictMode (bookmark=%s) using GET only", async bookmark => {
@@ -1109,7 +1102,20 @@ describe("progressive Case workspace", () => {
     expect(content.textContent).toBe(beforeContent);
   });
 
-  it("collapses the picker after successful reopen and can find cases again using GET only", async () => {
+  it("removes the saved-demo launcher and recovery note when analysis loads", async () => {
+    mockFallbackCaseLifecycle();
+    render(<App />);
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
+    expect(screen.getByRole("heading", {name: "Saved demos"})).toBeVisible();
+    await userEvent.click(screen.getByRole("button", {name: "Start a new demo"}));
+    expect(screen.getByText(/reads saved results and does not refresh evidence/i)).toBeVisible();
+    await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
+    await screen.findByText("Combined response");
+    expect(screen.queryByRole("heading", {name: "Saved demos"})).not.toBeInTheDocument();
+    expect(screen.queryByText(/reads saved results and does not refresh evidence/i)).not.toBeInTheDocument();
+  });
+
+  it("removes the saved-case launcher after successful reopen using GET only", async () => {
     const analyzedCase = {...caseInstance, status: "awaiting_decision", current_analysis_id: analysis.analysis_id,
       controls: {...caseInstance.controls, new_analysis: false, decide: true}};
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -1135,14 +1141,11 @@ describe("progressive Case workspace", () => {
     expect(await screen.findByText("Combined response")).toBeVisible();
     expect(screen.queryByRole("button", {name: "Reopen case RL-CASE-1"})).not.toBeInTheDocument();
     expect(screen.queryByText("No existing cases are available.")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", {name: "Find existing cases"})).toBeEnabled();
-    expect(screen.getByText(/reads saved results and does not refresh evidence/i)).toBeVisible();
+    expect(screen.queryByRole("heading", {name: "Saved demos"})).not.toBeInTheDocument();
+    expect(screen.queryByText(/reads saved results and does not refresh evidence/i)).not.toBeInTheDocument();
     expect(new URL(window.location.href).searchParams.get("caseId")).toBe("RL-CASE-1");
     expect(new URL(window.location.href).searchParams.get("analysisId")).toBe("RL-ANALYSIS-1");
     expect(new URL(window.location.href).searchParams.get("view")).toBe("planner");
-    await openOtherSavedCases();
-    await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
-    expect(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"})).toBeEnabled();
     expect(screen.getByText("Combined response")).toBeVisible();
     expect(fetchMock.mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
   });

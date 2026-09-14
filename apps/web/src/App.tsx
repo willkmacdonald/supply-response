@@ -41,12 +41,14 @@ function CaseWorkspace({independentFinanceEnabled = true}: {independentFinanceEn
     />
     {workspace.runtime?.runtime_mode === "live" &&
       <InboxCheck disabled={workspace.operation !== null} onBusyChange={setInboxBusy} onCaseCreated={workspace.reopen}/>}
-    <ExistingCases cases={workspace.existingCases} error={workspace.existingCasesError}
-      featuredCaseId={workspace.runtime?.runtime_mode === "live" ? "RL-CASE-bcbb8740-c770-42fd-aa67-981d08b66383" : undefined}
-      busy={workspace.operation !== null || inboxBusy}
-      loading={workspace.operation === "listing"} reopening={workspace.operation === "reopening"}
-      onLoad={workspace.loadExistingCases} onReopen={workspace.reopen} />
-    {workspace.caseInstance && <p className="reopen-note">This workspace reads saved results and does not refresh evidence or change retrieval times.</p>}
+    {!workspace.analysis && <>
+      <ExistingCases cases={workspace.existingCases} error={workspace.existingCasesError}
+        featuredCaseId={workspace.runtime?.runtime_mode === "live" ? "RL-CASE-bcbb8740-c770-42fd-aa67-981d08b66383" : undefined}
+        busy={workspace.operation !== null || inboxBusy}
+        loading={workspace.operation === "listing"} reopening={workspace.operation === "reopening"}
+        onLoad={workspace.loadExistingCases} onReopen={workspace.reopen} />
+      {workspace.caseInstance && <p className="reopen-note">This workspace reads saved results and does not refresh evidence or change retrieval times.</p>}
+    </>}
     {workspace.analysis && workspace.caseInstance?.current_decision_id && !workspace.decision &&
       <p className="reopen-note">The previous decision applies to an earlier analysis. Its approval and actions do not apply to the analysis shown here.</p>}
     <PlanningRoutes
