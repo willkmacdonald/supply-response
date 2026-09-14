@@ -58,6 +58,7 @@ it.each([null, "saved-analysis"])("reviews before opening a case with analysis %
  if (currentAnalysisId) expect(analyze).not.toHaveBeenCalled();
  else expect(analyze).toHaveBeenCalledWith("created-email-case");
  expect(busy).toHaveBeenLastCalledWith(false);
+ expect(screen.queryByRole("region", {name: "Supplier email"})).not.toBeInTheDocument();
 });
 it("keeps the review after a failed create and gives a useful changed-email error", async () => {
  vi.spyOn(api,"checkInbox").mockResolvedValue(reviewable);

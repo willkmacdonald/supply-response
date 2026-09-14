@@ -40,6 +40,7 @@ export function InboxCheck({disabled = false, onBusyChange, onCaseCreated}: {
   const pending = useRef(false);
   const mounted = useRef(true);
   useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
+  if (createdCaseId) return null;
   async function check() {
     if (disabled || pending.current) return;
     pending.current = true; setChecking(true); onBusyChange?.(true);
@@ -80,7 +81,6 @@ export function InboxCheck({disabled = false, onBusyChange, onCaseCreated}: {
     </button>
     {checking && <p role="status">Searching Alex’s mailbox through Work IQ…</p>}
     {creating !== null && <p role="status">Analyzing the supplier disruption…</p>}
-    {createdCaseId && <p role="status">Disruption analysis is ready below.</p>}
     {error && <p role="alert" className="error">{error}</p>}
     {result && <div aria-live="polite">
       {result.incomplete && <p role="status">Work IQ could not check every matching email. You can review any results below or try again.</p>}

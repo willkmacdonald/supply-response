@@ -1,5 +1,39 @@
 # Supply Response Personal-Tenant Deployment Plan
 
+## Hide completed email-discovery step — 2026-09-14
+
+Scope: after a reviewed supplier email successfully opens its completed
+analysis, remove the entire email-discovery panel from the current page. Keep
+the panel visible during processing and after any failure so the presenter can
+retry. Same approved Azure target; no data, identity, role, schema, or
+infrastructure changes.
+
+### All validation checks pass — completed email step
+
+- [x] 1. AZD Installation: 1.30.0
+- [x] 2. Schema Validation: unchanged validated azure.yaml
+- [x] 3. Environment Setup: existing guarded profile
+- [x] 4. Authentication Check: existing authenticated environment
+- [x] 5. Subscription/Location Check: Azure Dev / East US 2, unchanged
+- [x] 6. Aspire Pre-Provisioning Checks: not applicable
+- [x] 7. Provision Preview: passed; no resources created or deleted
+- [x] 8. Build Verification: 363 web tests and production build passed
+- [x] 9. Docker Build Context Validation: unchanged
+- [x] 10. Package Validation: passed through guarded ACR path
+- [x] 11. Azure Policy Validation: seven existing assignments; preview passed
+- [x] 12. Aspire Post-Provisioning Checks: not applicable
+
+### Validation Proof — completed email step
+
+The regression test first failed because the completed email panel remained in
+the document, then passed after the success-only dismissal was added. The full
+web suite (363 tests), TypeScript/Vite production build, and browser checks at
+1440px and 390px passed. The browser proof confirms the panel disappears after
+successful analysis without overflow or page errors; failure-path tests retain
+the email review for retry.
+Guarded preflight, official schema validation, AZD authentication, Azure policy
+listing, provision preview, packaging, and live role verification all passed.
+
 ## Email entry visibility correction — 2026-09-14
 
 Scope: keep inbox discovery available with an open case; show found email text
@@ -231,7 +265,7 @@ Restored Combined and verified its original waiting-for-Taylor review remained.
 No submission, approval, mail, execution, new case, or new analysis was performed.
 Prior revision29 approval acceptance below is historical.
 
-> **Status:** Deployed — email-entry visibility correction source61b8fa5 is live on revision34; live discovery and presentation verified.
+> **Status:** Validated — completed-email-step correction passed fresh validation; revision34 remains live pending this release.
 
 ## Independent approval browser release — 2026-09-13
 
