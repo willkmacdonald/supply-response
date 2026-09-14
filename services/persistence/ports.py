@@ -25,6 +25,8 @@ from data.domain.proposals import (
 )
 from data.synthetic.rl001 import OperationalSnapshot
 
+EXECUTION_PROPOSAL_STALE_ERROR = "EXECUTION_PROPOSAL_STALE"
+
 
 @runtime_checkable
 class CaseStore(Protocol):
@@ -152,6 +154,14 @@ class ExecutionStore(Protocol):
     def mark_outbox_processed(self, event_id: str) -> None: ...
 
     def record_outbox_failure(self, event_id: str, error_code: str) -> None: ...
+
+    def record_outbox_failure_if_current(
+        self,
+        event_id: str,
+        *,
+        expected: OutboxProcessingState,
+        error_code: str,
+    ) -> bool: ...
 
     def get_outbox_state(self, event_id: str) -> OutboxProcessingState: ...
 

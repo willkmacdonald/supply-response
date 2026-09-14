@@ -43,7 +43,7 @@ from services.analysis.service import (
     analysis_material_hash,
     canonical_operational_snapshot,
 )
-from services.persistence.ports import CaseStore
+from services.persistence.ports import EXECUTION_PROPOSAL_STALE_ERROR, CaseStore
 from services.persistence.tables import (
     action_projection,
     analysis_claims,
@@ -1674,6 +1674,10 @@ class SqlAlchemyExecutionRepository:
             outbox_events.c.available_at <= now,
             outbox_events.c.processed_at.is_(None),
             ready_to_claim,
+            or_(
+                outbox_events.c.last_error.is_(None),
+                outbox_events.c.last_error != EXECUTION_PROPOSAL_STALE_ERROR,
+            ),
         ]
         if decision_id is not None:
             filters.append(outbox_events.c.decision_id == decision_id)
@@ -1706,8 +1710,7 @@ class SqlAlchemyExecutionRepository:
                 update(outbox_events)
                 .where(
                     outbox_events.c.event_id == candidate["event_id"],
-                    outbox_events.c.processed_at.is_(None),
-                    ready_to_claim,
+                    *filters,
                 )
                 .values(
                     claim_status=OutboxClaimStatus.CLAIMED.value,
@@ -1788,6 +1791,10 @@ class SqlAlchemyExecutionRepository:
             .where(
                 outbox_events.c.event_id == event_id,
                 outbox_events.c.processed_at.is_(None),
+                or_(
+                    outbox_events.c.last_error.is_(None),
+                    outbox_events.c.last_error != EXECUTION_PROPOSAL_STALE_ERROR,
+                ),
             )
             .values(
                 claim_status=OutboxClaimStatus.PENDING.value,
@@ -1800,6 +1807,56 @@ class SqlAlchemyExecutionRepository:
         )
         if result.rowcount != 1:
             raise RecordNotFound(f"outbox event does not exist: {event_id}")
+
+    def record_outbox_failure_if_current(
+        self,
+        event_id: str,
+        *,
+        expected: OutboxProcessingState,
+        error_code: str,
+    ) -> bool:
+        if expected.event_id != event_id or not error_code.strip():
+            raise ValueError("event identity and nonblank error code are required")
+        if (
+            expected.processed_at is not None
+            or expected.last_error == EXECUTION_PROPOSAL_STALE_ERROR
+        ):
+            return False
+        now = datetime.now(UTC)
+        prior_error = (
+            outbox_events.c.last_error.is_(None)
+            if expected.last_error is None
+            else outbox_events.c.last_error == expected.last_error
+        )
+        available = or_(
+            outbox_events.c.claim_status == OutboxClaimStatus.PENDING.value,
+            (outbox_events.c.claim_status == OutboxClaimStatus.CLAIMED.value)
+            & (outbox_events.c.claim_expires_at < now),
+        )
+        result = self._connection.execute(
+            update(outbox_events)
+            .where(
+                outbox_events.c.event_id == event_id,
+                outbox_events.c.processed_at.is_(None),
+                outbox_events.c.claim_status == expected.claim_status.value,
+                outbox_events.c.attempt_count == expected.attempt_count,
+                prior_error,
+                available,
+                or_(
+                    outbox_events.c.last_error.is_(None),
+                    outbox_events.c.last_error != EXECUTION_PROPOSAL_STALE_ERROR,
+                ),
+            )
+            .values(
+                claim_status=OutboxClaimStatus.PENDING.value,
+                claimed_by=None,
+                claimed_at=None,
+                claim_expires_at=None,
+                attempt_count=outbox_events.c.attempt_count + 1,
+                last_error=error_code,
+            )
+        )
+        return result.rowcount == 1
 
     def get_outbox_state(self, event_id: str) -> OutboxProcessingState:
         row = (

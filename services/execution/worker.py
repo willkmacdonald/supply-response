@@ -5,6 +5,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from data.domain.cases import WorkflowVersion
 from data.domain.decisions import Decision
 from data.domain.execution import (
     ALLOWED_TRANSITIONS,
@@ -12,10 +13,14 @@ from data.domain.execution import (
     ExecutionAttempt,
     ExecutionStatus,
     ExecutionStatusEvent,
+    OutboxClaim,
 )
-from services.execution.currentness import guard_execution_current
+from services.execution.currentness import (
+    ExecutionProposalStale,
+    guard_execution_current,
+)
 from services.execution.planner import plan_actions
-from services.persistence.ports import UnitOfWork
+from services.persistence.ports import EXECUTION_PROPOSAL_STALE_ERROR, UnitOfWork
 
 UnitOfWorkFactory = Callable[[], UnitOfWork]
 Planner = Callable[[Decision], tuple[ExecutionAction, ...]]
@@ -59,47 +64,92 @@ class ActionPlanningWorker:
         decision_id: str | None,
         unattempted_only: bool,
     ) -> bool:
-        with self._uow_factory() as uow:
-            claim = (
-                (
-                    uow.execution.claim_next_unattempted_outbox(
+        claim: OutboxClaim | None = None
+        try:
+            with self._uow_factory() as uow:
+                claim = (
+                    uow.execution.claim_outbox_for_decision(
+                        "ActionPlanningRequested", decision_id
+                    )
+                    if decision_id is not None
+                    else uow.execution.claim_next_unattempted_outbox(
                         "ActionPlanningRequested"
                     )
                     if unattempted_only
                     else uow.execution.claim_next_outbox("ActionPlanningRequested")
                 )
-                if decision_id is None
-                else uow.execution.claim_outbox_for_decision(
-                    "ActionPlanningRequested",
-                    decision_id,
-                )
-            )
-            if claim is None:
-                return False
-            decision: Decision | None = None
-            planned_actions: tuple[ExecutionAction, ...] = ()
-            try:
+                if claim is None:
+                    return False
                 uow.execution.validate_claimed_outbox(claim)
-                decision = uow.decisions.get(claim.decision_id)
+                decision = guard_execution_current(uow, claim.decision_id)
                 planned_actions = self._planner(decision)
                 for action in planned_actions:
                     uow.execution.insert_action_if_absent(action)
                 uow.execution.mark_outbox_processed(claim.event_id)
                 uow.cases.mark_action_planning_complete(decision.case_id)
                 uow.commit()
-            except Exception as exc:
-                uow.rollback()
-                with self._uow_factory() as failed_uow:
-                    failed_uow.execution.record_outbox_failure(
-                        claim.event_id,
-                        error_code(exc),
+        except Exception as error:
+            if claim is None:
+                raise
+            return self._recover_failure(claim, error)
+        if self._after_plan is not None:
+            self._after_plan(decision, planned_actions)
+        return True
+
+    def _event_only_failure(self, claim: OutboxClaim, code: str) -> bool:
+        with self._uow_factory() as uow:
+            expected = uow.execution.get_outbox_state(claim.event_id)
+            changed = uow.execution.record_outbox_failure_if_current(
+                claim.event_id,
+                expected=expected,
+                error_code=code,
+            )
+            if changed:
+                uow.commit()
+            return changed
+
+    def _recover_failure(self, claim: OutboxClaim, error: Exception) -> bool:
+        if isinstance(error, ExecutionProposalStale):
+            self._event_only_failure(claim, EXECUTION_PROPOSAL_STALE_ERROR)
+            return False
+        independent = False
+        try:
+            with self._uow_factory() as uow:
+                case = uow.cases.get_projection(claim.case_id).case
+                independent = (
+                    case.effective_workflow_version
+                    is WorkflowVersion.INDEPENDENT_FINANCE
+                )
+                if not independent:
+                    uow.execution.record_outbox_failure(
+                        claim.event_id, error_code(error)
                     )
-                    failed_uow.cases.mark_action_planning_failed(claim.case_id)
-                    failed_uow.commit()
-            else:
-                if self._after_plan is not None and decision is not None:
-                    self._after_plan(decision, planned_actions)
-            return True
+                    uow.cases.mark_action_planning_failed(claim.case_id)
+                    uow.commit()
+                    return True
+                expected = uow.execution.get_outbox_state(claim.event_id)
+                if (
+                    expected.processed_at is not None
+                    or expected.last_error == EXECUTION_PROPOSAL_STALE_ERROR
+                ):
+                    return False
+                decision = guard_execution_current(uow, claim.decision_id)
+                if not uow.execution.record_outbox_failure_if_current(
+                    claim.event_id,
+                    expected=expected,
+                    error_code=error_code(error),
+                ):
+                    return False
+                uow.cases.mark_action_planning_failed(decision.case_id)
+                uow.commit()
+                return True
+        except ExecutionProposalStale:
+            self._event_only_failure(claim, EXECUTION_PROPOSAL_STALE_ERROR)
+            return False
+        except Exception:
+            if independent:
+                self._event_only_failure(claim, error_code(error))
+            raise
 
 
 class ExecutionService:
