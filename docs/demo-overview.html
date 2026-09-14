@@ -1,0 +1,926 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A visual business walkthrough of the Supply Response demonstration, from supplier disruption email through evidence, recommendation, approval, and mitigation.">
+  <title>Supply Response Demo — Business Walkthrough</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #132321;
+      --muted: #586b67;
+      --paper: #f4f7f3;
+      --surface: #ffffff;
+      --surface-2: #e9f0ed;
+      --line: #cbd8d3;
+      --forest: #073e36;
+      --green: #08725f;
+      --green-2: #10a37f;
+      --orange: #e48316;
+      --orange-soft: #fff0dc;
+      --blue: #2374e1;
+      --blue-soft: #e9f2ff;
+      --purple: #6c54c7;
+      --purple-soft: #f0edff;
+      --red: #c84836;
+      --red-soft: #fff0ed;
+      --gold: #b77908;
+      --shadow: 0 18px 55px rgba(14, 47, 41, 0.10);
+      --radius-xl: 2rem;
+      --radius-lg: 1.35rem;
+      --radius-md: 0.95rem;
+      font-family: Inter, Aptos, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 10% 0%, rgba(16, 163, 127, 0.10), transparent 30rem),
+        linear-gradient(180deg, #f8faf7 0%, var(--paper) 100%);
+      color: var(--ink);
+      font-size: 16px;
+      line-height: 1.55;
+    }
+
+    a { color: inherit; }
+
+    .skip-link {
+      position: absolute;
+      left: 1rem;
+      top: -5rem;
+      z-index: 20;
+      padding: 0.75rem 1rem;
+      border-radius: 0.6rem;
+      background: white;
+      color: var(--forest);
+      font-weight: 800;
+    }
+
+    .skip-link:focus { top: 1rem; }
+
+    .page-shell {
+      width: min(1180px, calc(100% - 2rem));
+      margin: 0 auto;
+      padding: 1rem 0 4rem;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0.75rem;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      padding: 0.7rem 0.85rem 0.7rem 1rem;
+      border: 1px solid rgba(203, 216, 211, 0.9);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.90);
+      box-shadow: 0 8px 30px rgba(14, 47, 41, 0.08);
+      backdrop-filter: blur(14px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 2rem;
+      height: 2rem;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--forest);
+      color: white;
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 0.25rem;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .nav-links a {
+      padding: 0.55rem 0.8rem;
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-weight: 750;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .nav-links a:hover,
+    .nav-links a:focus-visible {
+      background: var(--surface-2);
+      color: var(--forest);
+      outline: none;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(2rem, 6vw, 5rem);
+      border-radius: var(--radius-xl);
+      background: var(--forest);
+      color: white;
+      box-shadow: var(--shadow);
+    }
+
+    .hero::after {
+      position: absolute;
+      right: -10rem;
+      top: -13rem;
+      width: 35rem;
+      height: 35rem;
+      border: 1px solid rgba(255, 255, 255, 0.13);
+      border-radius: 50%;
+      box-shadow:
+        0 0 0 4rem rgba(255, 255, 255, 0.035),
+        0 0 0 9rem rgba(255, 255, 255, 0.025);
+      content: "";
+    }
+
+    .eyebrow {
+      position: relative;
+      z-index: 1;
+      margin: 0 0 0.75rem;
+      color: #f3a644;
+      font-size: 0.82rem;
+      font-weight: 900;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+
+    h1 {
+      position: relative;
+      z-index: 1;
+      max-width: 920px;
+      margin-bottom: 1rem;
+      font-size: clamp(2.8rem, 7vw, 5.9rem);
+      line-height: 0.98;
+      letter-spacing: -0.065em;
+    }
+
+    .hero-copy {
+      position: relative;
+      z-index: 1;
+      max-width: 790px;
+      margin-bottom: 2rem;
+      color: #d9e9e4;
+      font-size: clamp(1.05rem, 2vw, 1.35rem);
+    }
+
+    .hero-facts {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.75rem;
+      max-width: 860px;
+    }
+
+    .hero-fact {
+      min-height: 8.5rem;
+      padding: 1.1rem;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .hero-fact strong {
+      display: block;
+      margin-bottom: 0.25rem;
+      color: white;
+      font-size: clamp(1.55rem, 3vw, 2.25rem);
+      line-height: 1.1;
+      letter-spacing: -0.04em;
+    }
+
+    .hero-fact span { color: #c5dcd5; }
+
+    .truth-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      overflow: hidden;
+      margin: 1rem 0 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .truth-item {
+      min-height: 8rem;
+      padding: 1.2rem;
+      background: var(--surface);
+    }
+
+    .truth-item .mini-icon {
+      display: inline-grid;
+      width: 2rem;
+      height: 2rem;
+      margin-bottom: 0.65rem;
+      place-items: center;
+      border-radius: 0.55rem;
+      color: white;
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
+    .truth-item strong { display: block; margin-bottom: 0.2rem; }
+    .truth-item span { color: var(--muted); font-size: 0.92rem; }
+    .outlook { background: var(--blue); }
+    .teams { background: var(--purple); }
+    .fabric { background: linear-gradient(135deg, #f4a900, #d24f6b); }
+    .human { background: var(--green); }
+
+    section {
+      scroll-margin-top: 6rem;
+      margin-top: clamp(3.5rem, 8vw, 7rem);
+    }
+
+    .section-heading {
+      display: grid;
+      grid-template-columns: minmax(0, 0.85fr) minmax(280px, 1.15fr);
+      gap: 2rem;
+      align-items: end;
+      margin-bottom: 1.6rem;
+    }
+
+    .kicker {
+      margin-bottom: 0.55rem;
+      color: var(--green);
+      font-size: 0.78rem;
+      font-weight: 900;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      margin-bottom: 0;
+      font-size: clamp(2rem, 4vw, 3.5rem);
+      line-height: 1.03;
+      letter-spacing: -0.05em;
+    }
+
+    .section-heading > p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .stage-flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0.75rem;
+    }
+
+    .stage {
+      position: relative;
+      min-height: 16rem;
+      padding: 1.2rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      box-shadow: 0 12px 32px rgba(14, 47, 41, 0.06);
+    }
+
+    .stage:not(:last-child)::after {
+      position: absolute;
+      z-index: 2;
+      right: -1.05rem;
+      top: 2.2rem;
+      display: grid;
+      width: 1.4rem;
+      height: 1.4rem;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--orange);
+      color: white;
+      content: "›";
+      font-weight: 900;
+    }
+
+    .stage-number {
+      display: grid;
+      width: 2.2rem;
+      height: 2.2rem;
+      margin-bottom: 1rem;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--forest);
+      color: white;
+      font-weight: 900;
+    }
+
+    .stage h3 { margin-bottom: 0.5rem; font-size: 1.1rem; line-height: 1.2; }
+    .stage p { margin-bottom: 1rem; color: var(--muted); font-size: 0.92rem; }
+
+    .stage-proof {
+      display: inline-block;
+      padding: 0.3rem 0.55rem;
+      border-radius: 999px;
+      background: var(--surface-2);
+      color: var(--forest);
+      font-size: 0.74rem;
+      font-weight: 850;
+    }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .compare-card {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .compare-header { padding: 1.5rem 1.5rem 1rem; }
+    .compare-header h3 { margin-bottom: 0.35rem; font-size: 1.45rem; }
+    .compare-header p { margin-bottom: 0; color: var(--muted); }
+
+    .screen {
+      min-height: 22rem;
+      margin: 0 1rem 1rem;
+      padding: 1rem;
+      border-radius: 1rem;
+      background: #f6f8f7;
+    }
+
+    .screen-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 0.9rem;
+      color: var(--muted);
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .mini-chart, .mini-table, .ai-summary {
+      border: 1px solid #dce4e1;
+      border-radius: 0.75rem;
+      background: white;
+    }
+
+    .mini-chart { display: flex; align-items: end; gap: 0.42rem; height: 9rem; padding: 1rem; }
+    .bar { flex: 1; min-width: 0.4rem; border-radius: 0.25rem 0.25rem 0 0; background: var(--blue); }
+    .bar:nth-child(2n) { background: #75a9ef; }
+    .bar:nth-child(3n) { background: var(--orange); }
+
+    .mini-table { overflow: hidden; }
+    .table-row { display: grid; grid-template-columns: 1.2fr 0.8fr 0.7fr; gap: 0.4rem; padding: 0.52rem 0.65rem; border-bottom: 1px solid #e8eeeb; font-size: 0.68rem; }
+    .table-row:first-child { background: #edf3f0; color: var(--muted); font-weight: 900; }
+    .table-row:last-child { border-bottom: 0; }
+
+    .filter-row { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .filter-chip { padding: 0.3rem 0.5rem; border: 1px solid #c8d6d1; border-radius: 0.4rem; background: white; color: var(--muted); font-size: 0.68rem; }
+
+    .ai-summary { padding: 1rem; }
+    .ai-signal { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1rem; }
+    .ai-signal-mark { display: grid; width: 2.5rem; height: 2.5rem; flex: 0 0 auto; place-items: center; border-radius: 0.75rem; background: var(--red-soft); color: var(--red); font-weight: 900; }
+    .ai-signal strong { display: block; }
+    .ai-signal span { color: var(--muted); font-size: 0.8rem; }
+    .summary-line { height: 0.55rem; margin: 0.6rem 0; border-radius: 999px; background: #dce7e3; }
+    .summary-line:nth-child(2) { width: 94%; }
+    .summary-line:nth-child(3) { width: 78%; }
+    .summary-line:nth-child(4) { width: 86%; }
+    .recommendation-mini { margin-top: 1rem; padding: 0.85rem; border-left: 4px solid var(--green-2); border-radius: 0.45rem; background: #edf9f5; font-size: 0.82rem; }
+
+    .compare-footer {
+      padding: 1rem 1.5rem 1.4rem;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .evidence-map {
+      display: grid;
+      grid-template-columns: 1fr 4rem 1.15fr 4rem 1fr;
+      align-items: stretch;
+      gap: 0.75rem;
+    }
+
+    .source-stack { display: grid; gap: 0.75rem; }
+
+    .source-card, .case-card, .decision-card {
+      padding: 1.15rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      box-shadow: 0 10px 28px rgba(14, 47, 41, 0.06);
+    }
+
+    .source-card { display: grid; grid-template-columns: auto 1fr; gap: 0.8rem; align-items: start; }
+    .source-mark { display: grid; width: 2.6rem; height: 2.6rem; place-items: center; border-radius: 0.75rem; color: white; font-size: 0.78rem; font-weight: 900; }
+    .source-card h3, .case-card h3, .decision-card h3 { margin-bottom: 0.25rem; font-size: 1rem; }
+    .source-card p, .case-card p, .decision-card p { margin-bottom: 0; color: var(--muted); font-size: 0.88rem; }
+
+    .connector {
+      display: grid;
+      place-items: center;
+      color: var(--orange);
+      font-size: 2.5rem;
+      font-weight: 300;
+    }
+
+    .case-card {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      border: 2px solid var(--green);
+      background: linear-gradient(155deg, #ffffff 0%, #eaf8f3 100%);
+    }
+
+    .case-card .case-label {
+      align-self: flex-start;
+      margin-bottom: 1rem;
+      padding: 0.3rem 0.6rem;
+      border-radius: 999px;
+      background: var(--green);
+      color: white;
+      font-size: 0.74rem;
+      font-weight: 900;
+    }
+
+    .case-card h3 { font-size: 1.5rem; line-height: 1.15; }
+    .decision-card { display: flex; flex-direction: column; justify-content: center; background: var(--forest); color: white; }
+    .decision-card p { color: #c8ddd6; }
+    .decision-card .human-gate { margin-top: 1rem; padding: 0.55rem 0.7rem; border-radius: 0.55rem; background: rgba(255,255,255,0.10); color: white; font-size: 0.82rem; font-weight: 800; }
+
+    .evidence-note {
+      display: flex;
+      gap: 0.65rem;
+      align-items: flex-start;
+      margin-top: 1rem;
+      padding: 1rem 1.15rem;
+      border-radius: var(--radius-md);
+      background: var(--blue-soft);
+      color: #184f9d;
+    }
+
+    .scenario-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .scenario-card {
+      padding: 1.4rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+    }
+
+    .scenario-card h3 { margin-bottom: 0.25rem; }
+    .scenario-card > p { color: var(--muted); font-size: 0.9rem; }
+    .metric { display: flex; justify-content: space-between; gap: 1rem; padding: 0.6rem 0; border-bottom: 1px solid #e6ece9; }
+    .metric:last-child { border-bottom: 0; }
+    .metric span { color: var(--muted); }
+    .metric strong { text-align: right; }
+
+    .inventory-bar, .supplier-bar {
+      display: flex;
+      height: 2.15rem;
+      overflow: hidden;
+      margin: 1rem 0 0.6rem;
+      border-radius: 0.55rem;
+      background: #e4ebe8;
+    }
+
+    .inventory-bar span, .supplier-bar span { display: grid; place-items: center; color: white; font-size: 0.72rem; font-weight: 900; }
+    .available { width: 88.89%; background: var(--green); }
+    .held { width: 4.44%; background: var(--red); }
+    .protected { width: 6.67%; background: var(--gold); }
+    .partial { width: 37.5%; background: var(--blue); }
+    .unknown { width: 62.5%; background: #95a6a1; }
+    .bar-legend { display: flex; gap: 0.7rem; flex-wrap: wrap; color: var(--muted); font-size: 0.72rem; }
+
+    .recommendation {
+      display: grid;
+      grid-template-columns: 1.25fr 0.75fr;
+      overflow: hidden;
+      border-radius: var(--radius-xl);
+      background: var(--forest);
+      color: white;
+      box-shadow: var(--shadow);
+    }
+
+    .recommendation-main { padding: clamp(1.5rem, 4vw, 3rem); }
+    .recommendation-side { display: grid; gap: 1px; background: rgba(255,255,255,0.14); }
+    .recommendation-side > div { display: flex; flex-direction: column; justify-content: center; padding: 1.25rem; background: #0b4a40; }
+    .recommendation-side span { color: #b9d5cd; font-size: 0.82rem; }
+    .recommendation-side strong { font-size: 1.65rem; letter-spacing: -0.04em; }
+    .recommendation h3 { max-width: 650px; margin-bottom: 0.75rem; font-size: clamp(1.75rem, 4vw, 3rem); line-height: 1.05; letter-spacing: -0.04em; }
+    .recommendation p { max-width: 670px; color: #c9ddd7; }
+    .why-list { display: grid; gap: 0.65rem; margin: 1.25rem 0 0; padding: 0; list-style: none; }
+    .why-list li { display: flex; gap: 0.65rem; }
+    .why-list li::before { color: #6ce0bd; content: "✓"; font-weight: 900; }
+    .recommendation-label { display: inline-block; margin-bottom: 1rem; padding: 0.35rem 0.65rem; border-radius: 999px; background: #d7f8ec; color: var(--forest); font-size: 0.78rem; font-weight: 900; }
+
+    .approval-lanes {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .lane {
+      display: grid;
+      grid-template-columns: 10rem 1fr;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .lane:last-child { border-bottom: 0; }
+    .lane-person { padding: 1.2rem; background: #edf3f0; font-weight: 900; }
+    .lane-actions { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.5rem; align-items: center; min-height: 6.5rem; padding: 0.8rem; }
+    .lane-action { position: relative; padding: 0.65rem; border-radius: 0.65rem; background: var(--surface-2); color: var(--muted); font-size: 0.78rem; }
+    .lane-action.active { background: var(--green); color: white; font-weight: 800; }
+    .lane-action.review { background: var(--orange-soft); color: #86500d; font-weight: 800; }
+    .lane-action.send { background: var(--blue-soft); color: #1657ae; font-weight: 800; }
+
+    .status-boundary {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .status-card { padding: 1.2rem; border-radius: var(--radius-lg); }
+    .status-card h3 { margin-bottom: 0.45rem; }
+    .status-card p { margin-bottom: 0; }
+    .status-card.real { background: #e7f8f2; color: #0a5b4b; }
+    .status-card.target { background: var(--orange-soft); color: #714308; }
+
+    .people-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.8rem;
+    }
+
+    .person-card {
+      padding: 1.25rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+    }
+
+    .avatar {
+      display: grid;
+      width: 3rem;
+      height: 3rem;
+      margin-bottom: 1rem;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--forest);
+      color: white;
+      font-weight: 900;
+    }
+
+    .person-card:nth-child(2) .avatar { background: var(--purple); }
+    .person-card:nth-child(3) .avatar { background: var(--orange); }
+    .person-card:nth-child(4) .avatar { background: var(--blue); }
+    .person-card h3 { margin-bottom: 0.1rem; }
+    .person-role { min-height: 3.1rem; color: var(--muted); font-size: 0.9rem; }
+    .upn { display: block; overflow-wrap: anywhere; margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--line); color: var(--forest); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.82rem; font-weight: 800; }
+
+    .presenter-run {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 0.45rem;
+      counter-reset: run-step;
+    }
+
+    .run-step {
+      counter-increment: run-step;
+      min-height: 13rem;
+      padding: 1rem;
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      border: 1px solid var(--line);
+    }
+
+    .run-step::before {
+      display: grid;
+      width: 1.8rem;
+      height: 1.8rem;
+      margin-bottom: 0.8rem;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--orange);
+      color: white;
+      content: counter(run-step);
+      font-size: 0.78rem;
+      font-weight: 900;
+    }
+
+    .run-step strong { display: block; margin-bottom: 0.4rem; line-height: 1.2; }
+    .run-step span { color: var(--muted); font-size: 0.82rem; }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-top: 5rem;
+      padding: 1.5rem 0;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .footer-note { max-width: 720px; }
+    .footer-id { white-space: nowrap; font-weight: 800; }
+
+    @media (max-width: 980px) {
+      .stage-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stage:last-child { grid-column: 1 / -1; min-height: auto; }
+      .stage:nth-child(2n)::after, .stage:nth-child(4)::after { display: none; }
+      .truth-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .evidence-map { grid-template-columns: 1fr; }
+      .connector { min-height: 2rem; transform: rotate(90deg); }
+      .scenario-grid { grid-template-columns: 1fr 1fr; }
+      .scenario-card:last-child { grid-column: 1 / -1; }
+      .presenter-run { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .people-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 720px) {
+      .page-shell { width: min(100% - 1rem, 1180px); }
+      .topbar { align-items: flex-start; border-radius: 1rem; }
+      .brand span:last-child { display: none; }
+      .hero { padding: 2rem 1.25rem; border-radius: 1.4rem; }
+      .hero-facts, .comparison, .scenario-grid, .recommendation, .section-heading, .status-boundary { grid-template-columns: 1fr; }
+      .truth-strip, .stage-flow, .people-grid { grid-template-columns: 1fr; }
+      .stage { min-height: auto; }
+      .stage::after { display: none !important; }
+      .scenario-card:last-child { grid-column: auto; }
+      .recommendation-side { grid-template-columns: repeat(2, 1fr); }
+      .lane { grid-template-columns: 1fr; }
+      .lane-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .presenter-run { grid-template-columns: 1fr 1fr; }
+      footer { flex-direction: column; }
+    }
+
+    @media (max-width: 440px) {
+      .dashboard-grid, .presenter-run, .recommendation-side { grid-template-columns: 1fr; }
+      h1 { font-size: 2.65rem; }
+      .nav-links a { padding-inline: 0.55rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      body { background: white; }
+      .page-shell { width: 100%; padding: 0; }
+      .topbar { display: none; }
+      .hero, .recommendation { box-shadow: none; print-color-adjust: exact; }
+      section { break-inside: avoid; margin-top: 2.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to demo overview</a>
+  <div class="page-shell">
+    <nav class="topbar" aria-label="Demo overview sections">
+      <div class="brand"><span class="brand-mark">RL</span><span>Supply Response</span></div>
+      <div class="nav-links">
+        <a href="#journey">Journey</a>
+        <a href="#comparison">Before &amp; after</a>
+        <a href="#evidence">Evidence</a>
+        <a href="#recommendation">Recommendation</a>
+        <a href="#people">People</a>
+      </div>
+    </nav>
+
+    <main id="main">
+      <header class="hero">
+        <p class="eyebrow">RL-001 · Supply disruption response</p>
+        <h1>From a supplier email to an approved recovery plan</h1>
+        <p class="hero-copy">The demo shows how a material planner can move from a newly reported delay to a defensible response—without manually piecing together messages, inventory, customer orders, costs, and approvals.</p>
+        <div class="hero-facts" aria-label="Scenario starting facts">
+          <div class="hero-fact"><strong>8,000</strong><span>component units cannot arrive as planned</span></div>
+          <div class="hero-fact"><strong>3,000</strong><span>units are offered by air at $7.50 extra per unit</span></div>
+          <div class="hero-fact"><strong>$955K</strong><span>revenue is at risk if no action is taken</span></div>
+        </div>
+      </header>
+
+      <div class="truth-strip" aria-label="What is real in the demonstration">
+        <div class="truth-item"><span class="mini-icon outlook">MAIL</span><strong>Actual supplier email</strong><span>Sent to and opened from Alex's real Microsoft 365 mailbox.</span></div>
+        <div class="truth-item"><span class="mini-icon teams">TEAMS</span><strong>Actual Teams evidence</strong><span>Jordan's quality update is read from the demo Team and channel.</span></div>
+        <div class="truth-item"><span class="mini-icon fabric">DATA</span><strong>Actual data in Fabric</strong><span>Inventory, production, orders, costs, and saved evidence live in Fabric.</span></div>
+        <div class="truth-item"><span class="mini-icon human">✓</span><strong>Human decision remains</strong><span>AI recommends; Alex and Taylor retain approval authority.</span></div>
+      </div>
+
+      <section id="journey">
+        <div class="section-heading">
+          <div><p class="kicker">The story</p><h2>Five stages, one connected response</h2></div>
+          <p>Each stage answers the planner's next practical question. The interface keeps the source evidence close enough to inspect without making the technology the center of the story.</p>
+        </div>
+        <div class="stage-flow">
+          <article class="stage"><span class="stage-number">1</span><h3>Understand the disruption</h3><p>What changed? What inventory is available? Which production and customer orders are exposed?</p><span class="stage-proof">Email + Fabric evidence</span></article>
+          <article class="stage"><span class="stage-number">2</span><h3>Investigate responses</h3><p>What can the current supplier still provide? Can an alternate supplier or another plant help?</p><span class="stage-proof">Teams + operational data</span></article>
+          <article class="stage"><span class="stage-number">3</span><h3>Choose a response</h3><p>Compare do-nothing, expedite, transfer, resequence, alternate-supplier, and combined options.</p><span class="stage-proof">Immediate selection feedback</span></article>
+          <article class="stage"><span class="stage-number">4</span><h3>Review and approve</h3><p>Submit the exact response and cost to Finance when required, then preserve Alex's final decision.</p><span class="stage-proof">Taylor → Alex</span></article>
+          <article class="stage"><span class="stage-number">5</span><h3>Execute the plan</h3><p>Create bounded actions, review the supplier email draft, send it explicitly, and observe results.</p><span class="stage-proof">Controlled execution</span></article>
+        </div>
+      </section>
+
+      <section id="comparison">
+        <div class="section-heading">
+          <div><p class="kicker">The comparison</p><h2>Traditional investigation versus AI assistance</h2></div>
+          <p>The Power BI experience intentionally looks like the work planners do today: scan rows, charts, and filters, form a hypothesis, and cross-check systems. The AI view brings those same facts into a guided case.</p>
+        </div>
+        <div class="comparison">
+          <article class="compare-card">
+            <div class="compare-header"><h3>Before AI: investigate in Power BI</h3><p>The planner searches a broad operational view and connects the evidence manually.</p></div>
+            <div class="screen" role="img" aria-label="Illustration of a traditional Power BI report with charts, rows, and filters">
+              <div class="screen-title"><span>Operations report</span><span>178 records</span></div>
+              <div class="dashboard-grid">
+                <div class="mini-chart" aria-hidden="true"><span class="bar" style="height:38%"></span><span class="bar" style="height:72%"></span><span class="bar" style="height:54%"></span><span class="bar" style="height:88%"></span><span class="bar" style="height:46%"></span><span class="bar" style="height:66%"></span></div>
+                <div class="mini-table" aria-hidden="true">
+                  <div class="table-row"><span>Plant / part</span><span>Quantity</span><span>Status</span></div>
+                  <div class="table-row"><span>Chicago · 10247</span><span>4,500</span><span>On hand</span></div>
+                  <div class="table-row"><span>Chicago · 10247</span><span>200</span><span>Hold</span></div>
+                  <div class="table-row"><span>Chicago · 10247</span><span>300</span><span>Protected</span></div>
+                  <div class="table-row"><span>Dallas · 10247</span><span>1,500</span><span>Transfer</span></div>
+                </div>
+              </div>
+              <div class="filter-row" aria-hidden="true"><span class="filter-chip">Plant: Chicago</span><span class="filter-chip">Part: RL-MAT-10247</span><span class="filter-chip">Supplier</span><span class="filter-chip">Customer orders</span></div>
+            </div>
+            <div class="compare-footer">Useful and familiar—but the planner must decide which records matter, reconcile them, and explain the result.</div>
+          </article>
+
+          <article class="compare-card">
+            <div class="compare-header"><h3>With AI: review one connected case</h3><p>The planner sees the disruption, supporting evidence, impact, options, and approval path together.</p></div>
+            <div class="screen" role="img" aria-label="Illustration of an AI-assisted disruption summary and recommendation">
+              <div class="screen-title"><span>AI-assisted review</span><span>RL-001</span></div>
+              <div class="ai-summary">
+                <div class="ai-signal"><span class="ai-signal-mark">!</span><div><strong>Supplier delay confirmed</strong><span>8,000 units due to Chicago are affected</span></div></div>
+                <div class="summary-line"></div><div class="summary-line"></div><div class="summary-line"></div>
+                <div class="recommendation-mini"><strong>Recommended for review:</strong> combine the partial shipment, Dallas transfer, and production resequencing.</div>
+              </div>
+              <div class="filter-row" style="margin-top:.75rem" aria-hidden="true"><span class="filter-chip">Open supplier email</span><span class="filter-chip">Open Quality Teams post</span><span class="filter-chip">View supporting data</span></div>
+            </div>
+            <div class="compare-footer">The evidence remains inspectable. AI reduces the assembly work; it does not hide sources or take approval away from people.</div>
+          </article>
+        </div>
+      </section>
+
+      <section id="evidence">
+        <div class="section-heading">
+          <div><p class="kicker">Connected evidence</p><h2>The recommendation starts with real sources</h2></div>
+          <p>Work IQ accesses the messages Alex is allowed to see. Fabric provides the operational records. The application brings the relevant facts together into one traceable disruption case.</p>
+        </div>
+        <div class="evidence-map">
+          <div class="source-stack">
+            <article class="source-card"><span class="source-mark outlook">MAIL</span><div><h3>Supplier Alpha email</h3><p>Delivery delay, partial-shipment quantity, date, and $7.50 per-unit premium.</p></div></article>
+            <article class="source-card"><span class="source-mark teams">TEAMS</span><div><h3>Jordan's quality post</h3><p>Alternate Supplier Beta is not yet qualified; audit and first article remain incomplete.</p></div></article>
+            <article class="source-card"><span class="source-mark fabric">DATA</span><div><h3>Microsoft Fabric</h3><p>Inventory, holds, allocations, transfers, production demand, customer orders, revenue, and margin.</p></div></article>
+          </div>
+          <div class="connector" aria-hidden="true">→</div>
+          <article class="case-card"><span class="case-label">Brought together</span><h3>One disruption case with cited facts</h3><p>The case preserves the exact email and Teams citations alongside the exact Fabric records used for the analysis. A planner can move from a statement on a card back to its supporting source.</p></article>
+          <div class="connector" aria-hidden="true">→</div>
+          <article class="decision-card"><h3>Recommendation for human review</h3><p>Response options are tested against availability, qualification, service impact, cost, evidence, and approval requirements.</p><span class="human-gate">AI recommends · people approve</span></article>
+        </div>
+        <div class="evidence-note"><strong>Work IQ is the access layer for Microsoft 365 information.</strong><span>It discovers and reads the Outlook email and Teams message in the signed-in user's context. The demo does not paste those messages into a fake HTML page.</span></div>
+      </section>
+
+      <section id="scenario">
+        <div class="section-heading">
+          <div><p class="kicker">What the analysis connects</p><h2>One delay, several operational consequences</h2></div>
+          <p>The recommendation is not based on the supplier message alone. It uses the business records in Fabric to calculate what is available, what remains exposed, and what each response would change.</p>
+        </div>
+        <div class="scenario-grid">
+          <article class="scenario-card">
+            <h3>Supplier recovery offer</h3><p>Only part of the original delivery has a confirmed recovery path.</p>
+            <div class="supplier-bar" aria-label="3,000 units offered and 5,000 units with no confirmed date"><span class="partial">3,000 offered</span><span class="unknown">5,000 unknown</span></div>
+            <div class="bar-legend"><span>Air shipment: Sep 6</span><span>Premium: $7.50/unit</span></div>
+          </article>
+          <article class="scenario-card">
+            <h3>Chicago inventory</h3><p>Fabric records reconcile physical stock with commitments.</p>
+            <div class="inventory-bar" aria-label="4,000 units available after 200 units on quality hold and 300 units protected"><span class="available">4,000 available</span><span class="held" title="200 held"></span><span class="protected" title="300 protected"></span></div>
+            <div class="bar-legend"><span>4,500 on hand</span><span>− 200 held</span><span>− 300 protected</span></div>
+          </article>
+          <article class="scenario-card">
+            <h3>If the planner does nothing</h3><p>The no-mitigation baseline makes the cost of inaction visible.</p>
+            <div class="metric"><span>Parts still needed</span><strong>6,800</strong></div>
+            <div class="metric"><span>Order lines at risk</span><strong>2 of 2</strong></div>
+            <div class="metric"><span>Revenue at risk</span><strong>$955,000</strong></div>
+            <div class="metric"><span>Margin at risk</span><strong>$328,000</strong></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="recommendation">
+        <div class="section-heading">
+          <div><p class="kicker">The recommendation</p><h2>A response the planner can inspect</h2></div>
+          <p>The demo recommends the combined response for review. It is a prediction based on the saved evidence—not an approval, purchase commitment, or claim that the result has already happened.</p>
+        </div>
+        <article class="recommendation">
+          <div class="recommendation-main">
+            <span class="recommendation-label">Recommended for review</span>
+            <h3>Combine the supplier's partial shipment, a Dallas transfer, and production resequencing</h3>
+            <p>This response protects more customer demand than the other feasible choices while keeping the evaluated response cost within the scenario's Finance path.</p>
+            <ul class="why-list">
+              <li>Uses the 3,000-unit supplier recovery that has a confirmed date.</li>
+              <li>Adds 1,500 components available for transfer from Dallas.</li>
+              <li>Resequences production to protect the most valuable customer commitment.</li>
+              <li>Excludes Alternate Supplier Beta because qualification is still pending.</li>
+            </ul>
+          </div>
+          <div class="recommendation-side" aria-label="Predicted combined-response results">
+            <div><span>Evaluated response cost</span><strong>$24,750</strong></div>
+            <div><span>Uncovered part demand</span><strong>2,300</strong></div>
+            <div><span>Projected OTIF loss</span><strong>50%</strong></div>
+            <div><span>Customer orders protected</span><strong>1 of 2</strong></div>
+          </div>
+        </article>
+      </section>
+
+      <section id="approval">
+        <div class="section-heading">
+          <div><p class="kicker">Human control</p><h2>The AI does not approve its own recommendation</h2></div>
+          <p>Selection, Finance review, final approval, and sending the supplier communication are visible, separate actions performed by the people responsible for them.</p>
+        </div>
+        <div class="approval-lanes" aria-label="Approval and execution swimlane">
+          <div class="lane"><div class="lane-person">Alex · Planner</div><div class="lane-actions"><span class="lane-action active">Select response</span><span class="lane-action active">Submit exact proposal</span><span class="lane-action"></span><span class="lane-action active">Give final approval</span><span class="lane-action send">Review and send email</span></div></div>
+          <div class="lane"><div class="lane-person">Taylor · Finance</div><div class="lane-actions"><span class="lane-action"></span><span class="lane-action"></span><span class="lane-action review">Approve or reject $24,750</span><span class="lane-action"></span><span class="lane-action"></span></div></div>
+          <div class="lane"><div class="lane-person">Supply Response</div><div class="lane-actions"><span class="lane-action">Preserve selection</span><span class="lane-action">Bind proposal to evidence</span><span class="lane-action">Wait for Finance</span><span class="lane-action">Create bounded actions</span><span class="lane-action">Record outcomes</span></div></div>
+        </div>
+        <div class="status-boundary">
+          <article class="status-card real"><h3>Already demonstrated live</h3><p>Alex sign-in, Work IQ email discovery, review of the actual email, case creation, Fabric-backed analysis, Outlook citation, Power BI investigation, and the five-stage workspace.</p></article>
+          <article class="status-card target"><h3>Complete story still being accepted end to end</h3><p>Taylor's real browser approval, option-specific mitigation execution, the reviewed outbound email received by Will, populated outcomes, and a reliable Teams handoff.</p></article>
+        </div>
+      </section>
+
+      <section id="people">
+        <div class="section-heading">
+          <div><p class="kicker">Demo participants</p><h2>Who plays each role</h2></div>
+          <p>Three fictional business personas use purpose-built tenant identities. Will remains the presenter and, for the current inbound trigger, plays the supplier sender.</p>
+        </div>
+        <div class="people-grid">
+          <article class="person-card"><span class="avatar">AM</span><h3>Alex Morgan</h3><p class="person-role">Material Planner and final response approver</p><code class="upn">agent@willmacdonald.com</code></article>
+          <article class="person-card"><span class="avatar">JL</span><h3>Jordan Lee</h3><p class="person-role">Quality Manager who posts the alternate-supplier status in Teams</p><code class="upn">jorlee@willmacdonald.com</code></article>
+          <article class="person-card"><span class="avatar">TB</span><h3>Taylor Brooks</h3><p class="person-role">Finance Approver for responses above the spending threshold</p><code class="upn">taybro@willmacdonald.com</code></article>
+          <article class="person-card"><span class="avatar">WM</span><h3>Will Macdonald</h3><p class="person-role">Presenter and Supplier Alpha sender for the inbound-email trigger</p><code class="upn">will@willmacdonald.com</code></article>
+        </div>
+      </section>
+
+      <section id="run">
+        <div class="section-heading">
+          <div><p class="kicker">Presenter sequence</p><h2>How to run the story</h2></div>
+          <p>The strongest walkthrough begins with a real email and finishes with people making the decision. Power BI provides the deliberate “before AI” contrast along the way.</p>
+        </div>
+        <div class="presenter-run">
+          <div class="run-step"><strong>Send the delay</strong><span>Will emails the approved Supplier Alpha scenario to Alex.</span></div>
+          <div class="run-step"><strong>Check email</strong><span>Alex asks the app to check for disruption emails through Work IQ.</span></div>
+          <div class="run-step"><strong>Review the source</strong><span>Open the actual email and confirm the extracted delivery facts.</span></div>
+          <div class="run-step"><strong>Show the old way</strong><span>Use Power BI rows, charts, and filters to investigate the operational data.</span></div>
+          <div class="run-step"><strong>Analyze with AI</strong><span>Walk through the connected evidence and compare response options.</span></div>
+          <div class="run-step"><strong>Approve the response</strong><span>Alex submits; Taylor reviews; Alex makes the final decision.</span></div>
+          <div class="run-step"><strong>Execute visibly</strong><span>Review the generated actions and explicitly send the supplier email.</span></div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="footer-note"><strong>Demonstration boundary:</strong> the business scenario and records are fictional. The Microsoft 365 access, Work IQ retrieval path, Fabric data platform, application identities, citations, and deployed experience are real. Simulated actions and outcomes remain visibly labeled.</div>
+      <div class="footer-id">RL-001 · Supply Response</div>
+    </footer>
+  </div>
+</body>
+</html>
