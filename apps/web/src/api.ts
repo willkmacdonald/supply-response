@@ -1,4 +1,5 @@
 import type {
+  InboxCheckResult,
   AnalysisVersion,
   CaseInstance,
   CasePurpose,
@@ -16,6 +17,8 @@ import type {
 export const API_BASE = "";
 
 const SAFE_ERROR_MESSAGES = new Map<string, string>([
+  ["INBOX_CHECK_UNAVAILABLE", "Email checking is not available right now. Try again shortly."],
+  ["INBOX_CHECK_FAILED", "Work IQ could not complete the email check. Please try again."],
   ["LIVE_SOURCE_UNAVAILABLE", "The information needed for this analysis could not be retrieved."],
   ["FINANCE_WORKFLOW_DISABLED", "Independent Finance review is not enabled for new commands."],
   ["STALE_PROPOSAL", "The proposal changed. Refresh and reselect the response before continuing."],
@@ -83,6 +86,7 @@ async function post<T>(path: string, body: object, headers: Record<string, strin
 }
 
 export const api = {
+  checkInbox: (): Promise<InboxCheckResult> => post("/api/inbox/check", {}),
   me: (): Promise<SessionInfo> => get("/api/me"),
   runtime: (): Promise<RuntimeStatus> => get("/api/runtime"),
   cases: (): Promise<CaseInstance[]> => get("/api/cases"),

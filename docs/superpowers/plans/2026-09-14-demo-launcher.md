@@ -8,7 +8,7 @@
 
 ## Approved design and constraints
 
-- Resume the analyzed disruption: Supplier Alpha delay; email and analysis are already saved, not a new inbound-email trigger.
+- Resume the analyzed disruption: Supplier Alpha delay; opens the saved case, not a new inbound-email trigger. Presenter-facing card shows only the title and button; user requested removal of both explanatory paragraphs after live review.
 - Exact featured case: RL-CASE-bcbb8740-c770-42fd-aa67-981d08b66383. Do not select an arbitrary newest test case.
 - Other saved cases collapsed by default. Preserve all records and server authorization; no deletions.
 - Start a new demo remains separate and explicitly creates a showcase case, not a fresh-email trigger.

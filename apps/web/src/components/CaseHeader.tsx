@@ -64,11 +64,11 @@ export function CaseHeader({
       </span>}
       {powerBiUrl && <a href={powerBiUrl} target="_blank" rel="noopener noreferrer">Open case dashboard</a>}
     </div>
-    {runtime && !caseInstance && <><button type="button" className="secondary" onClick={() => onCreate(createPurpose)} disabled={busy || creating}>
+    {runtime && runtime.runtime_mode !== "live" && !caseInstance && <button type="button" className="secondary" onClick={() => onCreate(createPurpose)} disabled={busy || creating}>
       {creating
         ? "Creating Case workspace…"
         : createPurpose === "showcase" ? "Start a new demo" : `Create ${createPurpose === "automated_test" ? "automated test" : createPurpose} case`}
-    </button>{createPurpose === "showcase" && <p className="new-demo-note">Creates a new showcase case using the configured demo scenario—not a newly received email.</p>}</>}
+    </button>}
     {caseInstance?.controls.new_analysis && <button type="button" onClick={onAnalyze} disabled={busy || analyzing}>
       {analyzing ? "Analyzing disruption…" : "Analyze disruption"}
     </button>}

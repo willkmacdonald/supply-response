@@ -18,6 +18,11 @@ function renderHeader(runtime: RuntimeStatus | null) {
     createPurpose="showcase" creating={false} analyzing={false}
     onCreate={vi.fn()} onAnalyze={vi.fn()} />);
 }
+it("omits the repeated new-email caveat and seeded creation action in live mode", () => {
+  renderHeader(liveRuntime);
+  expect(screen.queryByText(/not a newly received email/)).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", {name:"Start a new demo"})).not.toBeInTheDocument();
+});
 
 it.each([
   [liveRuntime, "Fictional scenario · Uses live Microsoft services"],

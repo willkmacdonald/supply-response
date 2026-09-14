@@ -10,6 +10,7 @@ from apps.api.app.auth import AuthenticatedActor
 
 from .async_obo import AsyncWorkIQOboExchange
 from .errors import WorkIQError, WorkIQProtocolError, WorkIQResponseLimitError
+from .inbox import InboxCheck, discover_inbox
 from .mcp import WorkIQMcpClient
 from .message_evidence import evidence_from_message
 from .models import (
@@ -21,6 +22,7 @@ from .models import (
 from .structured_discovery import StructuredDiscoveryError, discover_structured
 
 SOURCE_TIMEOUT_SECONDS: Final = 120
+INBOX_TIMEOUT_SECONDS: Final = 119
 FailureStage = Literal["discovery", "fetch", "validation", "authentication", "timeout"]
 _logger = logging.getLogger(__name__)
 
@@ -73,6 +75,44 @@ class WorkIQMcpEvidencePort:
         self._client = client
         self._obo = obo
         self._binding = binding
+
+    async def check_inbox(
+        self, *, actor: AuthenticatedActor, checked_at: datetime
+    ) -> InboxCheck:
+        """Run one delegated, bounded inbox check for the configured Alex actor."""
+        binding = self._binding
+        if (
+            not isinstance(actor, AuthenticatedActor)
+            or actor.tenant_id != binding.tenant_id
+            or actor.object_id != binding.alex_object_id
+        ):
+            raise WorkIQSourceError("supplier", "authentication")
+        token = None
+        session = None
+        stage: FailureStage = "authentication"
+        failed = False
+        try:
+            async with asyncio.timeout(INBOX_TIMEOUT_SECONDS):
+                token = await self._obo.exchange(actor)
+                stage = "discovery"
+                async with self._client.session(access_token=token.reveal()) as session:
+                    token = None
+                    return await discover_inbox(
+                        session, binding=binding, checked_at=checked_at
+                    )
+        except TimeoutError:
+            stage = "timeout"
+            failed = True
+        except Exception:  # noqa: BLE001 - discard and sanitize upstream failures
+            failed = True
+        finally:
+            token = None
+            session = None
+        if failed:
+            _logger.warning(
+                "workiq_inbox_diagnostic stage=%s reason=unavailable", stage
+            )
+        raise WorkIQSourceError("supplier", stage) from None
 
     async def retrieve_supplier_signal(
         self,

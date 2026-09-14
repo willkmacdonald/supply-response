@@ -15,9 +15,12 @@ const props = {cases: [saved], loading: false, reopening: false, error: null, on
 it("offers the designated demo without loading or exposing the older case list", async () => {
   const onReopen = vi.fn(), onLoad = vi.fn();
   render(<ExistingCases {...props} featuredCaseId="verified-case" onReopen={onReopen} onLoad={onLoad} />);
-  expect(screen.getByText(/supplier email and analysis are already saved/i)).toBeVisible();
+  expect(screen.queryByText(/supplier email and analysis are already saved/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/It does not check for a new email or run a new analysis/)).not.toBeInTheDocument();
   expect(screen.getByRole("button", {name: "Reopen case old-case"})).not.toBeVisible();
   expect(screen.getByText("Other saved cases").closest("details")).not.toHaveAttribute("open");
+  expect(screen.getByRole("button", {name: "Resume the analyzed disruption"})).not.toBeVisible();
+  await userEvent.click(screen.getByText("Other saved cases"));
   await userEvent.click(screen.getByRole("button", {name: "Resume the analyzed disruption"}));
   expect(onReopen).toHaveBeenCalledExactlyOnceWith("verified-case");
   expect(onLoad).not.toHaveBeenCalled();

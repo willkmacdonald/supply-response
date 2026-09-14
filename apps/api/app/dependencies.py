@@ -92,6 +92,7 @@ class ApplicationServices:
     finance_actors: BoundFinanceActors | None = None
     finance_service: FinanceService | None = None
     finance_decision_service: FinanceDecisionService | None = None
+    inbox_service: Any | None = None
 
     @property
     def uow_factory(self) -> UnitOfWorkFactory:
@@ -263,6 +264,9 @@ def build_composition(
             None if live_components is None else live_components.get("operational_data")
         ),
         readiness=readiness,
+        inbox_service=None
+        if live_components is None
+        else live_components.get("inbox_service"),
     )
     if settings.runtime_mode is RuntimeMode.LIVE and all(
         (settings.allowed_tenant_id, settings.alex_object_id, settings.taylor_object_id)
@@ -463,6 +467,7 @@ def build_live_components(
     return {
         "store": store,
         "analysis_service": analysis,
+        "inbox_service": work_iq,
         "auth_service": auth_service,
         "power_bi_url": power_bi_url,
         "async_resources": (http,),

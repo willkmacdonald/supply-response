@@ -476,3 +476,15 @@ export interface OutcomeObservation {
   display_label: string;
   runtime_mode: RuntimeMode;
 }
+export interface InboxCheckResult {
+  checked_at: string;
+  incomplete: boolean;
+  messages: {
+    message_id: string;
+    subject: string;
+    sender: string;
+    received_at: string;
+    excerpt: string;
+    citation_url: string;
+  }[];
+}

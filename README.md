@@ -1,5 +1,18 @@
 # Supply Response
 
+## Inbox-check increment — September 14, 2026
+
+The new **Check email for disruptions** action searches Alex's mailbox through
+Work IQ for the presenter's Supplier Alpha email from `will@willmacdonald.com`
+to `agent@willmacdonald.com`. It displays the actual subject, received time,
+bounded message preview and validated Outlook link. Checks are read-only and
+presenter-controlled; old saved cases remain collapsed and recoverable.
+
+This increment does **not** yet create a case from the discovered email. That
+requires message-bound case creation and duplicate prevention; opening a saved
+case is not a substitute. Deployment and live-email acceptance are tracked in
+[the inbox-check plan](docs/superpowers/plans/2026-09-14-inbox-check.md).
+
 Supply Response is a decision-support demonstration for managing a fictional supplier disruption from detection through analysis, human approval, bounded execution, and outcome observation.
 
 The project combines a deterministic supply-response core with a FastAPI application, a React decision console, durable SQLite or Fabric SQL persistence, and a Power BI project. Microsoft 365 and Azure integrations are added through explicit adapters so the complete live demonstration can use Work IQ, Microsoft Fabric, Microsoft Foundry, Microsoft Agent Framework, Entra ID, and Power BI without coupling the business logic to those services.

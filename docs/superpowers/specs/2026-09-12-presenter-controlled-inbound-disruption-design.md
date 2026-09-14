@@ -27,7 +27,7 @@ URL to fetch. Sanitized excerpts must not execute HTML/scripts.
 
 ## Presenter interaction
 
-**Check for supplier disruptions** performs a bounded, on-demand discovery. It
+**Check email for disruptions** performs a bounded, on-demand discovery. It
 does not run on a timer, create cases, approve plans or send mail. Show checking,
 new candidates, no new matching messages, partial search and actionable failure
 states distinctly. Multiple matches produce a reviewable list, not an arbitrary

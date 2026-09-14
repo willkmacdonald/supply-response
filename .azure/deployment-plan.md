@@ -1,5 +1,41 @@
 # Supply Response Personal-Tenant Deployment Plan
 
+## Read-only inbox check release — 2026-09-14 UTC
+
+Scope: presenter-controlled Work IQ discovery and validated email review from
+Will to Alex; no case creation, send, schema, role or infrastructure changes.
+Existing approved Azure Dev / East US 2 / rg-supply-response-demo / ca-sr-demo.
+The live launcher starts with Check email for disruptions. Saved work is secondary.
+
+### All validation checks pass — inbox check
+
+- [x] 1. AZD Installation: installed 1.30.0.
+- [x] 2. Schema Validation: official Microsoft azure.yaml schema passed.
+- [x] 3. Environment Setup: existing profile checked by guarded preflight.
+- [x] 4. Authentication Check: interactive Will authenticated.
+- [x] 5. Subscription/Location Check: existing exact target verified.
+- [x] 6. Aspire Pre-Provisioning Checks: not applicable.
+- [x] 7. Provision Preview: passed; existing resources only, no creates/deletes.
+- [x] 8. Build Verification: 355 web tests and TypeScript/Vite build pass.
+- [x] 9. Docker Build Context Validation: four Entra args and lockfile intact.
+- [x] 10. Package Validation: passed; supported image path remains guarded ACR.
+- [x] 11. Azure Policy Validation: seven existing assignments, no scope changes.
+- [x] 12. Aspire Post-Provisioning Checks: not applicable.
+
+### Section 7: Validation Proof — inbox check
+
+Fresh 2026-09-14 checks: guarded preflight, preview and package passed against
+the unchanged approved target. Official azure.yaml schema validation passed.
+355 web tests and production build passed; 108 API/Work IQ tests passed.
+Ruff and diff whitespace checks passed. Desktop (1440px) and phone (390px)
+browser proof: actual component with explicitly simulated responses, preview
+and Outlook link visible, prior cases collapsed/recoverable, no overflow/errors.
+Review fixes simplify the search to subject:RL-001 with strict local markers
+and limit the sanitized preview to 4,000 characters plus ellipsis.
+Static roles: unchanged app AcrPull on ACR, Secrets User on vault, Azure AI User
+on Foundry project. No new permission or SQL migration is needed. Actual live
+retrieval of the presenter's email remains unverified until after deployment.
+
 ## Simplified demo launcher release — 2026-09-14 UTC
 
 Scope: user-approved featured resume for the verified analyzed disruption,
@@ -87,7 +123,7 @@ Restored Combined and verified its original waiting-for-Taylor review remained.
 No submission, approval, mail, execution, new case, or new analysis was performed.
 Prior revision29 approval acceptance below is historical.
 
-> **Status:** Deployed — simplified demo launcher source d14b2d5 is live on revision31; live browser verification passed.
+> **Status:** Validated — read-only inbox check passed azure-validate on September 14, 2026. Revision31 remains live until release.
 
 ## Independent approval browser release — 2026-09-13
 

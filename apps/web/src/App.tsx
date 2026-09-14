@@ -2,6 +2,7 @@ import {CaseHeader} from "./components/CaseHeader";
 import {InvestigationFlow} from "./components/InvestigationFlow";
 import {PlanningRoutes} from "./components/PlanningRoutes";
 import {ExistingCases} from "./components/ExistingCases";
+import {InboxCheck} from "./components/InboxCheck";
 import {useAuth} from "./auth/AuthProvider";
 import {useCaseWorkspace} from "./hooks/useCaseWorkspace";
 import {useEffect, useState} from "react";
@@ -12,6 +13,7 @@ import "./styles.css";
 
 function CaseWorkspace({independentFinanceEnabled = true}: {independentFinanceEnabled?: boolean}) {
   const workspace = useCaseWorkspace();
+  const [inboxBusy, setInboxBusy] = useState(false);
   const createPurpose = new URLSearchParams(window.location.search).get("purpose") === "automated_test"
     ? "automated_test"
     : "showcase";
@@ -33,13 +35,15 @@ function CaseWorkspace({independentFinanceEnabled = true}: {independentFinanceEn
       createPurpose={createPurpose}
       creating={workspace.operation === "creating"}
       analyzing={workspace.operation === "analyzing"}
-      busy={workspace.operation !== null}
+      busy={workspace.operation !== null || inboxBusy}
       onCreate={workspace.create}
       onAnalyze={workspace.analyze}
     />
+    {workspace.runtime?.runtime_mode === "live" && !workspace.caseInstance &&
+      <InboxCheck disabled={workspace.operation !== null} onBusyChange={setInboxBusy}/>}
     <ExistingCases cases={workspace.existingCases} error={workspace.existingCasesError}
       featuredCaseId={workspace.runtime?.runtime_mode === "live" ? "RL-CASE-bcbb8740-c770-42fd-aa67-981d08b66383" : undefined}
-      busy={workspace.operation !== null}
+      busy={workspace.operation !== null || inboxBusy}
       loading={workspace.operation === "listing"} reopening={workspace.operation === "reopening"}
       onLoad={workspace.loadExistingCases} onReopen={workspace.reopen} />
     {workspace.caseInstance && <p className="reopen-note">This workspace reads saved results and does not refresh evidence or change retrieval times.</p>}

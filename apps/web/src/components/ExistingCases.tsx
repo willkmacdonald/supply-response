@@ -25,16 +25,13 @@ function recordedLabel(value: string): string {
 export function ExistingCases({cases, loading, reopening, busy, error, onLoad, onReopen, featuredCaseId}: Props) {
   const otherCases = cases?.filter(item => item.case_id !== featuredCaseId);
   return <section className="panel existing-cases" aria-labelledby="existing-cases-heading">
-    <h2 id="existing-cases-heading">{featuredCaseId ? "Resume your demo" : "Saved demos"}</h2>
-    {featuredCaseId && <div className="featured-demo">
-      <h3>Supplier Alpha delay</h3>
-      <p>The supplier email and analysis are already saved. Resume the disruption review and approval workflow.</p>
-      <button type="button" disabled={busy || loading || reopening} onClick={() => onReopen(featuredCaseId)}>Resume the analyzed disruption</button>
-      <p className="saved-analysis-footer">This opens an existing case. It does not check for a new email or run a new analysis.</p>
-    </div>}
+    <h2 id="existing-cases-heading">Saved demos</h2>
     {error && <p className="error" role="alert">{error}</p>}
     <details className="other-saved-cases"><summary>Other saved cases</summary>
-    <p>Older saved work is kept here. Opening it does not create a case or refresh its evidence.</p>
+    {featuredCaseId && <div className="featured-demo">
+      <h3>Supplier Alpha delay</h3>
+      <button type="button" disabled={busy || loading || reopening} onClick={() => onReopen(featuredCaseId)}>Resume the analyzed disruption</button>
+    </div>}
     <button type="button" className="secondary" disabled={busy || loading || reopening} onClick={onLoad}>
       {loading ? "Finding existing cases…" : error ? "Try finding cases again" : "Find existing cases"}
     </button>

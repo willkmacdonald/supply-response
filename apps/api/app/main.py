@@ -21,6 +21,7 @@ from apps.api.app.routes.decisions import router as decisions_router
 from apps.api.app.routes.execution import router as execution_router
 from apps.api.app.routes.finance import router as finance_router
 from apps.api.app.routes.health import router as health_router
+from apps.api.app.routes.inbox import router as inbox_router
 from apps.api.app.routes.session import router as session_router
 from apps.api.app.routes.test_support import router as test_support_router
 from apps.api.app.runtime import RuntimeProgression
@@ -67,6 +68,7 @@ def create_app(
     api.include_router(session_router)
     planner_dependencies = [Depends(require_planner)]
     api.include_router(cases_router, dependencies=planner_dependencies)
+    api.include_router(inbox_router, dependencies=planner_dependencies)
     api.include_router(decisions_router, dependencies=planner_dependencies)
     api.include_router(execution_router, dependencies=planner_dependencies)
     api.include_router(dashboard_router, dependencies=planner_dependencies)
