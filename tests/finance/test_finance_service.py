@@ -1,8 +1,11 @@
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from decimal import Decimal
 from threading import Barrier
 from types import SimpleNamespace
+from typing import Never, cast
+from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
@@ -15,7 +18,11 @@ from data.domain.decisions import CorpusScope, IdentitySnapshot
 from data.domain.evidence import IdentitySource
 from data.synthetic.rl001 import build_rl001_evidence, instantiate_rl001
 from services.analysis.service import AnalyzeCaseCommand, analyze_case
-from services.finance.contracts import ResolveFinanceCommand, SubmitProposalCommand
+from services.finance.contracts import (
+    ResolutionResult,
+    ResolveFinanceCommand,
+    SubmitProposalCommand,
+)
 from services.finance.identity import BoundFinanceActors, FinancePermissionDenied
 from services.finance.service import (
     FinanceCommandConflict,
@@ -23,6 +30,7 @@ from services.finance.service import (
     FinanceService,
 )
 from services.persistence.finance_reviews import SqlAlchemyFinanceReviewRepository
+from services.persistence.ports import UnitOfWork
 from services.persistence.proposals import (
     SelectionIdempotencyConflict,
     SqlAlchemyProposalRepository,
@@ -46,7 +54,9 @@ def ctx(tmp_path):
     alex_id = "22222222-2222-4222-8222-222222222222"
     taylor_id = "33333333-3333-4333-8333-333333333333"
     actors = BoundFinanceActors(
-        tenant_id=tenant, alex_object_id=alex_id, taylor_object_id=taylor_id
+        tenant_id=UUID(tenant),
+        alex_object_id=UUID(alex_id),
+        taylor_object_id=UUID(taylor_id),
     )
     alex = IdentitySnapshot(
         persona_id="RL-PERSONA-ALEX",
@@ -93,7 +103,7 @@ def ctx(tmp_path):
     store.save_analysis(analysis)
     times = iter(SUBMITTED + timedelta(minutes=index) for index in range(30))
     service = FinanceService(
-        store.uow_factory, actors=actors, clock=lambda: next(times)
+        _finance_uow_factory(store), actors=actors, clock=lambda: next(times)
     )
     yield SimpleNamespace(
         store=store,
@@ -122,7 +132,9 @@ def submission(ctx, option="RL-OPTION-COMBINED", key="submit-1"):
     )
 
 
-def resolution(ctx, *, approved=False, reason="Budget 10000", key="resolve-1"):
+def resolution(
+    ctx, *, approved=False, reason: str | None = "Budget 10000", key="resolve-1"
+):
     state = current(ctx)
     return ResolveFinanceCommand(
         review_id=state.review.review_id,
@@ -149,6 +161,12 @@ def rows(ctx):
 
 def no_clock():
     raise AssertionError("replay must not read clock")
+
+
+def _finance_uow_factory(store) -> Callable[[], UnitOfWork]:
+    # The concrete UoW satisfies the protocol at runtime. Its mutable repository
+    # attributes prevent pyright from inferring structural compatibility.
+    return cast(Callable[[], UnitOfWork], store.uow_factory)
 
 
 def test_original_submit_and_resolution_replay_after_supersession(ctx):
@@ -291,8 +309,9 @@ def test_contracts_reject_client_material_and_bad_shapes(ctx):
 
 def test_invalid_option_clock_and_low_cost_behavior(ctx):
     before = rows(ctx)
-    with pytest.raises(FinanceRequestInvalid):
-        ctx.service.submit(submission(ctx, "RL-OPTION-BETA"), ctx.alex)
+    for invalid_option in ("RL-OPTION-BETA", "RL-OPTION-NO-MITIGATION"):
+        with pytest.raises(FinanceRequestInvalid):
+            ctx.service.submit(submission(ctx, invalid_option), ctx.alex)
     assert rows(ctx) == before
     invalid_clock = FinanceService(
         ctx.store.uow_factory,
@@ -313,10 +332,12 @@ def test_bound_actor_configuration_rejects_same_person_and_malformed_actor(ctx):
             taylor_object_id=ctx.actors.alex_object_id,
         )
     malformed = ctx.alex.model_copy(update={"object_id": "not-a-uuid"})
+
+    def forbidden() -> Never:
+        raise AssertionError("unauthorized command must not open UoW")
+
     with pytest.raises(FinancePermissionDenied):
-        FinanceService(lambda: None, actors=ctx.actors).submit(
-            submission(ctx), malformed
-        )
+        FinanceService(forbidden, actors=ctx.actors).submit(submission(ctx), malformed)
 
 
 @pytest.mark.parametrize(
@@ -348,6 +369,35 @@ def test_resolve_permission_variants_denied_before_database_access(ctx, field, v
         FinanceService(forbidden, actors=ctx.actors, clock=no_clock).resolve(
             command, actor
         )
+
+
+def test_authorization_precedes_replay_for_persisted_submit_and_resolution(ctx):
+    submit_command = submission(ctx)
+    ctx.service.submit(submit_command, ctx.alex)
+    resolve_command = resolution(ctx, approved=True, reason=None)
+    ctx.service.resolve(resolve_command, ctx.taylor)
+    before_rows, before_state = rows(ctx), current(ctx)
+
+    def forbidden() -> Never:
+        raise AssertionError("unauthorized replay must not open UoW")
+
+    denied = FinanceService(forbidden, actors=ctx.actors, clock=no_clock)
+    wrong_alex_object = ctx.alex.model_copy(
+        update={"object_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}
+    )
+    wrong_taylor_object = ctx.taylor.model_copy(
+        update={"object_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"}
+    )
+
+    with pytest.raises(FinancePermissionDenied):
+        denied.submit(submit_command, wrong_alex_object)
+    with pytest.raises(FinancePermissionDenied):
+        denied.resolve(resolve_command, wrong_taylor_object)
+    with pytest.raises(FinancePermissionDenied):
+        denied.resolve(resolve_command, ctx.alex)
+
+    assert rows(ctx) == before_rows
+    assert current(ctx) == before_state
 
 
 def test_late_submission_cas_failure_rolls_back_pending_and_pointer(ctx, monkeypatch):
@@ -497,6 +547,7 @@ def test_concurrent_identical_resolution_replays_one_revision(ctx):
         lambda: ctx.service.resolve(command, ctx.taylor),
     )
     assert results[0] == results[1]
+    assert isinstance(results[0], ResolutionResult)
     assert results[0].review_revision == 2
     assert rows(ctx) == (1, 2, 0, 0)
 
@@ -514,6 +565,7 @@ def test_exact_cost_threshold_comes_from_persisted_analysis(
         runtime_mode=RuntimeMode.FALLBACK,
         workflow_version=WorkflowVersion.INDEPENDENT_FINANCE,
     )
+    assert snapshot.alpha_expedite is not None
     snapshot = snapshot.model_copy(
         update={
             "alpha_expedite": snapshot.alpha_expedite.model_copy(
@@ -550,7 +602,7 @@ def test_exact_cost_threshold_comes_from_persisted_analysis(
         idempotency_key="cost-threshold",
     )
     result = FinanceService(
-        store.uow_factory, actors=ctx.actors, clock=lambda: SUBMITTED
+        _finance_uow_factory(store), actors=ctx.actors, clock=lambda: SUBMITTED
     ).submit(command, ctx.alex)
     assert result.selection.proposal.response_cost == Decimal(target_cost)
     assert (result.review is not None) is requires_review
