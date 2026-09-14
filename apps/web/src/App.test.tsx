@@ -11,6 +11,26 @@ import {AuthProvider, type AuthClient} from "./auth/AuthProvider";
 
 const scenarioTime = "2026-09-01T09:00:00-05:00";
 
+it("keeps email discovery available beside an open analysis without replacing it on search", async () => {
+  window.history.replaceState({}, "", "/?caseId=RL-CASE-1");
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const path = new URL(String(input), "http://localhost").pathname;
+    if (path === "/api/runtime") return response({...runtime, runtime_mode: "live"});
+    if (path === "/api/cases/RL-CASE-1") return response({...caseInstance, current_analysis_id: analysis.analysis_id});
+    if (path === "/api/cases/RL-CASE-1/analysis") return response(analysis);
+    if (path === "/api/inbox/check") return response({checked_at: scenarioTime, incomplete: false, messages: []});
+    if (path === "/api/cases") return response([]);
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  render(<App />);
+  await screen.findByRole("tab", {name: "1. Understand the disruption"});
+  await userEvent.click(screen.getByRole("button", {name: "Check email for disruptions"}));
+  expect(await screen.findByText("No matching supplier emails found.")).toBeVisible();
+  expect(screen.getByRole("tab", {name: "1. Understand the disruption"})).toBeVisible();
+  expect(window.location.search).toContain("caseId=RL-CASE-1");
+});
+
 const entraConfig = {
   tenantId: "11111111-1111-4111-8111-111111111111",
   webClientId: "22222222-2222-4222-8222-222222222222",

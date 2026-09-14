@@ -37,6 +37,14 @@ function state(): CaseWorkspaceState {
 async function selectDecisionStage() {
   await userEvent.click(screen.getByRole("tab", {name: "3. Choose a response"}));
 }
+it("keeps analysis timestamps collapsed instead of above the tabs", async () => {
+  render(<InvestigationFlow state={state()} />);
+  expect(screen.queryByText("Demo corpus — fictional")).not.toBeInTheDocument();
+  const timestamp = screen.getByText(/Analysis saved at/);
+  expect(timestamp).not.toBeVisible();
+  await userEvent.click(screen.getByText("Analysis source details"));
+  expect(timestamp).toBeVisible();
+});
 function selectionFixture() {
   const input = state();
   const combined: ResponseOption = {option_id: "combined", option_kind: "combined", name: "Combined response",

@@ -1,5 +1,40 @@
 # Supply Response Personal-Tenant Deployment Plan
 
+## Email entry visibility correction — 2026-09-14
+
+Scope: keep inbox discovery available with an open case; show found email text
+before analysis; explicitly analyze a newly created email case or reopen its
+existing analysis. Remove the three prominent analysis-context lines and retain
+timestamps in collapsed source details. Same approved target, no schema, roles,
+configuration, recipient, or infrastructure changes.
+
+### All validation checks pass — email entry correction
+
+- [x] 1. AZD Installation: 1.30.0
+- [x] 2. Schema Validation: official azure.yaml schema passed
+- [x] 3. Environment Setup: existing guarded profile preflight passed
+- [x] 4. Authentication Check: Will authenticated
+- [x] 5. Subscription/Location Check: Azure Dev / East US 2, unchanged
+- [x] 6. Aspire Pre-Provisioning Checks: not applicable
+- [x] 7. Provision Preview: passed, no resources created/deleted
+- [x] 8. Build Verification: 363 web tests and TypeScript/Vite build passed
+- [x] 9. Docker Build Context Validation: lockfile and four Entra arguments intact
+- [x] 10. Package Validation: guarded ACR path, azd package passed
+- [x] 11. Azure Policy Validation: seven existing assignments; preview passed
+- [x] 12. Aspire Post-Provisioning Checks: not applicable
+
+### Validation Proof — email entry correction
+
+Fresh 2026-09-14 checks: guarded preflight, preview, package; official schema;
+AZD version/auth; policy list; 363 web tests and production build. Regression
+tests first failed on the hidden inbox action, hidden email excerpt, prominent
+metadata, and missing analyze action, then passed with the correction. Static
+resource roles unchanged: AcrPull on shared ACR, Secrets User on vault, Foundry
+User on project; live assignments independently confirmed. No database changes.
+Actual App browser checks at 1440px and 390px, using explicitly simulated
+responses, passed: loaded-case email check, immediate message text, existing
+analysis reuse, collapsed metadata, no overflow or page errors.
+
 ## Reviewed inbound email to case release — 2026-09-14 UTC
 
 Scope: explicit reviewed Will-to-Alex email creates an email-bound case and
@@ -181,7 +216,7 @@ Restored Combined and verified its original waiting-for-Taylor review remained.
 No submission, approval, mail, execution, new case, or new analysis was performed.
 Prior revision29 approval acceptance below is historical.
 
-> **Status:** Deployed — reviewed email-to-case source974d4a1 is live on revision33; exact email creation, live analysis, Outlook citation and duplicate retry passed in Alex's browser.
+> **Status:** Validated — email-entry visibility correction passed fresh validation; previous source974d4a1 remains live pending release.
 
 ## Independent approval browser release — 2026-09-13
 

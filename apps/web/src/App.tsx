@@ -39,7 +39,7 @@ function CaseWorkspace({independentFinanceEnabled = true}: {independentFinanceEn
       onCreate={workspace.create}
       onAnalyze={workspace.analyze}
     />
-    {workspace.runtime?.runtime_mode === "live" && !workspace.caseInstance &&
+    {workspace.runtime?.runtime_mode === "live" &&
       <InboxCheck disabled={workspace.operation !== null} onBusyChange={setInboxBusy} onCaseCreated={workspace.reopen}/>}
     <ExistingCases cases={workspace.existingCases} error={workspace.existingCasesError}
       featuredCaseId={workspace.runtime?.runtime_mode === "live" ? "RL-CASE-bcbb8740-c770-42fd-aa67-981d08b66383" : undefined}

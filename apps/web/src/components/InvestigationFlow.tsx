@@ -61,9 +61,9 @@ function InvestigationPresentation({state, independentFinanceEnabled}: {state: C
     tabRefs.current[3]?.focus();
   }
   return <div id="assisted-review" className="investigation-flow"><div className="analysis-context">
-    <p>{analysis.material.corpus === "demo_corpus" ? "Demo corpus — fictional" : "Fictional provenance not established for this analysis"}</p>
-    <p>Snapshot used for this analysis · In this scenario, as of {instant(analysis.scenario_effective_time)}</p><p>Analysis saved at {instant(analysis.created_at)}. Sources are not monitored continuously.</p>
-    {analysis.runtime_mode === "fallback" && <p>Sample data — not a live retrieval</p>}<details><summary>Analysis source details</summary><p>Case {analysis.case_id}</p><p>Analysis {analysis.analysis_id}</p></details>
+    {analysis.runtime_mode === "fallback" && <p>Sample data — not a live retrieval</p>}<details><summary>Analysis source details</summary><p>Case {analysis.case_id}</p><p>Analysis {analysis.analysis_id}</p>
+      <p>Scenario snapshot: {instant(analysis.scenario_effective_time)}</p><p>Analysis saved at {instant(analysis.created_at)}</p>
+    </details>
   </div><RequiredCitationWarning analysis={analysis} tenantSharePointHost={props.tenantSharePointHost} />
     <div className="investigation-tabs" role="tablist" aria-label="Investigation stages">
       {stages.map((stage, index) => <button key={stage.id} type="button" role="tab"

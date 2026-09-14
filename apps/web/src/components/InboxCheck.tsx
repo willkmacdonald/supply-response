@@ -59,9 +59,11 @@ export function InboxCheck({disabled = false, onBusyChange, onCaseCreated}: {
     pending.current = true; setCreating(message.message_id); setError(null); onBusyChange?.(true);
     try {
       const created = await api.createCaseFromEmail(message.internet_message_id, message.review_fingerprint);
+      if (!created.current_analysis_id) await api.analyze(created.case_id);
       if (mounted.current) {
-        setCreatedCaseId(created.case_id);
         await onCaseCreated(created.case_id);
+        setCreatedCaseId(created.case_id);
+        document.getElementById("assisted-review")?.scrollIntoView({behavior: "smooth", block: "start"});
       }
     } catch (caught) {
       if (mounted.current) setError(safeErrorMessage(caught));
@@ -77,8 +79,8 @@ export function InboxCheck({disabled = false, onBusyChange, onCaseCreated}: {
       <SourceActionIcon product="outlook"/>{checking ? "Checking email…" : "Check email for disruptions"}
     </button>
     {checking && <p role="status">Searching Alex’s mailbox through Work IQ…</p>}
-    {creating !== null && <p role="status">Verifying the reviewed email and creating its disruption case…</p>}
-    {createdCaseId && <p role="status">Disruption case is ready.</p>}
+    {creating !== null && <p role="status">Analyzing the supplier disruption…</p>}
+    {createdCaseId && <p role="status">Disruption analysis is ready below.</p>}
     {error && <p role="alert" className="error">{error}</p>}
     {result && <div aria-live="polite">
       {result.incomplete && <p role="status">Work IQ could not check every matching email. You can review any results below or try again.</p>}
@@ -87,13 +89,13 @@ export function InboxCheck({disabled = false, onBusyChange, onCaseCreated}: {
         <h3>Supplier Alpha email found</h3>
         <p><strong>{message.subject}</strong></p>
         <p>From {message.sender} · Received {new Date(message.received_at).toLocaleString()}</p>
+        <p style={{whiteSpace:"pre-wrap", overflowWrap:"anywhere"}}>{message.excerpt}</p>
         <details><summary>Review disruption</summary>
-          <p style={{whiteSpace:"pre-wrap", overflowWrap:"anywhere"}}>{message.excerpt}</p>
           {message.facts && <DisruptionFacts facts={message.facts}/>}
           {message.creation_blocker && <p>{messageForCode(message.creation_blocker)}</p>}
           {onCaseCreated && message.facts && message.internet_message_id && message.review_fingerprint && !message.creation_blocker &&
             <button type="button" disabled={disabled || checking || creating !== null} onClick={() => void create(message)}>
-              {creating === message.message_id ? "Creating disruption case…" : "Create case from this email"}
+              {creating === message.message_id ? "Analyzing disruption…" : "Analyze this disruption"}
             </button>}
         </details>
         {outlookLink(message.citation_url) && <a className="source-action" href={outlookLink(message.citation_url)} target="_blank" rel="noopener noreferrer">
