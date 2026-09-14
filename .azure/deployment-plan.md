@@ -1,5 +1,46 @@
 # Supply Response Personal-Tenant Deployment Plan
 
+## Reviewed inbound email to case release — 2026-09-14 UTC
+
+Scope: explicit reviewed Will-to-Alex email creates an email-bound case and
+analysis. Existing approved Azure target, identities, roles, schema and older
+cases are unchanged. No outgoing email or approval is performed. User explicitly
+authorized body/link retrieval, saving this email into its case and analysis.
+
+### Validation checklist — email to case
+
+- [x] 1. AZD Installation: 1.30.0
+- [x] 2. Schema Validation: official Azure/azure-dev v1.0 schema passed
+- [x] 3. Environment Setup: existing approved profile guarded preflight passed
+- [x] 4. Authentication Check: interactive Will authenticated
+- [x] 5. Subscription/Location Check: exact Azure Dev / East US 2 verified
+- [x] 6. Aspire Pre-Provisioning Checks: not applicable
+- [x] 7. Provision Preview: passed; no resources created or deleted
+- [x] 8. Build Verification: 360 web tests and production build passed
+- [x] 9. Docker Build Context Validation: lockfile and four Entra args retained
+- [x] 10. Package Validation: passed; supported guarded ACR image path retained
+- [x] 11. Azure Policy Validation: seven assignments, same target preview passed
+- [x] 12. Aspire Post-Provisioning Checks: not applicable
+
+### Validation Proof — email to case
+
+Fresh September 14: guarded .tmp/approval_release.py preflight/preview/package
+passed. Official azure.yaml schema validated; azd authentication/version verified.
+Full web suite 360 passed; focused20 and build also passed after readable blocker
+copy correction. Backend integration/domain/API/persistence: 661 passed,18 skipped
+(live settings absent), one preexisting deprecation warning. Existing migration
+logging-order pollution documented in backend report; integration-before-persistence
+run passed. Runtime lint/type checks and diff whitespace checks passed.
+Static and live role checks match unchanged app AcrPull on ACR, Secrets User on
+vault and Foundry User (53ca6127 role ID, formerly Azure AI User) on project.
+No SQL schema/grants change. Independent review of f4b1de8..b6b4764 found no
+Critical or Important findings; parent independently reran all39 new backend tests.
+Local presenter interaction verified
+at 1440px and 390px with explicit simulated fixtures, no overflow or page errors.
+Work IQ metadata-only checks proved the same Internet Message-ID resolves after
+Inbox to Archive and back, while the ordinary Outlook locator changed. The
+message was restored to Inbox. Live case/analysis acceptance is still pending.
+
 ## Read-only inbox check release — 2026-09-14 UTC
 
 Scope: presenter-controlled Work IQ discovery and validated email review from
@@ -134,7 +175,7 @@ Restored Combined and verified its original waiting-for-Taylor review remained.
 No submission, approval, mail, execution, new case, or new analysis was performed.
 Prior revision29 approval acceptance below is historical.
 
-> **Status:** Deployed — read-only inbox check source 736c339 is live on revision32; actual Alex/Work IQ new-email discovery and body retrieval verified.
+> **Status:** Validated — email-to-case source b6b4764 passed fresh Azure validation; independent review and deployment acceptance pending. Production remains read-only inbox revision32 until the release below is recorded.
 
 ## Independent approval browser release — 2026-09-13
 

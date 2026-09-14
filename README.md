@@ -1,5 +1,15 @@
 # Supply Response
 
+## Email-to-case increment — in release verification
+
+Implemented: review the discovered email and its delivery facts, explicitly
+create its case, then use the existing Analyze disruption action. The case keeps
+the actual sender, subject and stable mailbox-scoped message identity. Repeated
+creation returns the same case; changed or ambiguous source content blocks.
+360 web tests and the production build pass. Live case/analysis acceptance is
+pending; the deployed baseline below remains authoritative until recorded.
+See the [email-to-case plan](docs/superpowers/plans/2026-09-14-email-to-case.md).
+
 ## Inbox-check increment — September 14, 2026
 
 **Deployed and live-verified:** revision32, source `736c339`. Work IQ found the
