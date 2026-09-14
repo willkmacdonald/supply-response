@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from "react";
-import {api, safeErrorMessage} from "../api";
+import {api, messageForCode, safeErrorMessage} from "../api";
 import type {InboxCheckResult, InboxMessage, SupplierDisruptionFacts} from "../types";
 import {SourceActionIcon} from "./SourceActionIcon";
 
@@ -90,7 +90,7 @@ export function InboxCheck({disabled = false, onBusyChange, onCaseCreated}: {
         <details><summary>Review disruption</summary>
           <p style={{whiteSpace:"pre-wrap", overflowWrap:"anywhere"}}>{message.excerpt}</p>
           {message.facts && <DisruptionFacts facts={message.facts}/>}
-          {message.creation_blocker && <p>{message.creation_blocker}</p>}
+          {message.creation_blocker && <p>{messageForCode(message.creation_blocker)}</p>}
           {onCaseCreated && message.facts && message.internet_message_id && message.review_fingerprint && !message.creation_blocker &&
             <button type="button" disabled={disabled || checking || creating !== null} onClick={() => void create(message)}>
               {creating === message.message_id ? "Creating disruption case…" : "Create case from this email"}

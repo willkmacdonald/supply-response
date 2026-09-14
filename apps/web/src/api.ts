@@ -32,7 +32,7 @@ const SAFE_ERROR_MESSAGES = new Map<string, string>([
 ]);
 const GENERIC_ERROR_MESSAGE = "The request could not be completed.";
 
-function messageForCode(code: string | null): string {
+export function messageForCode(code: string | null): string {
   return code ? SAFE_ERROR_MESSAGES.get(code) ?? GENERIC_ERROR_MESSAGE : GENERIC_ERROR_MESSAGE;
 }
 

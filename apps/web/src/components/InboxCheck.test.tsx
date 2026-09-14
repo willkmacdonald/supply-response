@@ -68,12 +68,13 @@ it("keeps the review after a failed create and gives a useful changed-email erro
  expect(create).toHaveBeenCalledTimes(1);
 });
 it("shows an unsupported-message explanation without enabling creation", async () => {
- vi.spyOn(api,"checkInbox").mockResolvedValue({...reviewable,messages:[{...reviewable.messages[0],facts:null,creation_blocker:"The partial shipment date is missing."}]});
+ vi.spyOn(api,"checkInbox").mockResolvedValue({...reviewable,messages:[{...reviewable.messages[0],facts:null,creation_blocker:"INBOUND_EMAIL_UNSUPPORTED"}]});
  const create=vi.spyOn(api,"createCaseFromEmail");
  render(<InboxCheck onCaseCreated={vi.fn()}/>);
  await userEvent.click(screen.getByRole("button",{name:"Check email for disruptions"}));
  await userEvent.click(await screen.findByText("Review disruption"));
- expect(screen.getByText("The partial shipment date is missing.")).toBeVisible();
+ expect(screen.getByText(/This email does not contain a complete, supported disruption/)).toBeVisible();
+ expect(screen.queryByText("INBOUND_EMAIL_UNSUPPORTED")).not.toBeInTheDocument();
  expect(screen.queryByRole("button",{name:"Create case from this email"})).not.toBeInTheDocument();
  expect(create).not.toHaveBeenCalled();
 });
