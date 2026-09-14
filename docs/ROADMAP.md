@@ -1,16 +1,19 @@
 # Supply Response Roadmap
 
-## September 14 email-to-case increment — release verification
+## September 14 email-to-case increment — deployed and live-verified
 
 Implemented: actual email review → explicit case creation → existing analysis
 using that bound email. Atomic duplicate prevention uses the existing case
 transaction and immutable source JSON, not a new database or migration.
 Work IQ's stable email lookup passed an Inbox/Archive/Inbox move test. Desktop
 and mobile presenter interaction, 360 web tests and build pass. Independent
-review, deployment and live creation/analysis acceptance are still pending.
+review found no blocking issues. Revision 33 (`974d4a1`) passed live case creation,
+analysis, exact Outlook citation and duplicate retry acceptance as Alex using
+Will's 0914-A email. Backend checks: 661 passed, 18 live-setting skips. See
+[release evidence](reviews/2026-09-14-email-to-case-release.md).
 No outbound email or Finance decision is part of this increment.
 
-## September 14 inbox-check increment
+## Earlier September 14 inbox-check increment
 
 Implemented and locally verified: **Check email for disruptions** → Work IQ
 mailbox discovery → validated supplier email preview and Outlook citation.

@@ -39,7 +39,13 @@ Local presenter interaction verified
 at 1440px and 390px with explicit simulated fixtures, no overflow or page errors.
 Work IQ metadata-only checks proved the same Internet Message-ID resolves after
 Inbox to Archive and back, while the ordinary Outlook locator changed. The
-message was restored to Inbox. Live case/analysis acceptance is still pending.
+message was restored to Inbox. Revision33/source974d4a1 deployed successfully,
+ACR run ch1q, image sha256:42524abd04a483b33ded515418929d48b49ab13ef97423dd50e403a9a67ce3a2.
+Latest-ready,100% traffic, unchanged scale0–2 and resource-scoped roles. Guarded
+Fabric/Foundry smoke and azd show passed. Real Alex browser created from Will's
+0914-A email, analyzed that bound message, opened its exact Outlook citation,
+and repeated creation returned the identical case/analysis without a new one.
+Full evidence: docs/reviews/2026-09-14-email-to-case-release.md.
 
 ## Read-only inbox check release — 2026-09-14 UTC
 
@@ -175,7 +181,7 @@ Restored Combined and verified its original waiting-for-Taylor review remained.
 No submission, approval, mail, execution, new case, or new analysis was performed.
 Prior revision29 approval acceptance below is historical.
 
-> **Status:** Validated — email-to-case source b6b4764 passed fresh Azure validation; independent review and deployment acceptance pending. Production remains read-only inbox revision32 until the release below is recorded.
+> **Status:** Deployed — reviewed email-to-case source974d4a1 is live on revision33; exact email creation, live analysis, Outlook citation and duplicate retry passed in Alex's browser.
 
 ## Independent approval browser release — 2026-09-13
 
