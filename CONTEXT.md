@@ -53,8 +53,8 @@ The calculated consequences of allowing the disruption to proceed without an act
 _Avoid_: Feasible scenario, recommended response
 
 **Feasible Mitigation**:
-A Response Option that satisfies every required operational, evidence, policy, and Prerequisite Approval gate.
-_Avoid_: Available scenario, possible response
+A Response Option that satisfies the operational, evidence, qualification and planning-policy constraints for consideration. Feasibility does not grant spending authority or replace required Prerequisite Approvals and the final Decision.
+_Avoid_: Approved response, available scenario, possible response
 
 **Uncovered Constrained-Part Demand**:
 The quantity of the disrupted component still required by customer demand that a Response Option does not protect.
@@ -135,6 +135,10 @@ _Avoid_: Evidence reference, attestation
 **Finance Proposal**:
 The exact Response Option, evaluated cost and Analysis Version submitted by Alex for Taylor's spending review. A changed response or analysis is a different proposal, not an extension of an earlier approval.
 _Avoid_: Final Decision, selected response alone
+
+**Submitted Response**:
+Alex's formally submitted Response Option for a specific Analysis Version and evaluated cost, with a Finance Review when required. It is distinct from an option selected for comparison and still requires Alex's final Decision.
+_Avoid_: Selected response alone, approved response, Finance approval
 
 **Finance Review**:
 Taylor's independent assessment of a Finance Proposal, recorded as pending, approved, rejected or superseded. Approval applies only to that proposal and does not replace Alex's final Decision; supersession preserves the earlier review history.
