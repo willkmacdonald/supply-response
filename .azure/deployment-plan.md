@@ -47,6 +47,26 @@ database without modifying resources. The official Azure Developer CLI schema,
 Bicep compilation, no-create/no-delete provision preview, clean Docker build
 context, guarded package and seven existing policy assignments all passed.
 
+### Deployment proof — Taylor evidence and Alex handoff
+
+Source `afa688a`; ACR run `ch1u` succeeded. Revision
+`ca-sr-demo--0000037` is latest-ready and running with 100% traffic on immutable
+image `sha256:ae8e0709ce507061f908e4c698595802597e084f51efa61f42cc891081539b31`.
+The guarded live readiness gate passed for Fabric and Foundry. Live role
+verification confirmed exact-resource `AcrPull`, `Key Vault Secrets User`, and
+project-scoped `Foundry User` assignments for the Container App identity.
+
+In the live Taylor browser, the approved `RL-FINANCE-91dd3ab9` review displayed
+both Fabric records as **Retrieved for this analysis** with **Required checks
+passed**; neither false **Source does not belong to this analysis** error was
+present. The completed-review message named Taylor and the recorded review time,
+said Alex's final approval was available, and displayed **Return to Alex for
+final approval**. That button opened the Microsoft account picker. Selecting
+Alex returned to the exact inbound case, analysis and `RL-OPTION-COMBINED` on
+tab 4, where the reviewed option, Taylor's approval time, and **Give final Alex
+approval** were visible. No console warning or error was recorded, and Alex's
+final approval was intentionally not submitted during verification.
+
 ## Hide completed case launcher — 2026-09-14
 
 Scope: once an analysis is loaded, remove the **Saved demos** launcher and its
