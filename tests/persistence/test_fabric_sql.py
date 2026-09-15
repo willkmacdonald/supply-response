@@ -80,7 +80,7 @@ def test_fabric_retention_lock_is_transaction_owned_and_fails_closed(
 
     def delete_aggregates(*args):  # allowed: record transaction ordering in this test
         calls.append("delete")
-        return PresenterRetentionResult(plan, {})
+        return PresenterRetentionResult(plan, dict(plan.planned_deletions))
 
     monkeypatch.setattr(presenter_runs, "plan_presenter_retention", plan_retention)
     monkeypatch.setattr(

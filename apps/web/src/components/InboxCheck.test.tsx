@@ -6,7 +6,7 @@ import {afterEach, expect, it, vi} from "vitest";
 import {ApiRequestError, api} from "../api";
 import {InboxCheck} from "./InboxCheck";
 afterEach(() => {cleanup(); vi.restoreAllMocks();});
-const result = {presenter_run_id:"RL-RUN-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",presenter_run_receipt:"PRR1.opaque.receipt",checked_at:"2026-09-14T05:00:00Z",incomplete:false,messages:[{
+const result = {presenter_run_id:"RL-RUN-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",checked_at:"2026-09-14T05:00:00Z",incomplete:false,messages:[{
  message_id:"new-message",subject:"[Supply Response Demo] RL-001 | Supplier Alpha | Run A",
  sender:"will@willmacdonald.com",received_at:"2026-09-14T04:59:00Z",
  excerpt:"RL-MAT-10247 shipment is delayed.",citation_url:"https://outlook.office365.com/mail/deeplink/read/new-message",
@@ -46,7 +46,7 @@ it.each([null, "saved-analysis"])("reviews before opening a case with analysis %
  const button=screen.getByRole("button",{name:"Analyze this disruption"});
  await userEvent.dblClick(button);
  expect(create).toHaveBeenCalledTimes(1);
- expect(create).toHaveBeenCalledWith(result.presenter_run_id, result.presenter_run_receipt, "<run-a@example.com>", "a".repeat(64));
+ expect(create).toHaveBeenCalledWith(result.presenter_run_id, "<run-a@example.com>", "a".repeat(64));
  expect(screen.getByRole("button",{name:"Analyzing disruption…"})).toBeDisabled();
  expect(screen.getByRole("button",{name:"Check email for disruptions"})).toBeDisabled();
  expect(busy).toHaveBeenLastCalledWith(true);

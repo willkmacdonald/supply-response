@@ -70,7 +70,6 @@ class RuntimeResponse(BaseModel):
 
 class InboxCheckResponse(InboxCheck):
     presenter_run_id: str = Field(pattern=PRESENTER_RUN_PATTERN)
-    presenter_run_receipt: str = Field(min_length=1, max_length=4096)
 
 
 class CaseControls(BaseModel):

@@ -61,7 +61,6 @@ export function InboxCheck({disabled = false, onBusyChange, onCaseCreated}: {
     try {
       const created = await api.createCaseFromEmail(
         result.presenter_run_id,
-        result.presenter_run_receipt,
         message.internet_message_id,
         message.review_fingerprint,
       );

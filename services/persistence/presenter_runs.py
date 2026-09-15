@@ -2,39 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
 
-from sqlalchemy import Connection, Table, delete, or_, select, update
+from sqlalchemy import Connection, Table, delete, func, or_, select, update
 
 from data.domain import CasePurpose, RuntimeMode
 from services.persistence import tables
 from services.persistence.store import PersistenceError
-
-if TYPE_CHECKING:
-    from services.persistence.store import SqlAlchemyStore
-
-
-@dataclass(frozen=True)
-class PresenterRetentionPlan:
-    current_case_id: str
-    retained_case_ids: tuple[str, ...]
-    pruned_case_ids: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class PresenterRetentionResult:
-    plan: PresenterRetentionPlan
-    deleted_rows: dict[str, int]
-
-
-class PresenterRetentionPlanChanged(PersistenceError):
-    """The eligible history changed after retention was previewed."""
-
-
-class PresenterRetentionLockUnavailable(PersistenceError):
-    """The database could not grant the transaction's exclusive retention lock."""
-
 
 PRESENTER_AGGREGATE_DELETE_ORDER = (
     "case_projection",
@@ -56,6 +31,36 @@ PRESENTER_AGGREGATE_DELETE_ORDER = (
     "operational_snapshots",
     "case_instances",
 )
+
+
+if TYPE_CHECKING:
+    from services.persistence.store import SqlAlchemyStore
+
+
+def _empty_planned_deletions() -> dict[str, int]:
+    return dict.fromkeys(PRESENTER_AGGREGATE_DELETE_ORDER, 0)
+
+
+@dataclass(frozen=True)
+class PresenterRetentionPlan:
+    current_case_id: str
+    retained_case_ids: tuple[str, ...]
+    pruned_case_ids: tuple[str, ...]
+    planned_deletions: dict[str, int] = field(default_factory=_empty_planned_deletions)
+
+
+@dataclass(frozen=True)
+class PresenterRetentionResult:
+    plan: PresenterRetentionPlan
+    deleted_rows: dict[str, int]
+
+
+class PresenterRetentionPlanChanged(PersistenceError):
+    """The eligible history changed after retention was previewed."""
+
+
+class PresenterRetentionLockUnavailable(PersistenceError):
+    """The database could not grant the transaction's exclusive retention lock."""
 
 
 def plan_presenter_retention(
@@ -97,15 +102,21 @@ def plan_presenter_retention(
     if current_case_id not in eligible:
         raise ValueError("current Case must be live, showcase, and supplier-bound")
     history = tuple(case_id for case_id in eligible if case_id != current_case_id)
-    return PresenterRetentionPlan(
+    partial_plan = PresenterRetentionPlan(
         current_case_id,
         (current_case_id, *history[:historical_limit]),
         history[historical_limit:],
     )
+    return PresenterRetentionPlan(
+        partial_plan.current_case_id,
+        partial_plan.retained_case_ids,
+        partial_plan.pruned_case_ids,
+        count_presenter_aggregate_deletions(connection, partial_plan),
+    )
 
 
-def presenter_aggregate_delete_statements(plan: PresenterRetentionPlan):
-    """Build portable statements while parents still exist for child subqueries."""
+def presenter_aggregate_targets(plan: PresenterRetentionPlan):
+    """Yield each aggregate table with the predicate used to delete its rows."""
     case_ids = plan.pruned_case_ids
     analysis_ids = select(tables.analysis_versions.c.analysis_id).where(
         tables.analysis_versions.c.case_id.in_(case_ids)
@@ -139,6 +150,25 @@ def presenter_aggregate_delete_statements(plan: PresenterRetentionPlan):
         predicate = or_(
             *(table.c[key].in_(predicates[key]) for key in keys if key in table.c)
         )
+        yield name, table, predicate
+
+
+def count_presenter_aggregate_deletions(
+    connection: Connection, plan: PresenterRetentionPlan
+) -> dict[str, int]:
+    if not plan.pruned_case_ids:
+        return _empty_planned_deletions()
+    return {
+        name: connection.execute(
+            select(func.count()).select_from(table).where(predicate)
+        ).scalar_one()
+        for name, table, predicate in presenter_aggregate_targets(plan)
+    }
+
+
+def presenter_aggregate_delete_statements(plan: PresenterRetentionPlan):
+    """Build portable statements while parents still exist for child subqueries."""
+    for name, table, predicate in presenter_aggregate_targets(plan):
         if name == "case_proposal_selections":
             yield update(table).where(predicate).values(expected_selection_id=None)
         yield delete(table).where(predicate)

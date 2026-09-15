@@ -15,10 +15,7 @@ def test_inbox_unavailable_in_fallback(client):
 
 def setup_inbox(app, services):
     services.settings = services.settings.model_copy(
-        update={
-            "runtime_mode": RuntimeMode.LIVE,
-            "entra_client_secret": "fixture-presenter-receipt-secret",
-        }
+        update={"runtime_mode": RuntimeMode.LIVE}
     )
     actor = SimpleNamespace(tenant_id="tenant-a", object_id="actor-a")
     app.dependency_overrides[require_planner] = lambda: actor
@@ -55,10 +52,13 @@ def test_successive_checks_mint_distinct_presenter_runs(app, client, services):
         case_domain.PRESENTER_RUN_PATTERN, first.json()["presenter_run_id"]
     )
     assert first.json()["presenter_run_id"] != second.json()["presenter_run_id"]
-    assert first.json()["presenter_run_receipt"]
-    assert (
-        first.json()["presenter_run_receipt"] != second.json()["presenter_run_receipt"]
-    )
+    assert set(first.json()) == {
+        "checked_at",
+        "messages",
+        "incomplete",
+        "presenter_run_id",
+    }
+    assert set(second.json()) == set(first.json())
 
 
 def test_inbox_failure_does_not_leak_raw_errors(app, client, services):
@@ -69,7 +69,6 @@ def test_inbox_failure_does_not_leak_raw_errors(app, client, services):
     assert response.json()["detail"]["code"] == "INBOX_CHECK_FAILED"
     assert "secret" not in response.text
     assert "presenter_run_id" not in response.text
-    assert "presenter_run_receipt" not in response.text
 
 
 def test_inbox_rejects_client_supplied_scope(app, client, services):

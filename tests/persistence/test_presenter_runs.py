@@ -21,6 +21,7 @@ from services.persistence.presenter_runs import (
     PRESENTER_AGGREGATE_DELETE_ORDER,
     PresenterRetentionPlan,
     PresenterRetentionPlanChanged,
+    PresenterRetentionResult,
 )
 from services.persistence.sqlite import sqlite_store
 from services.persistence.store import SqlAlchemyStore
@@ -112,7 +113,12 @@ def populate_aggregate(store, case):
                     action_id=ids["action_id"],
                 )
             if name == "approval_satisfactions":
-                values["decision_id"] = ids["decision_id"]
+                values.update(
+                    decision_id=ids["decision_id"],
+                    persona_id="RL-PERSONA-TAYLOR",
+                    role="finance_approver",
+                    satisfied=True,
+                )
             connection.execute(insert(table).values(**values))
             if name == "case_proposal_selections":
                 values.update(
@@ -284,6 +290,94 @@ def test_apply_rejects_a_changed_preview(populated_presenter_store):
     assert case_ids(fixture.store) == before
 
 
+def test_preview_counts_every_aggregate_table_including_zero_rows(tmp_path):
+    store = sqlite_store(
+        f"sqlite:///{tmp_path / 'preview-counts.db'}", runtime_mode=RuntimeMode.LIVE
+    )
+    expired, expired_snapshot = bound_case("expired", run_id="RL-RUN-" + "a" * 32)
+    current, current_snapshot = bound_case("current", run_id="RL-RUN-" + "b" * 32)
+    store.create_case(expired, expired_snapshot)
+    store.create_case(current, current_snapshot)
+    with store.engine.begin() as connection:
+        connection.execute(
+            update(tables.case_instances)
+            .where(tables.case_instances.c.case_id == expired.case_id)
+            .values(recorded_at=datetime(2026, 9, 13, tzinfo=UTC))
+        )
+        connection.execute(
+            update(tables.case_instances)
+            .where(tables.case_instances.c.case_id == current.case_id)
+            .values(recorded_at=datetime(2026, 9, 14, tzinfo=UTC))
+        )
+
+    plan = store.preview_presenter_retention(historical_limit=0)
+    expected = {
+        name: aggregate_row_count(store.engine, name, expired.case_id)
+        for name in PRESENTER_AGGREGATE_DELETE_ORDER
+    }
+
+    assert tuple(plan.planned_deletions) == PRESENTER_AGGREGATE_DELETE_ORDER
+    assert plan.planned_deletions == expected
+    assert any(count == 0 for count in expected.values())
+    assert expected["case_instances"] == 1
+
+
+def test_apply_rolls_back_when_actual_deletion_counts_differ_from_preview(
+    populated_presenter_store, monkeypatch
+):
+    fixture = populated_presenter_store
+    fixture.store.create_case(fixture.current_case, fixture.current_snapshot)
+    preview = fixture.store.preview_presenter_retention()
+    before = case_ids(fixture.store)
+    original = presenter_runs.delete_presenter_aggregates
+
+    def misreport(connection, plan):
+        result = original(connection, plan)
+        actual = dict(result.deleted_rows)
+        actual["analysis_versions"] += 1
+        return PresenterRetentionResult(result.plan, actual)
+
+    monkeypatch.setattr(presenter_runs, "delete_presenter_aggregates", misreport)
+
+    with pytest.raises(PresenterRetentionPlanChanged, match="preview again"):
+        fixture.store.apply_presenter_retention(preview)
+
+    assert case_ids(fixture.store) == before
+    assert all(
+        aggregate_row_count(
+            fixture.store.engine, name, fixture.oldest_presenter_case.case_id
+        )
+        for name in PRESENTER_AGGREGATE_DELETE_ORDER
+    )
+
+
+def test_apply_recomputes_counts_under_lock_and_rejects_changed_rows(
+    populated_presenter_store,
+):
+    fixture = populated_presenter_store
+    fixture.store.create_case(fixture.current_case, fixture.current_snapshot)
+    preview = fixture.store.preview_presenter_retention()
+    expired_id = fixture.oldest_presenter_case.case_id
+    with fixture.store.engine.begin() as connection:
+        connection.execute(
+            insert(tables.analysis_claims).values(
+                case_id=expired_id,
+                material_version="late-row",
+                claim_id="late-row",
+                claimed_at=datetime(2026, 9, 14, tzinfo=UTC),
+                claim_expires_at=datetime(2026, 9, 15, tzinfo=UTC),
+            )
+        )
+
+    with pytest.raises(PresenterRetentionPlanChanged, match="preview again"):
+        fixture.store.apply_presenter_retention(preview)
+
+    assert (
+        aggregate_row_count(fixture.store.engine, "analysis_claims", expired_id)
+        == preview.planned_deletions["analysis_claims"] + 1
+    )
+
+
 def test_preview_order_ties_and_custom_limit(populated_presenter_store):
     store = populated_presenter_store.store
     with store.engine.begin() as connection:
@@ -293,9 +387,16 @@ def test_preview_order_ties_and_custom_limit(populated_presenter_store):
             )
         )
     plan = store.preview_presenter_retention(historical_limit=1)
-    assert plan == PresenterRetentionPlan(
-        "presenter-3", ("presenter-3", "presenter-2"), ("presenter-1", "presenter-0")
-    )
+    assert plan.current_case_id == "presenter-3"
+    assert plan.retained_case_ids == ("presenter-3", "presenter-2")
+    assert plan.pruned_case_ids == ("presenter-1", "presenter-0")
+    assert plan.planned_deletions == {
+        name: sum(
+            aggregate_row_count(store.engine, name, case_id)
+            for case_id in plan.pruned_case_ids
+        )
+        for name in PRESENTER_AGGREGATE_DELETE_ORDER
+    }
     assert store.apply_presenter_retention(plan).plan == plan
 
 

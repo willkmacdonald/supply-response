@@ -566,7 +566,12 @@ class SqlAlchemyStore:
                 raise presenter_runs.PresenterRetentionPlanChanged(
                     "presenter history changed; preview again"
                 )
-            return presenter_runs.delete_presenter_aggregates(connection, plan)
+            result = presenter_runs.delete_presenter_aggregates(connection, plan)
+            if result.deleted_rows != current_plan.planned_deletions:
+                raise presenter_runs.PresenterRetentionPlanChanged(
+                    "presenter history changed; preview again"
+                )
+            return result
 
     def get_case(self, case_id: str) -> CaseInstance:
         with self.engine.connect() as connection:

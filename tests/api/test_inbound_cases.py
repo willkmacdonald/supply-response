@@ -2,12 +2,13 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy import select
 
 from apps.api.app.dependencies import get_actor, require_planner
-from apps.api.app.presenter_run_receipts import issue_presenter_run_receipt
 from data.domain import RuntimeMode
 from data.domain.inbound import InboundEmailError
 from data.synthetic.rl001 import instantiate_rl001
+from services.persistence import tables
 from services.persistence.sqlite import sqlite_store
 from services.persistence.store import ImmutableRecordConflict
 from tests.integration.test_workiq_contract import _authenticated_alex
@@ -22,7 +23,6 @@ def setup(app, services, tmp_path):
         update={
             "runtime_mode": RuntimeMode.LIVE,
             "independent_finance_enabled": True,
-            "entra_client_secret": "fixture-presenter-receipt-secret",
         }
     )
     services.store = sqlite_store(
@@ -70,20 +70,13 @@ def setup(app, services, tmp_path):
     return (
         actor,
         bound,
-        presenter_payload(services, actor, bound, presenter_run_id),
+        presenter_payload(bound, presenter_run_id),
     )
 
 
-def presenter_payload(services, actor, bound, presenter_run_id):
+def presenter_payload(bound, presenter_run_id):
     return {
         "presenter_run_id": presenter_run_id,
-        "presenter_run_receipt": issue_presenter_run_receipt(
-            services.settings.entra_client_secret,
-            tenant_id=actor.tenant_id,
-            object_id=actor.object_id,
-            presenter_run_id=presenter_run_id,
-            allowed_sources=((bound.internet_message_id, bound.review_fingerprint),),
-        ),
         "internet_message_id": bound.internet_message_id,
         "review_fingerprint": bound.review_fingerprint,
     }
@@ -94,137 +87,9 @@ def issued_payload(client, bound):
     assert checked.status_code == 200, checked.text
     return {
         "presenter_run_id": checked.json()["presenter_run_id"],
-        "presenter_run_receipt": checked.json()["presenter_run_receipt"],
         "internet_message_id": bound.internet_message_id,
         "review_fingerprint": bound.review_fingerprint,
     }
-
-
-def test_fabricated_presenter_receipt_fails_before_source_or_case_work(
-    app, client, services, tmp_path
-):
-    _, _, payload = setup(app, services, tmp_path)
-    result = client.post(
-        "/api/inbox/cases",
-        json={
-            **payload,
-            "presenter_run_receipt": "PRR1.fabricated.receipt",
-        },
-    )
-
-    assert result.status_code == 409
-    assert result.json()["detail"]["code"] == "INBOUND_EMAIL_CHECK_REQUIRED"
-    services.inbox_service.review_inbound_email.assert_not_awaited()
-    services.live_operational_data.retrieve.assert_not_awaited()
-    assert services.store.list_cases() == ()
-
-
-@pytest.mark.parametrize("receipt", [None, 123, "x" * 4097])
-def test_missing_or_malformed_presenter_receipt_uses_the_same_safe_failure(
-    app, client, services, tmp_path, receipt
-):
-    _, _, payload = setup(app, services, tmp_path)
-    if receipt is None:
-        payload.pop("presenter_run_receipt")
-    else:
-        payload["presenter_run_receipt"] = receipt
-
-    result = client.post("/api/inbox/cases", json=payload)
-
-    assert result.status_code == 409
-    assert result.json()["detail"]["code"] == "INBOUND_EMAIL_CHECK_REQUIRED"
-    services.inbox_service.review_inbound_email.assert_not_awaited()
-    services.live_operational_data.retrieve.assert_not_awaited()
-    assert services.store.list_cases() == ()
-
-
-def test_empty_check_receipt_authorizes_no_source(app, client, services, tmp_path):
-    _, bound, _ = setup(app, services, tmp_path)
-    services.inbox_service.check_inbox.return_value = {
-        "checked_at": "2026-09-14T05:00:00Z",
-        "messages": [],
-        "incomplete": False,
-    }
-    payload = issued_payload(client, bound)
-
-    result = client.post("/api/inbox/cases", json=payload)
-
-    assert result.status_code == 409
-    assert result.json()["detail"]["code"] == "INBOUND_EMAIL_CHECK_REQUIRED"
-    services.inbox_service.review_inbound_email.assert_not_awaited()
-    services.live_operational_data.retrieve.assert_not_awaited()
-    assert services.store.list_cases() == ()
-
-
-@pytest.mark.parametrize("change", ["tampered", "actor", "source", "fingerprint"])
-def test_presenter_receipt_mismatch_fails_before_source_or_case_work(
-    app, client, services, tmp_path, change
-):
-    actor, bound, _ = setup(app, services, tmp_path)
-    payload = issued_payload(client, bound)
-    if change == "tampered":
-        receipt = payload["presenter_run_receipt"]
-        payload["presenter_run_receipt"] = receipt[:-1] + (
-            "A" if receipt[-1] != "A" else "B"
-        )
-    elif change == "actor":
-        app.dependency_overrides[require_planner] = lambda: SimpleNamespace(
-            tenant_id=actor.tenant_id,
-            object_id="different-actor",
-        )
-    elif change == "source":
-        payload["internet_message_id"] = "<different@example.com>"
-    else:
-        payload["review_fingerprint"] = "b" * 64
-
-    result = client.post("/api/inbox/cases", json=payload)
-
-    assert result.status_code == 409
-    assert result.json()["detail"]["code"] == "INBOUND_EMAIL_CHECK_REQUIRED"
-    services.inbox_service.review_inbound_email.assert_not_awaited()
-    services.live_operational_data.retrieve.assert_not_awaited()
-    assert services.store.list_cases() == ()
-
-
-def test_successful_check_receipt_authorizes_matching_case_creation(
-    app, client, services, tmp_path
-):
-    _, bound, _ = setup(app, services, tmp_path)
-    payload = issued_payload(client, bound)
-    receipt = payload["presenter_run_receipt"]
-    assert actor_identifiers_are_opaque(receipt, bound)
-
-    result = client.post("/api/inbox/cases", json=payload)
-
-    assert result.status_code == 200, result.text
-    assert result.json()["presenter_run_id"] == payload["presenter_run_id"]
-    services.inbox_service.review_inbound_email.assert_awaited_once()
-    assert len(services.store.list_cases()) == 1
-
-
-def actor_identifiers_are_opaque(receipt, bound):
-    return (
-        bound.tenant_id not in receipt
-        and bound.mailbox_object_id not in receipt
-        and bound.internet_message_id not in receipt
-        and bound.review_fingerprint not in receipt
-    )
-
-
-def test_presenter_receipt_replay_is_idempotent_and_new_check_is_fresh(
-    app, client, services, tmp_path
-):
-    _, bound, _ = setup(app, services, tmp_path)
-    first_payload = issued_payload(client, bound)
-    first = client.post("/api/inbox/cases", json=first_payload)
-    retry = client.post("/api/inbox/cases", json=first_payload)
-    second_payload = issued_payload(client, bound)
-    second = client.post("/api/inbox/cases", json=second_payload)
-
-    assert first.status_code == retry.status_code == second.status_code == 200
-    assert retry.json()["case_id"] == first.json()["case_id"]
-    assert second.json()["case_id"] != first.json()["case_id"]
-    assert second.json()["presenter_run_id"] == second_payload["presenter_run_id"]
 
 
 def test_create_rechecks_source_binds_case_and_retry_returns_same_open_case(
@@ -273,6 +138,77 @@ def test_same_email_is_fresh_across_runs_and_idempotent_within_run(
     assert second.json()["current_analysis_id"] is None
     assert second.json()["current_decision_id"] is None
     assert second.json()["status"] == "open"
+
+
+def test_new_run_for_same_email_is_isolated_from_the_complete_earlier_run(
+    app, client, services, tmp_path
+):
+    from tests.persistence.test_presenter_runs import (
+        aggregate_row_count,
+        populate_aggregate,
+    )
+
+    _, bound, _ = setup(app, services, tmp_path)
+    first_payload = issued_payload(client, bound)
+    first = client.post("/api/inbox/cases", json=first_payload)
+    assert first.status_code == 200, first.text
+    first_id = first.json()["case_id"]
+    populate_aggregate(services.store, services.store.get_case(first_id))
+    earlier_before = client.get(f"/api/cases/{first_id}").json()
+    assert earlier_before["current_analysis_id"] == f"{first_id}:analysis"
+    assert earlier_before["current_decision_id"] == f"{first_id}:decision"
+    with services.store.engine.connect() as connection:
+        assert connection.execute(
+            select(
+                tables.approval_satisfactions.c.persona_id,
+                tables.approval_satisfactions.c.role,
+            ).where(
+                tables.approval_satisfactions.c.analysis_id == f"{first_id}:analysis"
+            )
+        ).one() == ("RL-PERSONA-TAYLOR", "finance_approver")
+    isolated_tables = (
+        "analysis_versions",
+        "finance_review_revisions",
+        "approval_satisfactions",
+        "case_proposal_selections",
+        "decisions",
+        "outbox_events",
+        "execution_actions",
+        "action_projection",
+        "draft_artifacts",
+        "execution_events",
+        "execution_attempts",
+        "playbacks",
+        "outcome_observations",
+    )
+    earlier_counts = {
+        name: aggregate_row_count(services.store.engine, name, first_id)
+        for name in isolated_tables
+    }
+    assert all(earlier_counts.values())
+
+    second_payload = issued_payload(client, bound)
+    second = client.post("/api/inbox/cases", json=second_payload)
+
+    assert second.status_code == 200, second.text
+    second_body = second.json()
+    second_id = second_body["case_id"]
+    assert second_id != first_id
+    assert second_payload["presenter_run_id"] != first_payload["presenter_run_id"]
+    assert second_body["presenter_run_id"] == second_payload["presenter_run_id"]
+    assert second_body["status"] == "open"
+    assert second_body["current_analysis_id"] is None
+    assert second_body["current_decision_id"] is None
+    assert client.get(f"/api/cases/{second_id}/analysis").status_code == 409
+    assert all(
+        aggregate_row_count(services.store.engine, name, second_id) == 0
+        for name in isolated_tables
+    )
+    assert client.get(f"/api/cases/{first_id}").json() == earlier_before
+    assert {
+        name: aggregate_row_count(services.store.engine, name, first_id)
+        for name in isolated_tables
+    } == earlier_counts
 
 
 @pytest.mark.parametrize(
@@ -324,7 +260,7 @@ def test_same_identity_with_new_fingerprint_conflicts(app, client, services, tmp
         "/api/inbox/cases", json={**payload, "review_fingerprint": "b" * 64}
     )
     assert result.status_code == 409
-    assert result.json()["detail"]["code"] == "INBOUND_EMAIL_CHECK_REQUIRED"
+    assert result.json()["detail"]["code"] == "INBOUND_EMAIL_CHANGED"
     assert len(services.store.list_cases()) == 1
 
 
@@ -352,7 +288,6 @@ def test_authentication_live_gate_and_untrusted_request_fields(
             "/api/inbox/cases",
             json={
                 "presenter_run_id": "RL-RUN-" + "a" * 32,
-                "presenter_run_receipt": "unverified",
                 "internet_message_id": "<a@b>",
                 "review_fingerprint": "a" * 64,
             },
@@ -457,15 +392,10 @@ def test_conflicting_concurrent_winner_is_not_returned(
 
 
 def test_inbound_creation_retains_four_runs(app, client, services, tmp_path):
-    actor, bound, _ = setup(app, services, tmp_path)
+    _, bound, _ = setup(app, services, tmp_path)
     created = []
     for index in range(5):
-        payload = presenter_payload(
-            services,
-            actor,
-            bound,
-            f"RL-RUN-{index:032x}",
-        )
+        payload = presenter_payload(bound, f"RL-RUN-{index:032x}")
         response = client.post(
             "/api/inbox/cases",
             json=payload,
@@ -489,7 +419,7 @@ def test_failed_new_run_analysis_preserves_fresh_case_and_earlier_decision(
     from tests.integration.test_live_case_contract import NOW
     from tests.integration.test_live_hardening import ExplicitLiveOperationalPort
 
-    actor, bound, payload = setup(app, services, tmp_path)
+    _, bound, payload = setup(app, services, tmp_path)
     # A retained legacy workflow Case can already have a completed Decision.
     services.settings = services.settings.model_copy(
         update={"independent_finance_enabled": False}
@@ -525,12 +455,7 @@ def test_failed_new_run_analysis_preserves_fresh_case_and_earlier_decision(
     services.settings = services.settings.model_copy(
         update={"independent_finance_enabled": True}
     )
-    second_payload = presenter_payload(
-        services,
-        actor,
-        bound,
-        "RL-RUN-" + "b" * 32,
-    )
+    second_payload = presenter_payload(bound, "RL-RUN-" + "b" * 32)
     second = client.post("/api/inbox/cases", json=second_payload)
     assert second.status_code == 200, second.text
     second_id = second.json()["case_id"]
