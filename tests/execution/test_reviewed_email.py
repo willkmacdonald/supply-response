@@ -1,4 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from threading import Barrier
 
 import pytest
 from pydantic import ValidationError
@@ -267,6 +269,176 @@ def test_every_write_rejects_stale_decision_and_revision(planning_context):
         )
     with pytest.raises(ExecutionProposalStale):
         service.review(planning_context.decision.decision_id, 2, alex_identity())
+
+
+def test_concurrent_edits_return_one_safe_revision_conflict(
+    planning_context, monkeypatch
+):
+    from services.execution.mail_service import EmailRevisionConflict
+    from services.persistence.store import SqlAlchemySupplierEmailRepository
+    from tests.execution.conftest import alex_identity
+
+    _plan(planning_context)
+    service = _mail_service(planning_context)
+    initial = service.get(planning_context.decision.decision_id)
+    writers_ready = Barrier(2)
+    original_append = SqlAlchemySupplierEmailRepository.append_revision
+
+    def synchronized_append(repository, revision, *, expected_revision):
+        writers_ready.wait(timeout=5)
+        return original_append(
+            repository,
+            revision,
+            expected_revision=expected_revision,
+        )
+
+    monkeypatch.setattr(
+        SqlAlchemySupplierEmailRepository,
+        "append_revision",
+        synchronized_append,
+    )
+
+    def save(subject):
+        try:
+            service.save(
+                planning_context.decision.decision_id,
+                initial.revision,
+                subject,
+                f"{subject} fictional demo body.",
+                alex_identity(),
+            )
+        except EmailRevisionConflict:
+            return "conflict"
+        return "saved"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = tuple(
+            future.result()
+            for future in (
+                executor.submit(save, "Concurrent edit A"),
+                executor.submit(save, "Concurrent edit B"),
+            )
+        )
+
+    assert sorted(outcomes) == ["conflict", "saved"]
+    current = service.get(planning_context.decision.decision_id)
+    assert current.revision == 2
+    assert current.subject in {"Concurrent edit A", "Concurrent edit B"}
+
+
+def test_concurrent_edit_and_review_never_leave_a_non_current_effective_review(
+    planning_context, monkeypatch
+):
+    from services.execution.mail_service import EmailRevisionConflict
+    from services.persistence.store import SqlAlchemySupplierEmailRepository
+    from tests.execution.conftest import alex_identity
+
+    _plan(planning_context)
+    service = _mail_service(planning_context)
+    initial = service.get(planning_context.decision.decision_id)
+    writers_ready = Barrier(2)
+    original_append = SqlAlchemySupplierEmailRepository.append_revision
+    original_review = SqlAlchemySupplierEmailRepository.mark_reviewed
+
+    def synchronized_append(repository, revision, *, expected_revision):
+        writers_ready.wait(timeout=5)
+        return original_append(
+            repository,
+            revision,
+            expected_revision=expected_revision,
+        )
+
+    def synchronized_review(
+        repository,
+        revision,
+        delivery,
+        *,
+        expected_revision,
+    ):
+        writers_ready.wait(timeout=5)
+        return original_review(
+            repository,
+            revision,
+            delivery,
+            expected_revision=expected_revision,
+        )
+
+    monkeypatch.setattr(
+        SqlAlchemySupplierEmailRepository,
+        "append_revision",
+        synchronized_append,
+    )
+    monkeypatch.setattr(
+        SqlAlchemySupplierEmailRepository,
+        "mark_reviewed",
+        synchronized_review,
+    )
+
+    def save():
+        try:
+            service.save(
+                planning_context.decision.decision_id,
+                initial.revision,
+                "Concurrent edit",
+                "Concurrent fictional demo body.",
+                alex_identity(),
+            )
+        except EmailRevisionConflict:
+            return "conflict"
+        return "saved"
+
+    def review():
+        try:
+            service.review(
+                planning_context.decision.decision_id,
+                initial.revision,
+                alex_identity(),
+            )
+        except EmailRevisionConflict:
+            return "conflict"
+        return "reviewed"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = tuple(
+            future.result()
+            for future in (executor.submit(save), executor.submit(review))
+        )
+
+    assert set(outcomes) <= {"saved", "reviewed", "conflict"}
+    assert "saved" in outcomes
+    current = service.get(planning_context.decision.decision_id)
+    assert current.revision == 2
+    assert current.reviewed_revision is None
+
+
+def test_database_conflict_classification_is_narrow():
+    import sqlite3
+
+    from sqlalchemy.exc import IntegrityError, OperationalError
+
+    from services.persistence.store import (
+        _is_supplier_email_revision_collision,
+        _is_write_contention,
+    )
+
+    busy = sqlite3.OperationalError("database is locked")
+    busy.sqlite_errorcode = sqlite3.SQLITE_BUSY
+    unrelated = sqlite3.OperationalError("unrelated failure")
+    unrelated.sqlite_errorcode = sqlite3.SQLITE_ERROR
+    duplicate = sqlite3.IntegrityError(
+        "UNIQUE constraint failed: supplier_email_revisions.email_id, "
+        "supplier_email_revisions.revision"
+    )
+    duplicate.sqlite_errorcode = sqlite3.SQLITE_CONSTRAINT_UNIQUE
+
+    assert _is_write_contention(OperationalError("update", {}, busy))
+    assert not _is_write_contention(OperationalError("update", {}, unrelated))
+    assert _is_supplier_email_revision_collision(
+        IntegrityError("insert", {}, duplicate)
+    )
+    assert not _is_supplier_email_revision_collision(
+        IntegrityError("insert", {}, sqlite3.IntegrityError("foreign key failed"))
+    )
 
 
 def test_mismatched_action_cannot_own_supplier_email(planning_context):

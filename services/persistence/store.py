@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
@@ -10,7 +11,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import Connection, Engine, insert, or_, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from data.domain import CaseInstance, CasePurpose, CaseStatus, RuntimeMode
 from data.domain.analysis import AnalysisVersion
@@ -101,6 +102,37 @@ class AnalysisClaimBusy(PersistenceError):
 
 def serialize_model(value: BaseModel) -> str:
     return value.model_dump_json(exclude_none=False, by_alias=True)
+
+
+def _is_write_contention(error: OperationalError) -> bool:
+    original = error.orig
+    sqlite_code = getattr(original, "sqlite_errorcode", None)
+    if (
+        isinstance(original, sqlite3.OperationalError)
+        and isinstance(sqlite_code, int)
+        and (sqlite_code & 0xFF) in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED)
+    ):
+        return True
+    message = " ".join(str(part) for part in getattr(original, "args", ()))
+    return any(marker in message for marker in ("40001", "(1205)", "(3960)"))
+
+
+def _is_supplier_email_revision_collision(error: IntegrityError) -> bool:
+    original = error.orig
+    message = str(original).lower()
+    identifies_revision = "uq_supplier_email_revisions_email_revision" in message or (
+        "supplier_email_revisions.email_id" in message
+        and "supplier_email_revisions.revision" in message
+    )
+    if not identifies_revision:
+        return False
+    sqlite_code = getattr(original, "sqlite_errorcode", None)
+    if sqlite_code in (
+        sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY,
+        sqlite3.SQLITE_CONSTRAINT_UNIQUE,
+    ):
+        return True
+    return any(marker in message for marker in ("2601", "2627"))
 
 
 class SqlAlchemyStore:
@@ -2874,12 +2906,28 @@ class SqlAlchemySupplierEmailRepository:
             )
         )
 
+    def _claim_delivery_for_write(self, decision_id: str) -> bool:
+        """Serialize email writers on the aggregate's mutable delivery row."""
+        try:
+            result = self._connection.execute(
+                update(supplier_email_deliveries)
+                .where(supplier_email_deliveries.c.decision_id == decision_id)
+                .values(status_updated_at=supplier_email_deliveries.c.status_updated_at)
+            )
+        except OperationalError as error:
+            if _is_write_contention(error):
+                return False
+            raise
+        return result.rowcount == 1
+
     def append_revision(
         self,
         revision: SupplierEmailRevision,
         *,
         expected_revision: int,
     ) -> bool:
+        if not self._claim_delivery_for_write(revision.decision_id):
+            return False
         current = self.get_current(revision.decision_id)
         if current is None or current[0].revision != expected_revision:
             return False
@@ -2897,7 +2945,16 @@ class SqlAlchemySupplierEmailRepository:
                 "new supplier email revision changes immutable binding"
             )
         self._require_action_binding(revision)
-        self._insert_revision(revision)
+        try:
+            self._insert_revision(revision)
+        except IntegrityError as error:
+            if _is_supplier_email_revision_collision(error):
+                return False
+            raise
+        except OperationalError as error:
+            if _is_write_contention(error):
+                return False
+            raise
         changed = delivery.model_copy(
             update={
                 "reviewed_revision": None,
@@ -2939,6 +2996,8 @@ class SqlAlchemySupplierEmailRepository:
         *,
         expected_revision: int,
     ) -> bool:
+        if not self._claim_delivery_for_write(revision.decision_id):
+            return False
         current = self.get_current(revision.decision_id)
         if current is None or current[0].revision != expected_revision:
             return False
@@ -2960,18 +3019,23 @@ class SqlAlchemySupplierEmailRepository:
             raise PersistenceIntegrityError(
                 "supplier email review changes content or delivery state"
             )
-        result = self._connection.execute(
-            update(supplier_email_revisions)
-            .where(
-                supplier_email_revisions.c.email_id == revision.email_id,
-                supplier_email_revisions.c.revision == expected_revision,
-                supplier_email_revisions.c.reviewed_at.is_(None),
+        try:
+            result = self._connection.execute(
+                update(supplier_email_revisions)
+                .where(
+                    supplier_email_revisions.c.email_id == revision.email_id,
+                    supplier_email_revisions.c.revision == expected_revision,
+                    supplier_email_revisions.c.reviewed_at.is_(None),
+                )
+                .values(
+                    reviewed_at=revision.reviewed_at,
+                    payload_json=serialize_model(revision),
+                )
             )
-            .values(
-                reviewed_at=revision.reviewed_at,
-                payload_json=serialize_model(revision),
-            )
-        )
+        except OperationalError as error:
+            if _is_write_contention(error):
+                return False
+            raise
         if result.rowcount != 1:
             return False
         self._update_delivery(delivery)
