@@ -283,6 +283,37 @@ async def test_send_remote_protocol_failure_is_explicitly_uncertain():
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("oversize_kind", ["content_length", "stream"])
+async def test_send_oversized_202_response_is_explicitly_uncertain(oversize_kind):
+    stream = OversizedStream()
+
+    def graph(_: httpx.Request) -> httpx.Response:
+        if oversize_kind == "content_length":
+            return httpx.Response(
+                202,
+                headers={"content-length": str(1024 * 1024 + 1)},
+            )
+        return httpx.Response(202, stream=stream)
+
+    async with httpx.AsyncClient(
+        base_url="https://graph.microsoft.com",
+        transport=httpx.MockTransport(graph),
+        follow_redirects=False,
+    ) as http:
+        client = GraphMailClient(
+            http=http,
+            obo=StubObo(),
+            mailbox_address="agent@willmacdonald.com",
+        )
+        with pytest.raises(GraphMailSubmissionUncertain) as error:
+            await client.send_draft("immutable-message-id", object())
+
+    assert error.value.code == "graph_send_uncertain"
+    if oversize_kind == "stream":
+        assert stream.chunks_read == 2
+
+
+@pytest.mark.anyio
 async def test_oversized_response_stream_stops_at_limit(reviewed_revision):
     stream = OversizedStream()
 

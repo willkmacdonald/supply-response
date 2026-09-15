@@ -149,6 +149,8 @@ class GraphMailClient:
                         and content_length.isdigit()
                         and int(content_length) > _MAX_RESPONSE_BYTES
                     ):
+                        if uncertain_after_submit:
+                            raise GraphMailSubmissionUncertain("graph_send_uncertain")
                         raise GraphMailError("graph_response_invalid")
                     if expect_json and not _json_media_type(
                         response.headers.get("content-type", "")
@@ -157,6 +159,10 @@ class GraphMailClient:
                     body = bytearray()
                     async for chunk in response.aiter_bytes():
                         if len(body) + len(chunk) > _MAX_RESPONSE_BYTES:
+                            if uncertain_after_submit:
+                                raise GraphMailSubmissionUncertain(
+                                    "graph_send_uncertain"
+                                )
                             raise GraphMailError("graph_response_invalid")
                         body.extend(chunk)
         except (TimeoutError, httpx.TransportError):

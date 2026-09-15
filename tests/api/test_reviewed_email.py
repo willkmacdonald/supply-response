@@ -378,19 +378,24 @@ def test_failure_before_provider_submission_remains_editable(client, services):
     assert edited.json()["send_status"] == "draft"
 
 
-def test_timeout_after_send_begins_is_uncertain_and_check_is_get_only(client, services):
+def test_indeterminate_send_cannot_repeat_and_can_reconcile_with_get_only(
+    client, services
+):
     _, path = _reviewed_email(client, services)
     graph = FakeGraphMail(
-        send_error=GraphMailSubmissionUncertain("graph_send_uncertain")
+        send_error=GraphMailSubmissionUncertain("graph_send_uncertain"),
+        sent=True,
     )
     _enable_mocked_send(services, graph)
 
     uncertain = client.post(f"{path}/send", json={"revision": 1})
+    repeated = client.post(f"{path}/send", json={"revision": 1})
     checked = client.post(f"{path}/check-send-status")
 
-    assert uncertain.status_code == checked.status_code == 200
+    assert uncertain.status_code == repeated.status_code == checked.status_code == 200
     assert uncertain.json()["send_status"] == "uncertain"
-    assert checked.json()["send_status"] == "uncertain"
+    assert repeated.json() == uncertain.json()
+    assert checked.json()["send_status"] == "sent-confirmed"
     assert len(graph.create_calls) == len(graph.send_calls) == len(graph.get_calls) == 1
 
 
