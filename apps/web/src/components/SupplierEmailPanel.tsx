@@ -36,6 +36,7 @@ export function SupplierEmailPanel({
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const pendingRef = useRef(false);
+  const reconciledAccepted = useRef<string | null>(null);
 
   useEffect(() => {
     setCurrent(email);
@@ -72,6 +73,15 @@ export function SupplierEmailPanel({
     }
   }
 
+  useEffect(() => {
+    if (current.send_status !== "accepted" || pending !== null) return;
+    const key = `${current.email_id}:${current.revision}`;
+    if (reconciledAccepted.current === key) return;
+    reconciledAccepted.current = key;
+    void run("check", "Accepted by Microsoft 365. Checking send status…",
+      next => statusLabels.get(next.send_status) ?? "Send status unavailable", onCheckStatus);
+  }, [current.email_id, current.revision, current.send_status, onCheckStatus, pending]);
+
   const status = pending === "send" ? "Sending…" : statusLabels.get(current.send_status) ?? "Send status unavailable";
 
   return <section className="panel supplier-email-panel" aria-labelledby="supplier-email-heading">
@@ -86,11 +96,11 @@ export function SupplierEmailPanel({
     <p>To: Supplier Alpha (demo) — {current.to_address}</p>
     <label className="email-field">Subject
       <input value={subject} maxLength={255} disabled={!editable || actionDisabled}
-        onChange={event => setSubject(event.target.value)} />
+        onChange={event => {setSubject(event.target.value); setNotice(null);}} />
     </label>
     <label className="email-field">Message
       <textarea value={body} maxLength={10_000} rows={10} disabled={!editable || actionDisabled}
-        onChange={event => setBody(event.target.value)} />
+        onChange={event => {setBody(event.target.value); setNotice(null);}} />
     </label>
     <div className="supplier-email-actions">
       {dirty && <button type="button" disabled={actionDisabled || !subject.trim() || !body.trim()}

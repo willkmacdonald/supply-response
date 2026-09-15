@@ -393,6 +393,7 @@ function mockFallbackCaseLifecycle(overrides: {
   actions?: unknown;
   runtimeFailure?: boolean;
   runtimeError?: Error;
+  supplierEmailFailure?: boolean;
 } = {}) {
   let decisionPolls = 0;
   let playbackPolls = 0;
@@ -429,7 +430,9 @@ function mockFallbackCaseLifecycle(overrides: {
       return response({...actions[0], status: "in_progress"});
     }
     if (path === "/api/decisions/RL-DECISION-1/drafts" && method === "GET") return response(drafts);
-    if (path === "/api/decisions/RL-DECISION-1/supplier-email" && method === "GET") return response(supplierEmail);
+    if (path === "/api/decisions/RL-DECISION-1/supplier-email" && method === "GET") return overrides.supplierEmailFailure
+      ? response({detail: {code: "MAIL_UNAVAILABLE"}}, 503)
+      : response(supplierEmail);
     if (path === "/api/decisions/RL-DECISION-1/playback" && method === "POST") return response(inProgressPlayback, 201);
     if (path === "/api/decisions/RL-DECISION-1/playback" && method === "GET") {
       playbackPolls += 1;
@@ -473,6 +476,26 @@ function savedReads(overrides: Record<string, unknown> = {}) {
 }
 
 describe("reopening lifecycle and operation safety", () => {
+  it("keeps reopened execution usable when only supplier email loading fails", async () => {
+    const decidedCase = {...caseInstance, status: "executing", current_analysis_id: analysis.analysis_id,
+      current_decision_id: decision.decision_id,
+      controls: {new_analysis: false, decide: false, retry_action_planning: false, start_playback: true}};
+    savedReads({
+      "/api/cases/RL-CASE-1": decidedCase,
+      "/api/decisions/RL-DECISION-1/playback": await response({detail: {code: "PLAYBACK_NOT_FOUND"}}, 404),
+      "/api/decisions/RL-DECISION-1/observations": [],
+      "/api/decisions/RL-DECISION-1/supplier-email": await response({detail: {code: "MAIL_UNAVAILABLE"}}, 503),
+    });
+    window.history.replaceState(null, "", "/?caseId=RL-CASE-1&analysisId=RL-ANALYSIS-1&stage=execution");
+
+    render(<App />);
+
+    expect((await screen.findAllByTestId("execution-action"))).toHaveLength(5);
+    expect(screen.getByRole("alert")).toHaveTextContent("Supplier email is unavailable");
+    expect(screen.queryByText(/Unable to reopen this case|Action planning failed/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", {name: "Run simulated coordination"})).toBeEnabled();
+  });
+
   it("restores Taylor's reviewed non-recommended option at Alex's approval deep link", async () => {
     const reviewedOption = {...combinedOption, option_id: "RL-OPTION-EXPEDITE", option_kind: "expedite", name: "Expedite the partial shipment"};
     const reviewedAnalysis = {...analysis, response_options: [combinedOption, reviewedOption], material: {...analysis.material,
@@ -634,6 +657,25 @@ describe("reopening lifecycle and operation safety", () => {
     const calls = mock.mock.calls.length;
     await act(async () => {await approving;});
     expect(mock.mock.calls).toHaveLength(calls);
+  });
+
+  it("does not add a workspace-global error when the email panel owns an action failure", async () => {
+    const decidedCase = {...caseInstance, status: "executing", current_analysis_id: analysis.analysis_id,
+      current_decision_id: decision.decision_id};
+    const mock = savedReads({"/api/cases/RL-CASE-1": decidedCase});
+    window.history.replaceState(null, "", "/?caseId=RL-CASE-1&analysisId=RL-ANALYSIS-1");
+    const {result} = renderHook(useCaseWorkspace);
+    await waitFor(() => expect(result.current.supplierEmail).toEqual(supplierEmail));
+    const read = mock.getMockImplementation()!;
+    mock.mockImplementation((url, init) => init?.method === "PUT"
+      ? response({detail: {code: "MAIL_UNAVAILABLE"}}, 503)
+      : read(url, init));
+
+    await act(async () => {
+      await expect(result.current.saveSupplierEmail({revision: 1, subject: "Updated", body: "Body"})).rejects.toThrow();
+    });
+
+    expect(result.current.error).toBeNull();
   });
 
   it.each([
@@ -1054,6 +1096,24 @@ describe("progressive Case workspace", () => {
     await userEvent.click(within(failedAction).getByRole("button", {name: "Retry prepare supplier recovery draft"}));
     expect(await within(failedAction).findByText("In progress")).toBeVisible();
     expect(screen.getAllByTestId("execution-action")).toHaveLength(5);
+  });
+
+  it("keeps newly planned execution usable when only supplier email loading fails", async () => {
+    mockFallbackCaseLifecycle({supplierEmailFailure: true});
+    render(<App />);
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
+    await userEvent.click(screen.getByRole("button", {name: "Start a new demo"}));
+    await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
+    await selectDecisionStage();
+    await screen.findByText("Combined response");
+    await selectApprovalStage();
+    await userEvent.click(screen.getByRole("button", {name: "Approve combined response"}));
+    await selectExecutionStage();
+
+    expect((await screen.findAllByTestId("execution-action"))).toHaveLength(5);
+    expect(screen.getByRole("alert")).toHaveTextContent("Supplier email is unavailable");
+    expect(screen.queryByText(/Action planning failed/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", {name: "Run simulated coordination"})).toBeEnabled();
   });
 
   it("records a rejection with a nonblank reason and keeps prior analysis visible", async () => {

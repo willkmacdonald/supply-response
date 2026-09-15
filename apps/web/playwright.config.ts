@@ -61,7 +61,7 @@ export default defineConfig({
       },
     },
     {
-      command: "npm run dev -- --host 127.0.0.1 --port 5173 --strictPort",
+      command: "npm run dev -- --config vite.e2e.config.ts --host 127.0.0.1 --port 5173 --strictPort",
       cwd: import.meta.dirname,
       url: "http://127.0.0.1:5173",
       reuseExistingServer: false,

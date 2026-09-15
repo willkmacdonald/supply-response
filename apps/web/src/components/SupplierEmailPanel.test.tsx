@@ -78,6 +78,7 @@ describe("SupplierEmailPanel", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Email reviewed. It is ready to send.");
 
     await user.type(screen.getByLabelText("Message"), " New constraint.");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("button", {name: "Save changes"})).toBeEnabled();
     expect(screen.getByRole("button", {name: "Send email"})).toBeDisabled();
     await user.click(screen.getByRole("button", {name: "Save changes"}));
@@ -93,7 +94,7 @@ describe("SupplierEmailPanel", () => {
       reviewed_by: {persona_id: "RL-PERSONA-ALEX"} as never};
 
     render(<SupplierEmailPanel email={reviewed} busy={false} onSave={vi.fn()} onReview={vi.fn()}
-      onSend={onSend} onCheckStatus={vi.fn()} />);
+      onSend={onSend} onCheckStatus={vi.fn(() => new Promise<SupplierEmailState>(() => undefined))} />);
 
     const send = screen.getByRole("button", {name: "Send email"});
     await user.click(send);
@@ -101,9 +102,29 @@ describe("SupplierEmailPanel", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Sending…");
     await user.click(screen.getByRole("button", {name: "Sending…"}));
     expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith(1);
 
     finishSend({...reviewed, send_status: "accepted"});
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Accepted by Microsoft 365"));
+  });
+
+  it("reconciles an accepted submission once while keeping its accepted feedback visible", async () => {
+    let finishCheck!: (email: SupplierEmailState) => void;
+    const onCheckStatus = vi.fn(() => new Promise<SupplierEmailState>(resolve => { finishCheck = resolve; }));
+    const accepted = {...initialEmail, reviewed_revision: 1, reviewed_at: "2026-09-15T12:00:00Z",
+      reviewed_by: {persona_id: "RL-PERSONA-ALEX"} as never, send_status: "accepted" as const};
+
+    render(<SupplierEmailPanel email={accepted} busy={false} onSave={vi.fn()} onReview={vi.fn()}
+      onSend={vi.fn()} onCheckStatus={onCheckStatus} />);
+
+    expect(screen.getByText("Accepted by Microsoft 365")).toBeVisible();
+    await waitFor(() => expect(onCheckStatus).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Accepted by Microsoft 365")).toBeVisible();
+    expect(screen.queryByRole("button", {name: "Check send status"})).not.toBeInTheDocument();
+
+    finishCheck({...accepted, send_status: "sent-confirmed"});
+    expect(await screen.findByRole("status")).toHaveTextContent("Sent");
+    expect(onCheckStatus).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -113,7 +134,8 @@ describe("SupplierEmailPanel", () => {
     ["uncertain", "Send status uncertain"],
   ] as const)("maps %s to the proven status %s without claiming delivery", (send_status, label) => {
     render(<SupplierEmailPanel email={{...initialEmail, send_status}} busy={false}
-      onSave={vi.fn()} onReview={vi.fn()} onSend={vi.fn()} onCheckStatus={vi.fn()} />);
+      onSave={vi.fn()} onReview={vi.fn()} onSend={vi.fn()}
+      onCheckStatus={send_status === "accepted" ? vi.fn(() => new Promise<SupplierEmailState>(() => undefined)) : vi.fn()} />);
 
     expect(screen.getByText(label)).toBeVisible();
     expect(screen.queryByText(/Delivered/i)).not.toBeInTheDocument();

@@ -59,23 +59,32 @@ function analysisRecord(run: number) {
   };
 }
 
-function proposalState(run: number, approved: boolean) {
+type FinanceStatus = "none" | "pending" | "approved";
+
+function proposalState(run: number, status: FinanceStatus) {
   const analysis = analysisRecord(run);
   const proposal = {case_id: analysis.case_id, analysis_id: analysis.analysis_id,
     analysis_material_hash: analysis.material_hash, option_id: option.option_id, response_cost: "24750.00"};
-  const selection = approved ? {selection_id: `RL-SELECTION-${run}`, proposal,
+  const selection = status !== "none" ? {selection_id: `RL-SELECTION-${run}`, proposal,
     workflow_version: "independent-finance-v1", submitted_by: actor("ALEX"), submitted_at: at,
     finance_review_id: `RL-REVIEW-${run}`} : null;
-  const review = approved ? {review_id: `RL-REVIEW-${run}`, proposal, submitted_by: actor("ALEX"), submitted_at: at,
-    status: "approved", reviewed_by: actor("TAYLOR"), reviewed_at: at, reason: null, superseded_at: null} : null;
-  return {token: {generation: approved ? 2 : 1, analysis_id: analysis.analysis_id,
+  const review = status !== "none" ? {review_id: `RL-REVIEW-${run}`, proposal, submitted_by: actor("ALEX"), submitted_at: at,
+    status, reviewed_by: status === "approved" ? actor("TAYLOR") : null,
+    reviewed_at: status === "approved" ? at : null, reason: null, superseded_at: null} : null;
+  return {token: {generation: status === "approved" ? 3 : status === "pending" ? 2 : 1, analysis_id: analysis.analysis_id,
     analysis_material_hash: analysis.material_hash, selection_id: selection?.selection_id ?? null},
-  selection, review, review_revision: approved ? 2 : null};
+  selection, review, review_revision: status === "approved" ? 2 : status === "pending" ? 1 : null};
+}
+
+function financeDetail(run: number, approved: boolean) {
+  const state = proposalState(run, approved ? "approved" : "pending");
+  return {selection: state.selection, review: state.review, review_revision: state.review_revision,
+    analysis: analysisRecord(run), option, is_current: true, current_token: state.token};
 }
 
 function decisionRecord(run: number, complete = true) {
   const analysis = analysisRecord(run);
-  const approval = proposalState(run, true);
+  const approval = proposalState(run, "approved");
   return {decision_id: `RL-DECISION-RUN-${run}`, case_id: analysis.case_id, analysis_id: analysis.analysis_id,
     analysis_material_hash: analysis.material_hash, kind: "approved", selected_option_id: option.option_id,
     rejection_reason: null, evidence_ids: [], assumptions: option.assumptions, constraints: [],
@@ -114,11 +123,23 @@ function emailRecord(run: number, revision: number, reviewed: boolean, send_stat
 async function installMockedPresenterApi(page: Page) {
   let activeRun = 0;
   const analyzed = new Set<number>();
+  const submitted = new Set<number>();
   const financed = new Set<number>();
   const finalized = new Set<number>();
   const played = new Set<number>();
   const emailByRun = new Map<number, ReturnType<typeof emailRecord>>();
   let sendCalls = 0;
+  let checkCalls = 0;
+  let releaseCheck!: () => void;
+  const checkGate = new Promise<void>(resolve => { releaseCheck = resolve; });
+  const externalRequests: string[] = [];
+
+  await page.context().route("**/*", async route => {
+    const url = new URL(route.request().url());
+    if (url.origin === "http://127.0.0.1:5173") return route.fallback();
+    externalRequests.push(route.request().url());
+    return route.abort("blockedbyclient");
+  });
 
   await page.route("**/api/**", async (route: Route) => {
     const request = route.request();
@@ -131,8 +152,11 @@ async function installMockedPresenterApi(page: Page) {
     if (path === "/api/runtime") return fulfill({runtime_mode: "live", work_iq: "work_iq",
       operational_store: "fabric_sql", agent_runtime: "foundry", power_bi_available: false,
       capability_health: {}, deployment_contract: {tenant_sharepoint_host: "tenant.sharepoint.com"}});
-    if (path === "/api/me") return fulfill({mode: "entra", persona_id: "RL-PERSONA-ALEX",
-      display_name: "Alex", independent_finance_enabled: true});
+    if (path === "/api/me") {
+      const persona = new URL(page.url()).searchParams.get("e2ePersona") === "taylor" ? "TAYLOR" : "ALEX";
+      return fulfill({mode: "entra", persona_id: `RL-PERSONA-${persona}`,
+        display_name: persona === "TAYLOR" ? "Taylor" : "Alex", independent_finance_enabled: true});
+    }
     if (path === "/api/inbox/check" && method === "POST") {
       activeRun += 1;
       return fulfill({presenter_run_id: `RL-RUN-${activeRun}`, checked_at: at, incomplete: false, messages: [{
@@ -159,12 +183,31 @@ async function installMockedPresenterApi(page: Page) {
           start_playback: !played.has(run)}} : base);
     }
     if (path === `/api/cases/RL-CASE-RUN-${run}/analysis` && method === "GET") return fulfill(analysisRecord(run));
-    if (path === `/api/cases/RL-CASE-RUN-${run}/proposal` && method === "GET") return fulfill(proposalState(run, financed.has(run)));
+    if (path === `/api/cases/RL-CASE-RUN-${run}/proposal` && method === "GET") {
+      const status: FinanceStatus = financed.has(run) ? "approved" : submitted.has(run) ? "pending" : "none";
+      return fulfill(proposalState(run, status));
+    }
     if (path === `/api/cases/RL-CASE-RUN-${run}/proposals` && method === "POST") {
-      financed.add(run); return fulfill({selection: proposalState(run, true).selection,
-        review: proposalState(run, true).review, review_revision: 2}, 201);
+      expect(request.postDataJSON()).toEqual({option_id: option.option_id,
+        expected: proposalState(run, "none").token});
+      submitted.add(run);
+      const pending = proposalState(run, "pending");
+      return fulfill({selection: pending.selection, review: pending.review, review_revision: 1}, 201);
+    }
+    if (path === "/api/finance/reviews" && method === "GET") {
+      return fulfill(submitted.has(activeRun) ? [financeDetail(activeRun, financed.has(activeRun))] : []);
+    }
+    if (path === `/api/finance/reviews/RL-REVIEW-${run}` && method === "GET") {
+      return fulfill(financeDetail(run, financed.has(run)));
+    }
+    if (path === `/api/finance/reviews/RL-REVIEW-${run}/resolutions` && method === "POST") {
+      expect(request.postDataJSON()).toEqual({expected: proposalState(run, "pending").token,
+        expected_review_revision: 1, approved: true});
+      financed.add(run);
+      return fulfill({review: proposalState(run, "approved").review, review_revision: 2});
     }
     if (path === `/api/cases/RL-CASE-RUN-${run}/proposal-decisions` && method === "POST") {
+      expect(request.postDataJSON()).toEqual({expected: proposalState(run, "approved").token, kind: "approved"});
       finalized.add(run); emailByRun.set(run, emailRecord(run, 1, false, "draft"));
       return fulfill(decisionRecord(run, false), 201);
     }
@@ -174,18 +217,25 @@ async function installMockedPresenterApi(page: Page) {
     if (path === `/api/decisions/RL-DECISION-RUN-${run}/supplier-email` && method === "GET") return fulfill(emailByRun.get(run));
     if (path === `/api/decisions/RL-DECISION-RUN-${run}/supplier-email` && method === "PUT") {
       const input = request.postDataJSON();
+      expect(input).toEqual({revision: 1, subject: "RL-001 supplier recovery request — presenter edit",
+        body: "Fictional demo — please confirm current recovery timing. Include a revised ship date."});
       const next = emailRecord(run, input.revision + 1, false, "draft", input.subject, input.body);
       emailByRun.set(run, next); return fulfill(next);
     }
     if (path.endsWith("/supplier-email/review") && method === "POST") {
+      expect(request.postDataJSON()).toEqual({revision: 2});
       const current = emailByRun.get(run)!; const next = {...current, reviewed_revision: current.revision,
         reviewed_at: at, reviewed_by: actor("ALEX")}; emailByRun.set(run, next); return fulfill(next);
     }
     if (path.endsWith("/supplier-email/send") && method === "POST") {
+      expect(request.postDataJSON()).toEqual({revision: 2});
       sendCalls += 1; const next = {...emailByRun.get(run)!, send_status: "accepted"};
       emailByRun.set(run, next); return fulfill(next);
     }
     if (path.endsWith("/supplier-email/check-send-status") && method === "POST") {
+      expect(request.postDataJSON()).toEqual({});
+      checkCalls += 1;
+      await checkGate;
       const next = {...emailByRun.get(run)!, send_status: "sent-confirmed"};
       emailByRun.set(run, next); return fulfill(next);
     }
@@ -214,7 +264,8 @@ async function installMockedPresenterApi(page: Page) {
     throw new Error(`Unexpected mocked API request: ${method} ${path}`);
   });
 
-  return {sendCount: () => sendCalls, analyzed};
+  return {sendCount: () => sendCalls, checkCount: () => checkCalls, releaseCheck,
+    externalRequests, analyzed};
 }
 
 async function openInboundRun(page: Page, expectedRun: number) {
@@ -228,13 +279,20 @@ async function openInboundRun(page: Page, expectedRun: number) {
 
 test("complete mocked presenter journey and a fresh second run do not leak state", async ({page}) => {
   const api = await installMockedPresenterApi(page);
-  await page.goto("/");
+  await page.goto("/?e2ePersona=alex");
   await openInboundRun(page, 1);
 
   await page.getByRole("tab", {name: "3. Choose a response"}).click();
   await page.getByRole("button", {name: "Select Combined response"}).click();
   await page.getByRole("button", {name: "Continue to review and approve"}).click();
   await page.getByRole("button", {name: "Submit for Finance review"}).click();
+  await page.getByRole("link", {name: "Open Taylor review"}).click();
+  await page.getByRole("button", {name: "Switch Microsoft account"}).click();
+  await expect(page.getByText("Signed in as Taylor.")).toBeVisible();
+  await page.getByRole("button", {name: "Approve spending"}).click();
+  await expect(page.getByText(/Taylor approved the spending/)).toBeVisible();
+  await page.getByRole("button", {name: "Return to Alex for final approval"}).click();
+  await expect(page.getByText("Signed in as Alex")).toBeVisible();
   await expect(page.getByText(/Taylor approved the proposed spending/)).toBeVisible();
   await page.getByRole("button", {name: "Give final Alex approval"}).click();
   await expect(page.getByRole("heading", {name: "Alex approved this response"})).toBeVisible();
@@ -247,6 +305,7 @@ test("complete mocked presenter journey and a fresh second run do not leak state
   await expect(page.getByText("Simulated results")).toBeVisible();
 
   await page.getByLabel("Subject").fill("RL-001 supplier recovery request — presenter edit");
+  await page.getByLabel("Message").fill("Fictional demo — please confirm current recovery timing. Include a revised ship date.");
   await page.getByRole("tab", {name: "3. Choose a response"}).click();
   await page.getByRole("tab", {name: "5. Execute mitigation plan"}).click();
   await expect(page.getByLabel("Subject")).toHaveValue("RL-001 supplier recovery request — presenter edit");
@@ -255,15 +314,11 @@ test("complete mocked presenter journey and a fresh second run do not leak state
   await page.getByRole("button", {name: "Review this email"}).click();
   await expect(page.getByRole("button", {name: "Send email"})).toBeEnabled();
   await page.getByRole("button", {name: "Send email"}).click();
-  await expect(page.getByRole("status")).toHaveText("Accepted by Microsoft 365");
+  await expect(page.locator(".mail-status")).toHaveText("Accepted by Microsoft 365");
   expect(api.sendCount()).toBe(1);
-
-  await page.evaluate(async () => {
-    await fetch("/api/decisions/RL-DECISION-RUN-1/supplier-email/check-send-status", {method: "POST"});
-  });
-  await page.reload();
-  await page.getByRole("tab", {name: "5. Execute mitigation plan"}).click();
-  await expect(page.getByText("Sent", {exact: true})).toBeVisible();
+  await expect.poll(api.checkCount).toBe(1);
+  api.releaseCheck();
+  await expect(page.getByRole("status")).toHaveText("Sent");
   await expect(page.getByText(/Delivered/i)).toHaveCount(0);
   expect(api.sendCount()).toBe(1);
 
@@ -279,4 +334,6 @@ test("complete mocked presenter journey and a fresh second run do not leak state
   await expect(page.getByText("Simulated results")).toHaveCount(0);
   await expect(page.getByRole("region", {name: "Review the supplier email"})).toHaveCount(0);
   expect(api.sendCount()).toBe(1);
+  expect(api.checkCount()).toBe(1);
+  expect(api.externalRequests).toEqual([]);
 });

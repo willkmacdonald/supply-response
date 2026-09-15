@@ -11,10 +11,12 @@ copy is limited to **Not sent**, **Sending…**, **Accepted by Microsoft 365**,
 delivery or receipt.
 
 Local acceptance uses intercepted API responses only. It covers a fresh inbound
-case, response selection, recorded Taylor approval, separate Alex final approval,
+case, response selection, Taylor approval through the Finance review workspace,
+return to Alex for separate final approval,
 the chosen option's action set, simulated playback, email edit/save/review, one
-mocked accepted send, GET-only status reconciliation to Sent, and a second fresh
-Presenter Run with no inherited approval, actions, playback, or mail state. The
+mocked accepted send, product-owned GET-only status reconciliation to Sent, and
+a second fresh Presenter Run with no inherited approval, actions, playback, or
+mail state. The
 application's mail-send setting remains default-off, and these results do not
 establish tenant consent, deployment, provider acceptance, Sent Items evidence,
 or receipt by Will.
