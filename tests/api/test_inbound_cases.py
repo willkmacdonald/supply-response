@@ -156,13 +156,13 @@ def test_concurrent_primary_key_winner_is_validated_and_returned(
     app, client, services, tmp_path, monkeypatch
 ):
     _, _, payload = setup(app, services, tmp_path)
-    create = services.store.create_case
+    create = services.store.create_presenter_case
 
     def concurrent(case, snapshot):
         create(case, snapshot)
         raise ImmutableRecordConflict("winner")
 
-    monkeypatch.setattr(services.store, "create_case", concurrent)
+    monkeypatch.setattr(services.store, "create_presenter_case", concurrent)
     result = client.post("/api/inbox/cases", json=payload)
     assert result.status_code == 200, result.text
     assert len(services.store.list_cases()) == 1
@@ -259,7 +259,7 @@ def test_conflicting_concurrent_winner_is_not_returned(
     from data.domain import CaseInstance
 
     _, _, payload = setup(app, services, tmp_path)
-    create = services.store.create_case
+    create = services.store.create_presenter_case
 
     def concurrent(case, snapshot):
         changed = CaseInstance.model_validate(
@@ -273,7 +273,103 @@ def test_conflicting_concurrent_winner_is_not_returned(
         create(changed, snapshot)
         raise ImmutableRecordConflict("winner")
 
-    monkeypatch.setattr(services.store, "create_case", concurrent)
+    monkeypatch.setattr(services.store, "create_presenter_case", concurrent)
     result = client.post("/api/inbox/cases", json=payload)
     assert result.status_code == 409
     assert result.json()["detail"]["code"] == "INBOUND_EMAIL_CHANGED"
+
+
+def test_inbound_creation_retains_four_runs(app, client, services, tmp_path):
+    _, _, payload = setup(app, services, tmp_path)
+    created = []
+    for index in range(5):
+        response = client.post(
+            "/api/inbox/cases",
+            json={**payload, "presenter_run_id": f"RL-RUN-{index:032x}"},
+        )
+        assert response.status_code == 200, response.text
+        created.append(response.json()["case_id"])
+    retained = {case.case_id for case in services.store.list_cases()}
+    assert len(retained) == 4
+    assert created[-1] in retained
+
+
+def test_failed_new_run_analysis_preserves_fresh_case_and_earlier_decision(
+    app, client, services, tmp_path
+):
+    from agents.orchestrator.local import LocalAgentSet
+    from agents.orchestrator.workflow import Orchestrator
+    from apps.api.app.live import LiveAnalysisApplicationService
+    from services.analysis.service import analyze_case
+    from services.decisions.service import DecisionService
+    from tests.integration.test_inbound_analysis import BoundWorkIQ
+    from tests.integration.test_live_case_contract import NOW
+    from tests.integration.test_live_hardening import ExplicitLiveOperationalPort
+
+    _, bound, payload = setup(app, services, tmp_path)
+    # A retained legacy workflow Case can already have a completed Decision.
+    services.settings = services.settings.model_copy(
+        update={"independent_finance_enabled": False}
+    )
+    workiq = BoundWorkIQ()
+    services.analysis_service = LiveAnalysisApplicationService(
+        store=services.store,
+        operational_data=ExplicitLiveOperationalPort(),
+        work_iq=workiq,
+        orchestrator=Orchestrator(LocalAgentSet.deterministic, analyze_case),
+        supplier_source_id="seed-locator",
+        quality_source_id="source-quality",
+        fabric_citation_base_url="https://app.powerbi.com/groups/demo/reports/report",
+        clock=lambda: NOW,
+    )
+    services.decision_service = DecisionService(services.uow_factory, clock=lambda: NOW)
+    first = client.post("/api/inbox/cases", json=payload)
+    assert first.status_code == 200, first.text
+    first_id = first.json()["case_id"]
+    analyzed = client.post(f"/api/cases/{first_id}/analysis")
+    assert analyzed.status_code == 201, analyzed.text
+    approved = client.post(
+        f"/api/cases/{first_id}/decisions",
+        headers={"Idempotency-Key": "earlier-run"},
+        json={
+            "analysis_id": analyzed.json()["analysis_id"],
+            "kind": "approved",
+            "selected_option_id": "RL-OPTION-COMBINED",
+        },
+    )
+    assert approved.status_code == 201, approved.text
+    decision_id = approved.json()["decision_id"]
+    services.settings = services.settings.model_copy(
+        update={"independent_finance_enabled": True}
+    )
+    second_payload = {**payload, "presenter_run_id": "RL-RUN-" + "b" * 32}
+    second = client.post("/api/inbox/cases", json=second_payload)
+    assert second.status_code == 200, second.text
+    second_id = second.json()["case_id"]
+    assert second_id != first_id
+    for body in (second.json(),):
+        assert body["status"] == "open"
+        assert body["current_analysis_id"] is None
+        assert body["current_decision_id"] is None
+    workiq.fail = True
+    failed = client.post(f"/api/cases/{second_id}/analysis")
+    assert failed.status_code == 503, failed.text
+    for response in (
+        client.get(f"/api/cases/{second_id}"),
+        client.post("/api/inbox/cases", json=second_payload),
+    ):
+        assert response.status_code == 200, response.text
+        assert response.json()["case_id"] == second_id
+        assert response.json()["status"] == "open"
+        assert response.json()["current_analysis_id"] is None
+        assert response.json()["current_decision_id"] is None
+    assert services.store.get_case(second_id).supplier_email == bound
+    earlier = client.get(f"/api/cases/{first_id}").json()
+    assert earlier["current_decision_id"] == decision_id
+    assert earlier["current_analysis_id"] == analyzed.json()["analysis_id"]
+    assert client.get(f"/api/decisions/{decision_id}").json()["case_id"] == first_id
+    with services.uow_factory() as uow:
+        assert tuple(
+            item.decision_id for item in uow.decisions.list_for_case(first_id)
+        ) == (decision_id,)
+        assert uow.decisions.list_for_case(second_id) == ()

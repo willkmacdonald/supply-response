@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 from datetime import datetime
 from types import TracebackType
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from data.domain import CaseInstance, CasePurpose
 from data.domain.analysis import AnalysisVersion
@@ -26,11 +28,36 @@ from data.domain.proposals import (
 )
 from data.synthetic.rl001 import OperationalSnapshot
 
+if TYPE_CHECKING:
+    from services.persistence.presenter_runs import (
+        PresenterRetentionPlan,
+        PresenterRetentionResult,
+    )
+
 EXECUTION_PROPOSAL_STALE_ERROR = "EXECUTION_PROPOSAL_STALE"
 
 
 @runtime_checkable
 class CaseStore(Protocol):
+    def create_presenter_case(
+        self,
+        case: CaseInstance,
+        snapshot: OperationalSnapshot,
+        *,
+        historical_limit: int = 3,
+    ) -> PresenterRetentionResult: ...
+
+    def preview_presenter_retention(
+        self,
+        *,
+        historical_limit: int = 3,
+    ) -> PresenterRetentionPlan: ...
+
+    def apply_presenter_retention(
+        self,
+        plan: PresenterRetentionPlan,
+    ) -> PresenterRetentionResult: ...
+
     def create_case(
         self,
         case: CaseInstance,
@@ -222,7 +249,7 @@ class UnitOfWork(Protocol):
     finance_reviews: FinanceReviewStore
     proposals: ProposalStore
 
-    def __enter__(self) -> "UnitOfWork": ...  # noqa: PYI034
+    def __enter__(self) -> UnitOfWork: ...  # noqa: PYI034
 
     def __exit__(
         self,

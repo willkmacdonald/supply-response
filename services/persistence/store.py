@@ -66,6 +66,10 @@ from services.policy.workflow import approval_policy_for
 
 if TYPE_CHECKING:
     from apps.api.app.settings import Settings
+    from services.persistence.presenter_runs import (
+        PresenterRetentionPlan,
+        PresenterRetentionResult,
+    )
 
 
 class PersistenceError(RuntimeError):
@@ -436,7 +440,7 @@ class SqlAlchemyStore:
                 "case projection conflicts with immutable Case Instance provenance"
             )
 
-    def create_case(
+    def _validate_new_case(
         self,
         case: CaseInstance,
         snapshot: OperationalSnapshot,
@@ -453,43 +457,109 @@ class SqlAlchemyStore:
                 "operational snapshot Scenario Effective Time must match Case Instance"
             )
 
+    def _insert_case_connection(
+        self,
+        connection: Connection,
+        case: CaseInstance,
+        snapshot: OperationalSnapshot,
+    ) -> None:
+        connection.execute(
+            insert(case_instances).values(
+                case_id=case.case_id,
+                template_id=case.template_id,
+                purpose=case.purpose.value,
+                runtime_mode=case.runtime_mode.value,
+                status=case.status.value,
+                scenario_effective_time=case.scenario_effective_time,
+                payload_json=serialize_model(case),
+            )
+        )
+        connection.execute(
+            insert(operational_snapshots).values(
+                case_id=snapshot.case_id,
+                runtime_mode=snapshot.runtime_mode.value,
+                scenario_effective_time=snapshot.scenario_effective_time,
+                analysis_horizon_start=snapshot.analysis_horizon_start,
+                analysis_horizon_end=snapshot.analysis_horizon_end.isoformat(),
+                payload_json=serialize_model(snapshot),
+            )
+        )
+        connection.execute(
+            insert(case_projection).values(
+                case_id=case.case_id,
+                purpose=case.purpose.value,
+                runtime_mode=case.runtime_mode.value,
+                status=case.status.value,
+                scenario_effective_time=case.scenario_effective_time,
+                payload_json=serialize_model(case),
+            )
+        )
+
+    def create_case(self, case: CaseInstance, snapshot: OperationalSnapshot) -> None:
+        self._validate_new_case(case, snapshot)
         try:
             with self.engine.begin() as connection:
-                connection.execute(
-                    insert(case_instances).values(
-                        case_id=case.case_id,
-                        template_id=case.template_id,
-                        purpose=case.purpose.value,
-                        runtime_mode=case.runtime_mode.value,
-                        status=case.status.value,
-                        scenario_effective_time=case.scenario_effective_time,
-                        payload_json=serialize_model(case),
-                    )
-                )
-                connection.execute(
-                    insert(operational_snapshots).values(
-                        case_id=snapshot.case_id,
-                        runtime_mode=snapshot.runtime_mode.value,
-                        scenario_effective_time=snapshot.scenario_effective_time,
-                        analysis_horizon_start=snapshot.analysis_horizon_start,
-                        analysis_horizon_end=snapshot.analysis_horizon_end.isoformat(),
-                        payload_json=serialize_model(snapshot),
-                    )
-                )
-                connection.execute(
-                    insert(case_projection).values(
-                        case_id=case.case_id,
-                        purpose=case.purpose.value,
-                        runtime_mode=case.runtime_mode.value,
-                        status=case.status.value,
-                        scenario_effective_time=case.scenario_effective_time,
-                        payload_json=serialize_model(case),
-                    )
-                )
+                self._insert_case_connection(connection, case, snapshot)
         except IntegrityError as error:
             raise ImmutableRecordConflict(
                 f"case already exists: {case.case_id}"
             ) from error
+
+    def create_presenter_case(
+        self,
+        case: CaseInstance,
+        snapshot: OperationalSnapshot,
+        *,
+        historical_limit: int = 3,
+    ) -> PresenterRetentionResult:
+        from services.persistence import presenter_runs
+
+        self._validate_new_case(case, snapshot)
+        try:
+            with self.engine.begin() as connection:
+                self._insert_case_connection(connection, case, snapshot)
+                plan = presenter_runs.plan_presenter_retention(
+                    connection,
+                    self,
+                    current_case_id=case.case_id,
+                    historical_limit=historical_limit,
+                )
+                return presenter_runs.delete_presenter_aggregates(connection, plan)
+        except IntegrityError as error:
+            raise ImmutableRecordConflict(
+                f"case already exists: {case.case_id}"
+            ) from error
+
+    def preview_presenter_retention(
+        self, *, historical_limit: int = 3
+    ) -> PresenterRetentionPlan:
+        from services.persistence import presenter_runs
+
+        with self.engine.connect() as connection:
+            return presenter_runs.plan_presenter_retention(
+                connection,
+                self,
+                current_case_id=None,
+                historical_limit=historical_limit,
+            )
+
+    def apply_presenter_retention(
+        self, plan: PresenterRetentionPlan
+    ) -> PresenterRetentionResult:
+        from services.persistence import presenter_runs
+
+        with self.engine.begin() as connection:
+            current_plan = presenter_runs.plan_presenter_retention(
+                connection,
+                self,
+                current_case_id=None,
+                historical_limit=max(0, len(plan.retained_case_ids) - 1),
+            )
+            if current_plan != plan:
+                raise presenter_runs.PresenterRetentionPlanChanged(
+                    "presenter history changed; preview again"
+                )
+            return presenter_runs.delete_presenter_aggregates(connection, plan)
 
     def get_case(self, case_id: str) -> CaseInstance:
         with self.engine.connect() as connection:

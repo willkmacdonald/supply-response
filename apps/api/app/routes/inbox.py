@@ -157,7 +157,7 @@ async def create_inbound_case(
                 values["workflow_version"] = WorkflowVersion.INDEPENDENT_FINANCE
             case = CaseInstance.model_validate(values)
             try:
-                services.store.create_case(case, live.snapshot)
+                services.store.create_presenter_case(case, live.snapshot)
             except ImmutableRecordConflict:
                 if not _matching_case(
                     services, case_id, source, request.presenter_run_id

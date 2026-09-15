@@ -13,6 +13,35 @@ from services.persistence import fabric_sql
 from services.persistence import store as store_module
 
 
+@pytest.mark.parametrize("dialect_name", ["sqlite", "mssql"])
+def test_presenter_retention_statements_compile_portably(dialect_name):
+    from sqlalchemy.dialects import mssql, sqlite
+
+    from services.persistence.presenter_runs import (
+        PRESENTER_AGGREGATE_DELETE_ORDER,
+        PresenterRetentionPlan,
+        presenter_aggregate_delete_statements,
+    )
+
+    dialect = mssql.dialect() if dialect_name == "mssql" else sqlite.dialect()
+    statements = tuple(
+        presenter_aggregate_delete_statements(
+            PresenterRetentionPlan("current", ("current",), ("expired",))
+        )
+    )
+    assert len(statements) == len(PRESENTER_AGGREGATE_DELETE_ORDER) + 1
+    assert (
+        tuple(statement.table.name for statement in statements if statement.is_delete)
+        == PRESENTER_AGGREGATE_DELETE_ORDER
+    )
+    for statement in statements:
+        sql = str(
+            statement.compile(dialect=dialect, compile_kwargs={"literal_binds": True})
+        )
+        assert "expired" in sql and "WHERE" in sql
+        assert "reporting" not in sql and "operational_source" not in sql
+
+
 def test_fabric_sql_adapter_module_exists():
     assert find_spec("services.persistence.fabric_sql") is not None
 
