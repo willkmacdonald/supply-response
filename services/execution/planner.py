@@ -107,7 +107,8 @@ def _action_display(
         return (
             (
                 f"Coordinate a {transfer.quantity:,}-unit transfer from {source} to "
-                f"{destination}, arriving {_date_label(transfer.arrival_date)}."
+                f"{destination}, arriving {_date_label(transfer.arrival_date)} at "
+                f"${transfer.incremental_cost_per_unit:.2f} per unit."
             ),
             (
                 f"{transfer.quantity:,} units are simulated as available in "

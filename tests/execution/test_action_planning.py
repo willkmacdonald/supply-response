@@ -74,7 +74,13 @@ def test_approved_option_creates_only_its_applicable_actions(
         (
             "RL-OPTION-TRANSFER",
             "transfer_dallas_to_chicago",
-            ("1,500", "Dallas", "Chicago", "September 5, 2026"),
+            (
+                "1,500",
+                "Dallas",
+                "Chicago",
+                "September 5, 2026",
+                "$1.50 per unit",
+            ),
         ),
         (
             "RL-OPTION-RESEQUENCE",
