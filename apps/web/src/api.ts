@@ -19,6 +19,7 @@ export const API_BASE = "";
 const SAFE_ERROR_MESSAGES = new Map<string, string>([
   ["INBOX_CHECK_UNAVAILABLE", "Email checking is not available right now. Try again shortly."],
   ["INBOX_CHECK_FAILED", "Work IQ could not complete the email check. Please try again."],
+  ["INBOUND_EMAIL_CHECK_REQUIRED", "This email review is no longer valid. Check email again before creating its case."],
   ["INBOUND_EMAIL_CHANGED", "The email changed since you reviewed it. Check email again before creating its case."],
   ["INBOUND_EMAIL_UNSUPPORTED", "This email does not contain a complete, supported disruption. Review its delivery quantity, dates, component, and partial-shipment offer."],
   ["INBOUND_EMAIL_CONFLICT", "The supplier email conflicts with the planning records or the email already used for this case. Review the source details before continuing."],
@@ -93,10 +94,12 @@ export const api = {
   checkInbox: (): Promise<InboxCheckResult> => post("/api/inbox/check", {}),
   createCaseFromEmail: (
     presenterRunId: string,
+    presenterRunReceipt: string,
     internetMessageId: string,
     reviewFingerprint: string,
   ): Promise<CaseInstance> => post("/api/inbox/cases", {
     presenter_run_id: presenterRunId,
+    presenter_run_receipt: presenterRunReceipt,
     internet_message_id: internetMessageId,
     review_fingerprint: reviewFingerprint,
   }),

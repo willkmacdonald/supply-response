@@ -72,3 +72,45 @@ def test_persistence_round_trip_and_all_projection_provenance_checks(tmp_path):
         )
     with pytest.raises(PersistenceIntegrityError):
         store.get_case(case.case_id)
+
+
+def test_case_projection_save_rejects_presenter_run_lineage_change(tmp_path):
+    store = sqlite_store(
+        f"sqlite:///{tmp_path / 'presenter-run-save.db'}",
+        runtime_mode=RuntimeMode.LIVE,
+    )
+    case, snapshot = bound_case()
+    case = CaseInstance.model_validate(
+        {**case.model_dump(), "presenter_run_id": "RL-RUN-" + "a" * 32}
+    )
+    store.create_case(case, snapshot)
+    changed = CaseInstance.model_validate(
+        {**case.model_dump(), "presenter_run_id": "RL-RUN-" + "b" * 32}
+    )
+
+    with pytest.raises(ImmutableRecordConflict, match="immutable provenance"):
+        store.save_case_projection(changed)
+
+
+def test_case_projection_read_rejects_presenter_run_lineage_corruption(tmp_path):
+    store = sqlite_store(
+        f"sqlite:///{tmp_path / 'presenter-run-read.db'}",
+        runtime_mode=RuntimeMode.LIVE,
+    )
+    case, snapshot = bound_case()
+    case = CaseInstance.model_validate(
+        {**case.model_dump(), "presenter_run_id": "RL-RUN-" + "a" * 32}
+    )
+    store.create_case(case, snapshot)
+    changed = CaseInstance.model_validate(
+        {**case.model_dump(), "presenter_run_id": "RL-RUN-" + "b" * 32}
+    )
+    with store.engine.begin() as connection:
+        connection.execute(
+            update(case_projection)
+            .where(case_projection.c.case_id == case.case_id)
+            .values(payload_json=changed.model_dump_json())
+        )
+
+    with pytest.raises(PersistenceIntegrityError, match="case projection"):
+        store.get_case(case.case_id)

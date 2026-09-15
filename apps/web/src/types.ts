@@ -505,6 +505,7 @@ export interface InboxMessage {
 
 export interface InboxCheckResult {
   presenter_run_id: string;
+  presenter_run_receipt: string;
   checked_at: string;
   incomplete: boolean;
   messages: InboxMessage[];

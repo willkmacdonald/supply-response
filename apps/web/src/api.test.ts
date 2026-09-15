@@ -11,9 +11,9 @@ describe("API client", () => {
   it("creates from the server-issued presenter run and reviewed email identity without copied facts or message text", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ok:true,json:async()=>({case_id:"email-case"})});
     vi.stubGlobal("fetch", fetchMock);
-    await api.createCaseFromEmail("RL-RUN-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "<email@example.com>", "a".repeat(64));
+    await api.createCaseFromEmail("RL-RUN-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "PRR1.opaque.receipt", "<email@example.com>", "a".repeat(64));
     expect(fetchMock).toHaveBeenCalledWith("/api/inbox/cases", expect.objectContaining({
-      method:"POST",body:JSON.stringify({presenter_run_id:"RL-RUN-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",internet_message_id:"<email@example.com>",review_fingerprint:"a".repeat(64)}),
+      method:"POST",body:JSON.stringify({presenter_run_id:"RL-RUN-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",presenter_run_receipt:"PRR1.opaque.receipt",internet_message_id:"<email@example.com>",review_fingerprint:"a".repeat(64)}),
     }));
   });
   it("maps live source failures to safe display copy without leaking diagnostics", async () => {

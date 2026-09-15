@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from apps.api.app.dependencies import get_actor, require_planner
+from apps.api.app.presenter_run_receipts import issue_presenter_run_receipt
 from data.domain import RuntimeMode
 from data.domain.inbound import InboundEmailError
 from data.synthetic.rl001 import instantiate_rl001
@@ -18,7 +19,11 @@ def setup(app, services, tmp_path):
     app.dependency_overrides[require_planner] = lambda: actor
     app.dependency_overrides[get_actor] = lambda: actor
     services.settings = services.settings.model_copy(
-        update={"runtime_mode": RuntimeMode.LIVE, "independent_finance_enabled": True}
+        update={
+            "runtime_mode": RuntimeMode.LIVE,
+            "independent_finance_enabled": True,
+            "entra_client_secret": "fixture-presenter-receipt-secret",
+        }
     )
     services.store = sqlite_store(
         f"sqlite:///{tmp_path / 'inbound.db'}", runtime_mode=RuntimeMode.LIVE
@@ -27,7 +32,27 @@ def setup(app, services, tmp_path):
         update={"tenant_id": actor.tenant_id, "mailbox_object_id": actor.object_id}
     )
     services.inbox_service = SimpleNamespace(
-        review_inbound_email=AsyncMock(return_value=bound)
+        check_inbox=AsyncMock(
+            return_value={
+                "checked_at": "2026-09-14T05:00:00Z",
+                "messages": [
+                    {
+                        "message_id": bound.message_id,
+                        "subject": bound.subject,
+                        "sender": bound.sender,
+                        "received_at": bound.received_at,
+                        "excerpt": "Supplier disruption",
+                        "citation_url": bound.citation_url,
+                        "internet_message_id": bound.internet_message_id,
+                        "review_fingerprint": bound.review_fingerprint,
+                        "facts": bound.facts,
+                        "creation_blocker": None,
+                    }
+                ],
+                "incomplete": False,
+            }
+        ),
+        review_inbound_email=AsyncMock(return_value=bound),
     )
 
     async def retrieve(**kwargs):
@@ -41,15 +66,165 @@ def setup(app, services, tmp_path):
     services.live_operational_data = SimpleNamespace(
         retrieve=AsyncMock(side_effect=retrieve)
     )
+    presenter_run_id = "RL-RUN-" + "a" * 32
     return (
         actor,
         bound,
-        {
-            "presenter_run_id": "RL-RUN-" + "a" * 32,
-            "internet_message_id": bound.internet_message_id,
-            "review_fingerprint": bound.review_fingerprint,
+        presenter_payload(services, actor, bound, presenter_run_id),
+    )
+
+
+def presenter_payload(services, actor, bound, presenter_run_id):
+    return {
+        "presenter_run_id": presenter_run_id,
+        "presenter_run_receipt": issue_presenter_run_receipt(
+            services.settings.entra_client_secret,
+            tenant_id=actor.tenant_id,
+            object_id=actor.object_id,
+            presenter_run_id=presenter_run_id,
+            allowed_sources=((bound.internet_message_id, bound.review_fingerprint),),
+        ),
+        "internet_message_id": bound.internet_message_id,
+        "review_fingerprint": bound.review_fingerprint,
+    }
+
+
+def issued_payload(client, bound):
+    checked = client.post("/api/inbox/check", json={})
+    assert checked.status_code == 200, checked.text
+    return {
+        "presenter_run_id": checked.json()["presenter_run_id"],
+        "presenter_run_receipt": checked.json()["presenter_run_receipt"],
+        "internet_message_id": bound.internet_message_id,
+        "review_fingerprint": bound.review_fingerprint,
+    }
+
+
+def test_fabricated_presenter_receipt_fails_before_source_or_case_work(
+    app, client, services, tmp_path
+):
+    _, _, payload = setup(app, services, tmp_path)
+    result = client.post(
+        "/api/inbox/cases",
+        json={
+            **payload,
+            "presenter_run_receipt": "PRR1.fabricated.receipt",
         },
     )
+
+    assert result.status_code == 409
+    assert result.json()["detail"]["code"] == "INBOUND_EMAIL_CHECK_REQUIRED"
+    services.inbox_service.review_inbound_email.assert_not_awaited()
+    services.live_operational_data.retrieve.assert_not_awaited()
+    assert services.store.list_cases() == ()
+
+
+@pytest.mark.parametrize("receipt", [None, 123, "x" * 4097])
+def test_missing_or_malformed_presenter_receipt_uses_the_same_safe_failure(
+    app, client, services, tmp_path, receipt
+):
+    _, _, payload = setup(app, services, tmp_path)
+    if receipt is None:
+        payload.pop("presenter_run_receipt")
+    else:
+        payload["presenter_run_receipt"] = receipt
+
+    result = client.post("/api/inbox/cases", json=payload)
+
+    assert result.status_code == 409
+    assert result.json()["detail"]["code"] == "INBOUND_EMAIL_CHECK_REQUIRED"
+    services.inbox_service.review_inbound_email.assert_not_awaited()
+    services.live_operational_data.retrieve.assert_not_awaited()
+    assert services.store.list_cases() == ()
+
+
+def test_empty_check_receipt_authorizes_no_source(app, client, services, tmp_path):
+    _, bound, _ = setup(app, services, tmp_path)
+    services.inbox_service.check_inbox.return_value = {
+        "checked_at": "2026-09-14T05:00:00Z",
+        "messages": [],
+        "incomplete": False,
+    }
+    payload = issued_payload(client, bound)
+
+    result = client.post("/api/inbox/cases", json=payload)
+
+    assert result.status_code == 409
+    assert result.json()["detail"]["code"] == "INBOUND_EMAIL_CHECK_REQUIRED"
+    services.inbox_service.review_inbound_email.assert_not_awaited()
+    services.live_operational_data.retrieve.assert_not_awaited()
+    assert services.store.list_cases() == ()
+
+
+@pytest.mark.parametrize("change", ["tampered", "actor", "source", "fingerprint"])
+def test_presenter_receipt_mismatch_fails_before_source_or_case_work(
+    app, client, services, tmp_path, change
+):
+    actor, bound, _ = setup(app, services, tmp_path)
+    payload = issued_payload(client, bound)
+    if change == "tampered":
+        receipt = payload["presenter_run_receipt"]
+        payload["presenter_run_receipt"] = receipt[:-1] + (
+            "A" if receipt[-1] != "A" else "B"
+        )
+    elif change == "actor":
+        app.dependency_overrides[require_planner] = lambda: SimpleNamespace(
+            tenant_id=actor.tenant_id,
+            object_id="different-actor",
+        )
+    elif change == "source":
+        payload["internet_message_id"] = "<different@example.com>"
+    else:
+        payload["review_fingerprint"] = "b" * 64
+
+    result = client.post("/api/inbox/cases", json=payload)
+
+    assert result.status_code == 409
+    assert result.json()["detail"]["code"] == "INBOUND_EMAIL_CHECK_REQUIRED"
+    services.inbox_service.review_inbound_email.assert_not_awaited()
+    services.live_operational_data.retrieve.assert_not_awaited()
+    assert services.store.list_cases() == ()
+
+
+def test_successful_check_receipt_authorizes_matching_case_creation(
+    app, client, services, tmp_path
+):
+    _, bound, _ = setup(app, services, tmp_path)
+    payload = issued_payload(client, bound)
+    receipt = payload["presenter_run_receipt"]
+    assert actor_identifiers_are_opaque(receipt, bound)
+
+    result = client.post("/api/inbox/cases", json=payload)
+
+    assert result.status_code == 200, result.text
+    assert result.json()["presenter_run_id"] == payload["presenter_run_id"]
+    services.inbox_service.review_inbound_email.assert_awaited_once()
+    assert len(services.store.list_cases()) == 1
+
+
+def actor_identifiers_are_opaque(receipt, bound):
+    return (
+        bound.tenant_id not in receipt
+        and bound.mailbox_object_id not in receipt
+        and bound.internet_message_id not in receipt
+        and bound.review_fingerprint not in receipt
+    )
+
+
+def test_presenter_receipt_replay_is_idempotent_and_new_check_is_fresh(
+    app, client, services, tmp_path
+):
+    _, bound, _ = setup(app, services, tmp_path)
+    first_payload = issued_payload(client, bound)
+    first = client.post("/api/inbox/cases", json=first_payload)
+    retry = client.post("/api/inbox/cases", json=first_payload)
+    second_payload = issued_payload(client, bound)
+    second = client.post("/api/inbox/cases", json=second_payload)
+
+    assert first.status_code == retry.status_code == second.status_code == 200
+    assert retry.json()["case_id"] == first.json()["case_id"]
+    assert second.json()["case_id"] != first.json()["case_id"]
+    assert second.json()["presenter_run_id"] == second_payload["presenter_run_id"]
 
 
 def test_create_rechecks_source_binds_case_and_retry_returns_same_open_case(
@@ -85,9 +260,9 @@ def test_create_rechecks_source_binds_case_and_retry_returns_same_open_case(
 def test_same_email_is_fresh_across_runs_and_idempotent_within_run(
     app, client, services, tmp_path
 ):
-    _, _, payload = setup(app, services, tmp_path)
-    run_a = {**payload, "presenter_run_id": "RL-RUN-" + "a" * 32}
-    run_b = {**payload, "presenter_run_id": "RL-RUN-" + "b" * 32}
+    _, bound, _ = setup(app, services, tmp_path)
+    run_a = issued_payload(client, bound)
+    run_b = issued_payload(client, bound)
     first = client.post("/api/inbox/cases", json=run_a)
     retry = client.post("/api/inbox/cases", json=run_a)
     second = client.post("/api/inbox/cases", json=run_b)
@@ -149,6 +324,7 @@ def test_same_identity_with_new_fingerprint_conflicts(app, client, services, tmp
         "/api/inbox/cases", json={**payload, "review_fingerprint": "b" * 64}
     )
     assert result.status_code == 409
+    assert result.json()["detail"]["code"] == "INBOUND_EMAIL_CHECK_REQUIRED"
     assert len(services.store.list_cases()) == 1
 
 
@@ -176,6 +352,7 @@ def test_authentication_live_gate_and_untrusted_request_fields(
             "/api/inbox/cases",
             json={
                 "presenter_run_id": "RL-RUN-" + "a" * 32,
+                "presenter_run_receipt": "unverified",
                 "internet_message_id": "<a@b>",
                 "review_fingerprint": "a" * 64,
             },
@@ -280,12 +457,18 @@ def test_conflicting_concurrent_winner_is_not_returned(
 
 
 def test_inbound_creation_retains_four_runs(app, client, services, tmp_path):
-    _, _, payload = setup(app, services, tmp_path)
+    actor, bound, _ = setup(app, services, tmp_path)
     created = []
     for index in range(5):
+        payload = presenter_payload(
+            services,
+            actor,
+            bound,
+            f"RL-RUN-{index:032x}",
+        )
         response = client.post(
             "/api/inbox/cases",
-            json={**payload, "presenter_run_id": f"RL-RUN-{index:032x}"},
+            json=payload,
         )
         assert response.status_code == 200, response.text
         created.append(response.json()["case_id"])
@@ -306,7 +489,7 @@ def test_failed_new_run_analysis_preserves_fresh_case_and_earlier_decision(
     from tests.integration.test_live_case_contract import NOW
     from tests.integration.test_live_hardening import ExplicitLiveOperationalPort
 
-    _, bound, payload = setup(app, services, tmp_path)
+    actor, bound, payload = setup(app, services, tmp_path)
     # A retained legacy workflow Case can already have a completed Decision.
     services.settings = services.settings.model_copy(
         update={"independent_finance_enabled": False}
@@ -342,7 +525,12 @@ def test_failed_new_run_analysis_preserves_fresh_case_and_earlier_decision(
     services.settings = services.settings.model_copy(
         update={"independent_finance_enabled": True}
     )
-    second_payload = {**payload, "presenter_run_id": "RL-RUN-" + "b" * 32}
+    second_payload = presenter_payload(
+        services,
+        actor,
+        bound,
+        "RL-RUN-" + "b" * 32,
+    )
     second = client.post("/api/inbox/cases", json=second_payload)
     assert second.status_code == 200, second.text
     second_id = second.json()["case_id"]

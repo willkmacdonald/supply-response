@@ -437,6 +437,7 @@ class SqlAlchemyStore:
             or case.scenario_effective_time != stored_case.scenario_effective_time
             or case.scenario_timezone != stored_case.scenario_timezone
             or case.supplier_email != stored_case.supplier_email
+            or case.presenter_run_id != stored_case.presenter_run_id
             or case.effective_workflow_version
             is not stored_case.effective_workflow_version
         ):
@@ -918,6 +919,7 @@ class SqlAlchemyStore:
                 or case.scenario_effective_time != stored_case.scenario_effective_time
                 or case.scenario_timezone != stored_case.scenario_timezone
                 or case.supplier_email != stored_case.supplier_email
+                or case.presenter_run_id != stored_case.presenter_run_id
             ):
                 raise ImmutableRecordConflict(
                     "case projection cannot change immutable provenance"

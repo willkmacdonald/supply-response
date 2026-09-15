@@ -13,6 +13,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from apps.api.app.auth import AuthenticatedActor
 from apps.api.app.contracts import CaseResponse, InboxCheckResponse
 from apps.api.app.dependencies import ApplicationServices, get_services, require_planner
+from apps.api.app.presenter_run_receipts import (
+    issue_presenter_run_receipt,
+    verify_presenter_run_receipt,
+)
 from apps.api.app.routes.cases import case_response
 from data.domain import CaseInstance, CasePurpose, RuntimeMode
 from data.domain.cases import PRESENTER_RUN_PATTERN, WorkflowVersion
@@ -35,7 +39,19 @@ class _PrivateInboxRoute(APIRoute):
             except HTTPException as error:
                 error.headers = {**(error.headers or {}), "Cache-Control": "no-store"}
                 raise
-            except RequestValidationError:
+            except RequestValidationError as error:
+                validation_errors = error.errors()
+                receipt_errors = [
+                    item
+                    for item in validation_errors
+                    if item.get("loc", ())[-1:] == ("presenter_run_receipt",)
+                ]
+                if receipt_errors and len(receipt_errors) == len(validation_errors):
+                    raise HTTPException(
+                        409,
+                        detail={"code": "INBOUND_EMAIL_CHECK_REQUIRED"},
+                        headers={"Cache-Control": "no-store"},
+                    ) from None
                 raise HTTPException(
                     422,
                     detail={"code": "INVALID_INBOUND_REQUEST"},
@@ -57,6 +73,7 @@ class CheckRequest(BaseModel):
 class CreateInboundCaseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     presenter_run_id: str = Field(pattern=PRESENTER_RUN_PATTERN)
+    presenter_run_receipt: str = Field(min_length=1, max_length=4096)
     internet_message_id: str = Field(min_length=3, max_length=998)
     review_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
 
@@ -108,6 +125,16 @@ async def create_inbound_case(
             401, detail={"code": "AUTHENTICATION_REQUIRED"}, headers=headers
         )
     try:
+        if not verify_presenter_run_receipt(
+            request.presenter_run_receipt,
+            services.settings.entra_client_secret,
+            tenant_id=actor.tenant_id,
+            object_id=actor.object_id,
+            presenter_run_id=request.presenter_run_id,
+            internet_message_id=request.internet_message_id,
+            review_fingerprint=request.review_fingerprint,
+        ):
+            raise InboundEmailError("INBOUND_EMAIL_CHECK_REQUIRED")
         source = SupplierEmailSource.model_validate(
             await services.inbox_service.review_inbound_email(
                 actor=actor,
@@ -166,6 +193,7 @@ async def create_inbound_case(
         result = case_response(services, case_id)
     except InboundEmailError as error:
         statuses = {
+            "INBOUND_EMAIL_CHECK_REQUIRED": 409,
             "INBOUND_EMAIL_CHANGED": 409,
             "INBOUND_EMAIL_CONFLICT": 409,
             "INBOUND_EMAIL_UNSUPPORTED": 422,
@@ -208,9 +236,22 @@ async def check_inbox(
                 checked_at=services.clock(),
             )
         )
+        presenter_run_id = f"RL-RUN-{uuid4().hex}"
         result = InboxCheckResponse(
             **provider_result.model_dump(),
-            presenter_run_id=f"RL-RUN-{uuid4().hex}",
+            presenter_run_id=presenter_run_id,
+            presenter_run_receipt=issue_presenter_run_receipt(
+                services.settings.entra_client_secret,
+                tenant_id=actor.tenant_id,
+                object_id=actor.object_id,
+                presenter_run_id=presenter_run_id,
+                allowed_sources=(
+                    (message.internet_message_id, message.review_fingerprint)
+                    for message in provider_result.messages
+                    if message.internet_message_id is not None
+                    and message.review_fingerprint is not None
+                ),
+            ),
         )
     except Exception:  # noqa: BLE001 - never expose provider payloads or tokens
         raise HTTPException(
