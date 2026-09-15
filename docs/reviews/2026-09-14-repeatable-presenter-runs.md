@@ -18,10 +18,12 @@ application, and live browser acceptance remain pending.
   facts against freshly retrieved operational data.
 - Repeating case creation within one run is idempotent. A later check creates a
   different run and a fresh Case Instance for the same supplier email.
-- A focused acceptance test populates an earlier run with analysis, Finance
-  review, Taylor approval, Alex decision, execution records, playback, and
-  outcome records. The next run exposes none of them, while all earlier-run
-  pointers and records remain unchanged.
+- A focused local API/persistence acceptance test drives an earlier run through
+  the supported analysis, Finance submission/Taylor approval, Alex decision,
+  action planning, execution playback, and outcome services. It captures the
+  decoded persisted values and aggregate counts, creates a later run for the
+  same supplier email, proves that run has none of those dependent records, and
+  proves the earlier header, decoded values, and counts are unchanged.
 - The two persistence integrity checks reject a changed `presenter_run_id` both
   when saving a case projection and when reading a corrupted projection.
 - Retention previews keep the current eligible presenter case plus the configured

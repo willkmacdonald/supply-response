@@ -2,13 +2,11 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy import select
 
 from apps.api.app.dependencies import get_actor, require_planner
 from data.domain import RuntimeMode
 from data.domain.inbound import InboundEmailError
 from data.synthetic.rl001 import instantiate_rl001
-from services.persistence import tables
 from services.persistence.sqlite import sqlite_store
 from services.persistence.store import ImmutableRecordConflict
 from tests.integration.test_workiq_contract import _authenticated_alex
@@ -92,6 +90,152 @@ def issued_payload(client, bound):
     }
 
 
+def seed_complete_earlier_run(
+    store, case_id, analysis_id, authenticated_alex, playback_service
+):
+    from collections.abc import Callable
+    from datetime import datetime, timedelta
+    from typing import cast
+    from uuid import UUID
+
+    from data.domain.cases import WorkflowVersion
+    from data.domain.decisions import DecisionKind, IdentitySnapshot
+    from data.domain.evidence import IdentitySource
+    from services.execution.playback import ImmediateClock
+    from services.execution.worker import ActionPlanningWorker
+    from services.finance.contracts import (
+        FinalizeProposalCommand,
+        ResolveFinanceCommand,
+        SubmitProposalCommand,
+    )
+    from services.finance.decisions import FinanceDecisionService
+    from services.finance.identity import BoundFinanceActors
+    from services.finance.service import FinanceService
+    from services.persistence.ports import UnitOfWork
+
+    started = datetime.fromisoformat("2026-09-01T09:01:00-05:00")
+    taylor_object_id = "33333333-3333-4333-8333-333333333333"
+    actors = BoundFinanceActors(
+        tenant_id=UUID(authenticated_alex.tenant_id),
+        alex_object_id=UUID(authenticated_alex.object_id),
+        taylor_object_id=UUID(taylor_object_id),
+    )
+    alex = IdentitySnapshot(
+        persona_id=authenticated_alex.persona_id,
+        source_id=authenticated_alex.source_id,
+        identity_source=IdentitySource.ENTRA,
+        tenant_id=authenticated_alex.tenant_id,
+        object_id=authenticated_alex.object_id,
+        effective_roles=authenticated_alex.effective_roles,
+        display_name="Alex Morgan",
+        user_principal_name="alex@example.invalid",
+    )
+    taylor = IdentitySnapshot(
+        persona_id="RL-PERSONA-TAYLOR",
+        source_id="RL-ENTRA-TAYLOR",
+        identity_source=IdentitySource.ENTRA,
+        tenant_id=authenticated_alex.tenant_id,
+        object_id=taylor_object_id,
+        effective_roles=("finance_approver",),
+        display_name="Taylor Kim",
+        user_principal_name="taylor@example.invalid",
+    )
+    factory = cast(Callable[[], UnitOfWork], store.uow_factory)
+    times = iter(started + timedelta(minutes=index) for index in range(1, 8))
+    finance = FinanceService(factory, actors=actors, clock=lambda: next(times))
+    with factory() as uow:
+        expected = uow.proposals.get_state(case_id).token
+    submitted = finance.submit(
+        SubmitProposalCommand(
+            case_id=case_id,
+            option_id="RL-OPTION-COMBINED",
+            expected=expected,
+            idempotency_key="earlier-run-submit",
+        ),
+        alex,
+    )
+    assert submitted.review is not None
+    assert submitted.review_revision is not None
+    with factory() as uow:
+        selected = uow.proposals.get_state(case_id)
+    resolved = finance.resolve(
+        ResolveFinanceCommand(
+            review_id=submitted.review.review_id,
+            expected=selected.token,
+            expected_review_revision=submitted.review_revision,
+            approved=True,
+            reason=None,
+            idempotency_key="earlier-run-taylor-approval",
+        ),
+        taylor,
+    )
+    assert resolved.review.reviewed_by == taylor
+    with factory() as uow:
+        approved = uow.proposals.get_state(case_id)
+    decision = FinanceDecisionService(
+        factory,
+        actors=actors,
+        clock=lambda: next(times),
+    ).finalize(
+        FinalizeProposalCommand(
+            case_id=case_id,
+            expected=approved.token,
+            kind=DecisionKind.APPROVED,
+            idempotency_key="earlier-run-alex-decision",
+            rejection_reason=None,
+        ),
+        alex,
+    )
+    assert decision.actor == alex
+    assert ActionPlanningWorker(
+        factory,
+        processable_workflow_versions=(WorkflowVersion.INDEPENDENT_FINANCE,),
+    ).process_decision_outbox(decision.decision_id)
+    playback = playback_service.start(decision.decision_id, alex)
+    playback_service.run_to_completion(playback.playback_id, clock=ImmediateClock())
+    return submitted.review.review_id, decision.decision_id
+
+
+def saved_earlier_run_values(store, analysis_id, review_id, decision_id):
+    with store.uow_factory() as uow:
+        actions = uow.execution.list_actions(decision_id=decision_id)
+        playback = uow.execution.get_playback_for_decision(decision_id)
+        assert playback is not None
+        return {
+            "analysis": uow.cases.get_analysis(analysis_id),
+            "finance_review": uow.finance_reviews.get_latest(review_id),
+            "decision": uow.decisions.get(decision_id),
+            "outbox": uow.execution.list_outbox(decision_id=decision_id),
+            "actions": actions,
+            "drafts": tuple(
+                uow.execution.get_draft_artifact(action.action_id)
+                for action in actions
+                if action.draft_artifact_id is not None
+            ),
+            "attempts": tuple(
+                (action.action_id, uow.execution.list_attempts(action.action_id))
+                for action in actions
+            ),
+            "status_events": tuple(
+                (action.action_id, uow.execution.list_status_events(action.action_id))
+                for action in actions
+            ),
+            "playback": playback,
+            "outcomes": uow.execution.list_observations(decision_id),
+        }
+
+
+def presenter_aggregate_counts(store, case_id):
+    from services.persistence.presenter_runs import (
+        PresenterRetentionPlan,
+        count_presenter_aggregate_deletions,
+    )
+
+    plan = PresenterRetentionPlan(case_id, (), (case_id,))
+    with store.engine.connect() as connection:
+        return count_presenter_aggregate_deletions(connection, plan)
+
+
 def test_create_rechecks_source_binds_case_and_retry_returns_same_open_case(
     app, client, services, tmp_path
 ):
@@ -143,29 +287,60 @@ def test_same_email_is_fresh_across_runs_and_idempotent_within_run(
 def test_new_run_for_same_email_is_isolated_from_the_complete_earlier_run(
     app, client, services, tmp_path
 ):
-    from tests.persistence.test_presenter_runs import (
-        aggregate_row_count,
-        populate_aggregate,
-    )
+    from agents.orchestrator.local import LocalAgentSet
+    from agents.orchestrator.workflow import Orchestrator
+    from apps.api.app.live import LiveAnalysisApplicationService
+    from services.analysis.service import analyze_case
+    from services.execution.playback import ImmediateClock, PlaybackService
+    from tests.integration.test_inbound_analysis import BoundWorkIQ
+    from tests.integration.test_live_case_contract import NOW
+    from tests.integration.test_live_hardening import ExplicitLiveOperationalPort
 
-    _, bound, _ = setup(app, services, tmp_path)
+    actor, bound, _ = setup(app, services, tmp_path)
+    services.analysis_service = LiveAnalysisApplicationService(
+        store=services.store,
+        operational_data=ExplicitLiveOperationalPort(),
+        work_iq=BoundWorkIQ(),
+        orchestrator=Orchestrator(LocalAgentSet.deterministic, analyze_case),
+        supplier_source_id="seed-locator",
+        quality_source_id="source-quality",
+        fabric_citation_base_url="https://app.powerbi.com/groups/demo/reports/report",
+        clock=lambda: NOW,
+    )
+    services.playback_service = PlaybackService(
+        services.uow_factory, clock=ImmediateClock()
+    )
     first_payload = issued_payload(client, bound)
     first = client.post("/api/inbox/cases", json=first_payload)
     assert first.status_code == 200, first.text
     first_id = first.json()["case_id"]
-    populate_aggregate(services.store, services.store.get_case(first_id))
+    analyzed = client.post(f"/api/cases/{first_id}/analysis")
+    assert analyzed.status_code == 201, analyzed.text
+    analysis_id = analyzed.json()["analysis_id"]
+    review_id, decision_id = seed_complete_earlier_run(
+        services.store,
+        first_id,
+        analysis_id,
+        actor,
+        services.playback_service,
+    )
     earlier_before = client.get(f"/api/cases/{first_id}").json()
-    assert earlier_before["current_analysis_id"] == f"{first_id}:analysis"
-    assert earlier_before["current_decision_id"] == f"{first_id}:decision"
-    with services.store.engine.connect() as connection:
-        assert connection.execute(
-            select(
-                tables.approval_satisfactions.c.persona_id,
-                tables.approval_satisfactions.c.role,
-            ).where(
-                tables.approval_satisfactions.c.analysis_id == f"{first_id}:analysis"
-            )
-        ).one() == ("RL-PERSONA-TAYLOR", "finance_approver")
+    assert earlier_before["current_analysis_id"] == analysis_id
+    assert earlier_before["current_decision_id"] == decision_id
+    saved_before = saved_earlier_run_values(
+        services.store, analysis_id, review_id, decision_id
+    )
+    assert saved_before["finance_review"][0].reviewed_by is not None
+    assert saved_before["finance_review"][0].reviewed_by.persona_id == (
+        "RL-PERSONA-TAYLOR"
+    )
+    assert saved_before["decision"].actor.persona_id == "RL-PERSONA-ALEX"
+    assert saved_before["actions"]
+    assert saved_before["drafts"]
+    assert any(attempts for _, attempts in saved_before["attempts"])
+    assert any(events for _, events in saved_before["status_events"])
+    assert saved_before["playback"]
+    assert saved_before["outcomes"]
     isolated_tables = (
         "analysis_versions",
         "finance_review_revisions",
@@ -181,11 +356,23 @@ def test_new_run_for_same_email_is_isolated_from_the_complete_earlier_run(
         "playbacks",
         "outcome_observations",
     )
-    earlier_counts = {
-        name: aggregate_row_count(services.store.engine, name, first_id)
-        for name in isolated_tables
-    }
-    assert all(earlier_counts.values())
+    earlier_counts = presenter_aggregate_counts(services.store, first_id)
+    assert all(
+        earlier_counts[name] > 0
+        for name in (
+            "analysis_versions",
+            "finance_review_revisions",
+            "case_proposal_selections",
+            "decisions",
+            "execution_actions",
+            "action_projection",
+            "draft_artifacts",
+            "execution_events",
+            "execution_attempts",
+            "playbacks",
+            "outcome_observations",
+        )
+    )
 
     second_payload = issued_payload(client, bound)
     second = client.post("/api/inbox/cases", json=second_payload)
@@ -200,15 +387,14 @@ def test_new_run_for_same_email_is_isolated_from_the_complete_earlier_run(
     assert second_body["current_analysis_id"] is None
     assert second_body["current_decision_id"] is None
     assert client.get(f"/api/cases/{second_id}/analysis").status_code == 409
-    assert all(
-        aggregate_row_count(services.store.engine, name, second_id) == 0
-        for name in isolated_tables
-    )
+    second_counts = presenter_aggregate_counts(services.store, second_id)
+    assert all(second_counts[name] == 0 for name in isolated_tables)
     assert client.get(f"/api/cases/{first_id}").json() == earlier_before
-    assert {
-        name: aggregate_row_count(services.store.engine, name, first_id)
-        for name in isolated_tables
-    } == earlier_counts
+    assert (
+        saved_earlier_run_values(services.store, analysis_id, review_id, decision_id)
+        == saved_before
+    )
+    assert presenter_aggregate_counts(services.store, first_id) == earlier_counts
 
 
 @pytest.mark.parametrize(
