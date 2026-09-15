@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import Connection, Engine, insert, or_, select, update
+from sqlalchemy import Connection, Engine, and_, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from data.domain import CaseInstance, CasePurpose, CaseStatus, RuntimeMode
@@ -2936,6 +2936,13 @@ class SqlAlchemySupplierEmailRepository:
         if current is None or current[0].revision != expected_revision:
             return False
         previous, delivery = current
+        editable = delivery.send_status == "draft" or (
+            delivery.send_status == "failed"
+            and delivery.provider_message_id is None
+            and delivery.internet_message_id is None
+        )
+        if not editable:
+            return False
         if (
             revision.email_id != previous.email_id
             or revision.decision_id != previous.decision_id
@@ -3067,7 +3074,14 @@ class SqlAlchemySupplierEmailRepository:
                     supplier_email_deliveries.c.email_id == delivery.email_id,
                     supplier_email_deliveries.c.decision_id == delivery.decision_id,
                     supplier_email_deliveries.c.reviewed_revision == expected_revision,
-                    supplier_email_deliveries.c.send_status.in_(("draft", "failed")),
+                    or_(
+                        supplier_email_deliveries.c.send_status == "draft",
+                        and_(
+                            supplier_email_deliveries.c.send_status == "failed",
+                            supplier_email_deliveries.c.provider_message_id.is_(None),
+                            supplier_email_deliveries.c.internet_message_id.is_(None),
+                        ),
+                    ),
                 )
                 .values(
                     reviewed_revision=delivery.reviewed_revision,

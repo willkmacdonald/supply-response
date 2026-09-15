@@ -45,6 +45,16 @@ class ConfidentialClient:
         return self.response
 
 
+class OversizedStream(httpx.AsyncByteStream):
+    def __init__(self) -> None:
+        self.chunks_read = 0
+
+    async def __aiter__(self):
+        for chunk in (b"x" * 600_000, b"y" * 600_000, b"secret-never-read"):
+            self.chunks_read += 1
+            yield chunk
+
+
 @pytest.fixture
 def reviewed_revision() -> SupplierEmailRevision:
     actor = IdentitySnapshot(
@@ -95,7 +105,9 @@ async def test_adapter_creates_verifies_and_submits_exact_immutable_draft(
     async def graph(request: httpx.Request) -> httpx.Response:
         requests.append(request)
         assert request.headers["Authorization"] == "Bearer fixture-graph-access-token"
-        assert request.headers["Prefer"] == 'IdType="ImmutableId"'
+        assert request.headers["Prefer"] == (
+            'IdType="ImmutableId", outlook.body-content-type="text"'
+        )
         if request.method == "POST" and request.url.path == "/v1.0/me/messages":
             assert request.headers["Content-Type"] == "application/json"
             assert request.content == (
@@ -246,23 +258,76 @@ async def test_send_timeout_is_explicitly_uncertain():
 
 
 @pytest.mark.anyio
+async def test_send_remote_protocol_failure_is_explicitly_uncertain():
+    async def graph(request: httpx.Request) -> httpx.Response:
+        raise httpx.RemoteProtocolError(
+            "secret provider detail",
+            request=request,
+        )
+
+    async with httpx.AsyncClient(
+        base_url="https://graph.microsoft.com",
+        transport=httpx.MockTransport(graph),
+        follow_redirects=False,
+    ) as http:
+        client = GraphMailClient(
+            http=http,
+            obo=StubObo(),
+            mailbox_address="agent@willmacdonald.com",
+        )
+        with pytest.raises(GraphMailSubmissionUncertain) as error:
+            await client.send_draft("immutable-message-id", object())
+
+    assert error.value.code == "graph_send_uncertain"
+    assert "secret" not in str(error.value)
+
+
+@pytest.mark.anyio
+async def test_oversized_response_stream_stops_at_limit(reviewed_revision):
+    stream = OversizedStream()
+
+    async with httpx.AsyncClient(
+        base_url="https://graph.microsoft.com",
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                201,
+                headers={"content-type": "application/json"},
+                stream=stream,
+            )
+        ),
+        follow_redirects=False,
+    ) as http:
+        client = GraphMailClient(
+            http=http,
+            obo=StubObo(),
+            mailbox_address="agent@willmacdonald.com",
+        )
+        with pytest.raises(GraphMailError) as error:
+            await client.create_draft(reviewed_revision, object())
+
+    assert error.value.code == "graph_response_invalid"
+    assert stream.chunks_read == 2
+
+
+@pytest.mark.anyio
 async def test_capability_is_read_only_and_retrieves_the_exact_sent_item():
     requests: list[httpx.Request] = []
 
     async def graph(request: httpx.Request) -> httpx.Response:
         requests.append(request)
-        if request.url.path == "/v1.0/me":
+        if request.url.path == "/v1.0/me/mailFolders/sentitems/messages":
             return httpx.Response(
                 200,
-                json={
-                    "id": "alex-object-id",
-                    "mail": "agent@willmacdonald.com",
-                    "userPrincipalName": "agent@willmacdonald.com",
-                },
+                json={"value": [{"id": "sent-item-id"}]},
             )
-        if request.url.path == "/v1.0/me/mailFolders/sentitems/messages":
-            return httpx.Response(200, json={"value": [{"id": "sent-item-id"}]})
-        return httpx.Response(200, json={"id": "sent-item-id"})
+        return httpx.Response(
+            200,
+            json={
+                "id": "sent-item-id",
+                "sender": {"emailAddress": {"address": "agent@willmacdonald.com"}},
+                "from": {"emailAddress": {"address": "agent@willmacdonald.com"}},
+            },
+        )
 
     async with httpx.AsyncClient(
         base_url="https://graph.microsoft.com",
@@ -277,12 +342,45 @@ async def test_capability_is_read_only_and_retrieves_the_exact_sent_item():
 
     assert capability.mailbox_address == "agent@willmacdonald.com"
     assert capability.sample_sent_message_id == "sent-item-id"
-    assert [request.method for request in requests] == ["GET", "GET", "GET"]
-    assert requests[1].url.params["$top"] == "1"
-    assert requests[2].url.path == "/v1.0/me/messages/sent-item-id"
+    assert [request.method for request in requests] == ["GET", "GET"]
+    assert requests[0].url.path == "/v1.0/me/mailFolders/sentitems/messages"
+    assert requests[0].url.params["$top"] == "1"
+    assert requests[1].url.path == "/v1.0/me/messages/sent-item-id"
+    assert requests[1].url.params["$select"] == "id,sender,from"
     assert all(
-        request.headers["Prefer"] == 'IdType="ImmutableId"' for request in requests
+        request.headers["Prefer"]
+        == 'IdType="ImmutableId", outlook.body-content-type="text"'
+        for request in requests
     )
+
+
+@pytest.mark.anyio
+async def test_capability_rejects_sent_item_from_another_mailbox():
+    async def graph(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1.0/me/mailFolders/sentitems/messages":
+            return httpx.Response(200, json={"value": [{"id": "sent-item-id"}]})
+        return httpx.Response(
+            200,
+            json={
+                "id": "sent-item-id",
+                "sender": {"emailAddress": {"address": "attacker@example.com"}},
+                "from": {"emailAddress": {"address": "attacker@example.com"}},
+            },
+        )
+
+    async with httpx.AsyncClient(
+        base_url="https://graph.microsoft.com",
+        transport=httpx.MockTransport(graph),
+        follow_redirects=False,
+    ) as http:
+        with pytest.raises(GraphMailError) as error:
+            await GraphMailClient(
+                http=http,
+                obo=StubObo(),
+                mailbox_address="agent@willmacdonald.com",
+            ).capability(object())
+
+    assert error.value.code == "graph_capability_failed"
 
 
 @pytest.mark.anyio
@@ -378,3 +476,42 @@ async def test_production_obo_builder_accepts_only_graph_mail_scopes(monkeypatch
         "profile",
     }
     assert token_fields[0]["requested_token_use"] == ["on_behalf_of"]
+
+
+@pytest.mark.anyio
+async def test_production_obo_rejects_non_json_token_response(monkeypatch):
+    authority = f"https://login.microsoftonline.com/{TENANT_ID}"
+
+    async def entra(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "authorization_endpoint": f"{authority}/oauth2/v2.0/authorize",
+                    "token_endpoint": f"{authority}/oauth2/v2.0/token",
+                    "issuer": f"{authority}/v2.0",
+                },
+            )
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/plain"},
+            content=(
+                b'{"access_token":"fixture-production-graph-token",'
+                b'"token_type":"Bearer","scope":"Mail.ReadWrite Mail.Send"}'
+            ),
+        )
+
+    monkeypatch.setattr(
+        httpx,
+        "AsyncHTTPTransport",
+        lambda **_: httpx.MockTransport(entra),
+    )
+    auth_service, actor = _authenticated_alex()
+
+    with pytest.raises(GraphAuthenticationError):
+        await build_graph_obo_exchange(
+            client_id=API_CLIENT_ID,
+            client_secret="fixture-client-secret",
+            tenant_id=TENANT_ID,
+            auth_service=auth_service,
+        ).exchange(actor)

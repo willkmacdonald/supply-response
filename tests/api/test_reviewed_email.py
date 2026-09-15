@@ -8,6 +8,7 @@ from integrations.graph_mail.client import (
     ProviderDraft,
     ProviderMessage,
 )
+from services.execution.mail_service import EmailRevisionConflict
 from services.persistence.store import SqlAlchemySupplierEmailRepository
 
 
@@ -47,6 +48,22 @@ class FakeGraphMail:
             body_content_type="text",
             body=revision.body,
             sent_at=(revision.reviewed_at if self.sent else None),
+        )
+
+
+class BlockingGraphMail(FakeGraphMail):
+    def __init__(self) -> None:
+        super().__init__()
+        self.create_started = asyncio.Event()
+        self.release_create = asyncio.Event()
+
+    async def create_draft(self, revision, actor):  # allowed: provider race fake
+        self.create_calls.append((revision, actor))
+        self.create_started.set()
+        await self.release_create.wait()
+        return ProviderDraft(
+            provider_message_id="immutable-provider-id",
+            internet_message_id="<fixture@willmacdonald.com>",
         )
 
 
@@ -230,6 +247,90 @@ async def test_concurrent_send_claim_causes_at_most_one_provider_submission(
     assert services.mail_service.get(decision_id).send_status == "accepted"
 
 
+@pytest.mark.anyio
+async def test_edit_racing_send_cannot_erase_submitting_claim(client, services):
+    decision_id, _ = _reviewed_email(client, services)
+    graph = BlockingGraphMail()
+    _enable_mocked_send(services, graph)
+
+    send = asyncio.create_task(
+        services.mail_service.send(decision_id, 1, services.identity)
+    )
+    await graph.create_started.wait()
+    with services.uow_factory() as uow:
+        before = uow.mail.get_current(decision_id)
+    assert before is not None
+    assert before[1].send_status == "submitting"
+
+    with pytest.raises(EmailRevisionConflict):
+        services.mail_service.save(
+            decision_id,
+            1,
+            "Unsafe racing edit",
+            "This must not replace submitted content.",
+            services.identity,
+        )
+
+    with services.uow_factory() as uow:
+        after = uow.mail.get_current(decision_id)
+    assert after == before
+    graph.release_create.set()
+    result = await send
+    repeated = await services.mail_service.send(decision_id, 1, services.identity)
+
+    assert result.send_status == repeated.send_status == "accepted"
+    assert len(graph.create_calls) == len(graph.send_calls) == 1
+
+
+@pytest.mark.parametrize(
+    "send_status",
+    ["accepted", "failed", "uncertain", "sent-confirmed"],
+)
+def test_edit_after_provider_submission_preserves_tracking_and_cannot_resubmit(
+    client,
+    services,
+    send_status,
+):
+    decision_id, path = _reviewed_email(client, services)
+    graph = FakeGraphMail(
+        send_error=(
+            GraphMailError("graph_send_failed")
+            if send_status == "failed"
+            else (
+                GraphMailSubmissionUncertain("graph_send_uncertain")
+                if send_status == "uncertain"
+                else None
+            )
+        ),
+        sent=send_status == "sent-confirmed",
+    )
+    _enable_mocked_send(services, graph)
+    sent = client.post(f"{path}/send", json={"revision": 1})
+    if send_status == "sent-confirmed":
+        sent = client.post(f"{path}/check-send-status")
+    assert sent.json()["send_status"] == send_status
+    with services.uow_factory() as uow:
+        before = uow.mail.get_current(decision_id)
+
+    edited = client.put(
+        path,
+        json={
+            "revision": 1,
+            "subject": "Unsafe post-send edit",
+            "body": "This must preserve provider tracking.",
+        },
+    )
+    repeated = client.post(f"{path}/send", json={"revision": 1})
+    with services.uow_factory() as uow:
+        after = uow.mail.get_current(decision_id)
+
+    assert edited.status_code == 409
+    assert repeated.status_code == 200
+    assert repeated.json()["send_status"] == send_status
+    assert after == before
+    assert len(graph.create_calls) == len(graph.send_calls) == 1
+
+
 @pytest.mark.parametrize(
     ("error", "expected"),
     [
@@ -249,6 +350,32 @@ def test_create_or_verified_content_failure_is_failed_without_send(
     assert response.status_code == 200
     assert response.json()["send_status"] == expected
     assert graph.send_calls == []
+
+
+def test_failure_before_provider_submission_remains_editable(client, services):
+    decision_id, path = _reviewed_email(client, services)
+    graph = FakeGraphMail(create_error=GraphMailError("graph_create_failed"))
+    _enable_mocked_send(services, graph)
+
+    failed = client.post(f"{path}/send", json={"revision": 1})
+    with services.uow_factory() as uow:
+        before_edit = uow.mail.get_current(decision_id)
+    edited = client.put(
+        path,
+        json={
+            "revision": 1,
+            "subject": "Safe retry content",
+            "body": "No provider submission occurred.",
+        },
+    )
+
+    assert failed.json()["send_status"] == "failed"
+    assert before_edit is not None
+    assert before_edit[1].provider_message_id is None
+    assert graph.send_calls == []
+    assert edited.status_code == 200
+    assert edited.json()["revision"] == 2
+    assert edited.json()["send_status"] == "draft"
 
 
 def test_timeout_after_send_begins_is_uncertain_and_check_is_get_only(client, services):

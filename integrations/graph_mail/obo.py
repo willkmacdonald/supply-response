@@ -196,6 +196,12 @@ class _BoundedGraphOboHttp:
                             raise GraphAuthenticationError(
                                 "Graph identity HTTP request failed"
                             )
+                        if not _json_media_type(
+                            response.headers.get("content-type", "")
+                        ):
+                            raise GraphAuthenticationError(
+                                "Graph identity response is malformed"
+                            )
                         body = bytearray()
                         async for chunk in response.aiter_bytes():
                             if len(body) + len(chunk) > MAX_RESPONSE_BYTES:
@@ -245,6 +251,11 @@ class _BoundedGraphOboHttp:
         if self._tasks:
             await asyncio.gather(*tuple(self._tasks), return_exceptions=True)
         await self._http.aclose()
+
+
+def _json_media_type(value: str) -> bool:
+    media_type = value.partition(";")[0].strip().lower()
+    return media_type == "application/json" or media_type.endswith("+json")
 
 
 class GraphOboExchange:

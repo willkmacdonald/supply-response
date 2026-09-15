@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json as stdlib_json
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Final, Protocol
@@ -14,7 +15,7 @@ from data.domain.outbound_mail import SupplierEmailRevision
 from integrations.graph_mail.obo import GraphAccessToken
 
 _GRAPH_ROOT: Final = "https://graph.microsoft.com/v1.0"
-_PREFER_IMMUTABLE: Final = 'IdType="ImmutableId"'
+_PREFER: Final = 'IdType="ImmutableId", outlook.body-content-type="text"'
 _MAX_RESPONSE_BYTES: Final = 1024 * 1024
 _REQUEST_TIMEOUT_SECONDS: Final = 12
 _SAFE_CODES: Final = frozenset(
@@ -111,7 +112,7 @@ class GraphMailClient:
         return {
             "Authorization": f"Bearer {token.reveal()}",
             "Accept": "application/json",
-            "Prefer": _PREFER_IMMUTABLE,
+            "Prefer": _PREFER,
         }
 
     async def _request(
@@ -129,56 +130,52 @@ class GraphMailClient:
         headers = await self._headers(actor)
         try:
             async with asyncio.timeout(_REQUEST_TIMEOUT_SECONDS):
-                response = await self._http.request(
+                async with self._http.stream(
                     method,
                     f"{_GRAPH_ROOT}{path}",
                     headers=headers,
                     json=json,
-                )
-        except (TimeoutError, httpx.TimeoutException, httpx.NetworkError):
+                ) as response:
+                    if (
+                        response.is_redirect
+                        or response.status_code not in expected_statuses
+                    ):
+                        if uncertain_after_submit and response.status_code >= 500:
+                            raise GraphMailSubmissionUncertain("graph_send_uncertain")
+                        raise GraphMailError(failure_code)
+                    content_length = response.headers.get("content-length")
+                    if (
+                        content_length is not None
+                        and content_length.isdigit()
+                        and int(content_length) > _MAX_RESPONSE_BYTES
+                    ):
+                        raise GraphMailError("graph_response_invalid")
+                    if expect_json and not _json_media_type(
+                        response.headers.get("content-type", "")
+                    ):
+                        raise GraphMailError("graph_response_invalid")
+                    body = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        if len(body) + len(chunk) > _MAX_RESPONSE_BYTES:
+                            raise GraphMailError("graph_response_invalid")
+                        body.extend(chunk)
+        except (TimeoutError, httpx.TransportError):
             if uncertain_after_submit:
                 raise GraphMailSubmissionUncertain("graph_send_uncertain") from None
             raise GraphMailError(failure_code) from None
-        if response.is_redirect or response.status_code not in expected_statuses:
-            if uncertain_after_submit and response.status_code >= 500:
-                raise GraphMailSubmissionUncertain("graph_send_uncertain")
-            raise GraphMailError(failure_code)
         if not expect_json:
-            if response.content:
+            if body:
                 raise GraphMailSubmissionUncertain("graph_send_uncertain")
             return None
-        content_length = response.headers.get("content-length")
-        if (
-            content_length is not None
-            and content_length.isdigit()
-            and int(content_length) > _MAX_RESPONSE_BYTES
-        ) or len(response.content) > _MAX_RESPONSE_BYTES:
-            raise GraphMailError("graph_response_invalid")
-        if "application/json" not in response.headers.get("content-type", "").lower():
-            raise GraphMailError("graph_response_invalid")
         try:
-            value = response.json()
-        except (ValueError, UnicodeDecodeError):
+            value = stdlib_json.loads(body)
+        except (stdlib_json.JSONDecodeError, UnicodeDecodeError):
             raise GraphMailError("graph_response_invalid") from None
         if not isinstance(value, dict):
             raise GraphMailError("graph_response_invalid")
         return value
 
     async def capability(self, actor: object) -> GraphMailCapability:
-        me = await self._request(
-            "GET",
-            "/me?$select=id,mail,userPrincipalName",
-            actor,
-            failure_code="graph_capability_failed",
-        )
-        assert me is not None
-        addresses = {
-            value.lower()
-            for value in (me.get("mail"), me.get("userPrincipalName"))
-            if isinstance(value, str)
-        }
-        if self._mailbox_address not in addresses:
-            raise GraphMailError("graph_capability_failed")
         sent = await self._request(
             "GET",
             "/me/mailFolders/sentitems/messages?$select=id&$top=1&$orderby=sentDateTime%20desc",
@@ -192,11 +189,18 @@ class GraphMailClient:
         safe_id = _message_id(message_id)
         exact = await self._request(
             "GET",
-            f"/me/messages/{quote(safe_id, safe='')}?$select=id",
+            f"/me/messages/{quote(safe_id, safe='')}?$select=id,sender,from",
             actor,
             failure_code="graph_capability_failed",
         )
         if exact is None or exact.get("id") != safe_id:
+            raise GraphMailError("graph_capability_failed")
+        try:
+            sender = _address(exact.get("sender"))
+            from_address = _address(exact.get("from"))
+        except GraphMailError:
+            raise GraphMailError("graph_capability_failed") from None
+        if sender != from_address or sender != self._mailbox_address:
             raise GraphMailError("graph_capability_failed")
         return GraphMailCapability(
             mailbox_address=self._mailbox_address,
@@ -261,6 +265,11 @@ class GraphMailClient:
 def _valid_address(value: str) -> bool:
     local, separator, domain = value.partition("@")
     return bool(separator and local and domain and not any(c.isspace() for c in value))
+
+
+def _json_media_type(value: str) -> bool:
+    media_type = value.partition(";")[0].strip().lower()
+    return media_type == "application/json" or media_type.endswith("+json")
 
 
 def _message_id(value: object) -> str:
