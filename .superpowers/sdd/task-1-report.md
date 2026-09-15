@@ -93,3 +93,46 @@ uv run pyright <changed production Python files>
 ## Concerns
 
 - No functional concerns. The focused and broader API suites emit the pre-existing Starlette `TestClient`/httpx deprecation warning. Pyright also reports that a newer tool version is available; neither affects this task.
+
+## Review fix: approved transfer cost in action metadata
+
+### Files
+
+- `services/execution/planner.py`
+- `tests/execution/test_action_planning.py`
+
+### TDD evidence
+
+RED, after adding the transfer-cost assertion and before changing production:
+
+```text
+.venv/bin/python -m pytest tests/execution/test_action_planning.py -q -o addopts='' -k 'option_action_text and TRANSFER'
+1 failed, 20 deselected in 0.15s
+```
+
+The transfer action text lacked the expected snapshot-derived `$1.50 per unit` value.
+
+GREEN after formatting `snapshot.transfer.incremental_cost_per_unit` into the transfer purpose:
+
+```text
+.venv/bin/python -m pytest tests/execution/test_action_planning.py -q -o addopts='' -k 'option_action_text and TRANSFER'
+1 passed, 20 deselected in 0.05s
+
+.venv/bin/python -m pytest tests/execution/test_action_planning.py tests/finance/test_planning_worker_currentness.py tests/api/test_finance_journey.py -q -o addopts=''
+43 passed, 1 warning in 3.42s
+
+.venv/bin/python -m pytest tests/finance/test_execution_service_currentness.py -q -o addopts=''
+32 passed, 8 skipped in 3.45s
+
+.venv/bin/ruff check services/execution/planner.py tests/execution/test_action_planning.py
+All checks passed!
+```
+
+### Commit
+
+- `3620df7 fix: include approved transfer cost in action text`
+
+### Concerns
+
+- No functional concerns. The focused API suite continues to emit the pre-existing Starlette `TestClient`/httpx deprecation warning.
+- The reviewer's separate future-enum suggestion was intentionally not addressed, per the review-fix scope.
