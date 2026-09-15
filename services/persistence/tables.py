@@ -430,6 +430,68 @@ draft_artifacts = Table(
     Column("payload_json", Text, nullable=False),
 )
 
+supplier_email_deliveries = Table(
+    "supplier_email_deliveries",
+    metadata,
+    Column("email_id", String(128), primary_key=True),
+    Column(
+        "decision_id",
+        String(128),
+        ForeignKey("decisions.decision_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+        index=True,
+    ),
+    Column("reviewed_revision", Integer, nullable=True),
+    Column("send_status", String(32), nullable=False, index=True),
+    Column("provider_message_id", String(256), nullable=True),
+    Column("internet_message_id", String(512), nullable=True),
+    Column("correlation_id", String(128), nullable=True),
+    Column("status_updated_at", DateTime(timezone=True), nullable=False, index=True),
+    Column("failure_code", String(128), nullable=True),
+    Column("payload_json", Text, nullable=False),
+    CheckConstraint(
+        "reviewed_revision IS NULL OR reviewed_revision > 0",
+        name="reviewed_revision_positive",
+    ),
+    CheckConstraint(
+        "send_status IN ('draft', 'submitting', 'accepted', 'sent-confirmed', 'failed', 'uncertain')",
+        name="send_status_valid",
+    ),
+)
+
+supplier_email_revisions = Table(
+    "supplier_email_revisions",
+    metadata,
+    Column("email_id", String(128), primary_key=True),
+    Column("revision", Integer, primary_key=True),
+    Column(
+        "decision_id",
+        String(128),
+        ForeignKey("decisions.decision_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    ),
+    Column(
+        "action_id",
+        String(128),
+        ForeignKey("execution_actions.action_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    ),
+    Column("subject", String(255), nullable=False),
+    Column("body", Text, nullable=False),
+    Column("from_address", String(320), nullable=False),
+    Column("to_address", String(320), nullable=False),
+    Column("edited_at", DateTime(timezone=True), nullable=False, index=True),
+    Column("reviewed_at", DateTime(timezone=True), nullable=True, index=True),
+    Column("payload_json", Text, nullable=False),
+    CheckConstraint("revision > 0", name="revision_positive"),
+    UniqueConstraint(
+        "email_id", "revision", name="uq_supplier_email_revisions_email_revision"
+    ),
+)
+
 execution_events = Table(
     "execution_events",
     metadata,

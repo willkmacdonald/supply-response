@@ -70,6 +70,8 @@ def populate_aggregate(store, case):
         "approval_satisfactions",
         "outbox_events",
         "execution_actions",
+        "supplier_email_deliveries",
+        "supplier_email_revisions",
         "action_projection",
         "draft_artifacts",
         "execution_events",
@@ -112,6 +114,10 @@ def populate_aggregate(store, case):
                     playback_id=ids["playback_id"],
                     action_id=ids["action_id"],
                 )
+            if name in ("supplier_email_deliveries", "supplier_email_revisions"):
+                values["email_id"] = f"{case.case_id}:email"
+            if name == "supplier_email_deliveries":
+                values["send_status"] = "draft"
             if name == "approval_satisfactions":
                 values.update(
                     decision_id=ids["decision_id"],

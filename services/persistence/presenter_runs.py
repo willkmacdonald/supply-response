@@ -14,6 +14,8 @@ from services.persistence.store import PersistenceError
 PRESENTER_AGGREGATE_DELETE_ORDER = (
     "case_projection",
     "outcome_observations",
+    "supplier_email_revisions",
+    "supplier_email_deliveries",
     "draft_artifacts",
     "execution_attempts",
     "execution_events",

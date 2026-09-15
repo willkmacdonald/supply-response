@@ -38,6 +38,7 @@ from data.domain.execution import (
     Playback,
     PlaybackStatus,
 )
+from data.domain.outbound_mail import SupplierEmailDelivery, SupplierEmailRevision
 from data.synthetic.rl001 import OperationalSnapshot
 from services.analysis.service import (
     analysis_material_hash,
@@ -61,6 +62,8 @@ from services.persistence.tables import (
     outbox_events,
     outcome_observations,
     playbacks,
+    supplier_email_deliveries,
+    supplier_email_revisions,
 )
 from services.policy.workflow import approval_policy_for
 
@@ -2665,6 +2668,316 @@ class SqlAlchemyExecutionRepository:
         return tuple(self._observation_from_row(row) for row in rows)
 
 
+class SqlAlchemySupplierEmailRepository:
+    def __init__(self, store: SqlAlchemyStore, connection: Connection) -> None:
+        self._store = store
+        self._connection = connection
+
+    def _revision_from_row(self, row) -> SupplierEmailRevision:
+        try:
+            revision = SupplierEmailRevision.model_validate_json(row["payload_json"])
+        except (ValidationError, ValueError) as error:
+            raise PersistenceIntegrityError(
+                "persisted supplier email revision contains invalid JSON"
+            ) from error
+        if (
+            revision.email_id != row["email_id"]
+            or revision.decision_id != row["decision_id"]
+            or revision.action_id != row["action_id"]
+            or revision.revision != row["revision"]
+            or revision.subject != row["subject"]
+            or revision.body != row["body"]
+            or revision.from_address != row["from_address"]
+            or revision.to_address != row["to_address"]
+            or not self._store._datetime_matches(row["edited_at"], revision.edited_at)
+            or (revision.reviewed_at is None and row["reviewed_at"] is not None)
+            or (
+                revision.reviewed_at is not None
+                and (
+                    row["reviewed_at"] is None
+                    or not self._store._datetime_matches(
+                        row["reviewed_at"], revision.reviewed_at
+                    )
+                )
+            )
+        ):
+            raise PersistenceIntegrityError(
+                "supplier email revision columns conflict with canonical JSON"
+            )
+        return revision
+
+    def _delivery_from_row(self, row) -> SupplierEmailDelivery:
+        try:
+            delivery = SupplierEmailDelivery.model_validate_json(row["payload_json"])
+        except (ValidationError, ValueError) as error:
+            raise PersistenceIntegrityError(
+                "persisted supplier email delivery contains invalid JSON"
+            ) from error
+        if (
+            delivery.email_id != row["email_id"]
+            or delivery.decision_id != row["decision_id"]
+            or delivery.reviewed_revision != row["reviewed_revision"]
+            or delivery.send_status != row["send_status"]
+            or delivery.provider_message_id != row["provider_message_id"]
+            or delivery.internet_message_id != row["internet_message_id"]
+            or delivery.correlation_id != row["correlation_id"]
+            or delivery.failure_code != row["failure_code"]
+            or not self._store._datetime_matches(
+                row["status_updated_at"], delivery.status_updated_at
+            )
+        ):
+            raise PersistenceIntegrityError(
+                "supplier email delivery columns conflict with canonical JSON"
+            )
+        return delivery
+
+    def get_current(
+        self, decision_id: str
+    ) -> tuple[SupplierEmailRevision, SupplierEmailDelivery] | None:
+        delivery_row = (
+            self._connection.execute(
+                select(supplier_email_deliveries).where(
+                    supplier_email_deliveries.c.decision_id == decision_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if delivery_row is None:
+            return None
+        delivery = self._delivery_from_row(delivery_row)
+        revision_row = (
+            self._connection.execute(
+                select(supplier_email_revisions)
+                .where(
+                    supplier_email_revisions.c.email_id == delivery.email_id,
+                    supplier_email_revisions.c.decision_id == decision_id,
+                )
+                .order_by(supplier_email_revisions.c.revision.desc())
+                .limit(1)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if revision_row is None:
+            raise PersistenceIntegrityError(
+                "supplier email delivery has no content revision"
+            )
+        revision = self._revision_from_row(revision_row)
+        if (
+            revision.email_id != delivery.email_id
+            or revision.decision_id != delivery.decision_id
+            or (
+                delivery.reviewed_revision is not None
+                and delivery.reviewed_revision > revision.revision
+            )
+        ):
+            raise PersistenceIntegrityError(
+                "supplier email delivery conflicts with its revisions"
+            )
+        if delivery.reviewed_revision == revision.revision and (
+            revision.reviewed_by is None or revision.reviewed_at is None
+        ):
+            raise PersistenceIntegrityError(
+                "effective supplier email review is incomplete"
+            )
+        return revision, delivery
+
+    def get_revision(self, email_id: str, revision: int) -> SupplierEmailRevision:
+        row = (
+            self._connection.execute(
+                select(supplier_email_revisions).where(
+                    supplier_email_revisions.c.email_id == email_id,
+                    supplier_email_revisions.c.revision == revision,
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RecordNotFound(
+                f"supplier email revision does not exist: {email_id}/{revision}"
+            )
+        return self._revision_from_row(row)
+
+    def _require_action_binding(self, revision: SupplierEmailRevision) -> None:
+        action = SqlAlchemyExecutionRepository(
+            self._store, self._connection
+        ).get_action(revision.action_id)
+        if (
+            action.decision_id != revision.decision_id
+            or action.kind is not ExecutionActionKind.PREPARE_ALPHA_RECOVERY_DRAFT
+            or action.draft_artifact_id is None
+        ):
+            raise PersistenceIntegrityError(
+                "supplier email must belong to its Decision's draft action"
+            )
+        artifact = SqlAlchemyExecutionRepository(
+            self._store, self._connection
+        ).get_draft_artifact(action.action_id)
+        if artifact.decision_id != revision.decision_id:
+            raise PersistenceIntegrityError(
+                "supplier email draft artifact conflicts with its Decision"
+            )
+
+    def insert_initial(
+        self,
+        revision: SupplierEmailRevision,
+        delivery: SupplierEmailDelivery,
+    ) -> None:
+        if revision.revision != 1 or revision.reviewed_by is not None:
+            raise ValueError("initial supplier email must be unreviewed revision 1")
+        if (
+            delivery.email_id != revision.email_id
+            or delivery.decision_id != revision.decision_id
+            or delivery.reviewed_revision is not None
+            or delivery.send_status != "draft"
+        ):
+            raise PersistenceIntegrityError(
+                "initial supplier email delivery conflicts with its revision"
+            )
+        if self.get_current(revision.decision_id) is not None:
+            raise ImmutableRecordConflict(
+                "supplier email already exists for this Decision"
+            )
+        self._require_action_binding(revision)
+        self._connection.execute(
+            insert(supplier_email_deliveries).values(
+                email_id=delivery.email_id,
+                decision_id=delivery.decision_id,
+                reviewed_revision=delivery.reviewed_revision,
+                send_status=delivery.send_status,
+                provider_message_id=delivery.provider_message_id,
+                internet_message_id=delivery.internet_message_id,
+                correlation_id=delivery.correlation_id,
+                status_updated_at=delivery.status_updated_at,
+                failure_code=delivery.failure_code,
+                payload_json=serialize_model(delivery),
+            )
+        )
+        self._insert_revision(revision)
+
+    def _insert_revision(self, revision: SupplierEmailRevision) -> None:
+        self._connection.execute(
+            insert(supplier_email_revisions).values(
+                email_id=revision.email_id,
+                revision=revision.revision,
+                decision_id=revision.decision_id,
+                action_id=revision.action_id,
+                subject=revision.subject,
+                body=revision.body,
+                from_address=revision.from_address,
+                to_address=revision.to_address,
+                edited_at=revision.edited_at,
+                reviewed_at=revision.reviewed_at,
+                payload_json=serialize_model(revision),
+            )
+        )
+
+    def append_revision(
+        self,
+        revision: SupplierEmailRevision,
+        *,
+        expected_revision: int,
+    ) -> bool:
+        current = self.get_current(revision.decision_id)
+        if current is None or current[0].revision != expected_revision:
+            return False
+        previous, delivery = current
+        if (
+            revision.email_id != previous.email_id
+            or revision.decision_id != previous.decision_id
+            or revision.action_id != previous.action_id
+            or revision.from_address != previous.from_address
+            or revision.to_address != previous.to_address
+            or revision.revision != expected_revision + 1
+            or revision.reviewed_by is not None
+        ):
+            raise PersistenceIntegrityError(
+                "new supplier email revision changes immutable binding"
+            )
+        self._require_action_binding(revision)
+        self._insert_revision(revision)
+        changed = delivery.model_copy(
+            update={
+                "reviewed_revision": None,
+                "send_status": "draft",
+                "status_updated_at": revision.edited_at,
+                "provider_message_id": None,
+                "internet_message_id": None,
+                "correlation_id": None,
+                "failure_code": None,
+            }
+        )
+        self._update_delivery(changed)
+        return True
+
+    def _update_delivery(self, delivery: SupplierEmailDelivery) -> None:
+        result = self._connection.execute(
+            update(supplier_email_deliveries)
+            .where(supplier_email_deliveries.c.email_id == delivery.email_id)
+            .values(
+                reviewed_revision=delivery.reviewed_revision,
+                send_status=delivery.send_status,
+                provider_message_id=delivery.provider_message_id,
+                internet_message_id=delivery.internet_message_id,
+                correlation_id=delivery.correlation_id,
+                status_updated_at=delivery.status_updated_at,
+                failure_code=delivery.failure_code,
+                payload_json=serialize_model(delivery),
+            )
+        )
+        if result.rowcount != 1:
+            raise RecordNotFound(
+                f"supplier email delivery does not exist: {delivery.email_id}"
+            )
+
+    def mark_reviewed(
+        self,
+        revision: SupplierEmailRevision,
+        delivery: SupplierEmailDelivery,
+        *,
+        expected_revision: int,
+    ) -> bool:
+        current = self.get_current(revision.decision_id)
+        if current is None or current[0].revision != expected_revision:
+            return False
+        previous, previous_delivery = current
+        if previous.reviewed_at is not None:
+            return previous == revision and previous_delivery == delivery
+        if (
+            revision.model_copy(update={"reviewed_by": None, "reviewed_at": None})
+            != previous
+            or revision.reviewed_by is None
+            or delivery
+            != previous_delivery.model_copy(
+                update={
+                    "reviewed_revision": expected_revision,
+                    "status_updated_at": revision.reviewed_at,
+                }
+            )
+        ):
+            raise PersistenceIntegrityError(
+                "supplier email review changes content or delivery state"
+            )
+        result = self._connection.execute(
+            update(supplier_email_revisions)
+            .where(
+                supplier_email_revisions.c.email_id == revision.email_id,
+                supplier_email_revisions.c.revision == expected_revision,
+                supplier_email_revisions.c.reviewed_at.is_(None),
+            )
+            .values(
+                reviewed_at=revision.reviewed_at,
+                payload_json=serialize_model(revision),
+            )
+        )
+        if result.rowcount != 1:
+            return False
+        self._update_delivery(delivery)
+        return True
+
+
 class SqlAlchemyUnitOfWork:
     def __init__(
         self,
@@ -2701,6 +3014,7 @@ class SqlAlchemyUnitOfWork:
         self.finance_reviews = SqlAlchemyFinanceReviewRepository(
             self._store, self._connection
         )
+        self.mail = SqlAlchemySupplierEmailRepository(self._store, self._connection)
         self.proposals = SqlAlchemyProposalRepository(self._store, self._connection)
         return self
 

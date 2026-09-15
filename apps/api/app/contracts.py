@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from data.domain import CasePurpose, CaseStatus, RuntimeMode
 from data.domain.analysis import (
@@ -13,11 +13,12 @@ from data.domain.analysis import (
     ResponseOption,
 )
 from data.domain.cases import PRESENTER_RUN_PATTERN, WorkflowVersion
-from data.domain.decisions import ApprovalSatisfaction
+from data.domain.decisions import ApprovalSatisfaction, IdentitySnapshot
 from data.domain.evidence import EvidenceItem
 from data.domain.finance import FinanceReview
 from data.domain.finance_decisions import ProposalApprovalEvidence
 from data.domain.inbound import SupplierEmailSource
+from data.domain.outbound_mail import SupplierEmailSendStatus
 from data.domain.proposals import ProposalSelection, ProposalToken
 from integrations.workiq.inbox import InboxCheck
 
@@ -184,6 +185,38 @@ class DraftResponse(BaseModel):
     sent: Literal[False]
     runtime_mode: RuntimeMode
     scenario_effective_time: datetime
+
+
+class SupplierEmailSaveRequest(StrictRequest):
+    revision: int = Field(gt=0)
+    subject: str = Field(max_length=255)
+    body: str = Field(max_length=10_000)
+
+    @field_validator("subject", "body")
+    @classmethod
+    def require_nonblank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("supplier email content must be nonblank")
+        return value
+
+
+class SupplierEmailReviewRequest(StrictRequest):
+    revision: int = Field(gt=0)
+
+
+class SupplierEmailResponse(BaseModel):
+    email_id: str
+    decision_id: str
+    action_id: str
+    revision: int
+    subject: str
+    body: str
+    from_address: str
+    to_address: str
+    reviewed_revision: int | None
+    reviewed_at: datetime | None
+    reviewed_by: IdentitySnapshot | None
+    send_status: SupplierEmailSendStatus
 
 
 class PlaybackResponse(BaseModel):

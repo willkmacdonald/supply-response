@@ -10,15 +10,24 @@ from apps.api.app.contracts import (
     DraftResponse,
     ObservationResponse,
     PlaybackResponse,
+    SupplierEmailResponse,
+    SupplierEmailReviewRequest,
+    SupplierEmailSaveRequest,
 )
 from apps.api.app.dependencies import (
     ApplicationServices,
     get_decision_identity,
     get_services,
+    require_alex_identity,
 )
 from apps.api.app.routes.decisions import _decision, _require_role
 from data.domain.decisions import IdentitySnapshot
 from services.execution.currentness import ExecutionProposalStale
+from services.execution.mail_service import (
+    EmailAuthorizationError,
+    EmailRevisionConflict,
+    EmailStateError,
+)
 from services.execution.playback import (
     PlaybackAuthorizationError,
     PlaybackStateError,
@@ -27,6 +36,110 @@ from services.execution.worker import ExecutionService, IllegalExecutionTransiti
 from services.persistence.store import RecordNotFound
 
 router = APIRouter(prefix="/api/decisions", tags=["execution"])
+
+
+def _supplier_email_error(error: Exception) -> HTTPException:
+    if isinstance(error, EmailAuthorizationError):
+        return HTTPException(
+            status_code=403,
+            detail={"code": "SUPPLIER_EMAIL_ACCESS_REQUIRED"},
+        )
+    if isinstance(error, EmailRevisionConflict):
+        return HTTPException(
+            status_code=409,
+            detail={
+                "code": "SUPPLIER_EMAIL_CHANGED",
+                "message": "The supplier email changed. Refresh it and try again.",
+            },
+        )
+    if isinstance(error, ExecutionProposalStale):
+        return HTTPException(
+            status_code=409,
+            detail={
+                "code": "EXECUTION_PROPOSAL_STALE",
+                "message": "The approved response changed. Refresh before continuing.",
+            },
+        )
+    return HTTPException(
+        status_code=409,
+        detail={
+            "code": "SUPPLIER_EMAIL_NOT_AVAILABLE",
+            "message": str(error),
+        },
+    )
+
+
+@router.get(
+    "/{decision_id}/supplier-email",
+    response_model=SupplierEmailResponse,
+)
+def get_supplier_email(
+    decision_id: str,
+    services: ApplicationServices = Depends(get_services),
+) -> SupplierEmailResponse:
+    _decision(services, decision_id)
+    try:
+        return SupplierEmailResponse.model_validate(
+            services.mail_service.get(decision_id).model_dump()
+        )
+    except (EmailStateError, ExecutionProposalStale) as error:
+        raise _supplier_email_error(error) from None
+
+
+@router.put(
+    "/{decision_id}/supplier-email",
+    response_model=SupplierEmailResponse,
+)
+def save_supplier_email(
+    decision_id: str,
+    request: SupplierEmailSaveRequest,
+    services: ApplicationServices = Depends(get_services),
+    actor: IdentitySnapshot = Depends(require_alex_identity),
+) -> SupplierEmailResponse:
+    _decision(services, decision_id)
+    try:
+        return SupplierEmailResponse.model_validate(
+            services.mail_service.save(
+                decision_id,
+                request.revision,
+                request.subject,
+                request.body,
+                actor,
+            ).model_dump()
+        )
+    except (
+        EmailAuthorizationError,
+        EmailRevisionConflict,
+        EmailStateError,
+        ExecutionProposalStale,
+    ) as error:
+        raise _supplier_email_error(error) from None
+
+
+@router.post(
+    "/{decision_id}/supplier-email/review",
+    response_model=SupplierEmailResponse,
+)
+def review_supplier_email(
+    decision_id: str,
+    request: SupplierEmailReviewRequest,
+    services: ApplicationServices = Depends(get_services),
+    actor: IdentitySnapshot = Depends(require_alex_identity),
+) -> SupplierEmailResponse:
+    _decision(services, decision_id)
+    try:
+        return SupplierEmailResponse.model_validate(
+            services.mail_service.review(
+                decision_id, request.revision, actor
+            ).model_dump()
+        )
+    except (
+        EmailAuthorizationError,
+        EmailRevisionConflict,
+        EmailStateError,
+        ExecutionProposalStale,
+    ) as error:
+        raise _supplier_email_error(error) from None
 
 
 def _action_response(services, decision, action) -> ActionResponse:

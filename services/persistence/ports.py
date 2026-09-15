@@ -20,6 +20,7 @@ from data.domain.execution import (
     Playback,
 )
 from data.domain.finance import FinanceReview
+from data.domain.outbound_mail import SupplierEmailDelivery, SupplierEmailRevision
 from data.domain.proposals import (
     ProposalSelection,
     ProposalState,
@@ -242,11 +243,41 @@ class ExecutionStore(Protocol):
     ) -> tuple[OutcomeObservation, ...]: ...
 
 
+class SupplierEmailStore(Protocol):
+    def get_current(
+        self, decision_id: str
+    ) -> tuple[SupplierEmailRevision, SupplierEmailDelivery] | None: ...
+
+    def get_revision(self, email_id: str, revision: int) -> SupplierEmailRevision: ...
+
+    def insert_initial(
+        self,
+        revision: SupplierEmailRevision,
+        delivery: SupplierEmailDelivery,
+    ) -> None: ...
+
+    def append_revision(
+        self,
+        revision: SupplierEmailRevision,
+        *,
+        expected_revision: int,
+    ) -> bool: ...
+
+    def mark_reviewed(
+        self,
+        revision: SupplierEmailRevision,
+        delivery: SupplierEmailDelivery,
+        *,
+        expected_revision: int,
+    ) -> bool: ...
+
+
 class UnitOfWork(Protocol):
     cases: CaseStore
     decisions: DecisionStore
     execution: ExecutionStore
     finance_reviews: FinanceReviewStore
+    mail: SupplierEmailStore
     proposals: ProposalStore
 
     def __enter__(self) -> UnitOfWork: ...  # noqa: PYI034

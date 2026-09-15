@@ -158,6 +158,8 @@ def test_shared_metadata_defines_closed_loop_schema():
         "outbox_events",
         "outcome_observations",
         "playbacks",
+        "supplier_email_deliveries",
+        "supplier_email_revisions",
     }
 
 
@@ -698,7 +700,7 @@ def test_alembic_upgrade_path_adds_pointer_foreign_keys_after_original_0001(
             connection.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-            == "0008_case_proposal_selection"
+            == "0009_outbound_supplier_email"
         )
     head_foreign_keys = {
         tuple(item["constrained_columns"])
@@ -992,3 +994,100 @@ def test_selection_migration_empty_schema_downgrade_is_structural(
         item["name"] for item in inspect(engine).get_columns("case_projection")
     }
     engine.dispose()
+
+
+def test_supplier_email_upgrade_preserves_populated_0008_rows(tmp_path, monkeypatch):
+    import sqlalchemy as sa
+
+    from services.persistence.sqlite import SqliteStore, build_sqlite_engine
+
+    monkeypatch.delenv("SUPPLY_RESPONSE_DATABASE_URL", raising=False)
+    url = f"sqlite:///{tmp_path / 'supplier-email-upgrade.db'}"
+    config = Config("migrations/alembic.ini")
+    config.set_main_option("sqlalchemy.url", url)
+    command.upgrade(config, "0008_case_proposal_selection")
+    engine = build_sqlite_engine(url)
+    case, snapshot = fallback_rl001_case("RL-CASE-EMAIL-MIGRATION")
+    SqliteStore(engine, runtime_mode=RuntimeMode.FALLBACK).create_case(case, snapshot)
+    with engine.connect() as connection:
+        before = tuple(
+            connection.execute(
+                sa.text(
+                    "SELECT case_id, payload_json FROM case_instances ORDER BY case_id"
+                )
+            )
+        )
+    engine.dispose()
+
+    command.upgrade(config, "head")
+
+    engine = build_sqlite_engine(url)
+    with engine.connect() as connection:
+        assert (
+            tuple(
+                connection.execute(
+                    sa.text(
+                        "SELECT case_id, payload_json FROM case_instances ORDER BY case_id"
+                    )
+                )
+            )
+            == before
+        )
+    assert {
+        "supplier_email_revisions",
+        "supplier_email_deliveries",
+    } <= set(sa.inspect(engine).get_table_names())
+    assert sa.inspect(engine).get_unique_constraints("supplier_email_revisions")
+    assert {
+        item["name"]
+        for item in sa.inspect(engine).get_unique_constraints(
+            "supplier_email_deliveries"
+        )
+    } >= {"uq_supplier_email_deliveries_decision_id"}
+    engine.dispose()
+
+
+def test_presenter_pruning_removes_supplier_email_rows(tmp_path):
+    from datetime import UTC
+
+    from services.persistence import tables
+    from tests.persistence.test_presenter_runs import bound_case, populate_aggregate
+
+    store = sqlite_store(
+        f"sqlite:///{tmp_path / 'presenter-mail.db'}",
+        runtime_mode=RuntimeMode.LIVE,
+    )
+    expired, expired_snapshot = bound_case("mail-expired", run_id="RL-RUN-" + "a" * 32)
+    current, current_snapshot = bound_case("mail-current", run_id="RL-RUN-" + "b" * 32)
+    store.create_case(expired, expired_snapshot)
+    store.create_case(current, current_snapshot)
+    populate_aggregate(store, expired)
+    now = datetime(2026, 9, 15, tzinfo=UTC)
+    with store.engine.begin() as connection:
+        connection.execute(
+            update(tables.case_instances)
+            .where(tables.case_instances.c.case_id == expired.case_id)
+            .values(recorded_at=datetime(2026, 9, 14, tzinfo=UTC))
+        )
+        connection.execute(
+            update(tables.case_instances)
+            .where(tables.case_instances.c.case_id == current.case_id)
+            .values(recorded_at=now)
+        )
+
+    plan = store.preview_presenter_retention(historical_limit=0)
+    assert plan.planned_deletions["supplier_email_revisions"] == 1
+    assert plan.planned_deletions["supplier_email_deliveries"] == 1
+    result = store.apply_presenter_retention(plan)
+
+    assert result.deleted_rows["supplier_email_revisions"] == 1
+    assert result.deleted_rows["supplier_email_deliveries"] == 1
+    with store.engine.connect() as connection:
+        assert (
+            connection.scalar(select(tables.supplier_email_revisions.c.email_id))
+            is None
+        )
+        assert (
+            connection.scalar(select(tables.supplier_email_deliveries.c.email_id))
+            is None
+        )

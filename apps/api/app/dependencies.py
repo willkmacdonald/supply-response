@@ -36,6 +36,7 @@ from data.domain.evidence import IdentitySource
 from data.domain.execution import PlaybackStatus
 from services.analysis.application import FallbackAnalysisApplicationService
 from services.decisions.service import DecisionService, UnitOfWorkFactory
+from services.execution.mail_service import ReviewedEmailService
 from services.execution.planner import plan_actions
 from services.execution.playback import PlaybackClock, PlaybackService, RealClock
 from services.execution.worker import ActionPlanningWorker, ExecutionService
@@ -77,6 +78,7 @@ class ApplicationServices:
     decision_service: DecisionService
     planning_worker: ActionPlanningWorker
     playback_service: PlaybackService
+    mail_service: ReviewedEmailService
     playback_clock: PlaybackClock
     clock: Callable[[], datetime]
     identity: IdentitySnapshot
@@ -227,6 +229,20 @@ def build_composition(
     active_playback_clock = playback_clock or RealClock()
     test_faults = AutomatedTestFaults(settings.automated_test_faults_enabled)
     execution_service = ExecutionService(uow_factory, clock=now)
+    configured_alex = fallback_identity()
+    if (
+        settings.runtime_mode is RuntimeMode.LIVE
+        and settings.allowed_tenant_id
+        and settings.alex_object_id
+    ):
+        configured_alex = IdentitySnapshot(
+            tenant_id=str(UUID(settings.allowed_tenant_id)),
+            object_id=str(UUID(settings.alex_object_id)),
+            persona_id="RL-PERSONA-ALEX",
+            effective_roles=("material_planner", "response_approver"),
+            identity_source=IdentitySource.ENTRA,
+            source_id="RL-ENTRA-ALEX",
+        )
     services = ApplicationServices(
         settings=settings,
         store=store,
@@ -249,6 +265,13 @@ def build_composition(
         playback_service=PlaybackService(
             uow_factory,
             clock=active_playback_clock,
+        ),
+        mail_service=ReviewedEmailService(
+            uow_factory,
+            from_address=f"agent@{settings.tenant_domain}",
+            to_address=f"will@{settings.tenant_domain}",
+            configured_actor=configured_alex,
+            clock=now,
         ),
         playback_clock=active_playback_clock,
         clock=now,
