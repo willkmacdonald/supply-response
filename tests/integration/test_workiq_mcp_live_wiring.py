@@ -204,6 +204,20 @@ def test_live_composition_without_mail_address_keeps_mail_capability_unavailable
         store.engine.dispose()
 
 
+def test_non_fixed_sender_cannot_configure_capability_while_send_is_disabled(
+    tmp_path,
+):
+    with pytest.raises(
+        ValueError,
+        match="mail capability requires the fixed sender address",
+    ):
+        _live_settings(
+            tmp_path,
+            mail_from_address="planner@willmacdonald.com",
+            mail_send_enabled=False,
+        )
+
+
 @pytest.mark.parametrize(
     "receipt",
     [

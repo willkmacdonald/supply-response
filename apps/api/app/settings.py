@@ -86,6 +86,12 @@ class Settings(BaseSettings):
                 )
             if self.alex_object_id == self.taylor_object_id:
                 raise ValueError("Alex and Taylor must be different people")
+        if (
+            self.mail_from_address
+            and not self.mail_send_enabled
+            and self.mail_from_address != "agent@willmacdonald.com"
+        ):
+            raise ValueError("mail capability requires the fixed sender address")
         if self.mail_send_enabled:
             if not self.mail_from_address or not self.mail_to_address:
                 raise ValueError(
