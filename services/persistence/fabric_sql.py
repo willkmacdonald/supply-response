@@ -9,9 +9,11 @@ from urllib.parse import quote_plus
 from azure.core.credentials import TokenCredential
 from azure.identity import AzureCliCredential, ManagedIdentityCredential
 from sqlalchemy import Connection, Engine, create_engine, event, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from data.domain import RuntimeMode
 from data.domain.execution import Playback
+from services.persistence.presenter_runs import PresenterRetentionLockUnavailable
 from services.persistence.store import SqlAlchemyStore, serialize_model
 
 if TYPE_CHECKING:
@@ -23,6 +25,39 @@ SQL_DATABASE_SCOPE = "https://database.windows.net/.default"
 
 
 class FabricSqlStore(SqlAlchemyStore):
+    def _acquire_presenter_retention_lock(self, connection: Connection) -> None:
+        # Application locks are scoped by database/principal/resource. A fixed
+        # resource serializes every presenter run across connections/processes;
+        # transaction ownership holds it through commit or rollback.
+        try:
+            result = connection.execute(
+                text(
+                    """
+                    IF @@TRANCOUNT = 0 BEGIN TRANSACTION;
+                    DECLARE @lock_result int;
+                    EXEC @lock_result = sys.sp_getapplock
+                        @Resource = :resource,
+                        @LockMode = 'Exclusive',
+                        @LockOwner = 'Transaction',
+                        @LockTimeout = :lock_timeout_ms,
+                        @DbPrincipal = 'public';
+                    SELECT @lock_result;
+                    """
+                ),
+                {
+                    "resource": "supply-response:app:presenter-retention:v1",
+                    "lock_timeout_ms": 5_000,
+                },
+            ).scalar_one()
+        except SQLAlchemyError as error:
+            raise PresenterRetentionLockUnavailable(
+                "could not acquire presenter retention lock"
+            ) from error
+        if type(result) is not int or result not in (0, 1):
+            raise PresenterRetentionLockUnavailable(
+                "could not acquire presenter retention lock"
+            )
+
     def _insert_playback_if_absent(
         self,
         connection: Connection,

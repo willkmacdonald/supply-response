@@ -32,6 +32,10 @@ class PresenterRetentionPlanChanged(PersistenceError):
     """The eligible history changed after retention was previewed."""
 
 
+class PresenterRetentionLockUnavailable(PersistenceError):
+    """The database could not grant the transaction's exclusive retention lock."""
+
+
 PRESENTER_AGGREGATE_DELETE_ORDER = (
     "case_projection",
     "outcome_observations",

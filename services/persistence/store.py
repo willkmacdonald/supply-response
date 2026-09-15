@@ -117,6 +117,10 @@ class SqlAlchemyStore:
                 f"not {runtime_mode.value}"
             )
 
+    def _acquire_presenter_retention_lock(self, connection: Connection) -> None:
+        """Acquire the backend's database lock, released only on commit/rollback."""
+        raise NotImplementedError
+
     def _insert_playback_if_absent(
         self,
         connection: Connection,
@@ -517,6 +521,7 @@ class SqlAlchemyStore:
         self._validate_new_case(case, snapshot)
         try:
             with self.engine.begin() as connection:
+                self._acquire_presenter_retention_lock(connection)
                 self._insert_case_connection(connection, case, snapshot)
                 plan = presenter_runs.plan_presenter_retention(
                     connection,
@@ -549,6 +554,7 @@ class SqlAlchemyStore:
         from services.persistence import presenter_runs
 
         with self.engine.begin() as connection:
+            self._acquire_presenter_retention_lock(connection)
             current_plan = presenter_runs.plan_presenter_retention(
                 connection,
                 self,

@@ -2,7 +2,17 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import Boolean, DateTime, Engine, Integer, func, insert, select, update
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Engine,
+    Integer,
+    event,
+    func,
+    insert,
+    select,
+    update,
+)
 
 from data.domain import CaseInstance, CasePurpose, RuntimeMode
 from data.synthetic.rl001 import OperationalSnapshot, instantiate_rl001
@@ -344,3 +354,119 @@ def test_command_defaults_to_preview_and_apply_keeps_four(
     assert "presenter-0" in capsys.readouterr().out
     prune_presenter_runs.main(["--apply"])
     assert case_ids(fixture.store) == before - {"presenter-0"}
+
+
+def test_apply_recreate_interleaving_preserves_current_and_four_cases(
+    populated_presenter_store, monkeypatch
+):
+    from services.persistence.presenter_runs import PresenterRetentionLockUnavailable
+
+    fixture = populated_presenter_store
+    store = fixture.store
+    store.create_case(fixture.current_case, fixture.current_snapshot)
+    preview = store.preview_presenter_retention()
+    assert preview.pruned_case_ids == ("presenter-0",)
+    other = sqlite_store(str(store.engine.url), runtime_mode=RuntimeMode.LIVE)
+
+    @event.listens_for(other.engine, "checkout")
+    def fail_immediately_if_locked(dbapi_connection, *_):
+        dbapi_connection.execute("PRAGMA busy_timeout=0")
+
+    extra, extra_snapshot = bound_case("presenter-5", run_id="RL-RUN-" + "5" * 32)
+    recreated, recreated_snapshot = bound_case(
+        "presenter-0", run_id="RL-RUN-" + "6" * 32
+    )
+
+    def create_and_recreate():  # allowed: reproduce the competing writer's API calls
+        other.create_presenter_case(extra, extra_snapshot)
+        other.create_presenter_case(recreated, recreated_snapshot)
+
+    original_plan = presenter_runs.plan_presenter_retention
+    interleavings = []
+
+    def pause_after_recompute(connection, active_store, **kwargs):
+        plan = original_plan(connection, active_store, **kwargs)
+        if active_store is store and kwargs["current_case_id"] is None:
+            # Deterministically attempt the reviewer's two writes after recomputation,
+            # before apply can compare/delete. The other store has a separate pool.
+            try:
+                create_and_recreate()
+            except PresenterRetentionLockUnavailable:
+                interleavings.append("blocked")
+            else:
+                interleavings.append("interleaved")
+        return plan
+
+    monkeypatch.setattr(
+        presenter_runs, "plan_presenter_retention", pause_after_recompute
+    )
+    store.apply_presenter_retention(preview)
+    if interleavings == ["blocked"]:
+        # The competing writer can safely retry after apply commits/releases its lock.
+        create_and_recreate()
+    assert store.get_case(recreated.case_id) == recreated
+    assert len(other.preview_presenter_retention().retained_case_ids) == 4
+    assert interleavings == ["blocked"]
+
+
+@pytest.mark.parametrize("operation", ["create", "apply"])
+def test_sqlite_retention_lock_failure_is_closed(populated_presenter_store, operation):
+    from services.persistence.presenter_runs import PresenterRetentionLockUnavailable
+
+    fixture = populated_presenter_store
+    store = fixture.store
+    before = case_ids(store)
+    preview = store.preview_presenter_retention()
+    locker = sqlite_store(str(store.engine.url), runtime_mode=RuntimeMode.LIVE)
+
+    @event.listens_for(store.engine, "checkout")
+    def fail_immediately_if_locked(dbapi_connection, *_):
+        dbapi_connection.execute("PRAGMA busy_timeout=0")
+
+    with locker.engine.begin() as connection:
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+        with pytest.raises(PresenterRetentionLockUnavailable):
+            if operation == "create":
+                store.create_presenter_case(
+                    fixture.current_case, fixture.current_snapshot
+                )
+            else:
+                store.apply_presenter_retention(preview)
+        assert case_ids(store) == before
+    if operation == "create":
+        store.create_presenter_case(fixture.current_case, fixture.current_snapshot)
+    else:
+        store.apply_presenter_retention(preview)
+
+
+@pytest.mark.parametrize("operation", ["create", "apply"])
+def test_sqlite_retention_holds_lock_until_commit(populated_presenter_store, operation):
+    from services.persistence.presenter_runs import PresenterRetentionLockUnavailable
+
+    fixture = populated_presenter_store
+    store = fixture.store
+    preview = store.preview_presenter_retention()
+    other = sqlite_store(str(store.engine.url), runtime_mode=RuntimeMode.LIVE)
+
+    @event.listens_for(other.engine, "checkout")
+    def fail_immediately_if_locked(dbapi_connection, *_):
+        dbapi_connection.execute("PRAGMA busy_timeout=0")
+
+    attempted = []
+
+    @event.listens_for(store.engine, "commit")
+    def assert_still_locked(_connection):
+        with (
+            other.engine.begin() as connection,
+            pytest.raises(PresenterRetentionLockUnavailable),
+        ):
+            other._acquire_presenter_retention_lock(connection)
+        attempted.append(True)
+
+    if operation == "create":
+        store.create_presenter_case(fixture.current_case, fixture.current_snapshot)
+    else:
+        store.apply_presenter_retention(preview)
+    assert attempted == [True]
+    with other.engine.begin() as connection:
+        other._acquire_presenter_retention_lock(connection)

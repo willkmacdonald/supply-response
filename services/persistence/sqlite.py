@@ -1,9 +1,11 @@
 from sqlalchemy import Connection, Engine, create_engine, event
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import SQLAlchemyError
 
 from data.domain import RuntimeMode
 from data.domain.execution import Playback
+from services.persistence.presenter_runs import PresenterRetentionLockUnavailable
 from services.persistence.store import SqlAlchemyStore, serialize_model
 from services.persistence.tables import metadata, playbacks
 
@@ -11,6 +13,17 @@ SQLITE_BUSY_TIMEOUT_MS = 5_000
 
 
 class SqliteStore(SqlAlchemyStore):
+    def _acquire_presenter_retention_lock(self, connection: Connection) -> None:
+        # engine.begin() has only opened SQLAlchemy's transaction here. Start the
+        # SQLite write transaction before any read so no other process can prune
+        # or recreate a Case between retention planning and commit.
+        try:
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
+        except SQLAlchemyError as error:
+            raise PresenterRetentionLockUnavailable(
+                "could not acquire presenter retention lock"
+            ) from error
+
     def _insert_playback_if_absent(
         self,
         connection: Connection,

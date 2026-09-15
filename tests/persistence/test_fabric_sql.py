@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from importlib.util import find_spec
 from pathlib import Path
 from types import SimpleNamespace
@@ -5,12 +6,106 @@ from urllib.parse import parse_qs, unquote_plus, urlsplit
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy.exc import OperationalError
 
 from apps.api.app.settings import Settings
 from data.domain import RuntimeMode
 from integrations.fabric.schema import split_go_batches
 from services.persistence import fabric_sql
 from services.persistence import store as store_module
+
+
+@pytest.mark.parametrize("operation", ["create", "apply"])
+@pytest.mark.parametrize(
+    "lock_result", [0, 1, -1, -2, -3, -999, None, "0", "sql-error"]
+)
+def test_fabric_retention_lock_is_transaction_owned_and_fails_closed(
+    monkeypatch, operation, lock_result
+):
+    from sqlalchemy.dialects import mssql
+
+    from services.persistence import presenter_runs
+    from services.persistence.presenter_runs import (
+        PresenterRetentionLockUnavailable,
+        PresenterRetentionPlan,
+        PresenterRetentionResult,
+    )
+    from tests.persistence.test_presenter_runs import bound_case
+
+    calls = []
+    case, snapshot = bound_case("lock-case")
+    plan = PresenterRetentionPlan(case.case_id, (case.case_id,), ())
+
+    def execute(statement, parameters):
+        calls.append("lock")
+        sql = str(statement.compile(dialect=mssql.dialect()))
+        assert "IF @@TRANCOUNT = 0 BEGIN TRANSACTION" in sql
+        assert "sys.sp_getapplock" in sql
+        assert "@LockMode = 'Exclusive'" in sql
+        assert "@LockOwner = 'Transaction'" in sql
+        assert "@DbPrincipal = 'public'" in sql
+        assert "sp_releaseapplock" not in sql
+        assert "COMMIT" not in sql
+        assert parameters == {
+            "resource": "supply-response:app:presenter-retention:v1",
+            "lock_timeout_ms": 5_000,
+        }
+        if lock_result == "sql-error":
+            raise OperationalError("lock SQL", {}, RuntimeError("unavailable"))
+        return SimpleNamespace(scalar_one=lambda: lock_result)
+
+    connection = SimpleNamespace(execute=execute)
+
+    @contextmanager
+    def transaction():
+        calls.append("begin")
+        try:
+            yield connection
+        except Exception:
+            calls.append("rollback")
+            raise
+        else:
+            calls.append("commit")
+
+    store = fabric_sql.FabricSqlStore(
+        SimpleNamespace(begin=transaction), runtime_mode=RuntimeMode.LIVE
+    )
+    monkeypatch.setattr(
+        store, "_insert_case_connection", lambda *args: calls.append("insert")
+    )
+
+    def plan_retention(*args, **kwargs):
+        calls.append("plan")
+        return plan
+
+    def delete_aggregates(*args):  # allowed: record transaction ordering in this test
+        calls.append("delete")
+        return PresenterRetentionResult(plan, {})
+
+    monkeypatch.setattr(presenter_runs, "plan_presenter_retention", plan_retention)
+    monkeypatch.setattr(
+        presenter_runs, "delete_presenter_aggregates", delete_aggregates
+    )
+
+    def invoke():
+        if operation == "create":
+            return store.create_presenter_case(case, snapshot)
+        return store.apply_presenter_retention(plan)
+
+    if lock_result in (0, 1):
+        assert invoke().plan == plan
+        assert calls == [
+            "begin",
+            "lock",
+            *(["insert"] if operation == "create" else []),
+            "plan",
+            "delete",
+            "commit",
+        ]
+    else:
+        with pytest.raises(PresenterRetentionLockUnavailable):
+            invoke()
+        assert calls == ["begin", "lock", "rollback"]
 
 
 @pytest.mark.parametrize("dialect_name", ["sqlite", "mssql"])
