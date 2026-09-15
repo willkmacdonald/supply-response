@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import {render, screen} from "@testing-library/react";
-import {describe, expect, it, vi} from "vitest";
+import {cleanup, render, screen} from "@testing-library/react";
+import {afterEach, describe, expect, it, vi} from "vitest";
 import {ExecutionPanel} from "./ExecutionPanel";
 
 const decision = {kind: "approved", action_planning_status: "complete"} as never;
+
+afterEach(cleanup);
 
 describe("ExecutionPanel", () => {
   it("uses business labels for known action kinds and an honest fallback for unknown kinds", () => {
@@ -39,5 +41,18 @@ describe("ExecutionPanel", () => {
     expect(screen.getByRole("heading", {name: "Draft for review"})).toBeVisible();
     expect(screen.getByText("No draft subject recorded.")).toBeVisible();
     expect(screen.queryByText(/will be filled during simulated execution/i)).not.toBeInTheDocument();
+  });
+
+  it("labels a legacy draft action truthfully when execution mode was not stored", () => {
+    render(<ExecutionPanel decision={decision} actions={[
+      {action_id: "A-LEGACY-DRAFT", kind: "prepare_alpha_recovery_draft", status: "planned",
+        owner_kind: "persona", execution_mode: null},
+      {action_id: "A-LEGACY-UNKNOWN", kind: "mystery_action", status: "planned",
+        owner_kind: "system", execution_mode: null},
+    ] as never} drafts={[]} retrying={false} onRetry={vi.fn()} onRetryAction={vi.fn()} />);
+
+    expect(screen.getByText("What happens here: Draft prepared for Alex to review")).toBeVisible();
+    expect(screen.getByText("What happens here: Execution details not recorded")).toBeVisible();
+    expect(screen.queryByText("What happens here: Simulated coordination")).not.toBeInTheDocument();
   });
 });

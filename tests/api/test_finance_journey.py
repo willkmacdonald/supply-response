@@ -288,6 +288,9 @@ def test_verified_session_and_planner_boundary(tmp_path):
             "simulation",
             "simulation",
         ]
+        reopened = client.get("/api/cases/RL-CASE-HTTP", headers=alex)
+        assert reopened.status_code == 200
+        assert reopened.json()["controls"]["start_playback"] is True
         action_retry = client.post(
             f"/api/decisions/{decision_id}/actions/{actions[0]['action_id']}/retry",
             headers=alex,

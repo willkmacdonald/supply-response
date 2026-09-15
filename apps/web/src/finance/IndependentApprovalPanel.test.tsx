@@ -38,14 +38,15 @@ it("does not reuse approval for a changed selection and explains low-cost review
   expect(screen.queryByRole("button", {name: /final approval/i})).not.toBeInTheDocument();
 });
 
-it("keeps Alex final approval distinct and reports execution as unavailable", async () => {
+it("keeps Alex final approval distinct and points to the available execution plan", async () => {
   const current = currentState("approved");
   vi.mocked(api.proposal).mockResolvedValue(current as never);
   vi.mocked(api.finalizeProposal).mockResolvedValue({decision_id: "decision-1", case_id: "case-1", analysis_id: "analysis-1", analysis_material_hash: "a".repeat(64), kind: "approved", selected_option_id: "combined", action_planning_status: "failed", proposal_approval_evidence: {selection: current.selection, review: current.review, review_revision: 2}} as never);
   render(<IndependentApprovalPanel caseId="case-1" displayedAnalysis={displayedAnalysis} selectedOption={high} finalDecision={null} onFinalDecision={vi.fn()} independentFinanceEnabled />);
   await userEvent.click(await screen.findByRole("button", {name: "Give final Alex approval"}));
   expect(api.finalizeProposal).toHaveBeenCalledWith("case-1", {expected: current.token, kind: "approved"}, expect.any(String));
-  expect(await screen.findByText(/execution is not available in this milestone/i)).toBeVisible();
+  expect(await screen.findByText(/continue to execute mitigation plan/i)).toBeVisible();
+  expect(screen.queryByText(/execution is not available/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/Alex's final approval is still required/)).not.toBeInTheDocument();
 });
 

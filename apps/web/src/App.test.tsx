@@ -1239,6 +1239,37 @@ describe("progressive Case workspace", () => {
     expect(fetchMock.mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
   });
 
+  it("reopens a current approved independent case with its playback control", async () => {
+    const independentCase = {...caseInstance, status: "executing", workflow_version: "independent-finance-v1",
+      current_analysis_id: analysis.analysis_id, current_decision_id: decision.decision_id,
+      controls: {new_analysis: false, decide: false, retry_action_planning: false, start_playback: true}};
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      if (path === "/api/runtime") return response(runtime);
+      if (path === "/api/cases") return response([independentCase]);
+      if (path === "/api/cases/RL-CASE-1") return response(independentCase);
+      if (path === "/api/cases/RL-CASE-1/analysis") return response(analysis);
+      if (path === "/api/decisions/RL-DECISION-1") return response(decision);
+      if (path === "/api/decisions/RL-DECISION-1/actions") return response(actions);
+      if (path === "/api/decisions/RL-DECISION-1/drafts") return response(drafts);
+      if (path === "/api/decisions/RL-DECISION-1/playback") {
+        return response({detail: {code: "PLAYBACK_NOT_FOUND"}}, 404);
+      }
+      if (path === "/api/decisions/RL-DECISION-1/observations") return response([]);
+      throw new Error(`Unexpected API request: ${path}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    window.history.replaceState(null, "", "/");
+    render(<App />);
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
+    await openOtherSavedCases();
+    await userEvent.click(screen.getByRole("button", {name: "Find existing cases"}));
+    await userEvent.click(await screen.findByRole("button", {name: "Reopen case RL-CASE-1"}));
+    await selectExecutionStage();
+    expect(screen.getByRole("button", {name: "Run simulated coordination"})).toBeEnabled();
+    expect(fetchMock.mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
+  });
+
   it("leaves no actionable partial state when a related saved-state read fails", async () => {
     const decidedCase = {...caseInstance, status: "executing", current_analysis_id: analysis.analysis_id,
       current_decision_id: decision.decision_id};

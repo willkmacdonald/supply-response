@@ -59,8 +59,8 @@ def _draft_body(decision: Decision) -> str:
     option = decision.selected_option
     assert option is not None
     response = (
-        "The approved transfer and production resequencing response uses internal "
-        "coordination. No supplier order was placed."
+        "The approved Dallas transfer response uses internal coordination. "
+        "No supplier order was placed."
         if option.option_kind is ResponseOptionKind.TRANSFER
         else (
             f"The approved response is: {option.name}. This simulation did not order "

@@ -95,7 +95,7 @@ export function IndependentApprovalPanel({caseId, displayedAnalysis, selectedOpt
       {error && <p className="error" role="alert">{error}</p>}
       {!receipt && independentFinanceEnabled && analysisCurrent && (!selectionCurrent || proposalState?.review?.status === "rejected") && <button disabled={busy || !proposalState || !selectedOption.executable} onClick={() => void submit()}>{busy ? "Submitting…" : requiresFinance ? "Submit for Finance review" : "Submit response"}</button>}
       {!receipt && independentFinanceEnabled && financeSatisfied && <button disabled={busy} onClick={() => void finalize()}>{busy ? "Recording final approval…" : "Give final Alex approval"}</button>}
-      {receipt && <div><h3>Alex approved this response</h3><p>Final decision recorded separately from Finance review.</p><p>Execution is not available in this milestone because independent action planning has not been enabled.</p></div>}
+      {receipt && <div><h3>Alex approved this response</h3><p>Final decision recorded separately from Finance review.</p><p>Continue to Execute mitigation plan to review the approved action plan.</p></div>}
     </>}
     <p className="evidence-footer">Approval state from the current saved proposal; selection alone is not authorization.</p></section>;
 }

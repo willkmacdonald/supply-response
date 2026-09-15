@@ -241,7 +241,8 @@ def test_playback_completes_exact_option_plan_with_predicted_simulated_results(
     assert "fictional demo" in draft.body.lower()
     assert option_ctx.case.case_id in draft.body
     if option_ctx.decision.selected_option_id == "RL-OPTION-TRANSFER":
-        assert "approved transfer and production resequencing response" in draft.body
+        assert "approved Dallas transfer response" in draft.body
+        assert "resequenc" not in draft.body.lower()
         assert "supplier shipment was ordered" not in draft.body.lower()
 
 

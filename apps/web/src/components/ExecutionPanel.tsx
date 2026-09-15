@@ -42,6 +42,15 @@ function ownerName(kind: string): string {
   return "Owner not recognized";
 }
 
+function executionDescription(action: ExecutionAction): string {
+  if (action.execution_mode === "communication_preparation"
+    || (!action.execution_mode && action.kind === "prepare_alpha_recovery_draft")) {
+    return "Draft prepared for Alex to review";
+  }
+  if (action.execution_mode === "simulation") return "Simulated coordination";
+  return "Execution details not recorded";
+}
+
 export function ExecutionPanel({decision, actions, drafts, retrying, busy, canRetryPlanning = false, onRetry, onRetryAction}: ExecutionPanelProps) {
   if (!decision || decision.kind !== "approved") return null;
   return <section className="panel" aria-labelledby="execution-heading">
@@ -61,9 +70,7 @@ export function ExecutionPanel({decision, actions, drafts, retrying, busy, canRe
           {action.purpose && <p>{action.purpose}</p>}
           <p>{action.owner_kind === "system" || action.owner_kind === "persona" ? "Owner: " : ""}{ownerName(action.owner_kind)}</p>
           {action.expected_result && <p>Expected result: {action.expected_result}</p>}
-          <p>What happens here: {action.execution_mode === "communication_preparation"
-            ? "Draft prepared for Alex to review"
-            : "Simulated coordination"}</p>
+          <p>What happens here: {executionDescription(action)}</p>
           <details><summary>Action details</summary><p>Action {action.action_id}</p><p>Recorded kind: {action.kind}</p></details>
           {action.status === "failed" && <button type="button" disabled={busy || retrying} onClick={() => onRetryAction(action.action_id)}>
             Retry {actionName(action.kind).toLowerCase()}

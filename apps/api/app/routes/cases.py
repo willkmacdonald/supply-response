@@ -47,7 +47,7 @@ def case_response(
         WorkflowVersion.LEGACY,
         WorkflowVersion.INDEPENDENT_FINANCE,
     }
-    execution_available = workflow_version is WorkflowVersion.LEGACY
+    execution_available = planning_available
     return CaseResponse(
         **case.model_dump(exclude={"workflow_version"}),
         current_analysis_id=projection.current_analysis_id,
