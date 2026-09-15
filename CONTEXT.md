@@ -8,6 +8,10 @@ Supply Response is the domain of evaluating a supply disruption, recording a hum
 A presenter-initiated search for supplier communications that may describe a supply disruption. Finding a message does not itself create a Disruption Case or run an analysis.
 _Avoid_: Resume case, automatic monitoring, new disruption detected
 
+**Presenter Run**:
+A presenter-initiated response journey created from one successful Supplier Email Check. A new Presenter Run may reuse the same Reviewed Supplier Email but always creates a new Case Instance with no inherited approvals, Decisions, or execution state. The current run and three prior presenter runs are retained.
+_Avoid_: Resetting a Case Instance, reusing an old approval, global approval
+
 **Reviewed Supplier Email**:
 A supplier message whose sender, recipient, content and original-message citation have been checked and made available to the planner for review. It is not case evidence until explicitly bound to a Disruption Case and its analysis.
 _Avoid_: Approved response, newly received email without a verified received time

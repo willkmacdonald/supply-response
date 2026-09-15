@@ -1,5 +1,35 @@
 # Supply Response Roadmap
 
+## September 14 repeatable presenter runs — locally verified; release pending
+
+Implemented and locally verified: every successful **Check email for
+disruptions** response receives a server-issued Presenter Run identity, and
+**Analyze this disruption** creates a fresh source-bound Case Instance for that
+run. Reusing the same marked email therefore does not inherit Taylor's approval,
+Alex's Decision, execution state, drafts, playbacks, or outcomes. Retries and
+concurrent requests within one Presenter Run remain idempotent.
+
+Server-side retention keeps the current presenter case and the three most recent
+historical presenter cases. It prunes only complete aggregates for live,
+showcase, supplier-email-bound cases; automated-test, fallback, unbound showcase,
+operational-source, and traditional-reporting data are outside the retention
+set. The case-header **Open case dashboard** link is removed while **Explore in
+Power BI** and exact supporting-data links remain.
+
+Local feature evidence is green: 117 presenter/API/persistence tests and 369 web
+tests passed, the production web build passed, and the changed production Python
+files passed focused Ruff and Pyright checks. The repository-wide Python suite
+still has its previously recorded unrelated diagnostics/schema-count/reporting-
+digest failures; repository-wide Ruff and Pyright are also not clean. Exact
+results are in the [repeatable presenter-run release record](reviews/2026-09-14-repeatable-presenter-runs.md).
+
+The default, read-only live cleanup preview found one eligible retained presenter
+case and no cases proposed for pruning. No cleanup was applied. Deployment and
+live browser acceptance remain pending: after deployment, rerun the preview,
+apply only that exact reviewed plan with separate authorization, then prove two
+consecutive checks of the same email create different Case IDs and that the
+second run waits for a new Taylor review.
+
 ## September 14 email-to-case increment — deployed and live-verified
 
 Implemented: actual email review → explicit case creation → existing analysis
@@ -24,7 +54,7 @@ new `Demo run 0914-A` email through Work IQ on September 14. Prior release notes
 below remain historical. Next: bind a reviewed message to a new case atomically with
 duplicate prevention, then continue the existing analysis/approval journey.
 
-**Last updated:** September 13, 2026 (America/Chicago).
+**Last updated:** September 14, 2026 (America/Chicago).
 **Deployed baseline:** website revision **ca-sr-demo--0000029**, deployed source
 `afbf8db`; unchanged reviewed report/model artifacts through `fd53e99`.
 
@@ -198,9 +228,12 @@ Retain the existing fail-closed policy and immutable lineage while verifying:
 - Browser automation did not expose a new tab after one target-blank click.
   Exact emitted links were separately rendered and verified; automatic app/browser
   handoff is not certified by that result.
-- The user requested a way to clean up unfamiliar test cases. No case deletion
-  or delete workflow shipped in this release. Resolve exact targets and choose a
-  recoverable cleanup design before removing data.
+- Bounded presenter-history retention and a preview-first cleanup command are
+  locally implemented. The first live preview proposed no deletions. Deployment,
+  an exact reviewed non-empty preview if older eligible cases later exist, and
+  separately authorized application remain pending; never broaden the cleanup to
+  automated-test, fallback, unbound showcase, operational-source, or reporting
+  records.
 - Rehearse the [traditional-versus-assisted walkthrough](demo/traditional-and-assisted-walkthrough.md)
   using a known saved case; keep broad fictional context distinct from exact
   supporting evidence and avoid unmeasured productivity claims.
@@ -216,6 +249,9 @@ the specific presenter and reporting corrections:
 - [Recommendation explanation sheet](superpowers/specs/2026-09-12-recommendation-explanation-sheet-design.md)
 - [Traditional operational reporting correction](superpowers/specs/2026-09-12-traditional-operational-reporting-design.md)
 - [Traditional reporting implementation and reviews](superpowers/plans/2026-09-12-traditional-operational-reporting.md)
+- [Repeatable presenter runs](superpowers/specs/2026-09-14-repeatable-presenter-runs-design.md)
+- [Repeatable presenter-run implementation](superpowers/plans/2026-09-14-repeatable-presenter-runs.md)
+- [Repeatable presenter-run release evidence](reviews/2026-09-14-repeatable-presenter-runs.md)
 - [Deployment and live acceptance proof](../.azure/deployment-plan.md)
 - [Prior Work IQ discovery result](deployment/workiq-discovery-integration-result.md)
 

@@ -8,30 +8,32 @@ The project combines a deterministic supply-response core with a FastAPI applica
 
 ## Current presenter journey
 
-The live entry point is a presenter-controlled supplier-email check:
+Before presenting, send the fictional RL-001 disruption email from
+`will@willmacdonald.com` to Alex at `agent@willmacdonald.com`. Then:
 
-1. The presenter sends the fictional RL-001 disruption email from
-   `will@willmacdonald.com` to Alex at `agent@willmacdonald.com`.
-2. Alex selects **Check email for disruptions**. Work IQ searches Alex's mailbox
-   for the approved scenario message; this is an explicit check, not continuous
-   monitoring.
-3. The page shows the actual sender, subject, received time, message text, and an
-   Outlook link. Alex reviews the extracted delivery facts before continuing.
-4. **Analyze this disruption** creates a source-bound case when necessary and
-   runs or reopens its analysis. The email's stable mailbox-scoped identity
-   prevents duplicate cases; changed or ambiguous content fails closed.
-5. After the analysis loads successfully, the email-entry panel, saved-demo
-   launcher, and recovery note disappear. The page continues directly into the
-   analyzed case. The entry controls remain available if analysis fails so the
-   presenter can retry.
-6. The presenter compares traditional Power BI investigation with the five-stage
-   AI-assisted workflow: **Understand the disruption**, **Investigate responses**,
-   **Choose a response**, **Review and approve**, and **Execute mitigation plan**.
+1. Open the bare [application URL](https://ca-sr-demo.orangehill-337f5d48.eastus2.azurecontainerapps.io/),
+   without a Case ID or Analysis ID in the address.
+2. Select **Check email for disruptions**. Work IQ performs the explicit mailbox
+   check; the application is not monitoring the mailbox continuously.
+3. Review the found email, its extracted delivery facts, and its Outlook source,
+   then select **Analyze this disruption**.
+4. Expect a fresh Case ID and, when the selected response requires Finance review,
+   a new Taylor review. Reusing the same marked email starts a new Presenter Run;
+   retries within that run remain idempotent.
+5. Use **Explore in Power BI** for the traditional rows, charts, filters, and
+   lists comparison, then use the five-stage AI-assisted workflow: **Understand
+   the disruption**, **Investigate responses**, **Choose a response**, **Review
+   and approve**, and **Execute mitigation plan**.
 
-This path was live-verified as Alex using Will's `Demo run 0914-A` email. The
-Outlook citation opened the exact message, and repeated analysis reopened the
-same case and analysis. No outbound email, approval, or execution action was
-performed during that acceptance.
+The current Presenter Run and three prior presenter runs are retained. Older
+eligible presenter cases are pruned as complete aggregates; approvals and
+Decisions in retained runs stay immutable and are never reused by a new run.
+
+The earlier deployed email-to-case path was live-verified as Alex using Will's
+`Demo run 0914-A` email, including the exact Outlook citation. Fresh Presenter
+Run identity and four-case retention are locally verified but are not yet
+deployed or accepted in two consecutive live browser runs. No outbound email,
+approval, or execution action was performed during the earlier acceptance.
 
 ## Current acceptance boundary
 
@@ -42,6 +44,10 @@ performed during that acceptance.
 - **Implemented and deployed, but not accepted with Taylor's real session:**
   separate Finance review, rejection/approval, and Alex's subsequent final
   decision for new cases whose spending exceeds $20,000.
+- **Implemented and locally verified, deployment pending:** a successful inbox
+  check mints a fresh Presenter Run, analysis creates a new source-bound Case ID,
+  and retention keeps the current presenter case plus three prior cases. Live
+  cleanup application and the two-run browser proof remain release gates.
 - **Not yet a complete live demonstration:** option-specific mitigation
   execution, reviewed outbound email received by Will, populated execution
   outcomes in Power BI, and a reliable Teams desktop/web handoff still require
@@ -54,10 +60,10 @@ status and remaining work.
 
 ## Presenting the comparison
 
-For the complete story, start with **Check email for disruptions**. Reopen a
-known analyzed case only when a repeatable walkthrough is preferable to a fresh
-mailbox check. Reopening saved work does not retrieve sources again or approve a
-response.
+For the complete story, start from the bare application URL and select **Check
+email for disruptions**. Reopen a known analyzed case only when historical
+inspection is the intended story. Reopening saved work does not retrieve sources
+again, create a Presenter Run, or approve a response.
 
 - **Explore in Power BI** starts a traditional investigation across 178 fictional
   operational records: inventory, deliveries, transfers, qualification, production
@@ -138,12 +144,14 @@ The Decision is the immutable pivot between analysis and downstream activity. Au
 - A delegated Work IQ OBO client and bounded MCP integration with strict
   source-statement validation. The live presenter action discovers the approved
   supplier email, reads that individual message, validates its source facts and
-  citation, and binds it to an idempotent case. Named Team/channel discovery uses
-  the same structured Work IQ path. This is structured discovery, not Copilot
-  semantic search; the application has no direct Graph client. Configured message
-  IDs validate results and are never lookup inputs or fallback fetch targets. The
-  supplier-email path is accepted; the Teams handoff/authentication-loop report
-  remains unresolved.
+  citation. The locally verified presenter flow mints a server-side run identity
+  and binds analysis to a fresh Case Instance while preserving same-run retry
+  idempotency. Named Team/channel discovery uses the same structured Work IQ path.
+  This is structured discovery, not Copilot semantic search; the application has
+  no direct Graph client. Configured message IDs validate results and are never
+  lookup inputs or fallback fetch targets. The supplier-email path is accepted;
+  fresh-run live acceptance and the Teams handoff/authentication-loop report
+  remain unresolved.
 - Microsoft Agent Framework orchestration that preserves deterministic decision authority, plus fail-closed Foundry publication and verification tooling.
 - Three immutable Foundry prompt agents—signal, context, and decision—published as version `1` and verified against their committed contracts on `gpt-5.6-luna`.
 - Personal-tenant Azure infrastructure deployed in East US 2 through the guarded
