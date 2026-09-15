@@ -223,6 +223,11 @@ class SupplierEmailResponse(BaseModel):
     send_status: SupplierEmailSendStatus
 
 
+class SupplierEmailCapabilityResponse(BaseModel):
+    mailbox_address: str
+    sample_sent_message_verified: Literal[True]
+
+
 class PlaybackResponse(BaseModel):
     playback_id: str
     case_id: str

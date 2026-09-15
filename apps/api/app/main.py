@@ -23,6 +23,7 @@ from apps.api.app.routes.finance import router as finance_router
 from apps.api.app.routes.health import router as health_router
 from apps.api.app.routes.inbox import router as inbox_router
 from apps.api.app.routes.session import router as session_router
+from apps.api.app.routes.supplier_email import router as supplier_email_router
 from apps.api.app.routes.test_support import router as test_support_router
 from apps.api.app.runtime import RuntimeProgression
 from apps.api.app.settings import Settings
@@ -66,6 +67,7 @@ def create_app(
     api.state.services = active_services
     api.include_router(health_router)
     api.include_router(session_router)
+    api.include_router(supplier_email_router)
     planner_dependencies = [Depends(require_planner)]
     api.include_router(cases_router, dependencies=planner_dependencies)
     api.include_router(inbox_router, dependencies=planner_dependencies)

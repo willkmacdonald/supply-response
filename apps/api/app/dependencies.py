@@ -34,6 +34,7 @@ from data.domain.cases import WorkflowVersion
 from data.domain.decisions import DecisionKind, IdentitySnapshot
 from data.domain.evidence import IdentitySource
 from data.domain.execution import PlaybackStatus
+from integrations.graph_mail.client import GraphMailPort
 from services.analysis.application import FallbackAnalysisApplicationService
 from services.decisions.service import DecisionService, UnitOfWorkFactory
 from services.execution.mail_service import ReviewedEmailService
@@ -79,6 +80,7 @@ class ApplicationServices:
     planning_worker: ActionPlanningWorker
     playback_service: PlaybackService
     mail_service: ReviewedEmailService
+    graph_mail: GraphMailPort | None
     playback_clock: PlaybackClock
     clock: Callable[[], datetime]
     identity: IdentitySnapshot
@@ -278,6 +280,7 @@ def build_composition(
             mail_send_enabled=settings.mail_send_enabled,
             clock=now,
         ),
+        graph_mail=graph_mail,
         playback_clock=active_playback_clock,
         clock=now,
         identity=fallback_identity(),
@@ -472,7 +475,7 @@ def build_live_components(
         ),
     )
     graph_mail = None
-    if settings.mail_send_enabled:
+    if settings.mail_from_address:
         graph_mail = GraphMailClient(
             http=http,
             obo=build_graph_obo_exchange(

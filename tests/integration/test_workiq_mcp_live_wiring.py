@@ -20,9 +20,11 @@ from apps.api.app.main import create_app
 from apps.api.app.settings import Settings
 from data.domain import RuntimeMode
 from data.domain.analysis import AnalysisRetrievalLineage
+from integrations.graph_mail.client import GraphMailClient
 from integrations.workiq.mcp import WorkIQMcpClient
 from integrations.workiq.mcp_evidence import WorkIQMcpEvidencePort
 from services.analysis.service import analyze_case
+from services.execution.mail_service import EmailSendDisabled
 from services.persistence.sqlite import sqlite_store
 from services.persistence.tables import analysis_claims
 from tests.auth.test_token_authorization import ALEX_OID, API_CLIENT_ID, TENANT_ID
@@ -149,6 +151,52 @@ def test_live_composition_uses_mcp_evidence_with_all_trusted_bindings(
         assert port._binding.team_id == "55555555-5555-4555-8555-555555555555"
         assert port._binding.channel_id == "19:channel-fixture@thread.tacv2"
         assert components["readiness"].check().capability_health["work_iq"] == "ready"
+    finally:
+        import asyncio
+
+        asyncio.run(components["async_resources"][0].aclose())
+        store.engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_fixed_sender_composes_read_only_mail_capability_while_send_stays_disabled(
+    monkeypatch, tmp_path
+):
+    _offline_fabric(monkeypatch, tmp_path)
+    settings = _live_settings(
+        tmp_path,
+        mail_from_address="agent@willmacdonald.com",
+        mail_send_enabled=False,
+    )
+    components = build_live_components(settings, clock=lambda: NOW)
+    services = build_composition(
+        settings,
+        clock=lambda: NOW,
+        live_components=components,
+    )
+    try:
+        assert isinstance(services.graph_mail, GraphMailClient)
+        assert services.graph_mail is components["graph_mail"]
+        with pytest.raises(EmailSendDisabled):
+            await services.mail_service.send("RL-DECISION-MISSING", 1, object())
+        with pytest.raises(EmailSendDisabled):
+            await services.mail_service.check_send_status(
+                "RL-DECISION-MISSING", object()
+            )
+    finally:
+        await services.close()
+
+
+def test_live_composition_without_mail_address_keeps_mail_capability_unavailable(
+    monkeypatch, tmp_path
+):
+    store = _offline_fabric(monkeypatch, tmp_path)
+    components = build_live_components(
+        _live_settings(tmp_path, mail_send_enabled=False),
+        clock=lambda: NOW,
+    )
+    try:
+        assert components["graph_mail"] is None
     finally:
         import asyncio
 
