@@ -123,7 +123,13 @@ def ctx(tmp_path):
     clock = lambda: next(moments)
     finance = FinanceService(factory, actors=actors, clock=clock)
     context = SimpleNamespace(
-        store=store, factory=factory, case=case, finance=finance, alex=alex, clock=clock
+        store=store,
+        factory=factory,
+        case=case,
+        analysis=analysis,
+        finance=finance,
+        alex=alex,
+        clock=clock,
     )
     submitted = finance.submit(
         SubmitProposalCommand(
@@ -231,13 +237,15 @@ def test_stale_worker_retires_event_without_success_and_never_reclaims(ctx, meth
 
 def test_current_planning_commits_one_guard_and_exact_plan(ctx):
     token, before = proposal(ctx).token, snapshot(ctx)
-    planned, observed = plan_actions(ctx.decision), []
+    planned, observed = plan_actions(ctx.decision, ctx.analysis), []
     planning_worker = ActionPlanningWorker(
         ctx.factory,
-        after_plan=lambda decision, actions: observed.append((decision, actions)),
+        after_plan=lambda decision, analysis, actions: observed.append(
+            (decision, analysis, actions)
+        ),
     )
     assert planning_worker.process_next_outbox() is True
-    assert observed == [(ctx.decision, planned)]
+    assert observed == [(ctx.decision, ctx.analysis, planned)]
     assert proposal(ctx).token.generation == token.generation + 1
     with ctx.factory() as uow:
         assert set(
@@ -382,7 +390,8 @@ def test_replacement_between_failed_attempt_and_recovery_preserves_new_case(ctx)
             after_replacement.append(snapshot(ctx))
         return ctx.factory()
 
-    def fail(decision):
+    def fail(decision, analysis):
+        del decision, analysis
         raise RuntimeError("planner failure")
 
     assert ActionPlanningWorker(factory, planner=fail).process_next_outbox() is False
@@ -404,8 +413,8 @@ def test_current_failure_recovery_commits_one_guard_and_rolls_back_partial_plan(
 
     monkeypatch.setattr(worker_module, "guard_execution_current", guard)
 
-    def conflicting_plan(decision):
-        first = plan_actions(decision)[0]
+    def conflicting_plan(decision, analysis):
+        first = plan_actions(decision, analysis)[0]
         return first, first.model_copy(
             update={"created_at": first.created_at + timedelta(seconds=1)}
         )
@@ -470,7 +479,8 @@ def test_lost_conditional_bookkeeping_rolls_back_recovery_guard_without_case_wri
     monkeypatch.setattr(execution_type, "record_outbox_failure_if_current", lost)
     monkeypatch.setattr(case_type, "mark_action_planning_failed", forbidden_case_write)
 
-    def fail(decision):
+    def fail(decision, analysis):
+        del decision, analysis
         raise RuntimeError("planner failed")
 
     assert (
@@ -495,7 +505,8 @@ def test_recovery_guard_cas_rollback_precedes_event_only_transaction(ctx, monkey
 
     monkeypatch.setattr(worker_module, "guard_execution_current", guard)
 
-    def fail(decision):
+    def fail(decision, analysis):
+        del decision, analysis
         raise RuntimeError("planner failure")
 
     assert (
@@ -518,7 +529,8 @@ def test_recovery_integrity_error_is_not_staleness(ctx, monkeypatch):
 
     monkeypatch.setattr(worker_module, "guard_execution_current", guard)
 
-    def fail(decision):
+    def fail(decision, analysis):
+        del decision, analysis
         raise RuntimeError("planner failure")
 
     with pytest.raises(PersistenceIntegrityError) as caught:

@@ -124,6 +124,7 @@ def ctx(tmp_path, request):
         store=store,
         factory=factory,
         case=case,
+        analysis=analysis,
         alex=alex,
         taylor=taylor,
         finance=finance,
@@ -176,7 +177,7 @@ def ctx(tmp_path, request):
     context.decision = decision
     context.action = next(
         action
-        for action in plan_actions(decision)
+        for action in plan_actions(decision, analysis)
         if action.draft_artifact_id is not None
     )
     context.service = ExecutionService(factory, clock=clock)
@@ -196,7 +197,7 @@ def replacement(ctx):
 def prepare(ctx, operation):
     sibling = next(
         action
-        for action in plan_actions(ctx.decision)
+        for action in plan_actions(ctx.decision, ctx.analysis)
         if action.action_id != ctx.action.action_id
     )
     ctx.service.create(sibling)
@@ -527,7 +528,7 @@ def test_invalid_transition_and_wrong_attempt_leave_every_row_unchanged(ctx):
     attempt = ctx.service.start(ctx.action.action_id)
     other = next(
         action
-        for action in plan_actions(ctx.decision)
+        for action in plan_actions(ctx.decision, ctx.analysis)
         if action.action_id != ctx.action.action_id
     )
     ctx.service.create(other)

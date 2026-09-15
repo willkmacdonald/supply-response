@@ -5,6 +5,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from data.domain.analysis import AnalysisVersion
 from data.domain.cases import WorkflowVersion
 from data.domain.decisions import Decision
 from data.domain.execution import (
@@ -23,8 +24,8 @@ from services.execution.planner import plan_actions
 from services.persistence.ports import EXECUTION_PROPOSAL_STALE_ERROR, UnitOfWork
 
 UnitOfWorkFactory = Callable[[], UnitOfWork]
-Planner = Callable[[Decision], tuple[ExecutionAction, ...]]
-AfterPlan = Callable[[Decision, tuple[ExecutionAction, ...]], None]
+Planner = Callable[[Decision, AnalysisVersion], tuple[ExecutionAction, ...]]
+AfterPlan = Callable[[Decision, AnalysisVersion, tuple[ExecutionAction, ...]], None]
 Clock = Callable[[], datetime]
 
 
@@ -90,7 +91,8 @@ class ActionPlanningWorker:
                     return False
                 uow.execution.validate_claimed_outbox(claim)
                 decision = guard_execution_current(uow, claim.decision_id)
-                planned_actions = self._planner(decision)
+                analysis = uow.cases.get_analysis(decision.analysis_id)
+                planned_actions = self._planner(decision, analysis)
                 for action in planned_actions:
                     uow.execution.insert_action_if_absent(action)
                 uow.execution.mark_outbox_processed(claim.event_id)
@@ -101,7 +103,7 @@ class ActionPlanningWorker:
                 raise
             return self._recover_failure(claim, error)
         if self._after_plan is not None:
-            self._after_plan(decision, planned_actions)
+            self._after_plan(decision, analysis, planned_actions)
         return True
 
     def _event_only_failure(self, claim: OutboxClaim, code: str) -> bool:

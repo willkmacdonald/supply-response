@@ -239,6 +239,11 @@ def test_verified_session_and_planner_boundary(tmp_path):
                 analysis["recommendation"]["option_id"]
                 == analysis["ranking"]["recommended_option_id"]
             )
+        armed = client.post(
+            "/api/test/cases/RL-CASE-HTTP/faults/planning_failure",
+            headers=alex,
+        )
+        assert armed.status_code == 204
         state = client.get("/api/cases/RL-CASE-HTTP/proposal", headers=alex).json()
         final = client.post(
             "/api/cases/RL-CASE-HTTP/proposal-decisions",
@@ -246,20 +251,42 @@ def test_verified_session_and_planner_boundary(tmp_path):
             json={"expected": state["token"], "kind": "approved"},
         )
         assert final.status_code == 201
+        assert final.json()["action_planning_status"] == "pending"
         assert (
             final.json()["proposal_approval_evidence"]["review"]["status"] == "approved"
         )
         decision_id = final.json()["decision_id"]
+        assert (
+            client.get(f"/api/decisions/{decision_id}/actions", headers=alex).json()
+            == []
+        )
+        assert services.planning_worker.process_next_unattempted_outbox() is True
+        failed = client.get(f"/api/decisions/{decision_id}", headers=alex)
+        assert failed.json()["action_planning_status"] == "failed"
         controls = client.get("/api/cases/RL-CASE-HTTP", headers=alex).json()[
             "controls"
         ]
-        assert controls["retry_action_planning"] is False
+        assert controls["retry_action_planning"] is True
         assert controls["start_playback"] is False
         retry = client.post(
             f"/api/decisions/{decision_id}/actions/retry", headers=alex, json={}
         )
-        assert retry.status_code == 409
-        assert retry.json()["detail"]["code"] == "ACTION_PLANNING_RETRY_NOT_AVAILABLE"
+        assert retry.status_code == 200
+        assert retry.json()["action_planning_status"] == "complete"
+        actions = client.get(
+            f"/api/decisions/{decision_id}/actions", headers=alex
+        ).json()
+        assert [action["kind"] for action in actions] == [
+            "prepare_alpha_recovery_draft",
+            "coordinate_alpha_expedited_partial",
+            "update_disruption_status",
+        ]
+        action_retry = client.post(
+            f"/api/decisions/{decision_id}/actions/{actions[0]['action_id']}/retry",
+            headers=alex,
+        )
+        assert action_retry.status_code == 409
+        assert action_retry.json()["detail"]["code"] == "INDEPENDENT_EXECUTION_DEFERRED"
         playback = client.post(f"/api/decisions/{decision_id}/playback", headers=alex)
         assert playback.status_code == 409
         assert playback.json()["detail"]["code"] == "INDEPENDENT_EXECUTION_DEFERRED"

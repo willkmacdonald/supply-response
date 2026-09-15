@@ -912,7 +912,8 @@ def test_outbox_failure_and_targeted_retries_are_durable(
             0
         ]
 
-    def fail_planning(decision):
+    def fail_planning(decision, analysis):
+        del analysis
         raise RuntimeError(f"cannot plan {decision.decision_id}")
 
     failing_worker = ActionPlanningWorker(first.uow_factory, planner=fail_planning)
@@ -995,7 +996,8 @@ def test_targeted_contract_helpers_preserve_unrelated_shared_database_work(tmp_p
         datetime(2021, 1, 1, tzinfo=UTC),
     )
 
-    def fail_planning(decision):
+    def fail_planning(decision, analysis):
+        del analysis
         raise RuntimeError(f"cannot plan {decision.decision_id}")
 
     assert ActionPlanningWorker(

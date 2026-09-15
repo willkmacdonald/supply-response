@@ -90,6 +90,9 @@ class ExecutionAction(FrozenModel):
     status: ExecutionStatus = ExecutionStatus.PLANNED
     created_at: datetime
     draft_artifact_id: str | None = None
+    purpose: str | None = None
+    expected_result: str | None = None
+    execution_mode: Literal["simulation", "communication_preparation"] | None = None
 
     @model_validator(mode="after")
     def validate_owner_and_draft(self) -> ExecutionAction:

@@ -239,8 +239,8 @@ def test_decision_request_shape_is_validated_before_domain_services(client):
 
 
 def test_planning_failure_is_visible_and_retryable(tmp_path):
-    def fail_planning(decision):
-        del decision
+    def fail_planning(decision, analysis):
+        del decision, analysis
         raise RuntimeError("internal planning detail")
 
     settings = Settings(
@@ -280,8 +280,8 @@ def test_planning_failure_is_visible_and_retryable(tmp_path):
 
 
 def test_planning_retry_claims_only_the_requested_decision(tmp_path):
-    def fail_planning(decision):
-        del decision
+    def fail_planning(decision, analysis):
+        del decision, analysis
         raise RuntimeError("internal planning detail")
 
     api = create_app(
@@ -354,8 +354,8 @@ def test_planning_retry_requires_server_owned_response_approver(
     tmp_path,
     identity_update,
 ):
-    def fail_planning(decision):
-        del decision
+    def fail_planning(decision, analysis):
+        del decision, analysis
         raise RuntimeError("internal planning detail")
 
     api = create_app(
@@ -385,8 +385,8 @@ def test_planning_retry_requires_server_owned_response_approver(
 
 
 def test_planning_retry_rejects_caller_owned_identity_snapshot(tmp_path):
-    def fail_planning(decision):
-        del decision
+    def fail_planning(decision, analysis):
+        del decision, analysis
         raise RuntimeError("internal planning detail")
 
     api = create_app(

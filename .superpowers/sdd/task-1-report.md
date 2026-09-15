@@ -1,51 +1,95 @@
-# Task 1 report: immutable analysis base
+# Task 1 report: option-aware action planning
 
-## Changes
+## Status
 
-- Added `analytics.report_scalar`, a strict JSON scalar validation helper for text, flags, non-negative integers, fixed two-decimal money, ISO dates, and ISO instants.
-- Added `analytics.saved_analyses`, projecting one row per immutable `app.analysis_versions` record with separately reported payload and snapshot availability.
-- Snapshot extraction is guarded against non-object payload roots and root extraction row multiplication; malformed or identity-mismatched snapshots fail closed.
-- Added the Task 1 SQL acceptance module. Future `saved_options` tests remain in the module for Task 2 and are not implemented by this task.
-- Advanced static analytics-view inventory expectations from four to five views.
+DONE
 
-## RED/GREEN verification
+## Implementation
 
-The required local command was run before and after SQL authoring:
+- Extended `ExecutionAction` with backward-compatible optional `purpose`, `expected_result`, and `execution_mode` display metadata.
+- Changed `plan_actions` to require the immutable approved `AnalysisVersion`, reject rejected/non-executable/absent/mismatched options, parse `operational_snapshot_json`, and build only the action kinds for expedite, transfer, resequence, or combined.
+- Kept deterministic action and draft artifact ID formulas unchanged.
+- Added snapshot-derived action text for Alpha's 3,000-unit September 6 expedite at $7.50 per unit, the 1,500-unit Dallas-to-Chicago September 5 transfer, the priority customer order targeted by resequencing, and the disruption status update.
+- Kept preparation/coordinated actions owned by Alex, the status update system-owned, draft preparation labeled `communication_preparation`, and simulated coordination/status actions labeled `simulation`.
+- Updated `ActionPlanningWorker` to load the Decision's approved Analysis within the claimed transaction and pass the same Decision/Analysis pair through the planner and automated-test `after_plan` seam.
+- Configured the API composition worker for both legacy and independent-finance workflows.
+- Exposed independent action-planning retry while retaining `INDEPENDENT_EXECUTION_DEFERRED` for individual action retry and playback.
+- Updated existing planner consumers and fault-injection test doubles for the intentional two-argument planner interface.
+
+## Files
+
+- `.superpowers/sdd/task-1-report.md`
+- `data/domain/execution.py`
+- `services/execution/planner.py`
+- `services/execution/worker.py`
+- `apps/api/app/dependencies.py`
+- `apps/api/app/test_support.py`
+- `apps/api/app/routes/cases.py`
+- `apps/api/app/routes/execution.py`
+- `tests/execution/conftest.py`
+- `tests/execution/test_action_planning.py`
+- `tests/finance/test_planning_worker_currentness.py`
+- `tests/api/test_finance_journey.py`
+- `tests/finance/test_execution_service_currentness.py`
+- `tests/api/test_failure_contracts.py`
+- `tests/api/test_runtime_progression.py`
+- `tests/integration/test_store_contract.py`
+
+## TDD evidence
+
+### RED
+
+Before production changes:
 
 ```text
-uv run --extra dev pytest tests/integrations/test_saved_analysis_reporting_sql.py -rs
-42 skipped in 0.10s
+.venv/bin/python -m pytest tests/execution/test_action_planning.py tests/finance/test_planning_worker_currentness.py -q -o addopts=''
+21 failed, 21 passed in 2.74s
 ```
 
-The local SQL execution gate was not configured, so SQL semantics were skipped rather than reported as passing. An attempt to sync the scoped test to the authorized remote SQL VM for the missing-view RED checkpoint was rejected by the environment's source-upload safety review. The parent harness owner has the VM path and can perform that checkpoint.
+The failures were the expected missing-feature failures: `plan_actions` accepted only one argument, and the worker called two-argument planner test doubles with only a Decision.
 
-Static contract tests after implementation:
+### GREEN
+
+After the first implementation pass, the same suite reported 2 content failures and 40 passes. Those failures identified snapshot labels rendered as `Dal`/`Chi` and the need to derive the resequence target from snapshot priority when no order was fully protected in the predicted outcome. After the bounded correction:
 
 ```text
-uv run --extra dev pytest tests/integrations/test_fabric_sql_scripts.py tests/integrations/test_saved_analysis_reporting_sql.py -rs
-11 passed, 42 skipped in 0.10s
+.venv/bin/python -m pytest tests/execution/test_action_planning.py tests/finance/test_planning_worker_currentness.py -q -o addopts=''
+42 passed in 2.85s
 ```
 
-## Scope and deviations
+Final required focused verification:
 
-Only `fabric/sql/002_analytics_views.sql`, `tests/integrations/test_saved_analysis_reporting_sql.py`, and additive expectations in `tests/integrations/test_fabric_sql_scripts.py` were changed. No saved-options view, infrastructure, credentials, health contract, or operational script was changed.
+```text
+.venv/bin/python -m pytest tests/execution/test_action_planning.py tests/finance/test_planning_worker_currentness.py tests/api/test_finance_journey.py -q -o addopts=''
+43 passed, 1 warning in 3.16s
+```
 
-The supplied base view used `OPENJSON(a.payload_json) WITH` directly. This implementation wraps root extraction in an aggregate and requires an object root so a malformed array or duplicate parent extraction cannot multiply rows at the case/analysis grain.
+## Regression and quality verification
+
+```text
+.venv/bin/python -m pytest tests/execution tests/finance tests/api -q -o addopts=''
+347 passed, 11 skipped, 1 warning in 28.95s
+
+.venv/bin/python -m pytest tests/integration/test_store_contract.py -q -o addopts=''
+17 passed, 15 skipped in 1.00s
+
+.venv/bin/ruff check <all changed Python files>
+All checks passed!
+
+uv run pyright <changed production Python files>
+0 errors, 0 warnings, 0 informations
+```
+
+## Self-review
+
+- Confirmed the option-to-action sequences exactly match the approved Task 1 brief.
+- Confirmed baseline, alternate supplier, rejected, absent-option, and Decision/Analysis mismatch cases raise `ValueError` before any action insertion.
+- Confirmed deterministic action/draft IDs are unchanged and retry/reprocessing remains idempotent.
+- Confirmed the Analysis is loaded inside the worker's claimed transaction and the Decision/Analysis pair reaches both test seams unchanged.
+- Confirmed an independent expedite Decision remains pending until final Alex approval is processed, can fail planning once, exposes planning retry, and completes with exactly three option-specific actions.
+- Confirmed independent individual-action retry and playback both still return `INDEPENDENT_EXECUTION_DEFERRED`.
+- Confirmed no deployment, tenant permission change, email send, or live-data mutation was performed, and `.pnpm-store/` was not touched.
 
 ## Concerns
 
-- A real SQL Server run remains required before release; the local environment has no SQL URL and the remote source sync was blocked by policy.
-- The future `saved_options` assertions are expected to remain red until Task 2 adds that view.
-
-## Controller real-engine verification (after checkpoint 65502a3)
-
-Controller synced this module first to the unchanged 67ddbb6 remote SQL source,
-then ran `../.venv/bin/python run-reporting-tests.py -q
-tests/integrations/test_saved_analysis_reporting_sql.py -k
-"snapshot_is_full_length or strict_scalar_semantics or missing_duplicate_or_malformed"
---tb=short`. RED: 30 failed, 12 deselected; missing analytics.saved_analyses and
-analytics.report_scalar, as expected. Synced checkpoint SQL and repeated exactly
-the same command: GREEN, 30 passed, 12 deselected in 0.83s. Both executions used
-fresh dedicated databases, applied packaged scripts twice, and removed only their
-own generated test database afterward. SQL2022 x86_64 dedicated VM; no live calls.
-The preceding remote-policy obstacle is resolved for controller-owned uploads.
+- No functional concerns. The focused and broader API suites emit the pre-existing Starlette `TestClient`/httpx deprecation warning. Pyright also reports that a newer tool version is available; neither affects this task.

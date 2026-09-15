@@ -5,29 +5,105 @@ import pytest
 from sqlalchemy import select, update
 
 from data.domain import CaseStatus
+from data.domain.decisions import DecisionKind
+from data.domain.execution import ExecutionActionKind
 from services.execution.planner import plan_actions
 from services.execution.worker import ActionPlanningWorker
 from services.persistence.tables import decisions, outbox_events
 
+EXPECTED = {
+    "RL-OPTION-EXPEDITE": (
+        "prepare_alpha_recovery_draft",
+        "coordinate_alpha_expedited_partial",
+        "update_disruption_status",
+    ),
+    "RL-OPTION-TRANSFER": (
+        "prepare_alpha_recovery_draft",
+        "transfer_dallas_to_chicago",
+        "update_disruption_status",
+    ),
+    "RL-OPTION-RESEQUENCE": (
+        "prepare_alpha_recovery_draft",
+        "resequence_priority_production",
+        "update_disruption_status",
+    ),
+    "RL-OPTION-COMBINED": tuple(kind.value for kind in ExecutionActionKind),
+}
 
-def test_combined_decision_creates_exactly_five_bounded_actions(
-    approved_combined_decision,
+
+def decision_for_option(planning_context, option_id):
+    option = next(
+        option
+        for option in planning_context.analysis.response_options
+        if option.option_id == option_id
+    )
+    return planning_context.decision.model_copy(
+        update={"selected_option_id": option_id, "selected_option": option}
+    )
+
+
+@pytest.mark.parametrize("option_id, expected_kinds", EXPECTED.items())
+def test_approved_option_creates_only_its_applicable_actions(
+    planning_context,
+    option_id,
+    expected_kinds,
 ):
-    actions = plan_actions(approved_combined_decision)
-    assert [(a.kind, a.owner_persona_id) for a in actions] == [
-        ("prepare_alpha_recovery_draft", "RL-PERSONA-ALEX"),
-        ("coordinate_alpha_expedited_partial", "RL-PERSONA-ALEX"),
-        ("transfer_dallas_to_chicago", "RL-PERSONA-ALEX"),
-        ("resequence_priority_production", "RL-PERSONA-ALEX"),
-        ("update_disruption_status", None),
-    ]
-    assert all(a.decision_id == approved_combined_decision.decision_id for a in actions)
-    assert not any("beta" in a.kind for a in actions)
+    decision = decision_for_option(planning_context, option_id)
+
+    actions = plan_actions(decision, planning_context.analysis)
+
+    assert tuple(action.kind for action in actions) == expected_kinds
+    assert all(action.decision_id == decision.decision_id for action in actions)
+    assert actions[0].kind == "prepare_alpha_recovery_draft"
+    assert actions[-1].kind == "update_disruption_status"
+    assert actions[0].execution_mode == "communication_preparation"
+    assert all(action.purpose and action.expected_result for action in actions)
+    assert all(action.execution_mode == "simulation" for action in actions[1:])
+    assert all(action.owner_persona_id == "RL-PERSONA-ALEX" for action in actions[:-1])
+    assert actions[-1].owner_persona_id is None
 
 
-def test_action_ids_are_deterministic_for_reprocessing(approved_combined_decision):
-    first = plan_actions(approved_combined_decision)
-    second = plan_actions(approved_combined_decision)
+@pytest.mark.parametrize(
+    "option_id, action_kind, expected_text",
+    (
+        (
+            "RL-OPTION-EXPEDITE",
+            "coordinate_alpha_expedited_partial",
+            ("3,000", "September 6, 2026", "$7.50 per unit"),
+        ),
+        (
+            "RL-OPTION-TRANSFER",
+            "transfer_dallas_to_chicago",
+            ("1,500", "Dallas", "Chicago", "September 5, 2026"),
+        ),
+        (
+            "RL-OPTION-RESEQUENCE",
+            "resequence_priority_production",
+            ("RL-CO-DEMO-2",),
+        ),
+    ),
+)
+def test_option_action_text_uses_the_approved_snapshot(
+    planning_context,
+    option_id,
+    action_kind,
+    expected_text,
+):
+    decision = decision_for_option(planning_context, option_id)
+
+    action = next(
+        action
+        for action in plan_actions(decision, planning_context.analysis)
+        if action.kind == action_kind
+    )
+    display_text = f"{action.purpose} {action.expected_result}"
+
+    assert all(value in display_text for value in expected_text)
+
+
+def test_action_ids_are_deterministic_for_reprocessing(planning_context):
+    first = plan_actions(planning_context.decision, planning_context.analysis)
+    second = plan_actions(planning_context.decision, planning_context.analysis)
 
     assert [action.action_id for action in first] == [
         action.action_id for action in second
@@ -38,7 +114,7 @@ def test_action_ids_are_deterministic_for_reprocessing(approved_combined_decisio
 def test_draft_artifact_id_is_stable_across_idempotent_reprocessing(
     planning_context,
 ):
-    planned = plan_actions(planning_context.decision)
+    planned = plan_actions(planning_context.decision, planning_context.analysis)
     draft_action = planned[0]
 
     with planning_context.uow_factory() as uow:
@@ -101,8 +177,8 @@ def test_planning_failure_updates_only_failure_state_and_case_projection(
 ):
     immutable_decision = planning_context.decision
 
-    def fail_planning(decision):
-        del decision
+    def fail_planning(decision, analysis):
+        del decision, analysis
         raise RuntimeError("sensitive planning details")
 
     worker = ActionPlanningWorker(
@@ -170,8 +246,8 @@ def test_claimed_validation_failure_is_durably_projected(
 
 
 def test_failure_after_first_action_insert_rolls_back_partial_plan(planning_context):
-    def conflicting_plan(decision):
-        actions = plan_actions(decision)
+    def conflicting_plan(decision, analysis):
+        actions = plan_actions(decision, analysis)
         conflicting_second = actions[1].model_copy(
             update={"action_id": actions[0].action_id}
         )
@@ -209,4 +285,59 @@ def test_failure_after_first_action_insert_rolls_back_partial_plan(planning_cont
                 )
             )
             == 5
+        )
+
+
+@pytest.mark.parametrize(
+    "invalid_decision",
+    (
+        lambda context: decision_for_option(context, "RL-OPTION-NO-MITIGATION"),
+        lambda context: decision_for_option(context, "RL-OPTION-BETA"),
+        lambda context: context.decision.model_copy(
+            update={"kind": DecisionKind.REJECTED}
+        ),
+        lambda context: context.decision.model_copy(
+            update={"selected_option_id": None, "selected_option": None}
+        ),
+    ),
+    ids=("baseline", "alternate-supplier", "rejected", "absent-option"),
+)
+def test_invalid_decisions_are_not_planned_or_inserted(
+    planning_context,
+    invalid_decision,
+):
+    with pytest.raises(ValueError):
+        plan_actions(invalid_decision(planning_context), planning_context.analysis)
+
+    with planning_context.uow_factory() as uow:
+        assert (
+            uow.execution.list_actions(
+                decision_id=planning_context.decision.decision_id
+            )
+            == ()
+        )
+
+
+@pytest.mark.parametrize("mismatch", ("analysis_id", "material_hash"))
+def test_decision_analysis_mismatch_is_not_planned_or_inserted(
+    planning_context,
+    mismatch,
+):
+    analysis = (
+        planning_context.analysis.model_copy(
+            update={"analysis_id": "RL-ANALYSIS-OTHER"}
+        )
+        if mismatch == "analysis_id"
+        else planning_context.analysis.model_copy(update={"material_hash": "different"})
+    )
+
+    with pytest.raises(ValueError):
+        plan_actions(planning_context.decision, analysis)
+
+    with planning_context.uow_factory() as uow:
+        assert (
+            uow.execution.list_actions(
+                decision_id=planning_context.decision.decision_id
+            )
+            == ()
         )

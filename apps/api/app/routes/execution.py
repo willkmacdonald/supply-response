@@ -39,7 +39,7 @@ def _action_response(services, decision, action) -> ActionResponse:
     )
 
 
-def _require_execution_available(decision) -> None:
+def _require_action_execution_available(decision) -> None:
     if decision.approval_policy_version == WorkflowVersion.INDEPENDENT_FINANCE.value:
         raise HTTPException(
             status_code=409,
@@ -70,7 +70,7 @@ def retry_failed_action(
 ) -> ActionResponse:
     _require_role(actor, "response_approver")
     decision = _decision(services, decision_id)
-    _require_execution_available(decision)
+    _require_action_execution_available(decision)
     execution = ExecutionService(services.uow_factory, clock=services.clock)
     try:
         with services.uow_factory() as uow:
@@ -131,7 +131,7 @@ def start_playback(
     actor: IdentitySnapshot = Depends(get_decision_identity),
 ) -> PlaybackResponse:
     decision = _decision(services, decision_id)
-    _require_execution_available(decision)
+    _require_action_execution_available(decision)
     try:
         playback = services.playback_service.start(decision_id, actor)
     except PlaybackAuthorizationError:

@@ -102,9 +102,9 @@ def test_lifespan_completes_explicit_playback_without_blocking_or_duplicates(
 def test_lifespan_does_not_globally_retry_failed_planning(tmp_path):
     calls = 0
 
-    def fail_planning(decision):
+    def fail_planning(decision, analysis):
         nonlocal calls
-        del decision
+        del decision, analysis
         calls += 1
         raise RuntimeError("planner failed")
 

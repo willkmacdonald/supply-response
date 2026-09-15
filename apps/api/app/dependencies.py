@@ -235,9 +235,13 @@ def build_composition(
         planning_worker=ActionPlanningWorker(
             uow_factory,
             planner=test_faults.wrap(planner),
-            processable_workflow_versions=(WorkflowVersion.LEGACY,),
-            after_plan=lambda decision, actions: test_faults.after_plan(
+            processable_workflow_versions=(
+                WorkflowVersion.LEGACY,
+                WorkflowVersion.INDEPENDENT_FINANCE,
+            ),
+            after_plan=lambda decision, analysis, actions: test_faults.after_plan(
                 decision,
+                analysis,
                 actions,
                 execution_service,
             ),

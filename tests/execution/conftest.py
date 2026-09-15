@@ -8,24 +8,23 @@ from uuid import UUID
 import pytest
 
 from data.domain import CasePurpose, CaseStatus, RuntimeMode
+from data.domain.analysis import AnalysisVersion
 from data.domain.decisions import (
     CorpusScope,
+    Decision,
     DecisionKind,
     IdentitySnapshot,
     RecordDecisionCommand,
     StandingAuthorization,
-    Decision,
 )
 from data.domain.evidence import IdentitySource
 from data.synthetic.rl001 import build_rl001_evidence, instantiate_rl001
 from services.analysis.service import AnalyzeCaseCommand, analyze_case
 from services.decisions.service import DecisionService
 from services.execution.planner import plan_actions
-from services.execution.worker import ExecutionService
-from services.execution.worker import UnitOfWorkFactory
+from services.execution.worker import ExecutionService, UnitOfWorkFactory
 from services.persistence.sqlite import sqlite_store
 from services.persistence.store import SqlAlchemyStore
-
 
 APPROVED_DECISION_ID = "RL-DECISION-00000000-0000-0000-0000-000000000008"
 
@@ -52,6 +51,7 @@ def alex_identity(
 class PlanningContext:
     store: SqlAlchemyStore
     decision: Decision
+    analysis: AnalysisVersion
 
     @property
     def uow_factory(self) -> UnitOfWorkFactory:
@@ -101,7 +101,7 @@ def planning_context(tmp_path, monkeypatch) -> PlanningContext:
         alex_identity(),
     )
     assert decision.decision_id == APPROVED_DECISION_ID
-    return PlanningContext(store=store, decision=decision)
+    return PlanningContext(store=store, decision=decision, analysis=analysis)
 
 
 @pytest.fixture
@@ -110,8 +110,8 @@ def approved_combined_decision(planning_context):
 
 
 @pytest.fixture
-def planned_action(approved_combined_decision):
-    return plan_actions(approved_combined_decision)[0]
+def planned_action(planning_context):
+    return plan_actions(planning_context.decision, planning_context.analysis)[0]
 
 
 @pytest.fixture
