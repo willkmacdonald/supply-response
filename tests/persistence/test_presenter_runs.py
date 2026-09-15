@@ -140,11 +140,13 @@ def populated_presenter_store(tmp_path):
         f"sqlite:///{tmp_path / 'presenter.db'}", runtime_mode=RuntimeMode.LIVE
     )
     cases = []
+    snapshots = []
     for index in range(5):
         case, snapshot = bound_case(
             f"presenter-{index}", run_id=None if index == 0 else f"RL-RUN-{index:032x}"
         )
         cases.append(case)
+        snapshots.append(snapshot)
         if index < 4:
             store.create_case(case, snapshot)
             with store.engine.begin() as connection:
@@ -170,7 +172,7 @@ def populated_presenter_store(tmp_path):
     populate_aggregate(store, unbound)
     populate_aggregate(store, automated)
     return PopulatedPresenterStore(
-        store, cases[4], snapshot, tuple(cases[1:4]), cases[0], unbound, automated
+        store, cases[4], snapshots[4], tuple(cases[1:4]), cases[0], unbound, automated
     )
 
 
@@ -183,9 +185,9 @@ def aggregate_row_count(engine: Engine, name: str, case_id: str) -> int:
     )
     value = case_id if key == "case_id" else f"{case_id}:{key.removesuffix('_id')}"
     with engine.connect() as connection:
-        return connection.scalar(
+        return connection.execute(
             select(func.count()).select_from(table).where(table.c[key] == value)
-        )
+        ).scalar_one()
 
 
 def case_ids(store):
