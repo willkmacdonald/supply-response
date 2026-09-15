@@ -441,6 +441,30 @@ def test_database_conflict_classification_is_narrow():
     )
 
 
+def test_sql_server_primary_key_collision_is_a_revision_conflict():
+    from sqlalchemy.exc import IntegrityError
+
+    from services.persistence.store import _is_supplier_email_revision_collision
+
+    original = RuntimeError(
+        "23000",
+        "[Microsoft][ODBC Driver 18 for SQL Server][SQL Server]Violation of "
+        "PRIMARY KEY constraint 'pk_supplier_email_revisions'. Cannot insert "
+        "duplicate key in object 'app.supplier_email_revisions'. (2627)",
+    )
+    unrelated = RuntimeError(
+        "23000",
+        "[Microsoft][ODBC Driver 18 for SQL Server][SQL Server]Violation of "
+        "PRIMARY KEY constraint 'pk_decisions'. Cannot insert duplicate key "
+        "in object 'app.decisions'. (2627)",
+    )
+
+    assert _is_supplier_email_revision_collision(IntegrityError("insert", {}, original))
+    assert not _is_supplier_email_revision_collision(
+        IntegrityError("insert", {}, unrelated)
+    )
+
+
 def test_mismatched_action_cannot_own_supplier_email(planning_context):
     try:
         from services.execution.mail_service import EmailStateError

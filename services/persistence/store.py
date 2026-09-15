@@ -120,9 +120,13 @@ def _is_write_contention(error: OperationalError) -> bool:
 def _is_supplier_email_revision_collision(error: IntegrityError) -> bool:
     original = error.orig
     message = str(original).lower()
-    identifies_revision = "uq_supplier_email_revisions_email_revision" in message or (
-        "supplier_email_revisions.email_id" in message
-        and "supplier_email_revisions.revision" in message
+    identifies_revision = (
+        "uq_supplier_email_revisions_email_revision" in message
+        or "pk_supplier_email_revisions" in message
+        or (
+            "supplier_email_revisions.email_id" in message
+            and "supplier_email_revisions.revision" in message
+        )
     )
     if not identifies_revision:
         return False
