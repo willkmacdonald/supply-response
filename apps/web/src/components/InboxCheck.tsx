@@ -56,10 +56,14 @@ export function InboxCheck({disabled = false, onBusyChange, onCaseCreated}: {
     }
   }
   async function create(message: InboxMessage) {
-    if (disabled || pending.current || !onCaseCreated || !message.internet_message_id || !message.review_fingerprint || !message.facts || message.creation_blocker) return;
+    if (disabled || pending.current || !onCaseCreated || !result || !message.internet_message_id || !message.review_fingerprint || !message.facts || message.creation_blocker) return;
     pending.current = true; setCreating(message.message_id); setError(null); onBusyChange?.(true);
     try {
-      const created = await api.createCaseFromEmail(message.internet_message_id, message.review_fingerprint);
+      const created = await api.createCaseFromEmail(
+        result.presenter_run_id,
+        message.internet_message_id,
+        message.review_fingerprint,
+      );
       if (!created.current_analysis_id) await api.analyze(created.case_id);
       if (mounted.current) {
         await onCaseCreated(created.case_id);

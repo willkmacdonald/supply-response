@@ -7,7 +7,6 @@ import {CaseHeader} from "./CaseHeader";
 import {EvidencePanel} from "./EvidencePanel";
 import {OutcomePanel} from "./OutcomePanel";
 import type {AnalysisVersion, CaseInstance, EvidenceItem} from "../types";
-import {reportIdentityKey} from "../reporting/reportNavigation";
 
 function liveAnalysis(overrides: Partial<EvidenceItem>): AnalysisVersion {
   const item: EvidenceItem = {
@@ -84,7 +83,7 @@ describe("live journey safety", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     expect(screen.queryByText("Required live citation missing")).not.toBeInTheDocument();
   });
-  it("shows a safe Power BI action only for an available live report", () => {
+  it("keeps live provenance without the redundant exact-case dashboard action", () => {
     const runtime = {
       runtime_mode: "live" as const,
       work_iq: "work_iq" as const,
@@ -110,12 +109,7 @@ describe("live journey safety", () => {
     const view = <CaseHeader runtime={runtime} caseInstance={caseInstance} analysis={null} createPurpose="showcase" creating={false} analyzing={false} onCreate={vi.fn()} onAnalyze={vi.fn()} />;
     const {rerender} = render(view);
     expect(screen.getByText("Fictional scenario · Uses live Microsoft services")).toBeVisible();
-    const link = screen.getByRole("link", {name: "Open case dashboard"});
-    const url = new URL(link.getAttribute("href")!);
-    expect(url.origin + url.pathname).toBe(`${runtime.power_bi_url}/command-center`);
-    expect(url.searchParams.get("filter")).toBe(`CaseCommandCenter/case_key eq '${reportIdentityKey(caseInstance.case_id)}'`);
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+    expect(screen.queryByRole("link", {name: "Open case dashboard"})).not.toBeInTheDocument();
     const caseDetails = screen.getByText("Case details").closest("details");
     expect(caseDetails).toHaveTextContent("RL-CASE-LIVE");
     expect(document.querySelector(".case-id")).not.toBeInTheDocument();

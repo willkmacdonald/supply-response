@@ -91,8 +91,15 @@ async function post<T>(path: string, body: object, headers: Record<string, strin
 
 export const api = {
   checkInbox: (): Promise<InboxCheckResult> => post("/api/inbox/check", {}),
-  createCaseFromEmail: (internetMessageId: string, reviewFingerprint: string): Promise<CaseInstance> =>
-    post("/api/inbox/cases", {internet_message_id: internetMessageId, review_fingerprint: reviewFingerprint}),
+  createCaseFromEmail: (
+    presenterRunId: string,
+    internetMessageId: string,
+    reviewFingerprint: string,
+  ): Promise<CaseInstance> => post("/api/inbox/cases", {
+    presenter_run_id: presenterRunId,
+    internet_message_id: internetMessageId,
+    review_fingerprint: reviewFingerprint,
+  }),
   me: (): Promise<SessionInfo> => get("/api/me"),
   runtime: (): Promise<RuntimeStatus> => get("/api/runtime"),
   cases: (): Promise<CaseInstance[]> => get("/api/cases"),

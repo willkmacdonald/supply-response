@@ -41,6 +41,7 @@ export interface CaseInstance {
   controls: CaseControls;
   workflow_version?: WorkflowVersion;
   supplier_email?: {sender: string; subject: string; received_at: string} | null;
+  presenter_run_id?: string | null;
 }
 
 export interface CaseControls {
@@ -503,6 +504,7 @@ export interface InboxMessage {
 }
 
 export interface InboxCheckResult {
+  presenter_run_id: string;
   checked_at: string;
   incomplete: boolean;
   messages: InboxMessage[];

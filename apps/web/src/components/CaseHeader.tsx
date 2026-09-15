@@ -1,6 +1,4 @@
 import type {AnalysisVersion, CaseInstance, CasePurpose, RuntimeStatus} from "../types";
-import {buildReportUrl} from "../reporting/reportNavigation";
-import {parseSnapshotEnvelope} from "./snapshotValidation";
 
 interface CaseHeaderProps {
   runtime: RuntimeStatus | null;
@@ -29,7 +27,6 @@ function scenarioLabel(value: string): string {
 export function CaseHeader({
   runtime,
   caseInstance,
-  analysis,
   createPurpose,
   creating,
   analyzing,
@@ -37,17 +34,6 @@ export function CaseHeader({
   onCreate,
   onAnalyze,
 }: CaseHeaderProps) {
-  const matchingAnalysis = caseInstance && analysis
-    ? parseSnapshotEnvelope({caseInstance, analysis}) !== null
-    : false;
-  const powerBiUrl = runtime && caseInstance && (!analysis || matchingAnalysis)
-    ? buildReportUrl(runtime, {
-        page: "command-center",
-        caseId: caseInstance.case_id,
-        runtimeMode: caseInstance.runtime_mode,
-        ...(analysis ? {analysisId: analysis.analysis_id} : {}),
-      })
-    : null;
   return <header className="case-header panel">
     <div className="case-header-intro">
       <p className="eyebrow">RL-001 · Supply Disruption Response</p>
@@ -62,7 +48,6 @@ export function CaseHeader({
           ? "Power BI unavailable in fallback"
           : "Power BI report is not available"}
       </span>}
-      {powerBiUrl && <a href={powerBiUrl} target="_blank" rel="noopener noreferrer">Open case dashboard</a>}
     </div>
     {runtime && runtime.runtime_mode !== "live" && !caseInstance && <button type="button" className="secondary" onClick={() => onCreate(createPurpose)} disabled={busy || creating}>
       {creating

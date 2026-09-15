@@ -109,11 +109,11 @@ function header(s: CaseWorkspaceState) {
 async function selectStage(name: "2. Investigate responses" | "3. Choose a response") {
   await userEvent.click(screen.getByRole("tab", {name}));
 }
-it("mounts exact historical header context and hides missing or mismatched context", () => {
+it("never mounts the redundant exact-case dashboard link in the header", () => {
   const s = fixture(); const {rerender} = render(header(s));
-  expectDestination("Open case dashboard", "command-center", exact);
+  expect(screen.queryByRole("link", {name: "Open case dashboard"})).not.toBeInTheDocument();
   s.analysis = null; rerender(header(s));
-  expectDestination("Open case dashboard", "command-center", caseFilter);
+  expect(screen.queryByRole("link", {name: "Open case dashboard"})).not.toBeInTheDocument();
   s.analysis = fixture().analysis; s.analysis!.case_id = "other"; rerender(header(s));
   expect(screen.queryByRole("link")).not.toBeInTheDocument();
   s.caseInstance = null; rerender(header(s));
