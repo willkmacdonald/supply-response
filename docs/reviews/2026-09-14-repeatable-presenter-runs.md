@@ -4,9 +4,9 @@
 
 **Status:** Locally verified; deployment, cleanup application, and live browser acceptance pending
 
-**Reviewed code head:** `64e8898`
+**Reviewed code head:** `ed89d3c`
 
-**Feature range:** `a5650be..64e8898`
+**Feature range:** `a5650be..ed89d3c`
 
 ## Observable behavior
 
@@ -36,6 +36,7 @@ accepted in the live browser.
 | `8f9c07b` | Atomic presenter retention and preview command |
 | `2863b5c` | Database-level serialization for concurrent retention |
 | `64e8898` | Web run propagation and redundant dashboard-link removal |
+| `ed89d3c` | Presenter-retention test typing correction |
 
 ## Local verification
 
@@ -55,7 +56,8 @@ uv run pytest tests/domain/test_rl001_contract.py tests/api/test_inbox.py \
 Result: **117 passed**, no failures or skips. Pytest emitted one existing
 Starlette `httpx` test-client deprecation warning.
 
-The changed production Python files also passed focused checks:
+The Presenter Run production and dedicated test files also passed focused
+checks:
 
 ```text
 Ruff: All checks passed.
@@ -130,10 +132,11 @@ The required broad checks were run and remain dirty:
   fixable. The counts are 67 `FURB157`, 24 `I001`, 12 `SIM117`, 12 `UP007`,
   5 `UP035`, 2 `B008`, and one each of `UP047`, `FLY002`, `RUF022`, and
   `RUF100`.
-- `uv run pyright`: **108 errors**, 0 warnings, 0 informations. Two errors are
-  in the new presenter-retention test fixture (`snapshot` possibly unbound and
-  a nullable scalar count); the changed production files pass the focused
-  Pyright command. The remaining findings are broader repository typing debt.
+- `uv run pyright`: **106 errors**, 0 warnings, 0 informations. The two earlier
+  presenter-retention test-fixture findings were fixed in `ed89d3c`; the
+  Presenter Run production files, API tests, and dedicated retention tests pass
+  the focused Pyright command with **0 errors, 0 warnings, 0 informations**. The
+  remaining 106 findings are broader repository typing debt.
 
 No unrelated lint, typing, diagnostic, Fabric schema-count, or reporting-digest
 work was included in this release.
