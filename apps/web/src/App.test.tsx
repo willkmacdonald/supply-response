@@ -394,6 +394,7 @@ function mockFallbackCaseLifecycle(overrides: {
   runtimeFailure?: boolean;
   runtimeError?: Error;
   supplierEmailFailure?: boolean;
+  supplierEmailResponse?: Promise<Response>;
 } = {}) {
   let decisionPolls = 0;
   let playbackPolls = 0;
@@ -432,7 +433,7 @@ function mockFallbackCaseLifecycle(overrides: {
     if (path === "/api/decisions/RL-DECISION-1/drafts" && method === "GET") return response(drafts);
     if (path === "/api/decisions/RL-DECISION-1/supplier-email" && method === "GET") return overrides.supplierEmailFailure
       ? response({detail: {code: "MAIL_UNAVAILABLE"}}, 503)
-      : response(supplierEmail);
+      : overrides.supplierEmailResponse ?? response(supplierEmail);
     if (path === "/api/decisions/RL-DECISION-1/playback" && method === "POST") return response(inProgressPlayback, 201);
     if (path === "/api/decisions/RL-DECISION-1/playback" && method === "GET") {
       playbackPolls += 1;
@@ -476,6 +477,29 @@ function savedReads(overrides: Record<string, unknown> = {}) {
 }
 
 describe("reopening lifecycle and operation safety", () => {
+  it("shows reopened execution while the optional supplier email read is still pending", async () => {
+    let resolveMail!: (value: Response) => void;
+    const pendingMail = new Promise<Response>(resolve => { resolveMail = resolve; });
+    const decidedCase = {...caseInstance, status: "executing", current_analysis_id: analysis.analysis_id,
+      current_decision_id: decision.decision_id,
+      controls: {new_analysis: false, decide: false, retry_action_planning: false, start_playback: true}};
+    savedReads({
+      "/api/cases/RL-CASE-1": decidedCase,
+      "/api/decisions/RL-DECISION-1/playback": await response({detail: {code: "PLAYBACK_NOT_FOUND"}}, 404),
+      "/api/decisions/RL-DECISION-1/observations": [],
+      "/api/decisions/RL-DECISION-1/supplier-email": pendingMail,
+    });
+    window.history.replaceState(null, "", "/?caseId=RL-CASE-1&analysisId=RL-ANALYSIS-1&stage=execution");
+
+    render(<App />);
+
+    expect((await screen.findAllByTestId("execution-action"))).toHaveLength(5);
+    expect(screen.getByRole("button", {name: "Run simulated coordination"})).toBeEnabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading supplier email");
+    await act(async () => {resolveMail(await response(supplierEmail));});
+    expect(await screen.findByRole("region", {name: "Review the supplier email"})).toBeVisible();
+  });
+
   it("keeps reopened execution usable when only supplier email loading fails", async () => {
     const decidedCase = {...caseInstance, status: "executing", current_analysis_id: analysis.analysis_id,
       current_decision_id: decision.decision_id,
@@ -1114,6 +1138,27 @@ describe("progressive Case workspace", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Supplier email is unavailable");
     expect(screen.queryByText(/Action planning failed/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", {name: "Run simulated coordination"})).toBeEnabled();
+  });
+
+  it("shows newly planned execution while the optional supplier email read is still pending", async () => {
+    let resolveMail!: (value: Response) => void;
+    const pendingMail = new Promise<Response>(resolve => { resolveMail = resolve; });
+    mockFallbackCaseLifecycle({supplierEmailResponse: pendingMail});
+    render(<App />);
+    await screen.findByText("Fictional scenario · Uses predefined sample data");
+    await userEvent.click(screen.getByRole("button", {name: "Start a new demo"}));
+    await userEvent.click(screen.getByRole("button", {name: "Analyze disruption"}));
+    await selectDecisionStage();
+    await screen.findByText("Combined response");
+    await selectApprovalStage();
+    await userEvent.click(screen.getByRole("button", {name: "Approve combined response"}));
+    await selectExecutionStage();
+
+    expect((await screen.findAllByTestId("execution-action"))).toHaveLength(5);
+    expect(screen.getByRole("button", {name: "Run simulated coordination"})).toBeEnabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading supplier email");
+    await act(async () => {resolveMail(await response(supplierEmail));});
+    expect(await screen.findByRole("region", {name: "Review the supplier email"})).toBeVisible();
   });
 
   it("records a rejection with a nonblank reason and keeps prior analysis visible", async () => {

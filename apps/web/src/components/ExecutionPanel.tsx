@@ -11,6 +11,7 @@ interface ExecutionPanelProps {
   onRetry: () => void;
   onRetryAction: (actionId: string) => void;
   supplierEmail?: SupplierEmailState | null;
+  supplierEmailLoading?: boolean;
   supplierEmailError?: string | null;
   onSaveSupplierEmail?: (input: {revision: number; subject: string; body: string}) => Promise<SupplierEmailState>;
   onReviewSupplierEmail?: (revision: number) => Promise<SupplierEmailState>;
@@ -60,7 +61,8 @@ function executionDescription(action: ExecutionAction): string {
 
 export function ExecutionPanel({
   decision, actions, drafts, retrying, busy, canRetryPlanning = false, onRetry, onRetryAction,
-  supplierEmail, supplierEmailError, onSaveSupplierEmail, onReviewSupplierEmail, onSendSupplierEmail, onCheckSupplierEmail,
+  supplierEmail, supplierEmailLoading, supplierEmailError,
+  onSaveSupplierEmail, onReviewSupplierEmail, onSendSupplierEmail, onCheckSupplierEmail,
 }: ExecutionPanelProps) {
   if (!decision || decision.kind !== "approved") return null;
   return <><section className="panel execution-simulation" aria-label="Simulated actions and prepared drafts">
@@ -90,7 +92,7 @@ export function ExecutionPanel({
       </li>)}
     </ol>}
     {drafts.map((draft) => <article className="draft" key={draft.artifact_id}>
-      <span className={`badge ${supplierEmail || supplierEmailError ? "" : "danger"}`}>{supplierEmail || supplierEmailError ? "Prepared draft" : "Not sent"}</span>
+      <span className={`badge ${supplierEmail || supplierEmailLoading || supplierEmailError ? "" : "danger"}`}>{supplierEmail || supplierEmailLoading || supplierEmailError ? "Prepared draft" : "Not sent"}</span>
       <h3>{draftName(draft.artifact_kind)}</h3>
       <p>{draft.subject ?? "No draft subject recorded."}</p>
       {draft.body && <pre>{draft.body}</pre>}
@@ -100,6 +102,11 @@ export function ExecutionPanel({
     {supplierEmail && onSaveSupplierEmail && onReviewSupplierEmail && onSendSupplierEmail && onCheckSupplierEmail &&
       <SupplierEmailPanel email={supplierEmail} busy={Boolean(busy)} onSave={onSaveSupplierEmail}
         onReview={onReviewSupplierEmail} onSend={onSendSupplierEmail} onCheckStatus={onCheckSupplierEmail} />}
+    {!supplierEmail && supplierEmailLoading && <section className="panel supplier-email-panel" aria-labelledby="supplier-email-loading-heading">
+      <p className="step">Supplier email</p>
+      <h2 id="supplier-email-loading-heading">Supplier email</h2>
+      <p role="status" aria-live="polite">Loading supplier email…</p>
+    </section>}
     {!supplierEmail && supplierEmailError && <section className="panel supplier-email-panel" aria-labelledby="supplier-email-unavailable-heading">
       <p className="step">Supplier email</p>
       <h2 id="supplier-email-unavailable-heading">Supplier email unavailable</h2>

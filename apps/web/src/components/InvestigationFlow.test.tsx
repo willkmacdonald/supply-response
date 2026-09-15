@@ -19,7 +19,7 @@ function state(): CaseWorkspaceState {
     excluded_baseline_ids: [], stages: [], recommended_option_id: null, no_feasible_mitigation: true};
   const validation = {policy_version: "v1", blocking_codes: [], global_blocking_codes: [], item_results: []};
   return {runtime: null, selectedOption: null, decision: null, actions: [], drafts: [], supplierEmail: null,
-    supplierEmailError: null, playback: null,
+    supplierEmailLoading: false, supplierEmailError: null, playback: null,
     observations: [], operation: null, error: null, existingCases: null, existingCasesError: null, decisionBlocked: true,
     create: vi.fn(), loadExistingCases: vi.fn(), reopen: vi.fn(), analyze: vi.fn(), selectOption: vi.fn(), approve: vi.fn(), reject: vi.fn(),
     retryPlanning: vi.fn(), retryAction: vi.fn(), startPlayback: vi.fn(), saveSupplierEmail: vi.fn(),

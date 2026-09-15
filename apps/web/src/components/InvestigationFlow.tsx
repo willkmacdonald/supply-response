@@ -100,7 +100,8 @@ function InvestigationPresentation({state, independentFinanceEnabled}: {state: C
           canRetryPlanning={state.caseInstance?.controls.retry_action_planning}
           decision={state.decision} actions={state.actions} drafts={state.drafts}
           retrying={state.operation === "planning"} onRetry={state.retryPlanning} onRetryAction={state.retryAction}
-          supplierEmail={state.supplierEmail} supplierEmailError={state.supplierEmailError}
+          supplierEmail={state.supplierEmail} supplierEmailLoading={state.supplierEmailLoading}
+          supplierEmailError={state.supplierEmailError}
           onSaveSupplierEmail={state.saveSupplierEmail}
           onReviewSupplierEmail={state.reviewSupplierEmail} onSendSupplierEmail={state.sendSupplierEmail}
           onCheckSupplierEmail={state.checkSupplierEmail} />

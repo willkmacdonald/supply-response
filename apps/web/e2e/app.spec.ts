@@ -2,6 +2,7 @@ import {expect, test, type Page, type Route} from "@playwright/test";
 
 const at = "2026-09-15T14:00:00Z";
 const scenarioTime = "2026-09-01T09:00:00-05:00";
+const localAppOrigin = "http://127.0.0.1:5173";
 
 const actor = (persona: "ALEX" | "TAYLOR") => ({
   persona_id: `RL-PERSONA-${persona}`,
@@ -136,14 +137,19 @@ async function installMockedPresenterApi(page: Page) {
 
   await page.context().route("**/*", async route => {
     const url = new URL(route.request().url());
-    if (url.origin === "http://127.0.0.1:5173") return route.fallback();
+    if (url.origin === localAppOrigin) return route.fallback();
     externalRequests.push(route.request().url());
     return route.abort("blockedbyclient");
   });
 
   await page.route("**/api/**", async (route: Route) => {
     const request = route.request();
-    const path = new URL(request.url()).pathname;
+    const requestUrl = new URL(request.url());
+    if (requestUrl.origin !== localAppOrigin) {
+      externalRequests.push(request.url());
+      return route.abort("blockedbyclient");
+    }
+    const path = requestUrl.pathname;
     const method = request.method();
     const fulfill = (json: unknown, status = 200) => route.fulfill({json, status});
     const runMatch = /RL-(?:CASE|DECISION)-RUN-(\d+)/.exec(path);
@@ -336,4 +342,21 @@ test("complete mocked presenter journey and a fresh second run do not leak state
   expect(api.sendCount()).toBe(1);
   expect(api.checkCount()).toBe(1);
   expect(api.externalRequests).toEqual([]);
+});
+
+test("rejects an external API lookalike instead of fulfilling it from local mocks", async ({page}) => {
+  const api = await installMockedPresenterApi(page);
+  await page.goto("/");
+
+  const rejected = await page.evaluate(async () => {
+    try {
+      await fetch("https://graph.microsoft.com/api/runtime");
+      return false;
+    } catch {
+      return true;
+    }
+  });
+
+  expect(rejected).toBe(true);
+  expect(api.externalRequests).toEqual(["https://graph.microsoft.com/api/runtime"]);
 });
