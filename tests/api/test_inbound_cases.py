@@ -45,6 +45,7 @@ def setup(app, services, tmp_path):
         actor,
         bound,
         {
+            "presenter_run_id": "RL-RUN-" + "a" * 32,
             "internet_message_id": bound.internet_message_id,
             "review_fingerprint": bound.review_fingerprint,
         },
@@ -67,7 +68,10 @@ def test_create_rechecks_source_binds_case_and_retry_returns_same_open_case(
     ] == bound.received_at.isoformat().replace("+00:00", "Z")
     assert services.store.get_case(body["case_id"]).supplier_email == bound
     services.inbox_service.review_inbound_email.assert_awaited_once_with(
-        actor=actor, checked_at=services.clock(), **payload
+        actor=actor,
+        checked_at=services.clock(),
+        internet_message_id=payload["internet_message_id"],
+        review_fingerprint=payload["review_fingerprint"],
     )
     # Current provider locator can change while the reviewed source identity stays fixed.
     services.inbox_service.review_inbound_email.return_value = bound.model_copy(
@@ -76,6 +80,24 @@ def test_create_rechecks_source_binds_case_and_retry_returns_same_open_case(
     second = client.post("/api/inbox/cases", json=payload)
     assert second.status_code == 200 and second.json()["case_id"] == body["case_id"]
     assert services.live_operational_data.retrieve.await_count == 1
+
+
+def test_same_email_is_fresh_across_runs_and_idempotent_within_run(
+    app, client, services, tmp_path
+):
+    _, _, payload = setup(app, services, tmp_path)
+    run_a = {**payload, "presenter_run_id": "RL-RUN-" + "a" * 32}
+    run_b = {**payload, "presenter_run_id": "RL-RUN-" + "b" * 32}
+    first = client.post("/api/inbox/cases", json=run_a)
+    retry = client.post("/api/inbox/cases", json=run_a)
+    second = client.post("/api/inbox/cases", json=run_b)
+    assert first.status_code == retry.status_code == second.status_code == 200
+    assert retry.json()["case_id"] == first.json()["case_id"]
+    assert second.json()["case_id"] != first.json()["case_id"]
+    assert second.json()["presenter_run_id"] == run_b["presenter_run_id"]
+    assert second.json()["current_analysis_id"] is None
+    assert second.json()["current_decision_id"] is None
+    assert second.json()["status"] == "open"
 
 
 @pytest.mark.parametrize(
@@ -152,14 +174,27 @@ def test_authentication_live_gate_and_untrusted_request_fields(
     assert (
         client.post(
             "/api/inbox/cases",
-            json={"internet_message_id": "<a@b>", "review_fingerprint": "a" * 64},
+            json={
+                "presenter_run_id": "RL-RUN-" + "a" * 32,
+                "internet_message_id": "<a@b>",
+                "review_fingerprint": "a" * 64,
+            },
         ).status_code
         == 503
     )
     _, _, payload = setup(app, services, tmp_path)
+    for invalid in (
+        {key: value for key, value in payload.items() if key != "presenter_run_id"},
+        {**payload, "presenter_run_id": "client-selected-run"},
+    ):
+        result = client.post("/api/inbox/cases", json=invalid)
+        assert result.status_code == 422
+        assert result.json()["detail"]["code"] == "INVALID_INBOUND_REQUEST"
+        assert result.headers.get("cache-control") == "no-store"
     for key in ("body", "facts", "mailbox", "sender", "case_id"):
         result = client.post("/api/inbox/cases", json={**payload, key: "untrusted"})
         assert result.status_code == 422
+        assert result.json()["detail"]["code"] == "INVALID_INBOUND_REQUEST"
         assert result.headers.get("cache-control") == "no-store"
     app.dependency_overrides[require_planner] = lambda: None
     assert client.post("/api/inbox/cases", json=payload).status_code == 401

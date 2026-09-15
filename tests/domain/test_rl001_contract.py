@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from decimal import Decimal
 
@@ -5,6 +6,8 @@ import pytest
 from pydantic import ValidationError
 
 from data.domain import CasePurpose, RuntimeMode
+from data.domain import cases as case_domain
+from data.domain.cases import CaseInstance
 from data.synthetic.rl001 import build_rl001_template, instantiate_rl001
 
 
@@ -95,6 +98,38 @@ def test_runtime_mode_is_immutable_on_a_case_instance():
     assert changed.runtime_mode is RuntimeMode.FALLBACK
     assert case.runtime_mode is RuntimeMode.LIVE
     assert changed.case_id != case.case_id
+
+
+def test_presenter_run_identity_is_validated_serialized_and_case_bound():
+    case, _ = instantiate_rl001(
+        case_id="RL-CASE-TEST-RUN-A",
+        purpose=CasePurpose.REHEARSAL,
+        runtime_mode=RuntimeMode.LIVE,
+    )
+    assert "presenter_run_id" not in case.model_dump()
+
+    presenter_run_id = "RL-RUN-" + "a" * 32
+    assert re.fullmatch(case_domain.PRESENTER_RUN_PATTERN, presenter_run_id)
+    bound = CaseInstance.model_validate(
+        {**case.model_dump(), "presenter_run_id": presenter_run_id}
+    )
+    assert bound.model_dump()["presenter_run_id"] == presenter_run_id
+
+    with pytest.raises(ValidationError):
+        CaseInstance.model_validate(
+            {**case.model_dump(), "presenter_run_id": "client-selected-run"}
+        )
+    with pytest.raises(ValueError, match="presenter_run_id changes require"):
+        bound.model_copy(update={"presenter_run_id": "RL-RUN-" + "b" * 32})
+
+    changed = bound.model_copy(
+        update={
+            "case_id": "RL-CASE-TEST-RUN-B",
+            "presenter_run_id": "RL-RUN-" + "b" * 32,
+        }
+    )
+    assert changed.case_id != bound.case_id
+    assert changed.presenter_run_id != bound.presenter_run_id
 
 
 def test_legacy_schema_path_reexports_operational_and_analysis_contracts():

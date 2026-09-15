@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal, Self
 
-from pydantic import SerializerFunctionWrapHandler, model_serializer
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer
 
 from .common import CasePurpose, FrozenModel, RuntimeMode
 from .inbound import SupplierEmailSource
@@ -32,6 +32,9 @@ class WorkflowVersion(StrEnum):
     INDEPENDENT_FINANCE = "independent-finance-v1"
 
 
+PRESENTER_RUN_PATTERN = r"^RL-RUN-[0-9a-f]{32}$"
+
+
 class CaseInstance(FrozenModel):
     case_id: str
     template_id: str
@@ -42,6 +45,10 @@ class CaseInstance(FrozenModel):
     status: CaseStatus = CaseStatus.OPEN
     workflow_version: WorkflowVersion | None = None
     supplier_email: SupplierEmailSource | None = None
+    presenter_run_id: str | None = Field(
+        default=None,
+        pattern=PRESENTER_RUN_PATTERN,
+    )
 
     @property
     def effective_workflow_version(self) -> WorkflowVersion:
@@ -54,6 +61,8 @@ class CaseInstance(FrozenModel):
             payload.pop("workflow_version", None)
         if self.supplier_email is None:
             payload.pop("supplier_email", None)
+        if self.presenter_run_id is None:
+            payload.pop("presenter_run_id", None)
         return payload
 
     def model_copy(
@@ -66,6 +75,11 @@ class CaseInstance(FrozenModel):
         values = self.model_dump(mode="python")
         values.update(update or {})
         changed = type(self).model_validate(values)
+        if (
+            changed.presenter_run_id != self.presenter_run_id
+            and changed.case_id == self.case_id
+        ):
+            raise ValueError("presenter_run_id changes require a different case_id")
         if (
             changed.supplier_email != self.supplier_email
             and changed.case_id == self.case_id

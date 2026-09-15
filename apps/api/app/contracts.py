@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from data.domain import CasePurpose, CaseStatus, RuntimeMode
 from data.domain.analysis import (
@@ -12,13 +12,14 @@ from data.domain.analysis import (
     RankingResult,
     ResponseOption,
 )
-from data.domain.cases import WorkflowVersion
+from data.domain.cases import PRESENTER_RUN_PATTERN, WorkflowVersion
 from data.domain.decisions import ApprovalSatisfaction
 from data.domain.evidence import EvidenceItem
 from data.domain.finance import FinanceReview
 from data.domain.finance_decisions import ProposalApprovalEvidence
 from data.domain.inbound import SupplierEmailSource
 from data.domain.proposals import ProposalSelection, ProposalToken
+from integrations.workiq.inbox import InboxCheck
 
 
 class StrictRequest(BaseModel):
@@ -67,6 +68,10 @@ class RuntimeResponse(BaseModel):
     deployment_contract: dict[str, str] | None = None
 
 
+class InboxCheckResponse(InboxCheck):
+    presenter_run_id: str = Field(pattern=PRESENTER_RUN_PATTERN)
+
+
 class CaseControls(BaseModel):
     new_analysis: bool
     decide: bool
@@ -90,6 +95,10 @@ class CaseResponse(BaseModel):
     controls: CaseControls
     workflow_version: WorkflowVersion
     supplier_email: SupplierEmailSource | None = None
+    presenter_run_id: str | None = Field(
+        default=None,
+        pattern=PRESENTER_RUN_PATTERN,
+    )
 
 
 class AnalysisResponse(BaseModel):

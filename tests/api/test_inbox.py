@@ -1,8 +1,10 @@
+import re
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from apps.api.app.dependencies import get_actor, require_planner
 from data.domain import RuntimeMode
+from data.domain import cases as case_domain
 
 
 def test_inbox_unavailable_in_fallback(client):
@@ -39,6 +41,17 @@ def test_inbox_delegates_actor_and_does_not_create_cases(app, client, services):
         actor=actor, checked_at=services.clock()
     )
     assert response.json()["messages"] == []
+
+
+def test_successive_checks_mint_distinct_presenter_runs(app, client, services):
+    setup_inbox(app, services)
+    first = client.post("/api/inbox/check", json={})
+    second = client.post("/api/inbox/check", json={})
+    assert first.status_code == second.status_code == 200
+    assert re.fullmatch(
+        case_domain.PRESENTER_RUN_PATTERN, first.json()["presenter_run_id"]
+    )
+    assert first.json()["presenter_run_id"] != second.json()["presenter_run_id"]
 
 
 def test_inbox_failure_does_not_leak_raw_errors(app, client, services):

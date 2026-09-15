@@ -3,6 +3,7 @@
 
 import hashlib
 import json
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -10,11 +11,11 @@ from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.api.app.auth import AuthenticatedActor
-from apps.api.app.contracts import CaseResponse
+from apps.api.app.contracts import CaseResponse, InboxCheckResponse
 from apps.api.app.dependencies import ApplicationServices, get_services, require_planner
 from apps.api.app.routes.cases import case_response
 from data.domain import CaseInstance, CasePurpose, RuntimeMode
-from data.domain.cases import WorkflowVersion
+from data.domain.cases import PRESENTER_RUN_PATTERN, WorkflowVersion
 from data.domain.inbound import (
     InboundEmailError,
     SupplierEmailSource,
@@ -55,12 +56,16 @@ class CheckRequest(BaseModel):
 
 class CreateInboundCaseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    presenter_run_id: str = Field(pattern=PRESENTER_RUN_PATTERN)
     internet_message_id: str = Field(min_length=3, max_length=998)
     review_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
 def _matching_case(
-    services: ApplicationServices, case_id: str, source: SupplierEmailSource
+    services: ApplicationServices,
+    case_id: str,
+    source: SupplierEmailSource,
+    presenter_run_id: str,
 ) -> bool:
     try:
         case = services.store.get_case(case_id)
@@ -70,6 +75,7 @@ def _matching_case(
     if (
         saved is None
         or case.runtime_mode is not RuntimeMode.LIVE
+        or case.presenter_run_id != presenter_run_id
         or (saved.tenant_id, saved.mailbox_object_id, saved.internet_message_id)
         != (source.tenant_id, source.mailbox_object_id, source.internet_message_id)
     ):
@@ -119,11 +125,16 @@ async def create_inbound_case(
         if source.review_fingerprint != request.review_fingerprint:
             raise InboundEmailError("INBOUND_EMAIL_CHANGED")
         key = json.dumps(
-            [actor.tenant_id, actor.object_id, source.internet_message_id],
+            [
+                actor.tenant_id,
+                actor.object_id,
+                source.internet_message_id,
+                request.presenter_run_id,
+            ],
             separators=(",", ":"),
         )
         case_id = "RL-INBOUND-" + hashlib.sha256(key.encode()).hexdigest()
-        if not _matching_case(services, case_id, source):
+        if not _matching_case(services, case_id, source, request.presenter_run_id):
             live = await services.live_operational_data.retrieve(
                 case_id=case_id,
                 purpose=CasePurpose.SHOWCASE,
@@ -137,14 +148,20 @@ async def create_inbound_case(
             ):
                 raise InboundEmailError("INBOUND_EMAIL_CONFLICT")
             validate_supplier_facts(source.facts, live.snapshot)
-            values = {**live.case.model_dump(), "supplier_email": source}
+            values = {
+                **live.case.model_dump(),
+                "supplier_email": source,
+                "presenter_run_id": request.presenter_run_id,
+            }
             if services.settings.independent_finance_enabled:
                 values["workflow_version"] = WorkflowVersion.INDEPENDENT_FINANCE
             case = CaseInstance.model_validate(values)
             try:
                 services.store.create_case(case, live.snapshot)
             except ImmutableRecordConflict:
-                if not _matching_case(services, case_id, source):
+                if not _matching_case(
+                    services, case_id, source, request.presenter_run_id
+                ):
                     raise InboundEmailError("INBOUND_EMAIL_CONFLICT") from None
         result = case_response(services, case_id)
     except InboundEmailError as error:
@@ -165,13 +182,13 @@ async def create_inbound_case(
     return result
 
 
-@router.post("/api/inbox/check", response_model=InboxCheck)
+@router.post("/api/inbox/check", response_model=InboxCheckResponse)
 async def check_inbox(
     request: CheckRequest,
     response: Response,
     services: ApplicationServices = Depends(get_services),
     actor: AuthenticatedActor | None = Depends(require_planner),
-) -> InboxCheck:
+) -> InboxCheckResponse:
     headers = {"Cache-Control": "no-store"}
     if (
         services.settings.runtime_mode is not RuntimeMode.LIVE
@@ -185,11 +202,15 @@ async def check_inbox(
             401, detail={"code": "AUTHENTICATION_REQUIRED"}, headers=headers
         )
     try:
-        result = InboxCheck.model_validate(
+        provider_result = InboxCheck.model_validate(
             await services.inbox_service.check_inbox(
                 actor=actor,
                 checked_at=services.clock(),
             )
+        )
+        result = InboxCheckResponse(
+            **provider_result.model_dump(),
+            presenter_run_id=f"RL-RUN-{uuid4().hex}",
         )
     except Exception:  # noqa: BLE001 - never expose provider payloads or tokens
         raise HTTPException(
