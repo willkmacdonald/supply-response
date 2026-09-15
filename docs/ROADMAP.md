@@ -55,8 +55,8 @@ below remain historical. Next: bind a reviewed message to a new case atomically 
 duplicate prevention, then continue the existing analysis/approval journey.
 
 **Last updated:** September 14, 2026 (America/Chicago).
-**Deployed baseline:** website revision **ca-sr-demo--0000029**, deployed source
-`afbf8db`; unchanged reviewed report/model artifacts through `fd53e99`.
+**Deployed baseline:** website revision **ca-sr-demo--0000037**, deployed source
+`afa688a`; unchanged reviewed report/model artifacts through `fd53e99`.
 
 This roadmap distinguishes implemented code, configured identities, verified live
 behavior and work still missing. The September 12 release was deployed from
@@ -69,9 +69,11 @@ behavior and work still missing. The September 12 release was deployed from
 - Presenter header **Respond to supply disruptions with AI**, followed by five
   tabs: **Understand the disruption**, **Investigate responses**, **Choose a response**,
   **Review and approve**, **Execute mitigation plan**.
-- Independent Alex/Taylor approval workflow for new cases. Real Alex creation,
-  analysis and Finance submission passed; Taylor password sign-in is needed to
-  finish live acceptance. Independent execution/email remain unavailable.
+- Independent Alex/Taylor approval workflow for new cases. Taylor's real browser
+  displayed the exact reviewed evidence, recorded the Finance approval, and
+  returned through the Microsoft account picker to Alex's exact response on tab
+  4. Alex's final-approval control was visible but intentionally not submitted.
+  Independent execution/email remain unavailable.
 - Vertically arranged, planner-language cards with source details at the bottom,
   email/Teams icons, whole-dollar USD totals and two-decimal per-part costs.
 - **Click here to understand why** opens the recommendation explanation sheet.
@@ -127,44 +129,53 @@ Foundry explanation invocation, finance-person approval or downstream execution.
 | Fabric SQL | Live and verified | Schema12, canonical source, saved projections and isolated 178-record reporting dataset |
 | Power BI | Traditional and exact-source reporting published and accepted | Native rows/charts/filtering and selected current/older evidence parity; populated execution outcomes and within-case multi-version history are not certified |
 | Work IQ | Prior structured discovery/read/validation passed | Work IQ entity tools discover sources and read individual messages; configured IDs validate results, not lookup inputs. No direct Graph fallback. This release did not repeat discovery |
-| Alex identity | Interactive app sign-in verified | Fresh live analysis and Finance submission passed on revision29 |
-| Jordan and Taylor identities | Existing tenant identities/roles retained | Exact Taylor app binding deployed; real Taylor password sign-in still needed |
-| Finance review | Interactive workflow implemented and deployed, acceptance incomplete | New cases use explicit Taylor review; old cases retain standing authorization. No real Taylor approve/reject or Alex final approval verified yet |
+| Alex identity | Interactive app sign-in verified | Fresh live analysis and Finance submission passed; revision37 handoff returned from Taylor to Alex's exact response on tab 4 |
+| Jordan and Taylor identities | Existing tenant identities/roles retained | Exact Taylor app binding and real Taylor browser approval passed; no identity or permission replacement |
+| Finance review | Interactive workflow deployed and accepted through handoff | Taylor reviewed the exact proposal evidence, approved it, and returned to Alex's final-approval screen. Alex's final approval was intentionally not submitted |
 | Foundry | Agents published and contract/readiness checks passed | Optional explanation invocation/evaluation remains a separate gate |
-| Complete live journey | Not complete | Live human approval, bounded downstream actions/observations and cross-service outcome parity remain unverified |
+| Complete live journey | Not complete | Taylor approval and handoff are accepted; Alex's final approval, bounded downstream actions/observations and cross-service outcome parity remain unverified |
 
 ## Remaining work
 
-### Active delivery milestone — Alex → Taylor → Alex
+### Latest accepted milestone — Taylor → Alex handoff
 
-September 13: authenticated routes and browser screens are connected, reviewed
-and deployed on revision29. Alex's real sign-in, new case, live analysis and
-$24,750 submission passed. The request is waiting for Taylor; her separate
-Microsoft password sign-in is the current blocker. See the
-[release and exact resume links](reviews/2026-09-13-approval-browser-release.md).
-Local two-page browser verification covers Alex submitting, Taylor rejecting,
-Alex resubmitting, Taylor approving and Alex finalizing, with wide/phone layouts.
-Those browser responses are simulated; real separate Microsoft-account acceptance
-for Taylor on the deployed site is still pending. Current checks: 346 frontend tests/build;
-561 backend/API/auth/Finance/execution/persistence/deployment tests, 11 skips.
-The reviewed additive Finance SQL upgrade has been applied with identical saved
-case/analysis/decision payload hashes before and after. No grants were added.
+September 14: the authenticated Finance presentation and handoff corrections are
+deployed from source `afa688a` on revision `ca-sr-demo--0000037`. Fresh validation
+passed 369 web tests, the TypeScript/Vite production build, API and Finance tests,
+58 infrastructure tests, Ruff, and diff checks.
+
+In Taylor's real browser, the reviewed response showed both Fabric records as
+retrieved for the analysis with required checks passed. Taylor's completed
+approval offered **Return to Alex for final approval**. After the Microsoft
+account picker, Alex returned to the exact case, analysis, and combined response
+on tab 4 with Taylor's approval time and **Give final Alex approval** visible.
+No console warning or error appeared. Alex's final approval was intentionally
+not submitted. The controlling proof is the [Taylor evidence and Alex handoff
+deployment record](../.azure/deployment-plan.md#taylor-evidence-and-alex-handoff-release--2026-09-14).
+
+The earlier [September 13 approval release](reviews/2026-09-13-approval-browser-release.md)
+records the historical pre-acceptance checkpoint. It is not the current live
+status. The reviewed additive Finance SQL upgrade preserved saved
+case/analysis/decision payload hashes and added no grants.
 
 Independent decisions are saved without launching the legacy combined-response
 execution planner. Pending work is retained but not claimed, and the UI clearly
-says execution is unavailable for this milestone. Next visible milestone is a
-reviewed email from Alex to Will, followed by presenter-controlled inbound email
-discovery. Test counts alone do not close any of these live acceptance gates.
+says execution is unavailable for this milestone. The next visible gates are
+Alex's final approval, option-specific execution, a reviewed email from Alex to
+Will, and deployment plus two-run browser acceptance of repeatable Presenter
+Runs. Test counts alone do not close any of these live acceptance gates.
 
-The following September 13 increment notes describe earlier checkpoints, not the
-current local implementation status.
+The following September 13 increment notes are a historical snapshot superseded
+by the September 14 increments and revision 37 acceptance above. They do not
+describe current local or deployed status.
 
 The proposed [email-to-mitigation presenter journey](superpowers/specs/2026-09-12-email-to-mitigation-workflow-design.md)
 captures the next integrated increment: Will's real mailbox as Supplier Alpha,
 presenter-controlled Work IQ discovery, five stages, independent Taylor review,
 option-specific plans, and an explicitly reviewed real email back to Will.
-Its written design was approved September 13; none of these additions is claimed as
-deployed by this roadmap update. Historical cases keep their original evidence.
+At that checkpoint its written design was approved, but none of those additions
+was yet claimed as deployed. The current acceptance boundary is recorded above.
+Historical cases keep their original evidence.
 
 September 13 local progress: independent Finance rules, durable review history,
 versioned case policy, current-proposal storage, submission/review commands,
@@ -174,26 +185,22 @@ checkpoint passes 497 backend tests (11 intentional skips, 15 live tests
 excluded). Queued planning and simulated playback safeguards remain separate
 unfinished increments. Five-stage navigation
 passes 331 frontend tests, the production build, and local desktop/phone browser
-checks. Taylor's authenticated inbox, application-route integration and the new
-email workflow are not connected or enabled yet; see the
+checks. At that checkpoint Taylor's authenticated inbox, application-route
+integration and the new email workflow were not connected or enabled; see the
 [increment evidence and remaining gates](reviews/2026-09-13-email-workflow-progress.md).
 
-### 1. Separate finance-person review workflow
+### 1. Finance-person review follow-through
 
 Taylor Brooks (`RL-PERSONA-TAYLOR`) already has a separate Finance Approver
 identity and tenant role assignment. Reuse that identity; do not create a
 replacement or present an Alex click as Taylor's approval.
 
-The deployed composition currently configures only Alex's interactive persona
-binding and supplies Taylor's predefined RL-001 standing authorization. It has
-no Taylor sign-in/review inbox/case-specific approve-or-reject workflow. This is
-missing implementation, not merely a hidden link or a pending test.
-
-The next finance increment must make the planner-to-finance handoff visible,
-enforce the independent identity and role, bind the review to the exact analysis
-and response, record the outcome, and return meaningful status to the planner.
-Review and verify that journey separately from Alex's final Decision. Any new
-tenant permission or role change remains an explicit approval boundary.
+The deployed workflow now enforces Taylor's independent identity, binds her
+review to the exact analysis and response, records the outcome, and returns to
+Alex's exact final-approval screen. That journey is live-accepted through the
+handoff. Alex's final approval was deliberately not submitted during acceptance,
+so final Decision and downstream execution remain separate pending gates. Any
+new tenant permission or role change remains an explicit approval boundary.
 
 ### 2. Teams source opening and session behavior
 

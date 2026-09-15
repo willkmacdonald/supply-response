@@ -4,7 +4,7 @@ Supply Response is a decision-support demonstration for managing a fictional sup
 
 The project combines a deterministic supply-response core with a FastAPI application, a React decision console, durable SQLite or Fabric SQL persistence, and a Power BI project. Microsoft 365 and Azure integrations are added through explicit adapters so the complete live demonstration can use Work IQ, Microsoft Fabric, Microsoft Foundry, Microsoft Agent Framework, Entra ID, and Power BI without coupling the business logic to those services.
 
-> **Live demo:** [Open Supply Response](https://ca-sr-demo.orangehill-337f5d48.eastus2.azurecontainerapps.io/). The latest verified release passed 364 web tests, production build, desktop/mobile browser checks, guarded Fabric/Foundry readiness, and live Alex acceptance. The current revision, immutable image, and release proof are recorded in the [deployment plan](.azure/deployment-plan.md).
+> **Live demo:** [Open Supply Response](https://ca-sr-demo.orangehill-337f5d48.eastus2.azurecontainerapps.io/). The latest verified release passed 369 web tests, the production build, guarded Fabric/Foundry readiness, and live Taylor-to-Alex browser handoff acceptance. Revision `ca-sr-demo--0000037`, source `afa688a`, the immutable image, and release proof are recorded in the [deployment plan](.azure/deployment-plan.md).
 
 ## Current presenter journey
 
@@ -41,9 +41,11 @@ approval, or execution action was performed during the earlier acceptance.
   discovery; reviewed email-to-case creation; duplicate prevention; live case
   analysis; Outlook citation; traditional Power BI investigation; exact
   card-to-report links; and the five-stage planner workspace.
-- **Implemented and deployed, but not accepted with Taylor's real session:**
-  separate Finance review, rejection/approval, and Alex's subsequent final
-  decision for new cases whose spending exceeds $20,000.
+- **Live and accepted through the Finance handoff:** Taylor's real browser shows
+  the exact reviewed evidence, records the Finance approval, and returns through
+  the Microsoft account picker to Alex's exact case, analysis, and response on
+  tab 4. Alex's final-approval control was visible; submitting that final
+  approval was intentionally outside the acceptance check.
 - **Implemented and locally verified, deployment pending:** a successful inbox
   check mints a fresh Presenter Run, analysis creates a new source-bound Case ID,
   and retention keeps the current presenter case plus three prior cases. Live
@@ -140,7 +142,12 @@ The Decision is the immutable pivot between analysis and downstream activity. Au
 - Opt-in Fabric SQL persistence, Entra token authentication, schema health checks, and read-only analytics views.
 - Guarded, insert-only canonical RL-001 source loading with full stored-data readback and timezone-preserving SQL binding. Live retrieval freshness is separate from fictional business dates, so the corpus does not require daily regeneration. See the [loader procedure](docs/deployment/personal-tenant.md#load-the-canonical-rl-001-operational-source).
 - A published DirectQuery Power BI project with seven broad traditional pages and eight exact saved-context pages. The isolated reporting dataset contains 178 records without changing saved analyses or the canonical operational source. Native tables/charts/filter checks, current/older saved inventory and order parity, and mismatched-identity safeguards passed. Artifact-bound acceptance enables the website links; populated execution outcomes remain unverified.
-- Single-tenant Entra authentication with exact Alex/Taylor identity and role bindings. Authenticated Finance inbox/detail and approve/reject routes are deployed. Alex's real session passed; Taylor's interactive acceptance awaits password sign-in. No replacement identity or new permission was created.
+- Single-tenant Entra authentication with exact Alex/Taylor identity and role
+  bindings. Authenticated Finance inbox/detail and approve/reject routes are
+  deployed. Taylor's real browser approval and the account-picker return to
+  Alex's exact tab-4 response passed on revision 37; Alex's final approval was
+  intentionally not submitted. No replacement identity or new permission was
+  created.
 - A delegated Work IQ OBO client and bounded MCP integration with strict
   source-statement validation. The live presenter action discovers the approved
   supplier email, reads that individual message, validates its source facts and
@@ -155,10 +162,13 @@ The Decision is the immutable pivot between analysis and downstream activity. Au
 - Microsoft Agent Framework orchestration that preserves deterministic decision authority, plus fail-closed Foundry publication and verification tooling.
 - Three immutable Foundry prompt agents—signal, context, and decision—published as version `1` and verified against their committed contracts on `gpt-5.6-luna`.
 - Personal-tenant Azure infrastructure deployed in East US 2 through the guarded
-  workflow. Revision36 is healthy with unchanged reporting activation,
-  resource-scoped roles and scale. The current release verified the actual
-  email-to-analysis transition without creating a duplicate case or performing
-  an outbound email, approval, or operational action.
+  workflow. Revision `ca-sr-demo--0000037` from source `afa688a` is latest-ready
+  and running with 100% traffic, unchanged reporting activation, resource-scoped
+  roles, and scale. The latest accepted release verified Taylor's saved-evidence
+  presentation and approval handoff back to Alex without submitting Alex's final
+  approval or performing an outbound email or operational action. Repeatable
+  Presenter Runs remain locally verified and are not part of that deployed
+  revision.
 
 Live Microsoft service integration is not yet complete. Published or configured cloud prerequisites do not count as live acceptance until their approval-gated invocation, data, browser, and cross-service consistency gates pass. The [roadmap](docs/ROADMAP.md) records the verified boundary between implemented, configured, and pending work.
 
