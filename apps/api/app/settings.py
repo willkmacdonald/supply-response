@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     alex_object_id: str | None = None
     taylor_object_id: str | None = None
     independent_finance_enabled: bool = False
+    mail_from_address: str | None = None
+    mail_to_address: str | None = None
+    mail_send_enabled: bool = False
     workiq_supplier_source_id: str | None = None
     workiq_quality_source_id: str | None = None
     workiq_supplier_sender: str | None = None
@@ -83,4 +86,17 @@ class Settings(BaseSettings):
                 )
             if self.alex_object_id == self.taylor_object_id:
                 raise ValueError("Alex and Taylor must be different people")
+        if self.mail_send_enabled:
+            if not self.mail_from_address or not self.mail_to_address:
+                raise ValueError(
+                    "mail sending requires configured sender and recipient addresses"
+                )
+            if (
+                self.mail_from_address.lower() != self.mail_from_address
+                or self.mail_to_address.lower() != self.mail_to_address
+                or self.mail_from_address == self.mail_to_address
+                or self.mail_from_address != "agent@willmacdonald.com"
+                or self.mail_to_address != "will@willmacdonald.com"
+            ):
+                raise ValueError("mail sending requires the fixed demo addresses")
         return self

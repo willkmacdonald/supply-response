@@ -20,6 +20,7 @@ done
 [[ "${SUPPLY_RESPONSE_CONFIRM_TENANT:-}" == "willmacdonald.com" ]] || die "set SUPPLY_RESPONSE_CONFIRM_TENANT=willmacdonald.com after confirming the directory"
 expected_tenant="${SUPPLY_RESPONSE_EXPECTED_TENANT_ID:-}"
 workiq_app_id="${SUPPLY_RESPONSE_WORKIQ_RESOURCE_APP_ID:-}"
+graph_app_id="00000003-0000-0000-c000-000000000000"
 redirect_uri="${SUPPLY_RESPONSE_REDIRECT_URI:-}"
 need_uuid "SUPPLY_RESPONSE_EXPECTED_TENANT_ID" "$expected_tenant"
 need_uuid "SUPPLY_RESPONSE_WORKIQ_RESOURCE_APP_ID" "$workiq_app_id"
@@ -92,12 +93,18 @@ if [[ -n "$fixture" ]]; then
   active_tenant="$(jq -er '.activeTenantId' "$fixture")"
   organization_json="$(jq -c '{verifiedDomains: .verifiedDomains}' "$fixture")"
   workiq_json="$(jq -c '.workIqServicePrincipal' "$fixture")"
+  graph_json='{"appId":"00000003-0000-0000-c000-000000000000","oauth2PermissionScopes":[{"id":"66666666-6666-4666-8666-666666666666","value":"Mail.ReadWrite","isEnabled":true},{"id":"77777777-7777-4777-8777-777777777777","value":"Mail.Send","isEnabled":true}]}'
 else
   [[ "$mode" != "dry-run" ]] || die "--dry-run requires --fixture"
   [[ "$fake_adapter" == "1" ]] || require az
   active_tenant="$(az_run account show --query tenantId -o tsv)"
   organization_json="$(az_run rest --method GET --uri 'https://graph.microsoft.com/v1.0/organization?$select=id,verifiedDomains' --query 'value[0]' -o json)"
   workiq_json="$(az_run ad sp show --id "$workiq_app_id" -o json)"
+  if [[ "$fake_adapter" == "1" ]]; then
+    graph_json='{"appId":"00000003-0000-0000-c000-000000000000","oauth2PermissionScopes":[{"id":"66666666-6666-4666-8666-666666666666","value":"Mail.ReadWrite","isEnabled":true},{"id":"77777777-7777-4777-8777-777777777777","value":"Mail.Send","isEnabled":true}]}'
+  else
+    graph_json="$(az_run ad sp show --id "$graph_app_id" -o json)"
+  fi
 fi
 need_uuid "active Azure tenant" "$active_tenant"
 [[ "$active_tenant" == "$expected_tenant" ]] || die "active tenant does not match SUPPLY_RESPONSE_EXPECTED_TENANT_ID"
@@ -107,14 +114,26 @@ workiq_scope_count="$(jq '[.oauth2PermissionScopes[]? | select(.value == "WorkIQ
 [[ "$workiq_scope_count" == "1" ]] || die "WorkIQAgent.Ask scope is missing or ambiguous"
 workiq_scope_id="$(jq -r '.oauth2PermissionScopes[] | select(.value == "WorkIQAgent.Ask" and .isEnabled == true) | .id' <<<"$workiq_json")"
 need_uuid "WorkIQAgent.Ask scope ID" "$workiq_scope_id"
+[[ "$(jq -r '.appId' <<<"$graph_json")" == "$graph_app_id" ]] || die "Microsoft Graph service principal app ID mismatch"
+graph_mail_readwrite_count="$(jq '[.oauth2PermissionScopes[]? | select(.value == "Mail.ReadWrite" and .isEnabled == true)] | length' <<<"$graph_json")"
+[[ "$graph_mail_readwrite_count" == "1" ]] || die "Mail.ReadWrite scope is missing or ambiguous"
+graph_mail_readwrite_scope_id="$(jq -r '.oauth2PermissionScopes[] | select(.value == "Mail.ReadWrite" and .isEnabled == true) | .id' <<<"$graph_json")"
+need_uuid "Mail.ReadWrite scope ID" "$graph_mail_readwrite_scope_id"
+graph_mail_send_count="$(jq '[.oauth2PermissionScopes[]? | select(.value == "Mail.Send" and .isEnabled == true)] | length' <<<"$graph_json")"
+[[ "$graph_mail_send_count" == "1" ]] || die "Mail.Send scope is missing or ambiguous"
+graph_mail_send_scope_id="$(jq -r '.oauth2PermissionScopes[] | select(.value == "Mail.Send" and .isEnabled == true) | .id' <<<"$graph_json")"
+need_uuid "Mail.Send scope ID" "$graph_mail_send_scope_id"
 
 api_client_id="${SUPPLY_RESPONSE_API_CLIENT_ID:-$(state_value SUPPLY_RESPONSE_API_CLIENT_ID)}"
 web_client_id="${SUPPLY_RESPONSE_WEB_CLIENT_ID:-$(state_value SUPPLY_RESPONSE_WEB_CLIENT_ID)}"
 make_payloads() {
   api_payload="$(mktemp)"; web_payload="$(mktemp)"
-  jq --arg api "$api_client_id" --arg workiq "$workiq_app_id" --arg permission "$workiq_scope_id" '
+  jq --arg api "$api_client_id" --arg workiq "$workiq_app_id" --arg permission "$workiq_scope_id" --arg graph "$graph_app_id" --arg mailReadWrite "$graph_mail_readwrite_scope_id" --arg mailSend "$graph_mail_send_scope_id" '
     .identifierUris = ["api://" + $api]
-    | .requiredResourceAccess = [{resourceAppId: $workiq, resourceAccess: [{id: $permission, type: "Scope"}]}]
+    | .requiredResourceAccess = [
+        {resourceAppId: $graph, resourceAccess: [{id: $mailReadWrite, type: "Scope"}, {id: $mailSend, type: "Scope"}]},
+        {resourceAppId: $workiq, resourceAccess: [{id: $permission, type: "Scope"}]}
+      ]
   ' "$script_dir/api-app.json" >"$api_payload"
   jq --arg api "$api_client_id" --arg redirect "$redirect_uri" '
     .spa.redirectUris = [$redirect] | .requiredResourceAccess[0].resourceAppId = $api
@@ -147,7 +166,7 @@ if [[ "$mode" == "dry-run" ]]; then
   need_uuid "SUPPLY_RESPONSE_API_CLIENT_ID" "$api_client_id"; need_uuid "SUPPLY_RESPONSE_WEB_CLIENT_ID" "$web_client_id"
   make_payloads; canonical_api_contract <"$api_payload" >/dev/null; canonical_web_contract <"$web_payload" >/dev/null
   rm -f "$api_payload" "$web_payload"
-  echo "DRY_RUN_VALID tenant=$active_tenant api=$api_client_id web=$web_client_id permission=WorkIQAgent.Ask scope=$workiq_scope_id redirect=$redirect_uri"
+  echo "DRY_RUN_VALID tenant=$active_tenant api=$api_client_id web=$web_client_id permissions=WorkIQAgent.Ask,Mail.ReadWrite,Mail.Send redirect=$redirect_uri"
   exit 0
 fi
 if [[ "$mode" == "check" ]]; then

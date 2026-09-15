@@ -23,6 +23,9 @@ param apiClientId string
 param alexObjectId string
 param taylorObjectId string = ''
 param independentFinanceEnabled bool = false
+param mailFromAddress string
+param mailToAddress string
+param mailSendEnabled bool = false
 param fabricSqlServer string
 param fabricSqlDatabase string
 param workIqSupplierSourceId string
@@ -107,6 +110,9 @@ module app 'modules/container-apps.bicep' = {
       alexObjectId: alexObjectId
       taylorObjectId: taylorObjectId
       independentFinanceEnabled: independentFinanceEnabled
+      mailFromAddress: mailFromAddress
+      mailToAddress: mailToAddress
+      mailSendEnabled: mailSendEnabled
       fabricSqlServer: fabricSqlServer
       fabricSqlDatabase: fabricSqlDatabase
       workIqSupplierSourceId: workIqSupplierSourceId

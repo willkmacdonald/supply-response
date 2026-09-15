@@ -204,6 +204,10 @@ class SupplierEmailReviewRequest(StrictRequest):
     revision: int = Field(gt=0)
 
 
+class SupplierEmailSendRequest(StrictRequest):
+    revision: int = Field(gt=0)
+
+
 class SupplierEmailResponse(BaseModel):
     email_id: str
     decision_id: str

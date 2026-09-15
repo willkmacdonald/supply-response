@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from apps.api.app.auth import AuthenticatedActor
 from apps.api.app.contracts import (
     ActionResponse,
     DraftResponse,
@@ -13,12 +14,14 @@ from apps.api.app.contracts import (
     SupplierEmailResponse,
     SupplierEmailReviewRequest,
     SupplierEmailSaveRequest,
+    SupplierEmailSendRequest,
 )
 from apps.api.app.dependencies import (
     ApplicationServices,
     get_decision_identity,
     get_services,
     require_alex_identity,
+    require_planner,
 )
 from apps.api.app.routes.decisions import _decision, _require_role
 from data.domain.decisions import IdentitySnapshot
@@ -26,6 +29,7 @@ from services.execution.currentness import ExecutionProposalStale
 from services.execution.mail_service import (
     EmailAuthorizationError,
     EmailRevisionConflict,
+    EmailSendDisabled,
     EmailStateError,
 )
 from services.execution.playback import (
@@ -39,6 +43,11 @@ router = APIRouter(prefix="/api/decisions", tags=["execution"])
 
 
 def _supplier_email_error(error: Exception) -> HTTPException:
+    if isinstance(error, EmailSendDisabled):
+        return HTTPException(
+            status_code=409,
+            detail={"code": "SUPPLIER_EMAIL_SEND_DISABLED"},
+        )
     if isinstance(error, EmailAuthorizationError):
         return HTTPException(
             status_code=403,
@@ -136,6 +145,67 @@ def review_supplier_email(
     except (
         EmailAuthorizationError,
         EmailRevisionConflict,
+        EmailStateError,
+        ExecutionProposalStale,
+    ) as error:
+        raise _supplier_email_error(error) from None
+
+
+def _mail_actor(
+    planner: AuthenticatedActor | None,
+    services: ApplicationServices,
+) -> object:
+    return services.identity if planner is None else planner
+
+
+@router.post(
+    "/{decision_id}/supplier-email/send",
+    response_model=SupplierEmailResponse,
+)
+async def send_supplier_email(
+    decision_id: str,
+    request: SupplierEmailSendRequest,
+    services: ApplicationServices = Depends(get_services),
+    planner: AuthenticatedActor | None = Depends(require_planner),
+) -> SupplierEmailResponse:
+    _decision(services, decision_id)
+    try:
+        state = await services.mail_service.send(
+            decision_id,
+            request.revision,
+            _mail_actor(planner, services),
+        )
+        return SupplierEmailResponse.model_validate(state.model_dump())
+    except (
+        EmailAuthorizationError,
+        EmailRevisionConflict,
+        EmailSendDisabled,
+        EmailStateError,
+        ExecutionProposalStale,
+    ) as error:
+        raise _supplier_email_error(error) from None
+
+
+@router.post(
+    "/{decision_id}/supplier-email/check-send-status",
+    response_model=SupplierEmailResponse,
+)
+async def check_supplier_email_send_status(
+    decision_id: str,
+    services: ApplicationServices = Depends(get_services),
+    planner: AuthenticatedActor | None = Depends(require_planner),
+) -> SupplierEmailResponse:
+    _decision(services, decision_id)
+    try:
+        state = await services.mail_service.check_send_status(
+            decision_id,
+            _mail_actor(planner, services),
+        )
+        return SupplierEmailResponse.model_validate(state.model_dump())
+    except (
+        EmailAuthorizationError,
+        EmailRevisionConflict,
+        EmailSendDisabled,
         EmailStateError,
         ExecutionProposalStale,
     ) as error:

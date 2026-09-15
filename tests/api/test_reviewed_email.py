@@ -1,3 +1,60 @@
+import asyncio
+
+import pytest
+
+from integrations.graph_mail.client import (
+    GraphMailError,
+    GraphMailSubmissionUncertain,
+    ProviderDraft,
+    ProviderMessage,
+)
+from services.persistence.store import SqlAlchemySupplierEmailRepository
+
+
+class FakeGraphMail:
+    def __init__(self, *, create_error=None, send_error=None, sent=False):
+        self.create_error = create_error
+        self.send_error = send_error
+        self.sent = sent
+        self.create_calls = []
+        self.send_calls = []
+        self.get_calls = []
+
+    async def create_draft(self, revision, actor):  # allowed: mocked provider seam
+        self.create_calls.append((revision, actor))
+        await asyncio.sleep(0.02)
+        if self.create_error is not None:
+            raise self.create_error
+        return ProviderDraft(
+            provider_message_id="immutable-provider-id",
+            internet_message_id="<fixture@willmacdonald.com>",
+        )
+
+    async def send_draft(self, provider_message_id, actor):
+        self.send_calls.append((provider_message_id, actor))
+        if self.send_error is not None:
+            raise self.send_error
+
+    async def get_message(self, provider_message_id, actor):
+        self.get_calls.append((provider_message_id, actor))
+        revision = self.create_calls[0][0]
+        return ProviderMessage(
+            provider_message_id=provider_message_id,
+            internet_message_id="<fixture@willmacdonald.com>",
+            sender_address=revision.from_address,
+            to_addresses=(revision.to_address,),
+            subject=revision.subject,
+            body_content_type="text",
+            body=revision.body,
+            sent_at=(revision.reviewed_at if self.sent else None),
+        )
+
+
+def _enable_mocked_send(services, graph: FakeGraphMail) -> None:
+    services.mail_service._graph_mail = graph
+    services.mail_service._mail_send_enabled = True
+
+
 def _approved_decision(client, services):
     created = client.post(
         "/api/cases",
@@ -46,13 +103,12 @@ def test_reviewed_email_routes_version_and_review_without_sending(client, servic
     assert reviewed.json()["reviewed_revision"] == 2
     assert reviewed.json()["reviewed_by"]["persona_id"] == "RL-PERSONA-ALEX"
     assert reviewed.json()["send_status"] == "draft"
-    assert (
-        client.post(
-            f"/api/decisions/{decision_id}/supplier-email/send",
-            json={"revision": 2},
-        ).status_code
-        == 404
+    disabled = client.post(
+        f"/api/decisions/{decision_id}/supplier-email/send",
+        json={"revision": 2},
     )
+    assert disabled.status_code == 409
+    assert disabled.json()["detail"]["code"] == "SUPPLIER_EMAIL_SEND_DISABLED"
 
 
 def test_reviewed_email_request_never_accepts_delivery_fields(client, services):
@@ -119,3 +175,133 @@ def test_reviewed_email_returns_safe_validation_and_conflict_responses(
     stale_review = client.post(f"{path}/review", json={"revision": 1})
     assert stale_review.status_code == 409
     assert "traceback" not in stale_review.text.lower()
+
+
+def _reviewed_email(client, services):
+    decision_id = _approved_decision(client, services)
+    path = f"/api/decisions/{decision_id}/supplier-email"
+    initial = client.get(path)
+    assert initial.status_code == 200
+    reviewed = client.post(f"{path}/review", json={"revision": 1})
+    assert reviewed.status_code == 200
+    return decision_id, path
+
+
+def test_send_accepts_only_revision_and_persists_accepted_state(client, services):
+    decision_id, path = _reviewed_email(client, services)
+    graph = FakeGraphMail()
+    _enable_mocked_send(services, graph)
+
+    invalid = client.post(
+        f"{path}/send",
+        json={"revision": 1, "to_address": "attacker@example.com"},
+    )
+    sent = client.post(f"{path}/send", json={"revision": 1})
+    repeated = client.post(f"{path}/send", json={"revision": 1})
+
+    assert invalid.status_code == 422
+    assert sent.status_code == repeated.status_code == 200
+    assert sent.json()["send_status"] == "accepted"
+    assert repeated.json() == sent.json()
+    assert len(graph.create_calls) == len(graph.send_calls) == 1
+    with services.uow_factory() as uow:
+        _, delivery = uow.mail.get_current(decision_id)
+    assert delivery.provider_message_id == "immutable-provider-id"
+    assert delivery.internet_message_id == "<fixture@willmacdonald.com>"
+    assert delivery.correlation_id is not None
+
+
+@pytest.mark.anyio
+async def test_concurrent_send_claim_causes_at_most_one_provider_submission(
+    client, services
+):
+    decision_id, _ = _reviewed_email(client, services)
+    graph = FakeGraphMail()
+    _enable_mocked_send(services, graph)
+    actor = services.identity
+
+    first, second = await asyncio.gather(
+        services.mail_service.send(decision_id, 1, actor),
+        services.mail_service.send(decision_id, 1, actor),
+    )
+
+    assert {first.send_status, second.send_status}.issubset({"submitting", "accepted"})
+    assert len(graph.create_calls) == len(graph.send_calls) == 1
+    assert services.mail_service.get(decision_id).send_status == "accepted"
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (GraphMailError("graph_create_failed"), "failed"),
+        (GraphMailError("graph_message_mismatch"), "failed"),
+    ],
+)
+def test_create_or_verified_content_failure_is_failed_without_send(
+    client, services, error, expected
+):
+    _, path = _reviewed_email(client, services)
+    graph = FakeGraphMail(create_error=error)
+    _enable_mocked_send(services, graph)
+
+    response = client.post(f"{path}/send", json={"revision": 1})
+
+    assert response.status_code == 200
+    assert response.json()["send_status"] == expected
+    assert graph.send_calls == []
+
+
+def test_timeout_after_send_begins_is_uncertain_and_check_is_get_only(client, services):
+    _, path = _reviewed_email(client, services)
+    graph = FakeGraphMail(
+        send_error=GraphMailSubmissionUncertain("graph_send_uncertain")
+    )
+    _enable_mocked_send(services, graph)
+
+    uncertain = client.post(f"{path}/send", json={"revision": 1})
+    checked = client.post(f"{path}/check-send-status")
+
+    assert uncertain.status_code == checked.status_code == 200
+    assert uncertain.json()["send_status"] == "uncertain"
+    assert checked.json()["send_status"] == "uncertain"
+    assert len(graph.create_calls) == len(graph.send_calls) == len(graph.get_calls) == 1
+
+
+def test_send_never_starts_until_provider_id_is_durably_persisted(
+    client, services, monkeypatch
+):
+    _, path = _reviewed_email(client, services)
+    graph = FakeGraphMail()
+    _enable_mocked_send(services, graph)
+    original = SqlAlchemySupplierEmailRepository.update_delivery_state
+
+    def reject_provider_id(self, delivery, **kwargs):
+        if delivery.provider_message_id is not None:
+            return False
+        return original(self, delivery, **kwargs)
+
+    monkeypatch.setattr(
+        SqlAlchemySupplierEmailRepository,
+        "update_delivery_state",
+        reject_provider_id,
+    )
+
+    response = client.post(f"{path}/send", json={"revision": 1})
+
+    assert response.status_code == 200
+    assert response.json()["send_status"] == "submitting"
+    assert len(graph.create_calls) == 1
+    assert graph.send_calls == []
+
+
+def test_exact_sent_item_reconciliation_is_the_only_sent_confirmation(client, services):
+    _, path = _reviewed_email(client, services)
+    graph = FakeGraphMail(sent=True)
+    _enable_mocked_send(services, graph)
+
+    accepted = client.post(f"{path}/send", json={"revision": 1})
+    confirmed = client.post(f"{path}/check-send-status")
+
+    assert accepted.json()["send_status"] == "accepted"
+    assert confirmed.json()["send_status"] == "sent-confirmed"
+    assert len(graph.create_calls) == len(graph.send_calls) == len(graph.get_calls) == 1

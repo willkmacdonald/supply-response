@@ -326,12 +326,49 @@ def test_final_revision_declares_every_live_backend_setting():
         "SUPPLY_RESPONSE_POWER_BI_REPORT_URL",
         "SUPPLY_RESPONSE_POWER_BI_DEPLOYMENT_RECEIPT",
         "SUPPLY_RESPONSE_FABRIC_CITATION_BASE_URL",
+        "SUPPLY_RESPONSE_MAIL_FROM_ADDRESS",
+        "SUPPLY_RESPONSE_MAIL_TO_ADDRESS",
+        "SUPPLY_RESPONSE_MAIL_SEND_ENABLED",
     }
     combined = source + main + parameters
 
     for setting in required:
         assert setting in combined
     assert "az containerapp update" not in _read("scripts/deploy_personal_tenant.sh")
+
+
+def test_mail_send_configuration_is_default_off_and_declares_exact_graph_scopes():
+    settings = _read("apps/api/app/settings.py")
+    main = _read("infra/main.bicep")
+    params = json.loads(_read("infra/main.parameters.json"))["parameters"]
+    module = _read("infra/modules/container-apps.bicep")
+    manifest = json.loads(_read("infra/entra/api-app.json"))
+    configure = _read("infra/entra/configure.sh")
+    preflight = _read("scripts/preflight_personal_tenant.sh")
+
+    assert "mail_send_enabled: bool = False" in settings
+    assert "param mailSendEnabled bool = false" in main
+    assert params["mailSendEnabled"]["value"] == (
+        "${SUPPLY_RESPONSE_MAIL_SEND_ENABLED=false}"
+    )
+    assert (
+        "{ name: 'SUPPLY_RESPONSE_MAIL_SEND_ENABLED', "
+        "value: string(runtimeSettings.mailSendEnabled) }" in module
+    )
+    resources = {
+        item["resourceAppId"]: item["resourceAccess"]
+        for item in manifest["requiredResourceAccess"]
+    }
+    assert resources["00000003-0000-0000-c000-000000000000"] == [
+        {"id": "{{GRAPH_MAIL_READWRITE_SCOPE_ID}}", "type": "Scope"},
+        {"id": "{{GRAPH_MAIL_SEND_SCOPE_ID}}", "type": "Scope"},
+    ]
+    assert 'select(.value == "Mail.ReadWrite" and .isEnabled == true)' in configure
+    assert 'select(.value == "Mail.Send" and .isEnabled == true)' in configure
+    assert "mail_send_enabled" in preflight
+    assert "Mail.ReadWrite" in preflight
+    assert "Mail.Send" in preflight
+    assert 'graph_sp_json="$(python3' not in preflight
 
 
 def test_deploy_preflight_validates_versioned_workiq_binding_receipt():

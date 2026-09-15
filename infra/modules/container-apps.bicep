@@ -45,6 +45,9 @@ var finalEnvironment = [
   { name: 'SUPPLY_RESPONSE_ALEX_OBJECT_ID', value: runtimeSettings.alexObjectId }
   { name: 'SUPPLY_RESPONSE_TAYLOR_OBJECT_ID', value: runtimeSettings.taylorObjectId }
   { name: 'SUPPLY_RESPONSE_INDEPENDENT_FINANCE_ENABLED', value: string(runtimeSettings.independentFinanceEnabled) }
+  { name: 'SUPPLY_RESPONSE_MAIL_FROM_ADDRESS', value: runtimeSettings.mailFromAddress }
+  { name: 'SUPPLY_RESPONSE_MAIL_TO_ADDRESS', value: runtimeSettings.mailToAddress }
+  { name: 'SUPPLY_RESPONSE_MAIL_SEND_ENABLED', value: string(runtimeSettings.mailSendEnabled) }
   { name: 'SUPPLY_RESPONSE_FABRIC_SQL_SERVER', value: runtimeSettings.fabricSqlServer }
   { name: 'SUPPLY_RESPONSE_FABRIC_SQL_DATABASE', value: runtimeSettings.fabricSqlDatabase }
   { name: 'SUPPLY_RESPONSE_WORKIQ_SUPPLIER_SOURCE_ID', value: runtimeSettings.workIqSupplierSourceId }

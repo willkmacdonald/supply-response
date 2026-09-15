@@ -243,6 +243,9 @@ def build_composition(
             identity_source=IdentitySource.ENTRA,
             source_id="RL-ENTRA-ALEX",
         )
+    graph_mail = None if live_components is None else live_components.get("graph_mail")
+    from_address = settings.mail_from_address or f"agent@{settings.tenant_domain}"
+    to_address = settings.mail_to_address or f"will@{settings.tenant_domain}"
     services = ApplicationServices(
         settings=settings,
         store=store,
@@ -268,9 +271,11 @@ def build_composition(
         ),
         mail_service=ReviewedEmailService(
             uow_factory,
-            from_address=f"agent@{settings.tenant_domain}",
-            to_address=f"will@{settings.tenant_domain}",
+            from_address=from_address,
+            to_address=to_address,
             configured_actor=configured_alex,
+            graph_mail=graph_mail,
+            mail_send_enabled=settings.mail_send_enabled,
             clock=now,
         ),
         playback_clock=active_playback_clock,
@@ -369,6 +374,8 @@ def build_live_components(
         verify_power_bi_deployment_receipt,
     )
     from integrations.fabric.operational import FabricLiveOperationalDataPort
+    from integrations.graph_mail.client import GraphMailClient
+    from integrations.graph_mail.obo import build_graph_obo_exchange
     from integrations.workiq.async_obo import AsyncWorkIQOboExchange
     from integrations.workiq.mcp import WorkIQMcpClient
     from integrations.workiq.mcp_evidence import WorkIQMcpEvidencePort
@@ -464,6 +471,18 @@ def build_live_components(
             quality_source_id=values["workiq_quality_source_id"],
         ),
     )
+    graph_mail = None
+    if settings.mail_send_enabled:
+        graph_mail = GraphMailClient(
+            http=http,
+            obo=build_graph_obo_exchange(
+                client_id=client_id,
+                client_secret=values["entra_client_secret"],
+                tenant_id=tenant_id,
+                auth_service=auth_service,
+            ),
+            mailbox_address=_required_live_setting(settings, "mail_from_address"),
+        )
     endpoint = values["foundry_project_endpoint"]
     bindings = {
         role: FoundryAgentBinding(
@@ -496,6 +515,7 @@ def build_live_components(
         "analysis_service": analysis,
         "inbox_service": work_iq,
         "auth_service": auth_service,
+        "graph_mail": graph_mail,
         "power_bi_url": power_bi_url,
         "async_resources": (http,),
         "operational_data": operational_data,

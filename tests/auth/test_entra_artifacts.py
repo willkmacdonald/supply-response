@@ -48,11 +48,18 @@ def test_manifests_define_only_two_single_tenant_apps_and_exact_permissions():
     }
     assert api["requiredResourceAccess"] == [
         {
+            "resourceAppId": "00000003-0000-0000-c000-000000000000",
+            "resourceAccess": [
+                {"id": "{{GRAPH_MAIL_READWRITE_SCOPE_ID}}", "type": "Scope"},
+                {"id": "{{GRAPH_MAIL_SEND_SCOPE_ID}}", "type": "Scope"},
+            ],
+        },
+        {
             "resourceAppId": "{{WORKIQ_RESOURCE_APP_ID}}",
             "resourceAccess": [
                 {"id": "{{WORKIQ_AGENT_ASK_SCOPE_ID}}", "type": "Scope"}
             ],
-        }
+        },
     ]
     assert web["requiredResourceAccess"] == [
         {
@@ -381,6 +388,12 @@ def _check_fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     api_text = api_text.replace("{{WORKIQ_RESOURCE_APP_ID}}", WORKIQ_ID)
     api_text = api_text.replace(
         "{{WORKIQ_AGENT_ASK_SCOPE_ID}}", "55555555-5555-4555-8555-555555555555"
+    )
+    api_text = api_text.replace(
+        "{{GRAPH_MAIL_READWRITE_SCOPE_ID}}", "66666666-6666-4666-8666-666666666666"
+    )
+    api_text = api_text.replace(
+        "{{GRAPH_MAIL_SEND_SCOPE_ID}}", "77777777-7777-4777-8777-777777777777"
     )
     web_text = json.dumps(load("web-app.json"))
     web_text = web_text.replace("{{API_APP_ID}}", API_ID)

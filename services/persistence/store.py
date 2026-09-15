@@ -3045,6 +3045,85 @@ class SqlAlchemySupplierEmailRepository:
         self._update_delivery(delivery)
         return True
 
+    def claim_send(
+        self,
+        delivery: SupplierEmailDelivery,
+        *,
+        expected_revision: int,
+    ) -> bool:
+        if (
+            delivery.reviewed_revision != expected_revision
+            or delivery.send_status != "submitting"
+            or delivery.correlation_id is None
+            or delivery.provider_message_id is not None
+            or delivery.internet_message_id is not None
+            or delivery.failure_code is not None
+        ):
+            raise PersistenceIntegrityError("supplier email send claim is invalid")
+        try:
+            result = self._connection.execute(
+                update(supplier_email_deliveries)
+                .where(
+                    supplier_email_deliveries.c.email_id == delivery.email_id,
+                    supplier_email_deliveries.c.decision_id == delivery.decision_id,
+                    supplier_email_deliveries.c.reviewed_revision == expected_revision,
+                    supplier_email_deliveries.c.send_status.in_(("draft", "failed")),
+                )
+                .values(
+                    reviewed_revision=delivery.reviewed_revision,
+                    send_status=delivery.send_status,
+                    provider_message_id=delivery.provider_message_id,
+                    internet_message_id=delivery.internet_message_id,
+                    correlation_id=delivery.correlation_id,
+                    status_updated_at=delivery.status_updated_at,
+                    failure_code=delivery.failure_code,
+                    payload_json=serialize_model(delivery),
+                )
+            )
+        except OperationalError as error:
+            if _is_write_contention(error):
+                return False
+            raise
+        return result.rowcount == 1
+
+    def update_delivery_state(
+        self,
+        delivery: SupplierEmailDelivery,
+        *,
+        expected_correlation_id: str,
+        expected_statuses: tuple[str, ...],
+    ) -> bool:
+        if delivery.correlation_id != expected_correlation_id or not expected_statuses:
+            raise PersistenceIntegrityError(
+                "supplier email delivery transition is invalid"
+            )
+        try:
+            result = self._connection.execute(
+                update(supplier_email_deliveries)
+                .where(
+                    supplier_email_deliveries.c.email_id == delivery.email_id,
+                    supplier_email_deliveries.c.decision_id == delivery.decision_id,
+                    supplier_email_deliveries.c.correlation_id
+                    == expected_correlation_id,
+                    supplier_email_deliveries.c.send_status.in_(expected_statuses),
+                )
+                .values(
+                    reviewed_revision=delivery.reviewed_revision,
+                    send_status=delivery.send_status,
+                    provider_message_id=delivery.provider_message_id,
+                    internet_message_id=delivery.internet_message_id,
+                    correlation_id=delivery.correlation_id,
+                    status_updated_at=delivery.status_updated_at,
+                    failure_code=delivery.failure_code,
+                    payload_json=serialize_model(delivery),
+                )
+            )
+        except OperationalError as error:
+            if _is_write_contention(error):
+                return False
+            raise
+        return result.rowcount == 1
+
 
 class SqlAlchemyUnitOfWork:
     def __init__(

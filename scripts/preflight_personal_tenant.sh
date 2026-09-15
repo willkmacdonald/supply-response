@@ -20,6 +20,7 @@ FABRIC_SQL_DATABASE_ID="${SUPPLY_RESPONSE_FABRIC_SQL_DATABASE_ID:?Set the exact 
 API_CLIENT_ID="${SUPPLY_RESPONSE_API_CLIENT_ID:?Set the exact API application client ID}"
 WEB_CLIENT_ID="${SUPPLY_RESPONSE_WEB_CLIENT_ID:?Set the exact Web application client ID}"
 REGISTERED_REDIRECT_URI="${SUPPLY_RESPONSE_REDIRECT_URI:?Set the exact registered SPA redirect URI}"
+mail_send_enabled="${SUPPLY_RESPONSE_MAIL_SEND_ENABLED:-false}"
 SHARED_RESOURCE_GROUP="${SUPPLY_RESPONSE_SHARED_RESOURCE_GROUP:-shared-services-rg}"
 SHARED_ENVIRONMENT="${SUPPLY_RESPONSE_SHARED_CONTAINER_APPS_ENVIRONMENT:-shared-services-env}"
 SHARED_REGISTRY="${SUPPLY_RESPONSE_SHARED_REGISTRY:-wkmsharedservicesacr}"
@@ -46,6 +47,17 @@ require_command az
 require_command azd
 require_command python3
 validate_workiq_binding
+
+case "$mail_send_enabled" in
+  true)
+    MAIL_FROM_ADDRESS="${SUPPLY_RESPONSE_MAIL_FROM_ADDRESS:?Set the fixed supplier-email sender}"
+    MAIL_TO_ADDRESS="${SUPPLY_RESPONSE_MAIL_TO_ADDRESS:?Set the fixed supplier-email recipient}"
+    assert_equal 'supplier-email sender' "$MAIL_FROM_ADDRESS" 'agent@willmacdonald.com'
+    assert_equal 'supplier-email recipient' "$MAIL_TO_ADDRESS" 'will@willmacdonald.com'
+    ;;
+  false) ;;
+  *) printf 'SUPPLY_RESPONSE_MAIL_SEND_ENABLED must be true or false.\n' >&2; exit 1 ;;
+esac
 
 if ! valid_container_app_name "$EXPECTED_CONTAINER_APP_NAME"; then
   printf 'SUPPLY_RESPONSE_CONTAINER_APP_NAME must be 2-32 lowercase letters, numbers, or hyphens, starting with a letter, ending alphanumeric, and containing no consecutive hyphens.\n' >&2
@@ -103,6 +115,16 @@ assert_equal 'Web application redirect set' "$web_redirects" "$REGISTERED_REDIRE
 safe_capture api_app_json api-application az ad app show --id "$API_CLIENT_ID" --output json
 api_app_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["appId"])' <<<"$api_app_json")"
 api_scope_count="$(python3 -c 'import json,sys; print(sum(1 for scope in json.load(sys.stdin).get("api", {}).get("oauth2PermissionScopes", []) if scope.get("value") == "access_as_user" and scope.get("isEnabled") is True))' <<<"$api_app_json")"
+if [[ "$mail_send_enabled" == "true" ]]; then
+  safe_capture graph_sp_json graph-service-principal az rest --method GET --uri "https://graph.microsoft.com/v1.0/servicePrincipals(appId='00000003-0000-0000-c000-000000000000')?\$select=appId,oauth2PermissionScopes" --output json
+  graph_mail_readwrite_id="$(python3 -c 'import json,sys; values=[scope["id"] for scope in json.load(sys.stdin).get("oauth2PermissionScopes", []) if scope.get("value") == "Mail.ReadWrite" and scope.get("isEnabled") is True]; print(values[0] if len(values) == 1 else "")' <<<"$graph_sp_json")"
+  graph_mail_send_id="$(python3 -c 'import json,sys; values=[scope["id"] for scope in json.load(sys.stdin).get("oauth2PermissionScopes", []) if scope.get("value") == "Mail.Send" and scope.get("isEnabled") is True]; print(values[0] if len(values) == 1 else "")' <<<"$graph_sp_json")"
+  unset graph_sp_json
+  [[ "$graph_mail_readwrite_id" =~ $uuid_pattern && "$graph_mail_send_id" =~ $uuid_pattern ]] || { printf 'Microsoft Graph Mail.ReadWrite or Mail.Send published scope is missing or ambiguous.\n' >&2; exit 1; }
+  graph_mail_permissions="$(python3 -c 'import json,sys; app=json.load(sys.stdin); items=[item for item in app.get("requiredResourceAccess", []) if item.get("resourceAppId") == "00000003-0000-0000-c000-000000000000"]; print("\n".join(sorted(value.get("id", "") + ":" + value.get("type", "") for item in items for value in item.get("resourceAccess", []))))' <<<"$api_app_json")"
+  expected_graph_mail_permissions="$(printf '%s:Scope\n%s:Scope\n' "$graph_mail_readwrite_id" "$graph_mail_send_id" | sort)"
+  assert_equal 'API Microsoft Graph delegated permissions' "$graph_mail_permissions" "$expected_graph_mail_permissions"
+fi
 unset api_app_json
 assert_equal 'API application client' "$api_app_id" "$API_CLIENT_ID"
 assert_equal 'enabled access_as_user scope count' "$api_scope_count" 1

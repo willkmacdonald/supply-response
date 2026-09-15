@@ -271,6 +271,21 @@ class SupplierEmailStore(Protocol):
         expected_revision: int,
     ) -> bool: ...
 
+    def claim_send(
+        self,
+        delivery: SupplierEmailDelivery,
+        *,
+        expected_revision: int,
+    ) -> bool: ...
+
+    def update_delivery_state(
+        self,
+        delivery: SupplierEmailDelivery,
+        *,
+        expected_correlation_id: str,
+        expected_statuses: tuple[str, ...],
+    ) -> bool: ...
+
 
 class UnitOfWork(Protocol):
     cases: CaseStore

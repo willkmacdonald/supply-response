@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
-from uuid import NAMESPACE_URL, uuid5
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from data.domain.decisions import Decision, IdentitySnapshot
 from data.domain.evidence import IdentitySource
@@ -11,6 +11,12 @@ from data.domain.outbound_mail import (
     ReviewedSupplierEmail,
     SupplierEmailDelivery,
     SupplierEmailRevision,
+)
+from integrations.graph_mail.client import (
+    GraphMailError,
+    GraphMailPort,
+    GraphMailSubmissionUncertain,
+    ProviderMessage,
 )
 from services.execution.currentness import (
     ExecutionProposalStale,
@@ -32,6 +38,10 @@ class EmailStateError(RuntimeError):
     """The current Decision cannot produce a reviewed supplier email."""
 
 
+class EmailSendDisabled(EmailStateError):
+    """Real supplier email sending is not enabled."""
+
+
 def deterministic_email_id(decision_id: str) -> str:
     return f"RL-EMAIL-{uuid5(NAMESPACE_URL, f'{decision_id}:supplier-email')}"
 
@@ -44,15 +54,25 @@ class ReviewedEmailService:
         from_address: str,
         to_address: str,
         configured_actor: IdentitySnapshot,
+        graph_mail: GraphMailPort | None = None,
+        mail_send_enabled: bool = False,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._from_address = from_address
         self._to_address = to_address
         self._configured_actor = configured_actor
+        self._graph_mail = graph_mail
+        self._mail_send_enabled = mail_send_enabled
         self._clock = clock or (lambda: datetime.now(UTC))
 
+    @staticmethod
+    def _identity(actor: object) -> IdentitySnapshot:
+        converter = getattr(actor, "to_identity_snapshot", None)
+        return converter() if callable(converter) else actor  # type: ignore[return-value]
+
     def _require_actor(self, actor: IdentitySnapshot) -> None:
+        actor = self._identity(actor)
         expected = self._configured_actor
         fixed_fields_match = (
             actor.persona_id == expected.persona_id == "RL-PERSONA-ALEX"
@@ -278,3 +298,227 @@ class ReviewedEmailService:
                 )
             uow.commit()
             return self._state((reviewed, reviewed_delivery))
+
+    def _send_records(
+        self,
+        uow,
+        decision_id: str,
+        revision: int,
+        actor: object,
+    ) -> tuple[SupplierEmailRevision, SupplierEmailDelivery]:
+        self._require_actor(actor)  # type: ignore[arg-type]
+        decision = guard_execution_current(uow, decision_id)
+        self._require_current_projection(uow, decision)
+        self._draft_action(uow, decision_id)
+        current = uow.mail.get_current(decision_id)
+        if current is None:
+            raise EmailStateError("Open the supplier email before sending it.")
+        content, delivery = current
+        if content.revision != revision:
+            raise EmailRevisionConflict(
+                "The supplier email changed. Refresh it and try again."
+            )
+        if (
+            content.reviewed_by is None
+            or content.reviewed_at is None
+            or delivery.reviewed_revision != revision
+        ):
+            raise EmailStateError(
+                "Review the current supplier email before sending it."
+            )
+        return content, delivery
+
+    def _canonical(self, decision_id: str) -> ReviewedSupplierEmail:
+        with self._uow_factory() as uow:
+            current = uow.mail.get_current(decision_id)
+            if current is None:
+                raise EmailStateError("The supplier email is not available.")
+            return self._state(current)
+
+    def _transition(
+        self,
+        decision_id: str,
+        correlation_id: str,
+        *,
+        expected_statuses: tuple[str, ...],
+        status: str,
+        provider_message_id: str | None = None,
+        internet_message_id: str | None = None,
+        failure_code: str | None = None,
+    ) -> ReviewedSupplierEmail:
+        with self._uow_factory() as uow:
+            current = uow.mail.get_current(decision_id)
+            if current is None:
+                raise EmailStateError("The supplier email is not available.")
+            revision, delivery = current
+            if delivery.correlation_id != correlation_id:
+                return self._state(current)
+            changed = delivery.model_copy(
+                update={
+                    "send_status": status,
+                    "provider_message_id": (
+                        provider_message_id
+                        if provider_message_id is not None
+                        else delivery.provider_message_id
+                    ),
+                    "internet_message_id": (
+                        internet_message_id
+                        if internet_message_id is not None
+                        else delivery.internet_message_id
+                    ),
+                    "status_updated_at": self._clock(),
+                    "failure_code": failure_code,
+                }
+            )
+            if not uow.mail.update_delivery_state(
+                changed,
+                expected_correlation_id=correlation_id,
+                expected_statuses=expected_statuses,
+            ):
+                return self._state(uow.mail.get_current(decision_id) or current)
+            uow.commit()
+            return self._state((revision, changed))
+
+    async def send(
+        self,
+        decision_id: str,
+        revision: int,
+        actor: object,
+    ) -> ReviewedSupplierEmail:
+        if not self._mail_send_enabled or self._graph_mail is None:
+            raise EmailSendDisabled("Supplier email sending is not enabled.")
+        with self._uow_factory() as uow:
+            content, delivery = self._send_records(uow, decision_id, revision, actor)
+            if delivery.send_status not in ("draft", "failed"):
+                return self._state((content, delivery))
+            correlation_id = str(uuid4())
+            claimed = delivery.model_copy(
+                update={
+                    "send_status": "submitting",
+                    "provider_message_id": None,
+                    "internet_message_id": None,
+                    "correlation_id": correlation_id,
+                    "status_updated_at": self._clock(),
+                    "failure_code": None,
+                }
+            )
+            if not uow.mail.claim_send(claimed, expected_revision=revision):
+                return self._canonical(decision_id)
+            uow.commit()
+
+        try:
+            draft = await self._graph_mail.create_draft(content, actor)
+        except GraphMailError as error:
+            return self._transition(
+                decision_id,
+                correlation_id,
+                expected_statuses=("submitting",),
+                status="failed",
+                failure_code=error.code,
+            )
+        prepared = self._transition(
+            decision_id,
+            correlation_id,
+            expected_statuses=("submitting",),
+            status="submitting",
+            provider_message_id=draft.provider_message_id,
+            internet_message_id=draft.internet_message_id,
+        )
+        if prepared.send_status != "submitting":
+            return prepared
+        with self._uow_factory() as uow:
+            persisted = uow.mail.get_current(decision_id)
+            if (
+                persisted is None
+                or persisted[1].correlation_id != correlation_id
+                or persisted[1].provider_message_id != draft.provider_message_id
+                or persisted[1].send_status != "submitting"
+            ):
+                return self._state(persisted) if persisted is not None else prepared
+        try:
+            await self._graph_mail.send_draft(draft.provider_message_id, actor)
+        except GraphMailSubmissionUncertain as error:
+            return self._transition(
+                decision_id,
+                correlation_id,
+                expected_statuses=("submitting",),
+                status="uncertain",
+                failure_code=error.code,
+            )
+        except GraphMailError as error:
+            return self._transition(
+                decision_id,
+                correlation_id,
+                expected_statuses=("submitting",),
+                status="failed",
+                failure_code=error.code,
+            )
+        return self._transition(
+            decision_id,
+            correlation_id,
+            expected_statuses=("submitting",),
+            status="accepted",
+        )
+
+    @staticmethod
+    def _provider_matches(
+        provider: ProviderMessage,
+        revision: SupplierEmailRevision,
+        delivery: SupplierEmailDelivery,
+    ) -> bool:
+        return (
+            provider.provider_message_id == delivery.provider_message_id
+            and (
+                delivery.internet_message_id is None
+                or provider.internet_message_id == delivery.internet_message_id
+            )
+            and provider.sender_address == revision.from_address
+            and provider.to_addresses == (revision.to_address,)
+            and provider.subject == revision.subject
+            and provider.body_content_type == "text"
+            and provider.body == revision.body
+        )
+
+    async def check_send_status(
+        self,
+        decision_id: str,
+        actor: object,
+    ) -> ReviewedSupplierEmail:
+        if not self._mail_send_enabled or self._graph_mail is None:
+            raise EmailSendDisabled("Supplier email sending is not enabled.")
+        with self._uow_factory() as uow:
+            current = uow.mail.get_current(decision_id)
+            if current is None:
+                raise EmailStateError("The supplier email is not available.")
+            revision, delivery = current
+            self._send_records(uow, decision_id, revision.revision, actor)
+            if delivery.send_status == "sent-confirmed":
+                return self._state(current)
+            if (
+                delivery.send_status not in ("submitting", "accepted", "uncertain")
+                or delivery.provider_message_id is None
+                or delivery.correlation_id is None
+            ):
+                raise EmailStateError("Send status is not available to check.")
+        try:
+            provider = await self._graph_mail.get_message(
+                delivery.provider_message_id, actor
+            )
+        except GraphMailError:
+            return self._canonical(decision_id)
+        if not self._provider_matches(provider, revision, delivery):
+            return self._transition(
+                decision_id,
+                delivery.correlation_id,
+                expected_statuses=("submitting", "accepted", "uncertain"),
+                status="uncertain",
+                failure_code="graph_message_mismatch",
+            )
+        if provider.sent_at is None:
+            return self._canonical(decision_id)
+        return self._transition(
+            decision_id,
+            delivery.correlation_id,
+            expected_statuses=("submitting", "accepted", "uncertain"),
+            status="sent-confirmed",
+        )
