@@ -1,5 +1,33 @@
 # Supply Response Roadmap
 
+## September 15 execute-mitigation presenter experience — locally complete; live gates pending
+
+Implemented in the current source: tab 5 loads the supplier email bound to the
+current approved Decision, preserves unsaved subject/body edits across tab
+changes, requires save and fresh review before Send, prevents a second send
+click, and keeps simulated coordination separate from actual mail state. Status
+copy is limited to **Not sent**, **Sending…**, **Accepted by Microsoft 365**,
+**Sent**, **Send failed**, and **Send status uncertain**; it never claims
+delivery or receipt.
+
+Local acceptance uses intercepted API responses only. It covers a fresh inbound
+case, response selection, recorded Taylor approval, separate Alex final approval,
+the chosen option's action set, simulated playback, email edit/save/review, one
+mocked accepted send, GET-only status reconciliation to Sent, and a second fresh
+Presenter Run with no inherited approval, actions, playback, or mail state. The
+application's mail-send setting remains default-off, and these results do not
+establish tenant consent, deployment, provider acceptance, Sent Items evidence,
+or receipt by Will.
+
+The remaining live gates are sequential and separately approval-controlled:
+apply and verify delegated `Mail.ReadWrite` plus `Mail.Send` consent; run the
+read-only mailbox identity/reconciliation capability check; deploy and verify
+the five-stage/two-run browser flow without sending; show the exact reviewed
+From, To, subject, and body and obtain authorization for one send; observe
+Microsoft 365 acceptance and exact-message Sent Items reconciliation; then have
+Will open the received message. No live mail or tenant action was performed by
+this local increment.
+
 ## September 14 repeatable presenter runs — locally verified; release pending
 
 Implemented and locally verified: every successful **Check email for
@@ -54,7 +82,7 @@ new `Demo run 0914-A` email through Work IQ on September 14. Prior release notes
 below remain historical. Next: bind a reviewed message to a new case atomically with
 duplicate prevention, then continue the existing analysis/approval journey.
 
-**Last updated:** September 14, 2026 (America/Chicago).
+**Last updated:** September 15, 2026 (America/Chicago).
 **Deployed baseline:** website revision **ca-sr-demo--0000037**, deployed source
 `afa688a`; unchanged reviewed report/model artifacts through `fd53e99`.
 
@@ -133,7 +161,8 @@ Foundry explanation invocation, finance-person approval or downstream execution.
 | Jordan and Taylor identities | Existing tenant identities/roles retained | Exact Taylor app binding and real Taylor browser approval passed; no identity or permission replacement |
 | Finance review | Interactive workflow deployed and accepted through handoff | Taylor reviewed the exact proposal evidence, approved it, and returned to Alex's final-approval screen. Alex's final approval was intentionally not submitted |
 | Foundry | Agents published and contract/readiness checks passed | Optional explanation invocation/evaluation remains a separate gate |
-| Complete live journey | Not complete | Taylor approval and handoff are accepted; Alex's final approval, bounded downstream actions/observations and cross-service outcome parity remain unverified |
+| Execute-mitigation presenter source | Implemented and locally verified | Mocked flow covers Alex final approval, option-specific simulation, reviewed email, one accepted send, reconciliation, and a clean second run; mail remains default-off |
+| Complete live journey | Not complete | Taylor approval and handoff are accepted in the deployed revision; current-source Alex final approval, bounded actions/observations, Graph permission/deployment/send/reconciliation/receipt, and cross-service outcome parity remain unverified live |
 
 ## Remaining work
 
@@ -164,6 +193,11 @@ says execution is unavailable for this milestone. The next visible gates are
 Alex's final approval, option-specific execution, a reviewed email from Alex to
 Will, and deployment plus two-run browser acceptance of repeatable Presenter
 Runs. Test counts alone do not close any of these live acceptance gates.
+
+The September 15 source increment implements those controls locally; the
+paragraph above remains the boundary of deployed revision 37. No tenant consent,
+deployment, Graph submission, provider reconciliation, or Will receipt has yet
+been observed for the new source.
 
 The following September 13 increment notes are a historical snapshot superseded
 by the September 14 increments and revision 37 acceptance above. They do not

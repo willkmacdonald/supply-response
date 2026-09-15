@@ -10,6 +10,29 @@ const decision = {kind: "approved", action_planning_status: "complete"} as never
 afterEach(cleanup);
 
 describe("ExecutionPanel", () => {
+  it("keeps simulated coordination visually separate from actual supplier mail state", () => {
+    render(<ExecutionPanel decision={decision} actions={[
+      {action_id: "A-1", kind: "coordinate_alpha_expedited_partial", status: "planned", owner_kind: "persona",
+        execution_mode: "simulation"},
+    ] as never} drafts={[
+      {artifact_id: "D-1", artifact_kind: "supplier_recovery_request", subject: "Recovery request", body: null},
+    ] as never} retrying={false} onRetry={vi.fn()} onRetryAction={vi.fn()}
+    supplierEmail={{email_id: "email-1", decision_id: "decision-1", action_id: "A-2", revision: 1,
+      subject: "Recovery request", body: "Please confirm timing.", from_address: "agent@willmacdonald.com",
+      to_address: "will@willmacdonald.com", reviewed_revision: null, reviewed_at: null, reviewed_by: null,
+      send_status: "draft"}}
+    onSaveSupplierEmail={vi.fn()} onReviewSupplierEmail={vi.fn()} onSendSupplierEmail={vi.fn()}
+    onCheckSupplierEmail={vi.fn()} />);
+
+    const simulation = screen.getByRole("region", {name: "Simulated actions and prepared drafts"});
+    const mail = screen.getByRole("region", {name: "Review the supplier email"});
+    expect(simulation).toHaveTextContent("What happens here: Simulated coordination");
+    expect(simulation).toHaveTextContent("Prepared draft");
+    expect(simulation).not.toHaveTextContent("Not sent");
+    expect(mail).toHaveTextContent("Not sent");
+    expect(simulation).not.toContainElement(mail);
+  });
+
   it("uses business labels for known action kinds and an honest fallback for unknown kinds", () => {
     render(<ExecutionPanel decision={decision} actions={[
       {action_id: "A-1", kind: "prepare_alpha_recovery_draft", status: "planned", owner_kind: "persona",

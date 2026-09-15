@@ -331,6 +331,21 @@ const drafts = [
   },
 ];
 
+const supplierEmail = {
+  email_id: "RL-EMAIL-1",
+  decision_id: "RL-DECISION-1",
+  action_id: "RL-ACTION-1",
+  revision: 1,
+  subject: "RL-001 supplier recovery request",
+  body: "Please confirm the current recovery timing.",
+  from_address: "agent@willmacdonald.com",
+  to_address: "will@willmacdonald.com",
+  reviewed_revision: null,
+  reviewed_at: null,
+  reviewed_by: null,
+  send_status: "draft",
+};
+
 const playback = {
   playback_id: "RL-PLAYBACK-1",
   case_id: "RL-CASE-1",
@@ -414,6 +429,7 @@ function mockFallbackCaseLifecycle(overrides: {
       return response({...actions[0], status: "in_progress"});
     }
     if (path === "/api/decisions/RL-DECISION-1/drafts" && method === "GET") return response(drafts);
+    if (path === "/api/decisions/RL-DECISION-1/supplier-email" && method === "GET") return response(supplierEmail);
     if (path === "/api/decisions/RL-DECISION-1/playback" && method === "POST") return response(inProgressPlayback, 201);
     if (path === "/api/decisions/RL-DECISION-1/playback" && method === "GET") {
       playbackPolls += 1;
@@ -440,6 +456,7 @@ function savedReads(overrides: Record<string, unknown> = {}) {
     "/api/decisions/RL-DECISION-1": decision,
     "/api/decisions/RL-DECISION-1/actions": actions,
     "/api/decisions/RL-DECISION-1/drafts": drafts,
+    "/api/decisions/RL-DECISION-1/supplier-email": supplierEmail,
     "/api/decisions/RL-DECISION-1/playback": playback,
     "/api/decisions/RL-DECISION-1/observations": observations,
     ...overrides,
@@ -923,6 +940,7 @@ describe("progressive Case workspace", () => {
     await selectExecutionStage();
     expect(await screen.findAllByTestId("execution-action")).toHaveLength(5);
     expect(screen.getByText("Not sent")).toBeVisible();
+    expect(screen.getByText("Prepared draft")).toBeVisible();
     await userEvent.click(screen.getByRole("button", {name: "Run simulated coordination"}));
     expect(await screen.findByText("Simulated results")).toBeVisible();
     expect(await screen.findAllByTestId("outcome-observation")).toHaveLength(5);
@@ -1220,6 +1238,7 @@ describe("progressive Case workspace", () => {
       if (path === "/api/decisions/RL-DECISION-1") return response(decision);
       if (path === "/api/decisions/RL-DECISION-1/actions") return response(actions);
       if (path === "/api/decisions/RL-DECISION-1/drafts") return response(drafts);
+      if (path === "/api/decisions/RL-DECISION-1/supplier-email") return response(supplierEmail);
       if (path === "/api/decisions/RL-DECISION-1/playback") return response(playback);
       if (path === "/api/decisions/RL-DECISION-1/observations") return response(observations);
       throw new Error(`Unexpected API request: ${path}`);
@@ -1252,6 +1271,7 @@ describe("progressive Case workspace", () => {
       if (path === "/api/decisions/RL-DECISION-1") return response(decision);
       if (path === "/api/decisions/RL-DECISION-1/actions") return response(actions);
       if (path === "/api/decisions/RL-DECISION-1/drafts") return response(drafts);
+      if (path === "/api/decisions/RL-DECISION-1/supplier-email") return response(supplierEmail);
       if (path === "/api/decisions/RL-DECISION-1/playback") {
         return response({detail: {code: "PLAYBACK_NOT_FOUND"}}, 404);
       }
@@ -1282,6 +1302,7 @@ describe("progressive Case workspace", () => {
       if (path === "/api/decisions/RL-DECISION-1") return response(decision);
       if (path.endsWith("/actions")) return response({detail: {code: "READ_FAILED"}}, 503);
       if (path.endsWith("/drafts") || path.endsWith("/observations")) return response([]);
+      if (path.endsWith("/supplier-email")) return response(supplierEmail);
       if (path.endsWith("/playback")) return response({detail: {code: "PLAYBACK_NOT_FOUND"}}, 404);
       throw new Error(`Unexpected API request: ${path}`);
     }));

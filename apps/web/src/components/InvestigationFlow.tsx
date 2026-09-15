@@ -99,7 +99,10 @@ function InvestigationPresentation({state, independentFinanceEnabled}: {state: C
         <ExecutionPanel busy={state.operation !== null}
           canRetryPlanning={state.caseInstance?.controls.retry_action_planning}
           decision={state.decision} actions={state.actions} drafts={state.drafts}
-          retrying={state.operation === "planning"} onRetry={state.retryPlanning} onRetryAction={state.retryAction} />
+          retrying={state.operation === "planning"} onRetry={state.retryPlanning} onRetryAction={state.retryAction}
+          supplierEmail={state.supplierEmail} onSaveSupplierEmail={state.saveSupplierEmail}
+          onReviewSupplierEmail={state.reviewSupplierEmail} onSendSupplierEmail={state.sendSupplierEmail}
+          onCheckSupplierEmail={state.checkSupplierEmail} />
         <OutcomePanel disabled={state.operation !== null || !state.caseInstance?.controls.start_playback}
           decision={state.decision} actionCount={state.actions.length} playback={state.playback}
           observations={state.observations} starting={state.operation === "playback"} onStart={state.startPlayback} />

@@ -25,6 +25,14 @@ Before presenting, send the fictional RL-001 disruption email from
    the disruption**, **Investigate responses**, **Choose a response**, **Review
    and approve**, and **Execute mitigation plan**.
 
+The current source completes the local tab-5 presenter experience: it shows the
+chosen option's simulated coordination separately from an editable supplier
+email, requires each changed revision to be saved and reviewed, prevents a
+second send click, and reports only `Accepted by Microsoft 365`, `Sent`,
+`Send failed`, or `Send status uncertain` as supported by server state. This
+increment is locally verified with mocked Microsoft responses; it is not in the
+deployed revision linked above.
+
 The current Presenter Run and three prior presenter runs are retained. Older
 eligible presenter cases are pruned as complete aggregates; approvals and
 Decisions in retained runs stay immutable and are never reused by a new run.
@@ -48,12 +56,20 @@ approval, or execution action was performed during the earlier acceptance.
   approval was intentionally outside the acceptance check.
 - **Implemented and locally verified, deployment pending:** a successful inbox
   check mints a fresh Presenter Run, analysis creates a new source-bound Case ID,
-  and retention keeps the current presenter case plus three prior cases. Live
-  cleanup application and the two-run browser proof remain release gates.
+  and retention keeps the current presenter case plus three prior cases. The
+  complete mocked presenter walkthrough now continues through Taylor approval,
+  Alex's final approval, option-specific simulated actions, editable save/review
+  email controls, one accepted submission, exact-message status reconciliation,
+  and a clean second Presenter Run.
 - **Not yet a complete live demonstration:** option-specific mitigation
-  execution, reviewed outbound email received by Will, populated execution
-  outcomes in Power BI, and a reliable Teams desktop/web handoff still require
-  end-to-end acceptance. Historical cases retain their saved approval policy.
+  execution and outbound mail have not been deployed or accepted. The remaining
+  mail gates are explicit tenant consent for delegated `Mail.ReadWrite` and
+  `Mail.Send`, read-only mailbox/reconciliation capability verification,
+  deployment, a fresh live two-run browser check, separate approval for one
+  exact reviewed send, Microsoft 365 acceptance and Sent Items reconciliation,
+  and Will opening the message. Populated execution outcomes in Power BI and a
+  reliable Teams desktop/web handoff also remain unaccepted. Historical cases
+  retain their saved approval policy.
 
 The demo uses live Microsoft services with fictional business data. A healthy
 deployment, a saved analysis, or a passing unit test does not by itself prove an
@@ -134,10 +150,16 @@ The Decision is the immutable pivot between analysis and downstream activity. Au
 - Append-only, idempotent Decisions and transactional outbox processing.
 - Exactly five bounded Execution Actions with durable attempt history.
 - Explicit, idempotent Simulated Execution with permanently labeled observations.
+- A versioned supplier-email aggregate bound to the current approved Decision,
+  fixed Alex-to-Will demo addresses, exact-revision review, a durable send claim,
+  and GET-only reconciliation. The Graph adapter is default-off; local tests use
+  fakes and do not send mail.
 - Presenter-focused React workspace with a reviewed email entry, five stage tabs,
   source links/icons, bottom-of-card provenance, whole-dollar USD totals,
   two-decimal unit prices, immediate option-selection feedback, and an accessible
-  recommendation explanation sheet.
+  recommendation explanation sheet. Tab 5 preserves unsaved edits across tab
+  changes and keeps simulated coordination visually separate from actual mail
+  state.
 - Durable fallback persistence through SQLite and a complete browser end-to-end gate.
 - Opt-in Fabric SQL persistence, Entra token authentication, schema health checks, and read-only analytics views.
 - Guarded, insert-only canonical RL-001 source loading with full stored-data readback and timezone-preserving SQL binding. Live retrieval freshness is separate from fictional business dates, so the corpus does not require daily regeneration. See the [loader procedure](docs/deployment/personal-tenant.md#load-the-canonical-rl-001-operational-source).
@@ -290,4 +312,11 @@ Cloud deployment and live tests are intentionally approval-gated because they au
 
 ## Scope boundaries
 
-The project does not send supplier communications, modify purchase orders, make financial or contractual commitments, use real business data, or permit an agent to perform authoritative arithmetic. Fabric IQ is optional for the core demonstration. Foundry IQ retrieval of SOPs, policies, supplier-risk documents, and continuity playbooks remains a separately designed backlog item.
+Supplier mail sending remains disabled by default and has not been live-accepted;
+enabling tenant permissions, deploying the feature, and sending one exact reviewed
+revision each require their own explicit approvals. The project does not modify
+purchase orders, make financial or contractual commitments, use real business
+data, or permit an agent to perform authoritative arithmetic. Fabric IQ is
+optional for the core demonstration. Foundry IQ retrieval of SOPs, policies,
+supplier-risk documents, and continuity playbooks remains a separately designed
+backlog item.

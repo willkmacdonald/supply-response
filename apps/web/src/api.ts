@@ -12,6 +12,7 @@ import type {
   RuntimeStatus,
   SessionInfo, ProposalState, SubmissionResult, FinanceReviewDetail, ResolutionResult,
   SubmitProposalInput, ResolveFinanceInput, FinalizeProposalInput,
+  SupplierEmailState,
 } from "./types";
 
 export const API_BASE = "";
@@ -89,6 +90,17 @@ async function post<T>(path: string, body: object, headers: Record<string, strin
   }));
 }
 
+async function put<T>(path: string, body: object): Promise<T> {
+  const token = await accessTokenProvider();
+  const headers: Record<string, string> = {"Content-Type": "application/json"};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return json(await fetch(`${API_BASE}${path}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(body),
+  }));
+}
+
 export const api = {
   checkInbox: (): Promise<InboxCheckResult> => post("/api/inbox/check", {}),
   createCaseFromEmail: (
@@ -128,6 +140,19 @@ export const api = {
     get(`/api/decisions/${decisionId}/playback`),
   observations: (decisionId: string): Promise<OutcomeObservation[]> =>
     get(`/api/decisions/${decisionId}/observations`),
+  supplierEmail: (decisionId: string): Promise<SupplierEmailState> =>
+    get(`/api/decisions/${encodeURIComponent(decisionId)}/supplier-email`),
+  saveSupplierEmail: (
+    decisionId: string,
+    input: {revision: number; subject: string; body: string},
+  ): Promise<SupplierEmailState> =>
+    put(`/api/decisions/${encodeURIComponent(decisionId)}/supplier-email`, input),
+  reviewSupplierEmail: (decisionId: string, revision: number): Promise<SupplierEmailState> =>
+    post(`/api/decisions/${encodeURIComponent(decisionId)}/supplier-email/review`, {revision}),
+  sendSupplierEmail: (decisionId: string, revision: number): Promise<SupplierEmailState> =>
+    post(`/api/decisions/${encodeURIComponent(decisionId)}/supplier-email/send`, {revision}),
+  checkSupplierEmail: (decisionId: string): Promise<SupplierEmailState> =>
+    post(`/api/decisions/${encodeURIComponent(decisionId)}/supplier-email/check-send-status`, {}),
   proposal: (caseId: string): Promise<ProposalState> =>
     get(`/api/cases/${encodeURIComponent(caseId)}/proposal`),
   submitProposal: (caseId: string, input: SubmitProposalInput, key: string): Promise<SubmissionResult> =>

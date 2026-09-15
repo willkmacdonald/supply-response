@@ -1,4 +1,5 @@
-import type {Decision, DraftArtifact, ExecutionAction} from "../types";
+import type {Decision, DraftArtifact, ExecutionAction, SupplierEmailState} from "../types";
+import {SupplierEmailPanel} from "./SupplierEmailPanel";
 
 interface ExecutionPanelProps {
   decision: Decision | null;
@@ -9,6 +10,11 @@ interface ExecutionPanelProps {
   canRetryPlanning?: boolean;
   onRetry: () => void;
   onRetryAction: (actionId: string) => void;
+  supplierEmail?: SupplierEmailState | null;
+  onSaveSupplierEmail?: (input: {revision: number; subject: string; body: string}) => Promise<SupplierEmailState>;
+  onReviewSupplierEmail?: (revision: number) => Promise<SupplierEmailState>;
+  onSendSupplierEmail?: (revision: number) => Promise<SupplierEmailState>;
+  onCheckSupplierEmail?: () => Promise<SupplierEmailState>;
 }
 
 const actionNames = new Map<string, string>([
@@ -51,11 +57,15 @@ function executionDescription(action: ExecutionAction): string {
   return "Execution details not recorded";
 }
 
-export function ExecutionPanel({decision, actions, drafts, retrying, busy, canRetryPlanning = false, onRetry, onRetryAction}: ExecutionPanelProps) {
+export function ExecutionPanel({
+  decision, actions, drafts, retrying, busy, canRetryPlanning = false, onRetry, onRetryAction,
+  supplierEmail, onSaveSupplierEmail, onReviewSupplierEmail, onSendSupplierEmail, onCheckSupplierEmail,
+}: ExecutionPanelProps) {
   if (!decision || decision.kind !== "approved") return null;
-  return <section className="panel" aria-labelledby="execution-heading">
+  return <><section className="panel execution-simulation" aria-label="Simulated actions and prepared drafts">
     <p className="step">5. Execute mitigation plan</p>
     <h2 id="execution-heading">Execution plan</h2>
+    <p className="execution-boundary">These actions are simulated coordination or preparation. Their status does not describe the supplier email below.</p>
     {decision.action_planning_status === "failed" && <div className="failure-banner">
       <strong>Approved — action planning failed</strong>
       <button type="button" onClick={onRetry} disabled={busy || retrying || !canRetryPlanning}>
@@ -79,11 +89,15 @@ export function ExecutionPanel({decision, actions, drafts, retrying, busy, canRe
       </li>)}
     </ol>}
     {drafts.map((draft) => <article className="draft" key={draft.artifact_id}>
-      <span className="badge danger">Not sent</span>
+      <span className={`badge ${supplierEmail ? "" : "danger"}`}>{supplierEmail ? "Prepared draft" : "Not sent"}</span>
       <h3>{draftName(draft.artifact_kind)}</h3>
       <p>{draft.subject ?? "No draft subject recorded."}</p>
       {draft.body && <pre>{draft.body}</pre>}
       <details><summary>Draft details</summary><p>Draft {draft.artifact_id}</p><p>Recorded kind: {draft.artifact_kind}</p></details>
     </article>)}
-  </section>;
+  </section>
+    {supplierEmail && onSaveSupplierEmail && onReviewSupplierEmail && onSendSupplierEmail && onCheckSupplierEmail &&
+      <SupplierEmailPanel email={supplierEmail} busy={Boolean(busy)} onSave={onSaveSupplierEmail}
+        onReview={onReviewSupplierEmail} onSend={onSendSupplierEmail} onCheckStatus={onCheckSupplierEmail} />}
+  </>;
 }

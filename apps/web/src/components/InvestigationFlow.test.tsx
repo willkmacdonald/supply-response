@@ -18,10 +18,11 @@ function state(): CaseWorkspaceState {
   const ranking = {policy_version: "v1", eligible_option_ids: [], infeasible_option_ids: [],
     excluded_baseline_ids: [], stages: [], recommended_option_id: null, no_feasible_mitigation: true};
   const validation = {policy_version: "v1", blocking_codes: [], global_blocking_codes: [], item_results: []};
-  return {runtime: null, selectedOption: null, decision: null, actions: [], drafts: [], playback: null,
+  return {runtime: null, selectedOption: null, decision: null, actions: [], drafts: [], supplierEmail: null, playback: null,
     observations: [], operation: null, error: null, existingCases: null, existingCasesError: null, decisionBlocked: true,
     create: vi.fn(), loadExistingCases: vi.fn(), reopen: vi.fn(), analyze: vi.fn(), selectOption: vi.fn(), approve: vi.fn(), reject: vi.fn(),
-    retryPlanning: vi.fn(), retryAction: vi.fn(), startPlayback: vi.fn(),
+    retryPlanning: vi.fn(), retryAction: vi.fn(), startPlayback: vi.fn(), saveSupplierEmail: vi.fn(),
+    reviewSupplierEmail: vi.fn(), sendSupplierEmail: vi.fn(), checkSupplierEmail: vi.fn(),
     caseInstance: {case_id: "c", template_id: "RL-001", purpose: "showcase", runtime_mode: "fallback",
       scenario_effective_time: at, scenario_timezone: "America/Chicago", status: "awaiting_decision",
       current_analysis_id: "a", current_decision_id: null, display_status: null, recorded_at: at, projection_updated_at: at,
@@ -301,6 +302,25 @@ it("preserves approval input and selected option while switching stages", async 
   expect(input.selectedOption).toBe(selected);
   await selectApprovalStage();
   expect(screen.getByLabelText("Rejection reason")).toHaveValue("Wait for evidence");
+});
+it("preserves unsaved supplier email edits while switching stages", async () => {
+  const input = state();
+  input.decision = {kind: "approved", action_planning_status: "complete", prerequisite_roles: [],
+    analysis_id: "a", selected_option_id: "selected", decision_id: "d", runtime_mode: "fallback"} as never;
+  input.supplierEmail = {email_id: "email-1", decision_id: "d", action_id: "action-1", revision: 1,
+    subject: "Recovery request", body: "Please confirm timing.", from_address: "agent@willmacdonald.com",
+    to_address: "will@willmacdonald.com", reviewed_revision: null, reviewed_at: null, reviewed_by: null,
+    send_status: "draft"};
+  render(<InvestigationFlow state={input} />);
+
+  await selectExecutionStage();
+  await userEvent.type(screen.getByLabelText("Subject"), " — revised");
+  await selectDecisionStage();
+  await selectExecutionStage();
+
+  expect(screen.getByLabelText("Subject")).toHaveValue("Recovery request — revised");
+  expect(screen.getByRole("button", {name: "Save changes"})).toBeEnabled();
+  expect(input.saveSupplierEmail).not.toHaveBeenCalled();
 });
 it("retains execution busy and server-control guards", async () => {
   const input = state();

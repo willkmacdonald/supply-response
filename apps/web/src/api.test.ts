@@ -8,6 +8,25 @@ afterEach(() => {
 });
 
 describe("API client", () => {
+  it("uses the reviewed supplier-email endpoints without expanding their input", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ok: true, json: async () => ({email_id: "email-1"})});
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.supplierEmail("decision/1");
+    await api.saveSupplierEmail("decision/1", {revision: 1, subject: "Subject", body: "Body"});
+    await api.reviewSupplierEmail("decision/1", 2);
+    await api.sendSupplierEmail("decision/1", 2);
+    await api.checkSupplierEmail("decision/1");
+
+    const path = "/api/decisions/decision%2F1/supplier-email";
+    expect(fetchMock.mock.calls).toEqual([
+      [path, undefined],
+      [path, expect.objectContaining({method: "PUT", body: JSON.stringify({revision: 1, subject: "Subject", body: "Body"})})],
+      [`${path}/review`, expect.objectContaining({method: "POST", body: JSON.stringify({revision: 2})})],
+      [`${path}/send`, expect.objectContaining({method: "POST", body: JSON.stringify({revision: 2})})],
+      [`${path}/check-send-status`, expect.objectContaining({method: "POST", body: JSON.stringify({})})],
+    ]);
+  });
   it("creates from the server-issued presenter run and reviewed email identity without copied facts or message text", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ok:true,json:async()=>({case_id:"email-case"})});
     vi.stubGlobal("fetch", fetchMock);

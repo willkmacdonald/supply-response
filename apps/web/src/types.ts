@@ -449,6 +449,29 @@ export interface DraftArtifact {
   scenario_effective_time: string;
 }
 
+export type SupplierEmailSendStatus =
+  | "draft"
+  | "submitting"
+  | "accepted"
+  | "sent-confirmed"
+  | "failed"
+  | "uncertain";
+
+export interface SupplierEmailState {
+  email_id: string;
+  decision_id: string;
+  action_id: string;
+  revision: number;
+  subject: string;
+  body: string;
+  from_address: string;
+  to_address: string;
+  reviewed_revision: number | null;
+  reviewed_at: string | null;
+  reviewed_by: IdentitySnapshot | null;
+  send_status: SupplierEmailSendStatus;
+}
+
 export interface Playback {
   playback_id: string;
   case_id: string;

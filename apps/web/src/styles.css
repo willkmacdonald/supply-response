@@ -111,6 +111,18 @@ h3 { margin: 0.75rem 0 0.45rem; }
 .action-list li div { display: grid; gap: 0.2rem; }
 .action-list span, .action-list small { color: #61716c; overflow-wrap: anywhere; }
 .draft pre { white-space: pre-wrap; font-family: inherit; }
+.execution-simulation { border-left: 4px solid var(--line, #d7dce2); }
+.execution-boundary, .mail-boundary { color: var(--muted, #52606d); }
+.supplier-email-panel { border-left: 4px solid #2563eb; }
+.supplier-email-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.supplier-email-header h2 { margin-top: 0; }
+.email-field { display: grid; gap: .4rem; margin-top: 1rem; font-weight: 700; }
+.email-field input, .email-field textarea { width: 100%; box-sizing: border-box; font: inherit; font-weight: 400; }
+.email-field textarea { resize: vertical; }
+.supplier-email-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
+.mail-notice { padding: .75rem 1rem; border-radius: .35rem; background: #eef6ff; color: #173b66; }
+.mail-status-accepted, .mail-status-sent-confirmed { background: #dff6e6; color: #155b2b; }
+.mail-status-failed, .mail-status-uncertain { background: #fff0e1; color: #7a3f00; }
 
 @media (min-width: 760px) {
   .case-header > button { width: fit-content; }

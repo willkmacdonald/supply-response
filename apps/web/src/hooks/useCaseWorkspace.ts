@@ -11,6 +11,7 @@ import type {
   Playback,
   ResponseOption,
   RuntimeStatus,
+  SupplierEmailState,
 } from "../types";
 import {trustedServerCitation} from "../security/trustedUrls";
 
@@ -22,7 +23,8 @@ export type WorkspaceOperation =
   | "analyzing"
   | "deciding"
   | "planning"
-  | "playback";
+  | "playback"
+  | "email";
 
 export interface CaseWorkspaceState {
   runtime: RuntimeStatus | null;
@@ -32,6 +34,7 @@ export interface CaseWorkspaceState {
   decision: Decision | null;
   actions: ExecutionAction[];
   drafts: DraftArtifact[];
+  supplierEmail: SupplierEmailState | null;
   playback: Playback | null;
   observations: OutcomeObservation[];
   operation: WorkspaceOperation | null;
@@ -49,6 +52,10 @@ export interface CaseWorkspaceState {
   retryPlanning: () => Promise<void>;
   retryAction: (actionId: string) => Promise<void>;
   startPlayback: () => Promise<void>;
+  saveSupplierEmail: (input: {revision: number; subject: string; body: string}) => Promise<SupplierEmailState>;
+  reviewSupplierEmail: (revision: number) => Promise<SupplierEmailState>;
+  sendSupplierEmail: (revision: number) => Promise<SupplierEmailState>;
+  checkSupplierEmail: () => Promise<SupplierEmailState>;
   acceptFinalDecision?: (decision: Decision) => void;
 }
 
@@ -90,6 +97,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
   const [decision, setDecision] = useState<Decision | null>(null);
   const [actions, setActions] = useState<ExecutionAction[]>([]);
   const [drafts, setDrafts] = useState<DraftArtifact[]>([]);
+  const [supplierEmail, setSupplierEmail] = useState<SupplierEmailState | null>(null);
   const [playback, setPlayback] = useState<Playback | null>(null);
   const [observations, setObservations] = useState<OutcomeObservation[]>([]);
   const [operation, setOperation] = useState<WorkspaceOperation | null>("initializing");
@@ -124,7 +132,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
 
   const clearWorkspace = useCallback(() => {
     setCaseInstance(null); setAnalysis(null); setSelectedOption(null); setDecision(null);
-    setActions([]); setDrafts([]); setPlayback(null); setObservations([]);
+    setActions([]); setDrafts([]); setSupplierEmail(null); setPlayback(null); setObservations([]);
   }, []);
   const loadExistingCases = useCallback(async () => {
     const token = begin("listing");
@@ -154,6 +162,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
         let nextDecision: Decision | null = null;
         let nextActions: ExecutionAction[] = [];
         let nextDrafts: DraftArtifact[] = [];
+        let nextSupplierEmail: SupplierEmailState | null = null;
         let nextPlayback: Playback | null = null;
         let nextObservations: OutcomeObservation[] = [];
         if (analysisId) {
@@ -186,17 +195,22 @@ export function useCaseWorkspace(): CaseWorkspaceState {
               || !nextAnalysis.response_options.some(option => option.option_id === nextDecision!.selected_option_id))) {
               throw new Error("selected option identity mismatch");
             }
-            [nextActions, nextDrafts, nextPlayback, nextObservations] = await Promise.all([
+            [nextActions, nextDrafts, nextPlayback, nextObservations, nextSupplierEmail] = await Promise.all([
               api.actions(nextDecision.decision_id), api.drafts(nextDecision.decision_id),
               api.playback(nextDecision.decision_id).catch(caught => {
                 if (caught instanceof ApiRequestError && caught.status === 404 && caught.code === "PLAYBACK_NOT_FOUND") return null;
                 throw caught;
               }), api.observations(nextDecision.decision_id),
+              nextDecision.kind === "approved" && nextDecision.action_planning_status === "complete"
+                ? api.supplierEmail(nextDecision.decision_id)
+                : Promise.resolve(null),
             ]);
             if (nextActions.some(item => item.case_id !== caseId || item.decision_id !== nextDecision!.decision_id)
               || nextDrafts.some(item => item.decision_id !== nextDecision!.decision_id
                 || !nextActions.some(action => action.action_id === item.action_id))
               || (nextPlayback && (nextPlayback.case_id !== caseId || nextPlayback.decision_id !== nextDecision.decision_id))
+              || (nextSupplierEmail && (nextSupplierEmail.decision_id !== nextDecision.decision_id
+                || !nextActions.some(action => action.action_id === nextSupplierEmail!.action_id)))
               || nextObservations.some(item => item.case_id !== caseId || item.decision_id !== nextDecision!.decision_id
                 || (item.playback_id !== null && item.playback_id !== nextPlayback?.playback_id)
                 || (item.action_id !== null && !nextActions.some(action => action.action_id === item.action_id)))) {
@@ -216,7 +230,8 @@ export function useCaseWorkspace(): CaseWorkspaceState {
             : nextAnalysis?.recommendation ?? null);
         setCaseInstance(confirmedCase); setAnalysis(nextAnalysis); setDecision(nextDecision);
         setSelectedOption(nextSelectedOption);
-        setActions(nextActions); setDrafts(nextDrafts); setPlayback(nextPlayback); setObservations(nextObservations);
+        setActions(nextActions); setDrafts(nextDrafts); setSupplierEmail(nextSupplierEmail);
+        setPlayback(nextPlayback); setObservations(nextObservations);
         replaceWorkspaceUrl(confirmedCase, nextAnalysis, expectedOptionId === nextSelectedOption?.option_id ? expectedOptionId : null);
         setExistingCases(null); setExistingCasesError(null);
       } catch (caught) {
@@ -247,6 +262,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
       setDecision(null);
       setActions([]);
       setDrafts([]);
+      setSupplierEmail(null);
       setPlayback(null);
       setObservations([]);
       replaceWorkspaceUrl(created, null);
@@ -297,6 +313,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
       setDecision(null);
       setActions([]);
       setDrafts([]);
+      setSupplierEmail(null);
       setPlayback(null);
       setObservations([]);
       setCaseInstance((current) => current ? {
@@ -321,13 +338,15 @@ export function useCaseWorkspace(): CaseWorkspaceState {
   }, []);
 
   const loadExecution = useCallback(async (decisionId: string, token: number) => {
-    const [nextActions, nextDrafts] = await Promise.all([
+    const [nextActions, nextDrafts, nextSupplierEmail] = await Promise.all([
       api.actions(decisionId),
       api.drafts(decisionId),
+      api.supplierEmail(decisionId),
     ]);
     if (!valid(token)) return;
     setActions(nextActions);
     setDrafts(nextDrafts);
+    setSupplierEmail(nextSupplierEmail);
   }, [valid]);
 
   const acceptFinalDecision = useCallback((next: Decision) => {
@@ -553,6 +572,35 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     return running;
   }, [begin, valid, finish, decision, caseInstance, playback, actions.length]);
 
+  const runSupplierEmailAction = useCallback(async (
+    operationCall: (decisionId: string) => Promise<SupplierEmailState>,
+  ): Promise<SupplierEmailState> => {
+    if (!decision || !supplierEmail) throw new Error("The supplier email is not available.");
+    const token = begin("email");
+    if (token === null) throw new Error("Another workspace operation is in progress.");
+    setError(null);
+    try {
+      const next = await operationCall(decision.decision_id);
+      if (!valid(token)) throw new Error("The supplier email workspace changed.");
+      setSupplierEmail(next);
+      return next;
+    } catch (caught) {
+      if (valid(token)) setError(`Supplier email action failed. ${safeErrorMessage(caught)}`);
+      throw caught;
+    } finally {
+      finish(token);
+    }
+  }, [begin, decision, finish, supplierEmail, valid]);
+
+  const saveSupplierEmail = useCallback((input: {revision: number; subject: string; body: string}) =>
+    runSupplierEmailAction(decisionId => api.saveSupplierEmail(decisionId, input)), [runSupplierEmailAction]);
+  const reviewSupplierEmail = useCallback((revision: number) =>
+    runSupplierEmailAction(decisionId => api.reviewSupplierEmail(decisionId, revision)), [runSupplierEmailAction]);
+  const sendSupplierEmail = useCallback((revision: number) =>
+    runSupplierEmailAction(decisionId => api.sendSupplierEmail(decisionId, revision)), [runSupplierEmailAction]);
+  const checkSupplierEmail = useCallback(() =>
+    runSupplierEmailAction(decisionId => api.checkSupplierEmail(decisionId)), [runSupplierEmailAction]);
+
 
   return {
     runtime,
@@ -562,6 +610,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     decision,
     actions,
     drafts,
+    supplierEmail,
     playback,
     observations,
     operation,
@@ -579,5 +628,9 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     retryPlanning,
     retryAction,
     startPlayback, acceptFinalDecision,
+    saveSupplierEmail,
+    reviewSupplierEmail,
+    sendSupplierEmail,
+    checkSupplierEmail,
   };
 }
