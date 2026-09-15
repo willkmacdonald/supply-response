@@ -17,13 +17,21 @@ const metricNames = new Map<string, string>([
   ["total_response_arranged_supply", "Total supply arranged by the response"],
   ["uncovered_part_demand", "Parts still needed"],
   ["response_cost", "Response cost"],
+  ["revenue_at_risk", "Revenue at risk"],
+  ["margin_at_risk", "Margin at risk"],
   ["protected_customer_orders", "Protected customer orders"],
   ["revenue_protected", "Revenue protected"],
   ["margin_protected", "Margin protected"],
   ["otif_loss_percentage", "Service-target exposure"],
   ["remaining_alpha_recovery_date", "Remaining Supplier Alpha recovery date"],
 ]);
-const monetaryMetrics = new Set(["response_cost", "revenue_protected", "margin_protected"]);
+const monetaryMetrics = new Set([
+  "response_cost",
+  "revenue_at_risk",
+  "margin_at_risk",
+  "revenue_protected",
+  "margin_protected",
+]);
 function outcomeValue(observation: OutcomeObservation, value: string) {
   return monetaryMetrics.has(observation.metric) ? wholeUsd(usdDecimal(value)) : value;
 }
@@ -33,8 +41,8 @@ export function OutcomePanel({decision, actionCount, playback, observations, sta
   return <section className="panel" aria-labelledby="outcomes-heading">
     <p className="step">Review outcomes</p>
     <h2 id="outcomes-heading">{playback ? "Simulated results" : "Recorded results"}</h2>
-    {!playback && <button type="button" onClick={onStart} disabled={disabled || starting || actionCount !== 5}>
-      {starting ? "Starting simulated execution…" : "Start simulated execution"}
+    {(!playback || playback.status === "in_progress") && <button type="button" onClick={onStart} disabled={disabled || starting}>
+      {starting ? "Running simulated coordination…" : "Run simulated coordination"}
     </button>}
     {playback?.status === "failed" && <p className="error" role="alert">Simulation failed. Another simulation cannot be started for this Case.</p>}
     {playback?.status === "in_progress" && observations.length === 0 && <p>Simulation in progress</p>}

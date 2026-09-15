@@ -47,8 +47,10 @@ def test_fallback_case_runs_from_creation_through_observations(
     assert repeated_playback.json()["playback_id"] == playback["playback_id"]
     assert len(drafts) == 1
     assert drafts[0]["sent"] is False
-    assert drafts[0]["subject"] == "RL-001 recovery-date confirmation request"
-    assert len(observations) == 10
+    assert drafts[0]["subject"] == "RL-001 supplier communication draft"
+    assert "fictional demo" in drafts[0]["body"].lower()
+    assert case_id in drafts[0]["body"]
+    assert len(observations) == 5
     assert {item["display_label"] for item in observations} == {"Simulated"}
 
 

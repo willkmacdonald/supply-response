@@ -3,27 +3,20 @@ from threading import Barrier, local
 
 import pytest
 
-from tests.execution.conftest import APPROVED_DECISION_ID, alex_identity
-
 from services.execution.playback import ImmediateClock, PlaybackService
 from services.execution.worker import ActionPlanningWorker
 from services.persistence.store import (
     ImmutableRecordConflict,
     SqlAlchemyExecutionRepository,
 )
-
+from tests.execution.conftest import APPROVED_DECISION_ID, alex_identity
 
 EXPECTED = {
-    "alpha_expedited_quantity": ("3000", "2800"),
-    "dallas_transfer_quantity": ("1500", "1500"),
-    "total_response_arranged_supply": ("4500", "4300"),
-    "uncovered_part_demand": ("2300", "2500"),
-    "response_cost": ("24750", "25000"),
-    "protected_customer_orders": ("1", "1"),
-    "revenue_protected": ("580000", "580000"),
-    "margin_protected": ("203000", "203000"),
+    "uncovered_part_demand": ("2300", "2300"),
+    "response_cost": ("24750.00", "24750.00"),
+    "revenue_at_risk": ("375000.00", "375000.00"),
+    "margin_at_risk": ("125000.00", "125000.00"),
     "otif_loss_percentage": ("50", "50"),
-    "remaining_alpha_recovery_date": ("unknown", "2026-09-12"),
 }
 
 
@@ -41,6 +34,7 @@ def test_playback_appends_only_the_frozen_simulated_observations(playback_servic
         o.metric: (o.predicted_value, o.observed_value) for o in observations
     } == EXPECTED
     assert all(o.kind.value == "simulated" and o.synthetic for o in observations)
+    assert all(o.source_reference.startswith("Simulated") for o in observations)
 
 
 def test_repeated_start_returns_existing_playback(playback_service):
@@ -83,9 +77,11 @@ def test_playback_conflict_does_not_accept_a_divergent_record(
     canonical = playback_service.start(APPROVED_DECISION_ID, alex_identity())
     divergent = canonical.model_copy(update={"playback_id": "RL-PLAYBACK-DIVERGENT"})
 
-    with planning_context.uow_factory() as uow:
-        with pytest.raises(ImmutableRecordConflict, match="different Playback"):
-            uow.execution.insert_playback_if_absent(divergent)
+    with (
+        planning_context.uow_factory() as uow,
+        pytest.raises(ImmutableRecordConflict, match="different Playback"),
+    ):
+        uow.execution.insert_playback_if_absent(divergent)
 
 
 def test_playback_completes_an_unsent_alpha_draft(playback_service):
@@ -94,6 +90,8 @@ def test_playback_completes_an_unsent_alpha_draft(playback_service):
         clock=ImmediateClock(),
     )
     draft = playback_service.draft(APPROVED_DECISION_ID, "alpha_recovery_request")
-    assert draft.subject == "RL-001 recovery-date confirmation request"
-    assert "RL-Supplier Alpha" in draft.body
+    assert draft.subject == "RL-001 supplier communication draft"
+    assert "fictional demo" in draft.body.lower()
+    assert "RL-CASE-EXECUTION-1" in draft.body
+    assert "Combine expedite, transfer, and resequencing" in draft.body
     assert draft.sent is False

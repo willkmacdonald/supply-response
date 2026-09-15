@@ -34,9 +34,7 @@ from services.persistence.tables import metadata, playbacks
 from tests.finance.test_finance_final_decision import final_ctx  # noqa: F401
 
 
-@pytest.fixture
-def ctx(request):
-    context = request.getfixturevalue("final_ctx")
+def prepare_context(context, option_id):
     context.clock = ImmediateClock(context.analysis.created_at + timedelta(hours=1))
 
     def tick():
@@ -51,24 +49,25 @@ def ctx(request):
         SubmitProposalCommand(
             case_id=context.case.case_id,
             expected=state(context).token,
-            option_id="RL-OPTION-COMBINED",
-            idempotency_key="playback-submit",
+            option_id=option_id,
+            idempotency_key=f"playback-submit-{option_id}",
         ),
         context.alex,
     )
     current = state(context)
-    assert selected.review is not None and current.review_revision is not None
-    context.finance.resolve(
-        ResolveFinanceCommand(
-            review_id=selected.review.review_id,
-            expected=current.token,
-            expected_review_revision=current.review_revision,
-            approved=True,
-            reason=None,
-            idempotency_key="playback-approve",
-        ),
-        context.taylor,
-    )
+    if selected.review is not None:
+        assert current.review_revision is not None
+        context.finance.resolve(
+            ResolveFinanceCommand(
+                review_id=selected.review.review_id,
+                expected=current.token,
+                expected_review_revision=current.review_revision,
+                approved=True,
+                reason=None,
+                idempotency_key=f"playback-approve-{option_id}",
+            ),
+            context.taylor,
+        )
     context.decision = FinanceDecisionService(
         context.store.uow_factory, actors=context.actors, clock=tick
     ).finalize(
@@ -83,6 +82,23 @@ def ctx(request):
     assert ActionPlanningWorker(context.store.uow_factory).process_next_outbox()
     context.service = PlaybackService(context.store.uow_factory, clock=context.clock)
     return context
+
+
+@pytest.fixture
+def ctx(request):
+    return prepare_context(request.getfixturevalue("final_ctx"), "RL-OPTION-COMBINED")
+
+
+@pytest.fixture(
+    params=(
+        "RL-OPTION-EXPEDITE",
+        "RL-OPTION-TRANSFER",
+        "RL-OPTION-RESEQUENCE",
+        "RL-OPTION-COMBINED",
+    )
+)
+def option_ctx(request):
+    return prepare_context(request.getfixturevalue("final_ctx"), request.param)
 
 
 def state(ctx):
@@ -148,6 +164,87 @@ def invoke(ctx, operation, playback, original_actions):
     return ctx.service._record_completion(playback, original_actions, ctx.clock)
 
 
+EXPECTED_ACTION_KINDS = {
+    "RL-OPTION-EXPEDITE": (
+        "prepare_alpha_recovery_draft",
+        "coordinate_alpha_expedited_partial",
+        "update_disruption_status",
+    ),
+    "RL-OPTION-TRANSFER": (
+        "prepare_alpha_recovery_draft",
+        "transfer_dallas_to_chicago",
+        "update_disruption_status",
+    ),
+    "RL-OPTION-RESEQUENCE": (
+        "prepare_alpha_recovery_draft",
+        "resequence_priority_production",
+        "update_disruption_status",
+    ),
+    "RL-OPTION-COMBINED": (
+        "prepare_alpha_recovery_draft",
+        "coordinate_alpha_expedited_partial",
+        "transfer_dallas_to_chicago",
+        "resequence_priority_production",
+        "update_disruption_status",
+    ),
+}
+
+
+def test_playback_completes_exact_option_plan_with_predicted_simulated_results(
+    option_ctx,
+):
+    planned = actions(option_ctx)
+    assert (
+        tuple(action.kind.value for action in planned)
+        == EXPECTED_ACTION_KINDS[option_ctx.decision.selected_option_id]
+    )
+
+    completed = option_ctx.service.run_to_completion(
+        start(option_ctx).playback_id,
+        clock=option_ctx.clock,
+    )
+
+    assert completed.status is PlaybackStatus.COMPLETED
+    assert all(action.status.value == "completed" for action in actions(option_ctx))
+    predicted = option_ctx.decision.selected_option.predicted
+    assert predicted is not None
+    expected = {
+        "uncovered_part_demand": (str(predicted.uncovered_part_demand), "units"),
+        "response_cost": (str(predicted.response_cost), "USD"),
+        "revenue_at_risk": (str(predicted.revenue_at_risk), "USD"),
+        "margin_at_risk": (str(predicted.margin_at_risk), "USD"),
+        "otif_loss_percentage": (str(predicted.otif_loss_percentage), "percent"),
+    }
+    observations = option_ctx.service.observations(option_ctx.decision.decision_id)
+    assert {
+        item.metric: (item.observed_value, item.unit) for item in observations
+    } == expected
+    assert all(
+        item.predicted_value == item.observed_value
+        and item.source_reference.startswith("Simulated")
+        and item.synthetic
+        and item.kind.value == "simulated"
+        for item in observations
+    )
+    metrics = {item.metric for item in observations}
+    if option_ctx.decision.selected_option_id == "RL-OPTION-TRANSFER":
+        assert "alpha_expedited_quantity" not in metrics
+    if option_ctx.decision.selected_option_id == "RL-OPTION-EXPEDITE":
+        assert "dallas_transfer_quantity" not in metrics
+    if option_ctx.decision.selected_option_id == "RL-OPTION-RESEQUENCE":
+        assert not {"alpha_expedited_quantity", "dallas_transfer_quantity"} & metrics
+
+    draft = option_ctx.service.draft(
+        option_ctx.decision.decision_id, "alpha_recovery_request"
+    )
+    assert draft.sent is False
+    assert "fictional demo" in draft.body.lower()
+    assert option_ctx.case.case_id in draft.body
+    if option_ctx.decision.selected_option_id == "RL-OPTION-TRANSFER":
+        assert "approved transfer and production resequencing response" in draft.body
+        assert "supplier shipment was ordered" not in draft.body.lower()
+
+
 @pytest.mark.parametrize("operation", ("start", "fill", "complete"))
 def test_each_playback_write_rejects_stale_approval_without_any_rows(ctx, operation):
     playback = None if operation == "start" else start(ctx)
@@ -184,7 +281,7 @@ def test_each_playback_write_commits_one_fresh_guard(ctx, operation):
     if operation == "complete":
         assert result.status is PlaybackStatus.COMPLETED
         observations = ctx.service.observations(ctx.decision.decision_id)
-        assert len(observations) == 10
+        assert len(observations) == 5
         assert all(
             item.synthetic and item.kind.value == "simulated" for item in observations
         )
@@ -271,7 +368,7 @@ def test_terminal_conflict_rolls_back_tentative_observations_and_guard(
     def lose(repository, completed):
         pending = repository.list_observations(ctx.decision.decision_id)
         witnessed.extend(pending)
-        assert len(pending) == 10
+        assert len(pending) == 5
         assert completed.playback_id == playback.playback_id
         assert completed.status is PlaybackStatus.COMPLETED
         raise injected
@@ -280,7 +377,7 @@ def test_terminal_conflict_rolls_back_tentative_observations_and_guard(
     with pytest.raises(ImmutableRecordConflict) as caught:
         ctx.service._record_completion(playback, original, ctx.clock)
     assert caught.value is injected
-    assert len(witnessed) == 10
+    assert len(witnessed) == 5
     assert rows(ctx) == before
 
 
@@ -421,13 +518,14 @@ def test_completion_and_historical_failure_have_one_terminal_winner(ctx, monkeyp
     if durable.status is PlaybackStatus.FAILED:
         assert added == ()
     else:
-        assert len(added) == 10
+        assert len(added) == 5
         observations = ctx.service.observations(ctx.decision.decision_id)
         assert {row["payload_json"] for row in added} == {
             serialize_model(item) for item in observations
         }
         assert {item.metric for item in observations} == {
-            metric for metric, _, _, _ in playback_module._OUTCOMES
+            metric
+            for metric, _, _ in playback_module.predicted_observations(ctx.decision)
         }
         assert all(
             item.playback_id == playback.playback_id

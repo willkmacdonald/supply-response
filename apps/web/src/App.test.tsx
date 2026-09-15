@@ -344,7 +344,7 @@ const playback = {
 
 const inProgressPlayback = {...playback, status: "in_progress", completed_at: null};
 
-const observations = Array.from({length: 10}, (_, index) => ({
+const observations = Array.from({length: 5}, (_, index) => ({
   observation_id: `RL-OBSERVATION-${index + 1}`,
   case_id: "RL-CASE-1",
   decision_id: "RL-DECISION-1",
@@ -357,7 +357,7 @@ const observations = Array.from({length: 10}, (_, index) => ({
   scenario_effective_time: scenarioTime,
   scenario_timezone: "America/Chicago",
   recorded_at: "2026-08-31T14:03:50Z",
-  source_reference: `RL-001 simulated playback:metric_${index + 1}`,
+  source_reference: `Simulated: RL-001:metric_${index + 1}`,
   kind: "simulated",
   synthetic: true,
   display_label: "Simulated",
@@ -586,7 +586,7 @@ describe("reopening lifecycle and operation safety", () => {
     expect(mock.mock.calls.every(([, init]) => !init?.method)).toBe(true);
     render(<App />);
     await selectExecutionStage();
-    expect(await screen.findByRole("button", {name: operation === "retryPlanning" ? "Retry action planning" : "Start simulated execution"})).toBeDisabled();
+    expect(await screen.findByRole("button", {name: operation === "retryPlanning" ? "Retry action planning" : "Run simulated coordination"})).toBeDisabled();
   });
 
   it("ignores late mutation responses after unmount", async () => {
@@ -798,7 +798,7 @@ describe("reopening lifecycle and operation safety", () => {
     render(<App />);
     if (code === "PLAYBACK_NOT_FOUND") {
       await selectExecutionStage();
-      expect(await screen.findByRole("button", {name: "Start simulated execution"})).toBeDisabled();
+      expect(await screen.findByRole("button", {name: "Run simulated coordination"})).toBeDisabled();
     } else {
       expect(await screen.findByRole("alert")).toHaveTextContent("Unable to reopen");
       expect(screen.queryByTestId("decision-receipt")).not.toBeInTheDocument();
@@ -922,10 +922,10 @@ describe("progressive Case workspace", () => {
     expect(within(screen.getByTestId("decision-receipt")).getByText("Combined response")).toBeVisible();
     await selectExecutionStage();
     expect(await screen.findAllByTestId("execution-action")).toHaveLength(5);
-    expect(screen.getByText("Unsent draft")).toBeVisible();
-    await userEvent.click(screen.getByRole("button", {name: "Start simulated execution"}));
+    expect(screen.getByText("Not sent")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", {name: "Run simulated coordination"}));
     expect(await screen.findByText("Simulated results")).toBeVisible();
-    expect(await screen.findAllByTestId("outcome-observation")).toHaveLength(10);
+    expect(await screen.findAllByTestId("outcome-observation")).toHaveLength(5);
     expect(screen.queryByText("Actual outcomes")).not.toBeInTheDocument();
     expect(screen.getByRole("tab", {name: "1. Understand the disruption"})).toBeVisible();
     await selectDecisionStage();
@@ -1076,11 +1076,11 @@ describe("progressive Case workspace", () => {
     await userEvent.click(screen.getByRole("button", {name: "Approve combined response"}));
     await selectExecutionStage();
     await screen.findAllByTestId("execution-action");
-    const start = screen.getByRole("button", {name: "Start simulated execution"});
+    const start = screen.getByRole("button", {name: "Run simulated coordination"});
     start.click();
     start.click();
     const outcomeRows = await screen.findAllByTestId("outcome-observation");
-    expect(outcomeRows).toHaveLength(10);
+    expect(outcomeRows).toHaveLength(5);
     outcomeRows.forEach((row) => expect(within(row).getByText("Simulated")).toBeVisible());
     expect(screen.queryByText("Actual")).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([input, init]) =>

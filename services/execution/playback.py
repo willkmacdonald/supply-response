@@ -6,7 +6,8 @@ from threading import Event
 from typing import Protocol
 from uuid import NAMESPACE_URL, uuid5
 
-from data.domain.decisions import DecisionKind, IdentitySnapshot
+from data.domain.common import ResponseOptionKind
+from data.domain.decisions import Decision, DecisionKind, IdentitySnapshot
 from data.domain.evidence import IdentitySource
 from data.domain.execution import (
     DraftArtifact,
@@ -20,44 +21,60 @@ from data.domain.execution import (
     PlaybackStep,
 )
 from services.execution.currentness import guard_execution_current
+from services.execution.planner import action_kinds_for
 from services.execution.worker import ExecutionService
 from services.persistence.ports import UnitOfWork
 
 UnitOfWorkFactory = Callable[[], UnitOfWork]
 
 
-PRODUCTION_STEPS = (
-    PlaybackStep(offset_seconds=0, action_kind="prepare_alpha_recovery_draft"),
-    PlaybackStep(
-        offset_seconds=10,
-        action_kind="coordinate_alpha_expedited_partial",
-    ),
-    PlaybackStep(offset_seconds=20, action_kind="transfer_dallas_to_chicago"),
-    PlaybackStep(offset_seconds=35, action_kind="resequence_priority_production"),
-    PlaybackStep(offset_seconds=50, action_kind="update_disruption_status"),
-)
+_DRAFT_SUBJECT = "RL-001 supplier communication draft"
 
 
-_OUTCOMES = (
-    ("alpha_expedited_quantity", "3000", "2800", "units"),
-    ("dallas_transfer_quantity", "1500", "1500", "units"),
-    ("total_response_arranged_supply", "4500", "4300", "units"),
-    ("uncovered_part_demand", "2300", "2500", "units"),
-    ("response_cost", "24750", "25000", "USD"),
-    ("protected_customer_orders", "1", "1", "orders"),
-    ("revenue_protected", "580000", "580000", "USD"),
-    ("margin_protected", "203000", "203000", "USD"),
-    ("otif_loss_percentage", "50", "50", "percent"),
-    ("remaining_alpha_recovery_date", "unknown", "2026-09-12", "date"),
-)
+def playback_steps(
+    actions: tuple[ExecutionAction, ...],
+) -> tuple[PlaybackStep, ...]:
+    return tuple(
+        PlaybackStep(offset_seconds=index * 2, action_kind=action.kind.value)
+        for index, action in enumerate(actions)
+    )
 
 
-_DRAFT_SUBJECT = "RL-001 recovery-date confirmation request"
-_DRAFT_BODY = (
-    "To RL-Supplier Alpha,\n\n"
-    "Please confirm the remaining recovery date for disruption RL-001. "
-    "This simulated draft has not been sent.\n"
-)
+def predicted_observations(
+    decision: Decision,
+) -> tuple[tuple[str, str, str], ...]:
+    assert decision.selected_option is not None
+    predicted = decision.selected_option.predicted
+    assert predicted is not None
+    return (
+        ("uncovered_part_demand", str(predicted.uncovered_part_demand), "units"),
+        ("response_cost", str(predicted.response_cost), "USD"),
+        ("revenue_at_risk", str(predicted.revenue_at_risk), "USD"),
+        ("margin_at_risk", str(predicted.margin_at_risk), "USD"),
+        ("otif_loss_percentage", str(predicted.otif_loss_percentage), "percent"),
+    )
+
+
+def _draft_body(decision: Decision) -> str:
+    option = decision.selected_option
+    assert option is not None
+    response = (
+        "The approved transfer and production resequencing response uses internal "
+        "coordination. No supplier order was placed."
+        if option.option_kind is ResponseOptionKind.TRANSFER
+        else (
+            f"The approved response is: {option.name}. This simulation did not order "
+            "or send a supplier shipment."
+        )
+    )
+    return (
+        "FICTIONAL DEMO — supplier communication draft for Alex's review.\n"
+        f"Case reference: {decision.case_id}\n"
+        f"Selected response: {option.name}\n\n"
+        f"{response}\n"
+        "Please confirm the remaining recovery timing for disruption RL-001.\n\n"
+        "Not sent.\n"
+    )
 
 
 class PlaybackAuthorizationError(RuntimeError):
@@ -151,11 +168,12 @@ class PlaybackService:
             if existing is not None:
                 return existing
             actions = uow.execution.list_actions(decision_id=decision_id)
-            if tuple(action.kind.value for action in actions) != tuple(
-                step.action_kind for step in PRODUCTION_STEPS
-            ):
+            if decision.selected_option is None:
+                raise PlaybackStateError("Playback requires a selected Decision option")
+            expected_kinds = action_kinds_for(decision.selected_option.option_kind)
+            if tuple(action.kind for action in actions) != expected_kinds:
                 raise PlaybackStateError(
-                    "Playback requires the five planned Decision actions"
+                    "Playback requires the exact planned Decision actions"
                 )
             playback = Playback(
                 playback_id=_deterministic_id(
@@ -194,7 +212,7 @@ class PlaybackService:
             actions = uow.execution.list_actions(decision_id=playback.decision_id)
         by_kind = {action.kind: action for action in actions}
 
-        for step in PRODUCTION_STEPS:
+        for step in playback_steps(actions):
             active_clock.wait_until(
                 playback.started_at + timedelta(seconds=step.offset_seconds)
             )
@@ -249,8 +267,9 @@ class PlaybackService:
     def _fill_draft(self, action: ExecutionAction) -> None:
         with self._uow_factory() as uow:
             shell = uow.execution.get_draft_artifact(action.action_id)
+            decision = uow.decisions.get(shell.decision_id)
             filled = shell.model_copy(
-                update={"subject": _DRAFT_SUBJECT, "body": _DRAFT_BODY}
+                update={"subject": _DRAFT_SUBJECT, "body": _draft_body(decision)}
             )
             if shell.subject is not None:
                 uow.execution.fill_draft_artifact(filled)
@@ -265,10 +284,6 @@ class PlaybackService:
         actions: tuple[ExecutionAction, ...],
         clock: PlaybackClock,
     ) -> Playback:
-        alpha_metrics = {
-            "alpha_expedited_quantity",
-            "remaining_alpha_recovery_date",
-        }
         with self._uow_factory() as uow:
             current = uow.execution.get_playback(playback.playback_id)
             normalized = playback.model_copy(
@@ -288,10 +303,12 @@ class PlaybackService:
             canonical_actions = uow.execution.list_actions(
                 decision_id=current.decision_id
             )
-            expected_kinds = tuple(step.action_kind for step in PRODUCTION_STEPS)
+            decision = uow.decisions.get(current.decision_id)
+            if decision.selected_option is None:
+                raise PlaybackStateError("Playback requires a selected Decision option")
+            expected_kinds = action_kinds_for(decision.selected_option.option_kind)
             if (
-                tuple(action.kind.value for action in canonical_actions)
-                != expected_kinds
+                tuple(action.kind for action in canonical_actions) != expected_kinds
                 or len({action.action_id for action in canonical_actions})
                 != len(expected_kinds)
                 or any(
@@ -314,13 +331,7 @@ class PlaybackService:
             case = uow.cases.get_case(current.case_id)
             recorded_at = clock.now()
             action_ids = {action.kind: action.action_id for action in canonical_actions}
-            for metric, predicted, observed, unit in _OUTCOMES:
-                if metric in alpha_metrics:
-                    action_kind = ExecutionActionKind.COORDINATE_ALPHA_EXPEDITED_PARTIAL
-                elif metric == "dallas_transfer_quantity":
-                    action_kind = ExecutionActionKind.TRANSFER_DALLAS_TO_CHICAGO
-                else:
-                    action_kind = ExecutionActionKind.UPDATE_DISRUPTION_STATUS
+            for metric, predicted, unit in predicted_observations(decision):
                 observation = OutcomeObservation(
                     observation_id=_deterministic_id(
                         "RL-OBSERVATION", decision.decision_id, metric
@@ -328,15 +339,15 @@ class PlaybackService:
                     case_id=decision.case_id,
                     decision_id=decision.decision_id,
                     playback_id=current.playback_id,
-                    action_id=action_ids[action_kind],
+                    action_id=action_ids[ExecutionActionKind.UPDATE_DISRUPTION_STATUS],
                     metric=metric,
-                    observed_value=observed,
+                    observed_value=predicted,
                     unit=unit,
                     predicted_value=predicted,
                     scenario_effective_time=decision.scenario_effective_time,
                     scenario_timezone=case.scenario_timezone,
                     recorded_at=recorded_at,
-                    source_reference=f"RL-001 simulated playback:{metric}",
+                    source_reference=f"Simulated: RL-001:{metric}",
                     kind=ObservationKind.SIMULATED,
                     synthetic=True,
                 )

@@ -695,7 +695,7 @@ def test_case_analysis_decision_outbox_action_and_observation_round_trip(
     assert restored == expected
     assert len(cast(tuple[object, ...], restored["actions"])) == 5
     assert len(cast(tuple[object, ...], restored["drafts"])) == 1
-    assert len(cast(tuple[object, ...], restored["observations"])) == 10
+    assert len(cast(tuple[object, ...], restored["observations"])) == 5
 
 
 def test_concurrent_finance_review_resolutions_with_different_keys_have_one_winner(
@@ -1116,4 +1116,4 @@ def test_completed_playback_replay_adds_no_attempts_events_or_observations(
 
     assert replay == first
     assert counts() == before
-    assert before == ((1, 1, 1, 1, 1), (3, 3, 3, 3, 3), 10)
+    assert before == ((1, 1, 1, 1, 1), (3, 3, 3, 3, 3), 5)

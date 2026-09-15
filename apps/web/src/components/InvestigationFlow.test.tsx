@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import {cleanup, render, screen, within} from "@testing-library/react";
+import {cleanup, render, screen, waitFor, within} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {useState} from "react";
 import {afterEach, beforeEach, expect, it, vi} from "vitest";
@@ -226,16 +226,60 @@ it("renders approved actions and results only in execution", async () => {
   await selectExecutionStage();
   expect(screen.getByRole("heading", {name: "Execution plan"})).toBeVisible();
   expect(screen.getByText("Prepare supplier recovery draft")).toBeVisible();
-  expect(screen.getByText("Unsent draft")).toBeVisible();
+  expect(screen.getByText("Not sent")).toBeVisible();
 });
-it("never mounts legacy execution controls for an approved independent case", async () => {
+it("shows and simulates the approved independent option plan while keeping its supplier draft unsent", async () => {
   const input = state(); input.caseInstance!.workflow_version = "independent-finance-v1";
-  input.decision = {kind: "approved", action_planning_status: "complete", prerequisite_roles: [], analysis_id: "a", selected_option_id: null, decision_id: "d", runtime_mode: "fallback"} as never;
-  render(<InvestigationFlow state={input} independentFinanceEnabled />);
+  input.caseInstance!.controls.start_playback = true;
+  input.decision = {kind: "approved", action_planning_status: "complete", prerequisite_roles: [], analysis_id: "a",
+    selected_option_id: "transfer", decision_id: "d", runtime_mode: "fallback"} as never;
+  input.actions = [
+    {action_id: "draft", kind: "prepare_alpha_recovery_draft", status: "planned", owner_kind: "persona",
+      purpose: "Prepare supplier communication.", expected_result: "A draft is ready for Alex.", execution_mode: "communication_preparation"},
+    {action_id: "transfer", kind: "transfer_dallas_to_chicago", status: "planned", owner_kind: "persona",
+      purpose: "Coordinate 1,500 units from Dallas.", expected_result: "Inventory is simulated in Chicago.", execution_mode: "simulation"},
+    {action_id: "status", kind: "update_disruption_status", status: "planned", owner_kind: "system",
+      purpose: "Update disruption status.", expected_result: "Status reflects coordination.", execution_mode: "simulation"},
+  ] as never;
+  input.drafts = [{artifact_id: "draft-1", action_id: "draft", artifact_kind: "alpha_recovery_request",
+    subject: "RL-001 supplier communication draft", body: "Fictional demo draft for Alex's review.", sent: false}] as never;
+  let finishSimulation!: () => void;
+  const pendingSimulation = new Promise<void>(resolve => { finishSimulation = resolve; });
+  function Harness() {
+    const [current, setCurrent] = useState(input);
+    const startPlayback = vi.fn(async () => {
+      setCurrent(value => ({...value, operation: "playback",
+        playback: {playback_id: "p", status: "in_progress"} as never}));
+      await pendingSimulation;
+      setCurrent(value => ({...value, operation: null,
+        playback: {playback_id: "p", status: "completed"} as never,
+        actions: value.actions.map(action => ({...action, status: "completed"})),
+        observations: [{observation_id: "revenue", playback_id: "p", metric: "revenue_at_risk",
+          observed_value: "580000.00", predicted_value: "580000.00", unit: "USD",
+          source_reference: "Simulated: RL-001:revenue_at_risk", synthetic: true, display_label: "Simulated"}] as never}));
+    });
+    return <InvestigationFlow state={{...current, startPlayback}} independentFinanceEnabled />;
+  }
+  render(<Harness />);
   await selectExecutionStage();
-  expect(screen.getByText(/execution is not available in this milestone/i)).toBeVisible();
-  expect(screen.queryByRole("heading", {name: "Execution plan"})).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", {name: /start simulated execution|retry action planning/i})).not.toBeInTheDocument();
+  expect(screen.getByRole("heading", {name: "Execution plan"})).toBeVisible();
+  expect(screen.getByText("Coordinate 1,500 units from Dallas.")).toBeVisible();
+  expect(screen.getAllByText("Owner: Alex")).toHaveLength(2);
+  expect(screen.getByText("Owner: System")).toBeVisible();
+  expect(screen.getAllByText("What happens here: Simulated coordination")).toHaveLength(2);
+  expect(screen.getByText("What happens here: Draft prepared for Alex to review")).toBeVisible();
+  expect(screen.getByText("Not sent")).toBeVisible();
+  expect(screen.queryByText(/execution is not available/i)).not.toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("button", {name: "Run simulated coordination"}));
+  expect(screen.getByText("Simulation in progress")).toBeVisible();
+  expect(screen.getByRole("button", {name: "Running simulated coordination…"})).toBeDisabled();
+  finishSimulation();
+  await waitFor(() => expect(screen.getAllByText("Completed")).toHaveLength(3));
+  expect(screen.getByRole("heading", {name: "Revenue at risk"})).toBeVisible();
+  expect(screen.getAllByText("Simulated")).toHaveLength(1);
+  expect(screen.getByText(/Simulated: RL-001:revenue_at_risk/)).toBeVisible();
+  expect(screen.getByText("Not sent")).toBeVisible();
 });
 it("blocks rejected execution explicitly", async () => {
   const input = state();

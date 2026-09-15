@@ -165,6 +165,9 @@ class ActionResponse(BaseModel):
     status: str
     created_at: datetime
     draft_artifact_id: str | None
+    purpose: str | None
+    expected_result: str | None
+    execution_mode: Literal["simulation", "communication_preparation"] | None
     runtime_mode: RuntimeMode
     scenario_effective_time: datetime
     projection_updated_at: datetime

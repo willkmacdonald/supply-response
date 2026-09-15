@@ -428,6 +428,9 @@ export interface ExecutionAction {
   status: string;
   created_at: string;
   draft_artifact_id: string | null;
+  purpose: string | null;
+  expected_result: string | null;
+  execution_mode: "simulation" | "communication_preparation" | null;
   runtime_mode: RuntimeMode;
   scenario_effective_time: string;
   projection_updated_at: string;

@@ -106,11 +106,11 @@ test("duplicate playback clicks coalesce into one operation and no duplicate out
       responses.push(response);
     }
   });
-  const start = page.getByRole("button", {name: "Start simulated execution"});
+  const start = page.getByRole("button", {name: "Run simulated coordination"});
   await start.evaluate((button: HTMLButtonElement) => {
     button.click();
     button.click();
   });
   await expect.poll(() => responses.length).toBe(1);
-  await expect(page.getByTestId("outcome-observation")).toHaveCount(10, {timeout: 65_000});
+  await expect(page.getByTestId("outcome-observation")).toHaveCount(5, {timeout: 65_000});
 });

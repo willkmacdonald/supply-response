@@ -7,8 +7,8 @@ from sqlalchemy import func, insert, select
 from sqlalchemy.exc import IntegrityError
 
 from data.domain.execution import ObservationKind, OutcomeObservation
+from services.execution import playback as playback_module
 from services.execution.playback import (
-    PRODUCTION_STEPS,
     ImmediateClock,
     PlaybackAuthorizationError,
     PlaybackService,
@@ -50,14 +50,17 @@ def _observation(**updates) -> OutcomeObservation:
     return OutcomeObservation.model_validate(values)
 
 
-def test_production_schedule_uses_the_frozen_offsets_and_actions():
-    assert [(step.offset_seconds, step.action_kind) for step in PRODUCTION_STEPS] == [
-        (0, "prepare_alpha_recovery_draft"),
-        (10, "coordinate_alpha_expedited_partial"),
-        (20, "transfer_dallas_to_chicago"),
-        (35, "resequence_priority_production"),
-        (50, "update_disruption_status"),
-    ]
+def test_playback_schedule_uses_the_planned_actions_at_two_second_offsets(
+    planning_context,
+):
+    _service(planning_context)
+    with planning_context.uow_factory() as uow:
+        actions = uow.execution.list_actions(decision_id=APPROVED_DECISION_ID)
+    assert hasattr(playback_module, "playback_steps")
+    assert [
+        (step.offset_seconds, step.action_kind)
+        for step in playback_module.playback_steps(actions)
+    ] == [(index * 2, action.kind.value) for index, action in enumerate(actions)]
 
 
 def test_actual_observation_cannot_claim_synthetic_provenance():
@@ -110,7 +113,7 @@ def test_rerunning_completed_playback_does_not_rewrite_history(planning_context)
         == ["planned", "in_progress", "completed"]
         for history in after.values()
     )
-    assert len(service.observations(APPROVED_DECISION_ID)) == 10
+    assert len(service.observations(APPROVED_DECISION_ID)) == 5
 
 
 def test_storage_rejects_actual_synthetic_observation(planning_context):
@@ -125,9 +128,11 @@ def test_storage_rejects_actual_synthetic_observation(planning_context):
     row["synthetic"] = True
     row["payload_json"] = "{}"
 
-    with pytest.raises(IntegrityError):
-        with planning_context.store.engine.begin() as connection:
-            connection.execute(insert(outcome_observations).values(**row))
+    with (
+        pytest.raises(IntegrityError),
+        planning_context.store.engine.begin() as connection,
+    ):
+        connection.execute(insert(outcome_observations).values(**row))
 
 
 def test_restart_between_approval_and_playback_retains_append_only_history(
@@ -147,7 +152,7 @@ def test_restart_between_approval_and_playback_retains_append_only_history(
     replacement_factory = cast(UnitOfWorkFactory, replacement.uow_factory)
     restarted = PlaybackService(replacement_factory)
     observations = restarted.observations(APPROVED_DECISION_ID)
-    assert len(observations) == 10
+    assert len(observations) == 5
     assert {item.decision_id for item in observations} == {APPROVED_DECISION_ID}
     with replacement.engine.connect() as connection:
         assert set(
@@ -172,5 +177,5 @@ def test_restart_between_approval_and_playback_retains_append_only_history(
         )
         assert (
             connection.scalar(select(func.count()).select_from(outcome_observations))
-            == 10
+            == 5
         )

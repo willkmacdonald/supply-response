@@ -94,9 +94,9 @@ def test_lifespan_completes_explicit_playback_without_blocking_or_duplicates(
     observations = client.get(f"/api/decisions/{decision_id}/observations").json()
 
     assert completed["completed_at"] is not None
-    assert len(observations) == 10
+    assert len(observations) == 5
     assert {item["display_label"] for item in observations} == {"Simulated"}
-    assert len({item["observation_id"] for item in observations}) == 10
+    assert len({item["observation_id"] for item in observations}) == 5
 
 
 def test_lifespan_does_not_globally_retry_failed_planning(tmp_path):

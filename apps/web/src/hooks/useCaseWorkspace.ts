@@ -126,10 +126,6 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     setCaseInstance(null); setAnalysis(null); setSelectedOption(null); setDecision(null);
     setActions([]); setDrafts([]); setPlayback(null); setObservations([]);
   }, []);
-  const acceptFinalDecision = useCallback((next: Decision) => {
-    if (mounted.current && next.case_id === caseInstance?.case_id && next.analysis_id === analysis?.analysis_id) setDecision(next);
-  }, [analysis?.analysis_id, caseInstance?.case_id]);
-
   const loadExistingCases = useCallback(async () => {
     const token = begin("listing");
     if (token === null) return;
@@ -334,6 +330,41 @@ export function useCaseWorkspace(): CaseWorkspaceState {
     setDrafts(nextDrafts);
   }, [valid]);
 
+  const acceptFinalDecision = useCallback((next: Decision) => {
+    if (!mounted.current || next.case_id !== caseInstance?.case_id || next.analysis_id !== analysis?.analysis_id) return;
+    setDecision(next);
+    const token = begin("planning");
+    if (token === null) return;
+    void (async () => {
+      try {
+        const planned = await pollWhile(
+          next,
+          () => api.decision(next.decision_id),
+          current => current.action_planning_status === "pending",
+          "action planning",
+          () => valid(token),
+        );
+        if (!valid(token)) return;
+        setDecision(planned);
+        setCaseInstance(current => current ? {
+          ...current,
+          current_decision_id: planned.decision_id,
+          status: planned.action_planning_status === "complete" ? "executing" : "action_planning",
+          display_status: planned.action_planning_status === "failed" ? "Approved — action planning failed" : null,
+          controls: {...current.controls,
+            decide: false,
+            retry_action_planning: planned.action_planning_status === "failed",
+            start_playback: planned.action_planning_status === "complete"},
+        } : current);
+        if (planned.action_planning_status === "complete") await loadExecution(planned.decision_id, token);
+      } catch (caught) {
+        if (valid(token)) setError(`Action planning failed. ${safeErrorMessage(caught)}`);
+      } finally {
+        finish(token);
+      }
+    })();
+  }, [analysis?.analysis_id, begin, caseInstance?.case_id, finish, loadExecution, valid]);
+
   const decisionBlocked = useMemo(() => {
     if (!analysis) return true;
     const stale = analysis.evidence_validation.item_results.some((item) => item.freshness === "stale");
@@ -479,7 +510,7 @@ export function useCaseWorkspace(): CaseWorkspaceState {
 
   const startPlayback = useCallback((): Promise<void> => {
     if (playbackOperation.current) return playbackOperation.current;
-    if (!decision || decision.kind !== "approved" || !caseInstance?.controls.start_playback || playback || actions.length !== 5) return Promise.resolve();
+    if (!decision || decision.kind !== "approved" || !caseInstance?.controls.start_playback || playback || actions.length === 0) return Promise.resolve();
     const token = begin("playback");
     if (token === null) return Promise.resolve();
     const running = (async () => {
@@ -499,8 +530,14 @@ export function useCaseWorkspace(): CaseWorkspaceState {
         if (!valid(token)) return;
         setPlayback(nextPlayback);
         if (nextPlayback.status === "failed") throw new Error("Simulated playback failed on the server.");
-        const nextObservations = await api.observations(decision.decision_id);
+        const [nextActions, nextDrafts, nextObservations] = await Promise.all([
+          api.actions(decision.decision_id),
+          api.drafts(decision.decision_id),
+          api.observations(decision.decision_id),
+        ]);
         if (!valid(token)) return;
+        setActions(nextActions);
+        setDrafts(nextDrafts);
         setObservations(nextObservations);
       } catch (caught) {
         if (!valid(token)) return;

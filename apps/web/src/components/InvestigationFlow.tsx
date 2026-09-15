@@ -88,9 +88,7 @@ function InvestigationPresentation({state, independentFinanceEnabled}: {state: C
       ? <IndependentApprovalPanel caseId={caseInstance.case_id} displayedAnalysis={analysis} selectedOption={state.selectedOption} finalDecision={state.decision} onFinalDecision={state.acceptFinalDecision ?? (() => undefined)} independentFinanceEnabled={independentFinanceEnabled} />
       : <DecisionPanel state={state} onApprove={state.approve} onReject={state.reject} />}</StagePanel>
     <StagePanel index={4} activeStage={activeStage}>
-      {caseInstance.workflow_version === "independent-finance-v1" ? <section className="panel" aria-labelledby="execution-waiting-heading">
-        <h2 id="execution-waiting-heading">Execute mitigation plan</h2><p>Execution is not available in this milestone until independent action planning is enabled after Alex's final approval.</p>
-      </section> : !state.decision || state.decision.kind !== "approved" ? (
+      {!state.decision || state.decision.kind !== "approved" ? (
         <section className="panel" aria-labelledby="execution-waiting-heading">
           <h2 id="execution-waiting-heading">Execute mitigation plan</h2>
           <p>{state.decision?.kind === "rejected"

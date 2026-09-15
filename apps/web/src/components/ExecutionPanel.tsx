@@ -36,6 +36,12 @@ function draftName(kind: string): string {
     : "Draft for review";
 }
 
+function ownerName(kind: string): string {
+  if (kind === "system") return "System";
+  if (kind === "persona") return "Alex";
+  return "Owner not recognized";
+}
+
 export function ExecutionPanel({decision, actions, drafts, retrying, busy, canRetryPlanning = false, onRetry, onRetryAction}: ExecutionPanelProps) {
   if (!decision || decision.kind !== "approved") return null;
   return <section className="panel" aria-labelledby="execution-heading">
@@ -52,6 +58,12 @@ export function ExecutionPanel({decision, actions, drafts, retrying, busy, canRe
       {actions.map((action) => <li data-testid="execution-action" key={action.action_id}>
         <div data-testid={`execution-action-${action.action_id}`}>
           <div><strong>{actionName(action.kind)}</strong><span>{actionStates.get(action.status) ?? "Status not recognized"}</span></div>
+          {action.purpose && <p>{action.purpose}</p>}
+          <p>{action.owner_kind === "system" || action.owner_kind === "persona" ? "Owner: " : ""}{ownerName(action.owner_kind)}</p>
+          {action.expected_result && <p>Expected result: {action.expected_result}</p>}
+          <p>What happens here: {action.execution_mode === "communication_preparation"
+            ? "Draft prepared for Alex to review"
+            : "Simulated coordination"}</p>
           <details><summary>Action details</summary><p>Action {action.action_id}</p><p>Recorded kind: {action.kind}</p></details>
           {action.status === "failed" && <button type="button" disabled={busy || retrying} onClick={() => onRetryAction(action.action_id)}>
             Retry {actionName(action.kind).toLowerCase()}
@@ -60,7 +72,7 @@ export function ExecutionPanel({decision, actions, drafts, retrying, busy, canRe
       </li>)}
     </ol>}
     {drafts.map((draft) => <article className="draft" key={draft.artifact_id}>
-      <span className="badge danger">Unsent draft</span>
+      <span className="badge danger">Not sent</span>
       <h3>{draftName(draft.artifact_kind)}</h3>
       <p>{draft.subject ?? "No draft subject recorded."}</p>
       {draft.body && <pre>{draft.body}</pre>}

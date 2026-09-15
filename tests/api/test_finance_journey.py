@@ -281,12 +281,19 @@ def test_verified_session_and_planner_boundary(tmp_path):
             "coordinate_alpha_expedited_partial",
             "update_disruption_status",
         ]
+        assert all(action["purpose"] for action in actions)
+        assert all(action["expected_result"] for action in actions)
+        assert [action["execution_mode"] for action in actions] == [
+            "communication_preparation",
+            "simulation",
+            "simulation",
+        ]
         action_retry = client.post(
             f"/api/decisions/{decision_id}/actions/{actions[0]['action_id']}/retry",
             headers=alex,
         )
         assert action_retry.status_code == 409
-        assert action_retry.json()["detail"]["code"] == "INDEPENDENT_EXECUTION_DEFERRED"
+        assert action_retry.json()["detail"]["code"] == "ACTION_RETRY_NOT_AVAILABLE"
         playback = client.post(f"/api/decisions/{decision_id}/playback", headers=alex)
-        assert playback.status_code == 409
-        assert playback.json()["detail"]["code"] == "INDEPENDENT_EXECUTION_DEFERRED"
+        assert playback.status_code == 201
+        assert playback.json()["status"] == "in_progress"
