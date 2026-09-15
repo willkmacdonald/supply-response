@@ -132,8 +132,11 @@ for setting in "${required_runtime_settings[@]}"; do
   [[ -n "${!setting:-}" ]] || { printf 'Missing required runtime setting: %s\n' "$setting" >&2; exit 1; }
   safe_run "azd-setting-${setting}" azd env set "$setting" "${!setting}"
 done
-# Acceptance is external to deployment; blank explicitly deactivates new links.
-safe_run azd-setting-SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT azd env set SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT "${SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT:-}"
+# Acceptance is external to deployment. Omission preserves the accepted release;
+# an explicitly supplied blank value deactivates the links.
+if [[ ${SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT+x} ]]; then
+  safe_run azd-setting-SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT azd env set SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT "${SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT}"
+fi
 # Recognition and workflow activation are distinct. Legacy deployments stay off.
 safe_run azd-setting-SUPPLY_RESPONSE_TAYLOR_OBJECT_ID azd env set SUPPLY_RESPONSE_TAYLOR_OBJECT_ID "${SUPPLY_RESPONSE_TAYLOR_OBJECT_ID:-}"
 safe_run azd-setting-SUPPLY_RESPONSE_INDEPENDENT_FINANCE_ENABLED azd env set SUPPLY_RESPONSE_INDEPENDENT_FINANCE_ENABLED "${SUPPLY_RESPONSE_INDEPENDENT_FINANCE_ENABLED:-false}"

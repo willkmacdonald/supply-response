@@ -113,10 +113,10 @@ connectivity and schema-version check.
 
 `SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT` is an optional, separate acceptance
 setting. Supply it only after artifact-bound SQL, model, DAX, native-browser, and
-access acceptance is complete. Omitting it or explicitly setting it to an empty
-value disables saved-analysis links on the next declarative deployment, including
-clearing a value previously saved by AZD. This deployment task neither issues nor
-installs an acceptance receipt.
+access acceptance is complete. Omitting it preserves the value already saved by
+AZD. Explicitly setting it to an empty value disables saved-analysis links on the
+next declarative deployment. This deployment task neither issues nor installs an
+acceptance receipt.
 
 Recompute the nonsecret Work IQ receipt after any one of those bindings changes:
 

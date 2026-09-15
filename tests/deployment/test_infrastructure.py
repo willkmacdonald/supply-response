@@ -42,30 +42,34 @@ def test_reporting_receipt_has_optional_declarative_wiring():
         "{ name: 'SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT', "
         "value: runtimeSettings.powerBiReportingReceipt }" in module
     )
-    assert '"${SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT:-}"' in script
+    assert "if [[ ${SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT+x} ]]; then" in script
+    assert '"${SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT}"' in script
     required = script.split("required_runtime_settings=(", 1)[1].split(")", 1)[0]
     assert "SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT" not in required
 
 
 @pytest.mark.parametrize(
-    ("configured_value", "expected"),
-    ((None, ""), ("", ""), ("a" * 64, "a" * 64)),
+    ("configured_value", "expected_calls", "expected"),
+    ((None, 0, ""), ("", 1, ""), ("a" * 64, 1, "a" * 64)),
 )
-def test_reporting_receipt_optional_update_preserves_explicit_value_or_empty(
-    configured_value: str | None, expected: str
+def test_reporting_receipt_optional_update_preserves_omitted_value_and_applies_explicit_value(
+    configured_value: str | None, expected_calls: int, expected: str
 ):
     script = _read("scripts/deploy_personal_tenant.sh")
-    line = next(
-        candidate.strip()
-        for candidate in script.splitlines()
-        if candidate.startswith(
-            "safe_run azd-setting-SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT "
-        )
+    block = (
+        script.split(
+            "# Acceptance is external to deployment. Omission preserves the accepted release;\n"
+            "# an explicitly supplied blank value deactivates the links.\n",
+            1,
+        )[1]
+        .split("# Recognition and workflow activation are distinct.", 1)[0]
+        .strip()
     )
     environment = os.environ.copy()
     environment.pop("SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT", None)
     if configured_value is not None:
         environment["SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT"] = configured_value
+    environment["EXPECTED_CALLS"] = str(expected_calls)
     environment["EXPECTED_REPORTING_RECEIPT"] = expected
     completed = subprocess.run(
         [
@@ -73,7 +77,9 @@ def test_reporting_receipt_optional_update_preserves_explicit_value_or_empty(
             "-c",
             textwrap.dedent(
                 """
+                calls=0
                 safe_run() {
+                  calls=$((calls + 1))
                   [[ "$#" -eq 6 &&
                     "$1" == "azd-setting-SUPPLY_RESPONSE_POWER_BI_REPORTING_RECEIPT" &&
                     "$2" == "azd" &&
@@ -83,10 +89,11 @@ def test_reporting_receipt_optional_update_preserves_explicit_value_or_empty(
                     "$6" == "$EXPECTED_REPORTING_RECEIPT" ]]
                 }
                 eval "$1"
+                [[ "$calls" -eq "$EXPECTED_CALLS" ]]
                 """
             ),
             "receipt-update",
-            line,
+            block,
         ],
         cwd=ROOT,
         env=environment,
