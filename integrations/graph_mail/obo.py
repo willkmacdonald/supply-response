@@ -17,13 +17,22 @@ from opentelemetry.instrumentation.utils import suppress_instrumentation
 from apps.api.app.auth import AuthenticatedActor, AuthorizationError, AuthService
 from integrations.workiq.mcp import MAX_RESPONSE_BYTES, bounded_json
 
-GRAPH_SCOPE: Final = "https://graph.microsoft.com/.default"
+GRAPH_SCOPES: Final = (
+    "https://graph.microsoft.com/Mail.ReadWrite",
+    "https://graph.microsoft.com/Mail.Send",
+)
 GRAPH_OBO_TIMEOUT_SECONDS: Final = 12
 _MAX_TOKEN_BYTES: Final = 32_768
 _REQUIRED_SCOPES: Final = frozenset({"Mail.ReadWrite", "Mail.Send"})
-_ALLOWED_SCOPES: Final = _REQUIRED_SCOPES | frozenset(
-    {"openid", "profile", "offline_access"}
-)
+_SCOPE_ALIASES: Final = {
+    "Mail.ReadWrite": "Mail.ReadWrite",
+    GRAPH_SCOPES[0]: "Mail.ReadWrite",
+    "Mail.Send": "Mail.Send",
+    GRAPH_SCOPES[1]: "Mail.Send",
+    "openid": "openid",
+    "profile": "profile",
+    "offline_access": "offline_access",
+}
 _OAUTH_ERRORS: Final = frozenset(
     {
         "invalid_request",
@@ -88,20 +97,27 @@ class _SafeResponse:
             raise GraphAuthenticationError("Graph identity request failed")
 
 
+def _validated_scopes(scope: object) -> frozenset[str] | None:
+    values = scope.split() if isinstance(scope, str) else []
+    if not values or any(value not in _SCOPE_ALIASES for value in values):
+        return None
+    normalized = frozenset(_SCOPE_ALIASES[value] for value in values)
+    return normalized if _REQUIRED_SCOPES.issubset(normalized) else None
+
+
 def _safe_token_result(value: dict[str, Any]) -> dict[str, Any]:
     if "error" in value:
         code = value.get("error")
         return {"error": code if code in _OAUTH_ERRORS else "unknown"}
     token = value.get("access_token")
     scope = value.get("scope")
-    scopes = set(scope.split()) if isinstance(scope, str) else set()
+    scopes = _validated_scopes(scope)
     if (
         not isinstance(token, str)
         or not 1 <= len(token.encode("utf-8")) <= _MAX_TOKEN_BYTES
         or any(ord(character) < 33 or ord(character) > 126 for character in token)
         or value.get("token_type") != "Bearer"
-        or not scopes.issubset(_ALLOWED_SCOPES)
-        or not _REQUIRED_SCOPES.issubset(scopes)
+        or scopes is None
     ):
         return {"error": "unknown"}
     result: dict[str, Any] = {
@@ -286,7 +302,7 @@ class GraphOboExchange:
             ) from None
         try:
             result = self._client.acquire_token_on_behalf_of(
-                user_assertion=assertion.reveal(), scopes=[GRAPH_SCOPE]
+                user_assertion=assertion.reveal(), scopes=list(GRAPH_SCOPES)
             )
         except Exception:  # noqa: BLE001 - sanitize provider/library details
             raise GraphAuthenticationError(
@@ -296,14 +312,13 @@ class GraphOboExchange:
             raise GraphAuthenticationError("Graph delegated token exchange failed")
         token = result.get("access_token")
         token_type = result.get("token_type")
-        scopes = result.get("scope")
-        granted = set(scopes.split()) if isinstance(scopes, str) else set()
+        granted = _validated_scopes(result.get("scope"))
         if (
             not isinstance(token, str)
             or not token.strip()
             or len(token.encode("utf-8")) > _MAX_TOKEN_BYTES
             or token_type != "Bearer"
-            or not _REQUIRED_SCOPES.issubset(granted)
+            or granted is None
         ):
             raise GraphAuthenticationError("Graph delegated token exchange failed")
         return GraphAccessToken(token)

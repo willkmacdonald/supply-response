@@ -16,7 +16,7 @@ from integrations.graph_mail.client import (
     GraphMailSubmissionUncertain,
 )
 from integrations.graph_mail.obo import (
-    GRAPH_SCOPE,
+    GRAPH_SCOPES,
     GraphAccessToken,
     GraphAuthenticationError,
     GraphOboExchange,
@@ -415,7 +415,7 @@ async def test_capability_rejects_sent_item_from_another_mailbox():
 
 
 @pytest.mark.anyio
-async def test_obo_uses_validated_assertion_and_only_graph_default_scope():
+async def test_obo_uses_validated_assertion_and_explicit_graph_mail_scopes():
     auth_service, actor = _authenticated_alex()
     confidential = ConfidentialClient(
         {
@@ -432,13 +432,31 @@ async def test_obo_uses_validated_assertion_and_only_graph_default_scope():
     assert confidential.calls == [
         {
             "user_assertion": actor.downstream_user_assertion.reveal(),
-            "scopes": [GRAPH_SCOPE],
+            "scopes": list(GRAPH_SCOPES),
         }
     ]
     assert "fixture-downstream-secret" not in repr(token)
     assert "fixture-downstream-secret" not in str(token)
     with pytest.raises(TypeError):
         pickle.dumps(token)
+
+
+@pytest.mark.anyio
+async def test_obo_accepts_resource_qualified_graph_mail_scopes():
+    auth_service, actor = _authenticated_alex()
+    confidential = ConfidentialClient(
+        {
+            "access_token": "fixture-downstream-secret",
+            "token_type": "Bearer",
+            "scope": " ".join(GRAPH_SCOPES),
+        }
+    )
+
+    token = await GraphOboExchange(confidential, auth_service=auth_service).exchange(
+        actor
+    )
+
+    assert token.reveal() == "fixture-downstream-secret"
 
 
 @pytest.mark.anyio
@@ -479,7 +497,7 @@ async def test_production_obo_builder_accepts_only_graph_mail_scopes(monkeypatch
             json={
                 "access_token": "fixture-production-graph-token",
                 "token_type": "Bearer",
-                "scope": "Mail.ReadWrite Mail.Send",
+                "scope": " ".join(GRAPH_SCOPES),
                 "expires_in": 3600,
             },
         )
@@ -501,7 +519,7 @@ async def test_production_obo_builder_accepts_only_graph_mail_scopes(monkeypatch
     assert token.reveal() == "fixture-production-graph-token"
     assert [request.method for request in requests] == ["GET", "POST"]
     assert set(token_fields[0]["scope"][0].split()) == {
-        GRAPH_SCOPE,
+        *GRAPH_SCOPES,
         "offline_access",
         "openid",
         "profile",
