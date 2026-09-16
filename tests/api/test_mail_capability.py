@@ -65,7 +65,18 @@ def test_mail_capability_returns_only_safe_verification(app, client, services):
 
 def test_mail_capability_hides_provider_failure(app, client, services):
     _, graph = _configure_live_capability(app, services)
-    graph.capability.side_effect = GraphMailError("graph_capability_failed")
+    sensitive_values = (
+        "fixture-provider-response-secret",
+        "https://graph.microsoft.com/v1.0/me/messages/private-id?$select=id,sender",
+        "11111111-1111-4111-8111-111111111111",
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "private-id",
+        "private-sender@example.com",
+        "private-recipient@example.com",
+        "private subject",
+        "private body",
+    )
+    graph.capability.side_effect = GraphMailError(sensitive_values[0])
 
     response = client.get("/api/supplier-email/capability")
 
@@ -75,6 +86,7 @@ def test_mail_capability_hides_provider_failure(app, client, services):
         "message": "Mailbox verification could not be completed.",
     }
     assert "graph" not in response.text.lower()
+    assert all(value not in response.text for value in sensitive_values)
 
 
 def test_mail_capability_enforces_actual_alex_guard(app, client, services):

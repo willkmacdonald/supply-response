@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json as stdlib_json
+import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Final, Protocol
+from typing import Final, Literal, Protocol
 from urllib.parse import quote
 
 import httpx
@@ -18,6 +19,7 @@ _GRAPH_ROOT: Final = "https://graph.microsoft.com/v1.0"
 _PREFER: Final = 'IdType="ImmutableId", outlook.body-content-type="text"'
 _MAX_RESPONSE_BYTES: Final = 1024 * 1024
 _REQUEST_TIMEOUT_SECONDS: Final = 12
+_logger = logging.getLogger("supply_response.graph_mail")
 _SAFE_CODES: Final = frozenset(
     {
         "graph_authentication_failed",
@@ -31,6 +33,23 @@ _SAFE_CODES: Final = frozenset(
     }
 )
 
+type _CapabilityStage = Literal[
+    "sent_list_obo",
+    "sent_list_http",
+    "sent_list_shape",
+    "exact_get_obo",
+    "exact_get_http",
+    "exact_get_shape",
+    "sender_binding",
+]
+type _CapabilityOutcome = Literal[
+    "timeout",
+    "transport",
+    "non_success",
+    "invalid_shape",
+    "mismatch",
+]
+
 
 class GraphMailError(RuntimeError):
     def __init__(self, code: str) -> None:
@@ -40,6 +59,50 @@ class GraphMailError(RuntimeError):
 
 class GraphMailSubmissionUncertain(GraphMailError):
     pass
+
+
+class _CapabilityDiagnosticError(GraphMailError):
+    __slots__ = ("outcome", "stage")
+
+    def __init__(
+        self,
+        stage: _CapabilityStage,
+        outcome: _CapabilityOutcome,
+    ) -> None:
+        self.stage = stage
+        self.outcome = outcome
+        super().__init__("graph_capability_failed")
+
+    def __repr__(self) -> str:
+        return (
+            f"{type(self).__name__}(stage={self.stage!r}, "
+            f"outcome={self.outcome!r}, code={self.code!r})"
+        )
+
+    def __reduce_ex__(
+        self, protocol: object
+    ) -> tuple[type[_CapabilityDiagnosticError], tuple[str, str]]:
+        del protocol
+        return type(self), (self.stage, self.outcome)
+
+
+@dataclass(frozen=True, slots=True)
+class _CapabilityRequestStages:
+    obo: _CapabilityStage
+    http: _CapabilityStage
+    shape: _CapabilityStage
+
+
+_SENT_LIST_STAGES: Final = _CapabilityRequestStages(
+    obo="sent_list_obo",
+    http="sent_list_http",
+    shape="sent_list_shape",
+)
+_EXACT_GET_STAGES: Final = _CapabilityRequestStages(
+    obo="exact_get_obo",
+    http="exact_get_http",
+    shape="exact_get_shape",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,12 +165,35 @@ class GraphMailClient:
         self._obo = obo
         self._mailbox_address = mailbox_address
 
-    async def _headers(self, actor: object) -> dict[str, str]:
+    async def _headers(
+        self,
+        actor: object,
+        *,
+        diagnostic_stage: _CapabilityStage | None = None,
+    ) -> dict[str, str]:
+        token: object | None = None
+        failure_outcome: _CapabilityOutcome | None = None
         try:
             token = await self._obo.exchange(actor)
+        except (TimeoutError, httpx.TimeoutException):
+            failure_outcome = "timeout"
+        except httpx.TransportError:
+            failure_outcome = "transport"
         except Exception:  # noqa: BLE001 - hide identity-provider details
-            raise GraphMailError("graph_authentication_failed") from None
+            failure_outcome = "non_success"
+        if failure_outcome is not None:
+            if diagnostic_stage is not None:
+                raise _CapabilityDiagnosticError(
+                    diagnostic_stage,
+                    failure_outcome,
+                )
+            raise GraphMailError("graph_authentication_failed")
         if not isinstance(token, GraphAccessToken):
+            if diagnostic_stage is not None:
+                raise _CapabilityDiagnosticError(
+                    diagnostic_stage,
+                    "invalid_shape",
+                )
             raise GraphMailError("graph_authentication_failed")
         return {
             "Authorization": f"Bearer {token.reveal()}",
@@ -126,8 +212,16 @@ class GraphMailClient:
         expect_json: bool = True,
         expected_statuses: frozenset[int] = frozenset({200}),
         uncertain_after_submit: bool = False,
+        diagnostic_stages: _CapabilityRequestStages | None = None,
     ) -> dict[str, object] | None:
-        headers = await self._headers(actor)
+        headers = await self._headers(
+            actor,
+            diagnostic_stage=(
+                diagnostic_stages.obo if diagnostic_stages is not None else None
+            ),
+        )
+        transport_outcome: _CapabilityOutcome | None = None
+        body = bytearray()
         try:
             async with asyncio.timeout(_REQUEST_TIMEOUT_SECONDS):
                 async with self._http.stream(
@@ -142,6 +236,11 @@ class GraphMailClient:
                     ):
                         if uncertain_after_submit and response.status_code >= 500:
                             raise GraphMailSubmissionUncertain("graph_send_uncertain")
+                        if diagnostic_stages is not None:
+                            raise _CapabilityDiagnosticError(
+                                diagnostic_stages.http,
+                                "non_success",
+                            )
                         raise GraphMailError(failure_code)
                     content_length = response.headers.get("content-length")
                     if (
@@ -151,24 +250,47 @@ class GraphMailClient:
                     ):
                         if uncertain_after_submit:
                             raise GraphMailSubmissionUncertain("graph_send_uncertain")
+                        if diagnostic_stages is not None:
+                            raise _CapabilityDiagnosticError(
+                                diagnostic_stages.shape,
+                                "invalid_shape",
+                            )
                         raise GraphMailError("graph_response_invalid")
                     if expect_json and not _json_media_type(
                         response.headers.get("content-type", "")
                     ):
+                        if diagnostic_stages is not None:
+                            raise _CapabilityDiagnosticError(
+                                diagnostic_stages.shape,
+                                "invalid_shape",
+                            )
                         raise GraphMailError("graph_response_invalid")
-                    body = bytearray()
                     async for chunk in response.aiter_bytes():
                         if len(body) + len(chunk) > _MAX_RESPONSE_BYTES:
                             if uncertain_after_submit:
                                 raise GraphMailSubmissionUncertain(
                                     "graph_send_uncertain"
                                 )
+                            if diagnostic_stages is not None:
+                                raise _CapabilityDiagnosticError(
+                                    diagnostic_stages.shape,
+                                    "invalid_shape",
+                                )
                             raise GraphMailError("graph_response_invalid")
                         body.extend(chunk)
-        except (TimeoutError, httpx.TransportError):
+        except (TimeoutError, httpx.TimeoutException):
+            transport_outcome = "timeout"
+        except httpx.TransportError:
+            transport_outcome = "transport"
+        if transport_outcome is not None:
             if uncertain_after_submit:
-                raise GraphMailSubmissionUncertain("graph_send_uncertain") from None
-            raise GraphMailError(failure_code) from None
+                raise GraphMailSubmissionUncertain("graph_send_uncertain")
+            if diagnostic_stages is not None:
+                raise _CapabilityDiagnosticError(
+                    diagnostic_stages.http,
+                    transport_outcome,
+                )
+            raise GraphMailError(failure_code)
         if not expect_json:
             if body:
                 raise GraphMailSubmissionUncertain("graph_send_uncertain")
@@ -176,42 +298,82 @@ class GraphMailClient:
         try:
             value = stdlib_json.loads(body)
         except (stdlib_json.JSONDecodeError, UnicodeDecodeError):
+            if diagnostic_stages is not None:
+                raise _CapabilityDiagnosticError(
+                    diagnostic_stages.shape,
+                    "invalid_shape",
+                ) from None
             raise GraphMailError("graph_response_invalid") from None
         if not isinstance(value, dict):
+            if diagnostic_stages is not None:
+                raise _CapabilityDiagnosticError(
+                    diagnostic_stages.shape,
+                    "invalid_shape",
+                )
             raise GraphMailError("graph_response_invalid")
         return value
 
     async def capability(self, actor: object) -> GraphMailCapability:
-        sent = await self._request(
-            "GET",
-            "/me/mailFolders/sentitems/messages?$select=id&$top=1&$orderby=sentDateTime%20desc",
-            actor,
-            failure_code="graph_capability_failed",
-        )
-        assert sent is not None
-        values = sent.get("value")
-        item = values[0] if isinstance(values, list) and len(values) == 1 else None
-        message_id = item.get("id") if isinstance(item, dict) else None
-        safe_id = _message_id(message_id)
-        exact = await self._request(
-            "GET",
-            f"/me/messages/{quote(safe_id, safe='')}?$select=id,sender,from",
-            actor,
-            failure_code="graph_capability_failed",
-        )
-        if exact is None or exact.get("id") != safe_id:
-            raise GraphMailError("graph_capability_failed")
         try:
-            sender = _address(exact.get("sender"))
-            from_address = _address(exact.get("from"))
-        except GraphMailError:
+            sent = await self._request(
+                "GET",
+                "/me/mailFolders/sentitems/messages?$select=id&$top=1&$orderby=sentDateTime%20desc",
+                actor,
+                failure_code="graph_capability_failed",
+                diagnostic_stages=_SENT_LIST_STAGES,
+            )
+            if sent is None:
+                raise _CapabilityDiagnosticError(
+                    "sent_list_shape",
+                    "invalid_shape",
+                )
+            values = sent.get("value")
+            item = values[0] if isinstance(values, list) and len(values) == 1 else None
+            message_id = item.get("id") if isinstance(item, dict) else None
+            try:
+                safe_id = _message_id(message_id)
+            except GraphMailError:
+                raise _CapabilityDiagnosticError(
+                    "sent_list_shape",
+                    "invalid_shape",
+                ) from None
+            exact = await self._request(
+                "GET",
+                f"/me/messages/{quote(safe_id, safe='')}?$select=id,sender,from",
+                actor,
+                failure_code="graph_capability_failed",
+                diagnostic_stages=_EXACT_GET_STAGES,
+            )
+            if exact is None or exact.get("id") != safe_id:
+                raise _CapabilityDiagnosticError(
+                    "exact_get_shape",
+                    "invalid_shape",
+                )
+            try:
+                sender = _address(exact.get("sender"))
+                from_address = _address(exact.get("from"))
+            except GraphMailError:
+                raise _CapabilityDiagnosticError(
+                    "exact_get_shape",
+                    "invalid_shape",
+                ) from None
+            if sender != from_address or sender != self._mailbox_address:
+                raise _CapabilityDiagnosticError(
+                    "sender_binding",
+                    "mismatch",
+                )
+            return GraphMailCapability(
+                mailbox_address=self._mailbox_address,
+                sample_sent_message_id=safe_id,
+            )
+        except _CapabilityDiagnosticError as error:
+            _logger.warning(
+                "graph_mail_capability_failed stage=%s outcome=%s code=%s",
+                error.stage,
+                error.outcome,
+                error.code,
+            )
             raise GraphMailError("graph_capability_failed") from None
-        if sender != from_address or sender != self._mailbox_address:
-            raise GraphMailError("graph_capability_failed")
-        return GraphMailCapability(
-            mailbox_address=self._mailbox_address,
-            sample_sent_message_id=safe_id,
-        )
 
     async def create_draft(
         self, revision: SupplierEmailRevision, actor: object
