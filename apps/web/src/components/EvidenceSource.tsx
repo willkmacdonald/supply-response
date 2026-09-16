@@ -12,7 +12,7 @@ function citation(item: EvidenceItem, analysis: AnalysisVersion, host?: string |
 }
 function citationAction(item: EvidenceItem, url: string): {label: string; product: "outlook" | "teams" | null} {
   const host = new URL(url).hostname;
-  if (["outlook.office.com", "outlook.office365.com"].includes(host) && item.authority_scope.includes("supplier_statement")) {
+  if (["outlook.office.com", "outlook.office365.com", "outlook.cloud.microsoft"].includes(host) && item.authority_scope.includes("supplier_statement")) {
     return {label: "Open supplier email", product: "outlook"};
   }
   if (host === "teams.microsoft.com" && item.authority_scope.includes("collaboration_statement")) {

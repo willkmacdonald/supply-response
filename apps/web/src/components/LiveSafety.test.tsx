@@ -65,12 +65,13 @@ const citationCases: Array<[
   EvidenceItem["authority_scope"][number],
   string,
   string,
+  string,
 ]> = [
-  ["work_iq", "supplier_statement", "https://outlook.office365.com/owa/?ItemID=demo", "Open supplier email"],
-  ["work_iq", "supplier_statement", "https://outlook.office.com/mail/deeplink/read/demo", "Open supplier email"],
-  ["work_iq", "collaboration_statement", "https://teams.microsoft.com/l/message/channel/message?tenantId=demo", "Open Quality Teams post"],
-  ["work_iq", "supplier_statement", "https://tenant.sharepoint.com/sites/demo/item", "Open citation"],
-  ["work_iq", "supplier_statement", "https://teams.microsoft.com/l/message/channel/message", "Open citation"],
+  ["work_iq", "supplier_statement", "https://outlook.office365.com/owa/?ItemID=demo", "Open supplier email", "https://outlook.cloud.microsoft/mail/deeplink/read/demo?ItemID=demo&exvsurl=1"],
+  ["work_iq", "supplier_statement", "https://outlook.office.com/mail/deeplink/read/demo", "Open supplier email", "https://outlook.office.com/mail/deeplink/read/demo"],
+  ["work_iq", "collaboration_statement", "https://teams.microsoft.com/l/message/channel/message?tenantId=demo", "Open Quality Teams post", "https://teams.microsoft.com/l/message/channel/message?tenantId=demo"],
+  ["work_iq", "supplier_statement", "https://tenant.sharepoint.com/sites/demo/item", "Open citation", "https://tenant.sharepoint.com/sites/demo/item"],
+  ["work_iq", "supplier_statement", "https://teams.microsoft.com/l/message/channel/message", "Open citation", "https://teams.microsoft.com/l/message/channel/message"],
 ];
 
 describe("live journey safety", () => {
@@ -156,7 +157,7 @@ describe("live journey safety", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
-  it.each(citationCases)("labels %s %s citations at %s as %s without changing the target", (source, authority, url, label) => {
+  it.each(citationCases)("labels %s %s citations at %s as %s with a safe target", (source, authority, url, label, expectedUrl) => {
     const analysis = liveAnalysis({
         evidence_id: "RL-E-LABEL",
         requirement: "required_authoritative",
@@ -173,7 +174,7 @@ describe("live journey safety", () => {
     });
     render(<EvidencePanel analysis={analysis} tenantSharePointHost="tenant.sharepoint.com" />);
     const link = screen.getByRole("link", {name: label});
-    expect(link).toHaveAttribute("href", url);
+    expect(link).toHaveAttribute("href", expectedUrl);
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();

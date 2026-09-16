@@ -1,16 +1,8 @@
 import {useEffect, useRef, useState} from "react";
 import {api, messageForCode, safeErrorMessage} from "../api";
+import {trustedOutlookUrl} from "../security/trustedUrls";
 import type {InboxCheckResult, InboxMessage, SupplierDisruptionFacts} from "../types";
 import {SourceActionIcon} from "./SourceActionIcon";
-
-function outlookLink(value: string): string | undefined {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" && !url.username && !url.password
-      && ["outlook.office365.com", "outlook.office.com", "outlook.cloud.microsoft"].includes(url.hostname)
-      ? url.href : undefined;
-  } catch { return undefined; }
-}
 
 function scenarioDate(value: string): string {
   return new Date(`${value}T12:00:00Z`).toLocaleDateString("en-US", {month:"long",day:"numeric",year:"numeric",timeZone:"UTC"});
@@ -102,7 +94,7 @@ export function InboxCheck({disabled = false, onBusyChange, onCaseCreated}: {
               {creating === message.message_id ? "Analyzing disruption…" : "Analyze this disruption"}
             </button>}
         </details>
-        {outlookLink(message.citation_url) && <a className="source-action" href={outlookLink(message.citation_url)} target="_blank" rel="noopener noreferrer">
+        {trustedOutlookUrl(message.citation_url) && <a className="source-action" href={trustedOutlookUrl(message.citation_url) ?? undefined} target="_blank" rel="noopener noreferrer">
           <SourceActionIcon product="outlook"/>Open supplier email
         </a>}
       </article>)}

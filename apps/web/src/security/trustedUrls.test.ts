@@ -1,5 +1,12 @@
 import {describe, expect, it} from "vitest";
-import {trustedServerCitation} from "./trustedUrls";
+import {trustedOutlookUrl, trustedServerCitation} from "./trustedUrls";
+
+it("converts a legacy OWA message link to the current Outlook web route", () => {
+  const legacy = "https://outlook.office365.com/owa/?ItemID=message%2Bid%2F%3D&exvsurl=1&viewmodel=ReadMessageItem";
+  expect(trustedOutlookUrl(legacy)).toBe(
+    "https://outlook.cloud.microsoft/mail/deeplink/read/message_id-%3D?ItemID=message%2Bid%2F%3D&exvsurl=1",
+  );
+});
 
 describe("server-classified citation trust", () => {
   const tenant = "tenant.sharepoint.com";

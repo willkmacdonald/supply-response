@@ -9,7 +9,7 @@ afterEach(() => {cleanup(); vi.restoreAllMocks();});
 const result = {presenter_run_id:"RL-RUN-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",checked_at:"2026-09-14T05:00:00Z",incomplete:false,messages:[{
  message_id:"new-message",subject:"[Supply Response Demo] RL-001 | Supplier Alpha | Run A",
  sender:"will@willmacdonald.com",received_at:"2026-09-14T04:59:00Z",
- excerpt:"RL-MAT-10247 shipment is delayed.",citation_url:"https://outlook.office365.com/mail/deeplink/read/new-message",
+ excerpt:"RL-MAT-10247 shipment is delayed.",citation_url:"https://outlook.office365.com/owa/?ItemID=new%2Bmessage%2F%3D&exvsurl=1&viewmodel=ReadMessageItem",
 }]};
 it("checks only on click and shows the actual message and Outlook citation", async () => {
  const check=vi.spyOn(api,"checkInbox").mockResolvedValue(result);
@@ -20,7 +20,10 @@ it("checks only on click and shows the actual message and Outlook citation", asy
  expect(check).toHaveBeenCalledTimes(1);
  expect(await screen.findByText(result.messages[0].subject)).toBeVisible();
  expect(screen.getByText(result.messages[0].excerpt)).toBeVisible();
- expect(screen.getByRole("link",{name:"Open supplier email"})).toHaveAttribute("href",result.messages[0].citation_url);
+ expect(screen.getByRole("link",{name:"Open supplier email"})).toHaveAttribute(
+  "href",
+  "https://outlook.cloud.microsoft/mail/deeplink/read/new_message-%3D?ItemID=new%2Bmessage%2F%3D&exvsurl=1",
+ );
  await userEvent.click(screen.getByText("Review disruption"));
  expect(screen.getByText(result.messages[0].excerpt)).toBeVisible();
  expect(create).not.toHaveBeenCalled();
