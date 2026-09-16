@@ -298,6 +298,73 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.execu
     ON app.execution_actions (decision_id);
 GO
 
+IF OBJECT_ID(N'app.supplier_email_deliveries', N'U') IS NULL
+BEGIN
+CREATE TABLE app.supplier_email_deliveries (
+    email_id nvarchar(128) NOT NULL,
+    decision_id nvarchar(128) NOT NULL,
+    reviewed_revision int NULL,
+    send_status nvarchar(32) NOT NULL,
+    provider_message_id nvarchar(256) NULL,
+    internet_message_id nvarchar(512) NULL,
+    correlation_id nvarchar(128) NULL,
+    status_updated_at datetimeoffset(6) NOT NULL,
+    failure_code nvarchar(128) NULL,
+    payload_json nvarchar(max) NOT NULL,
+    CONSTRAINT pk_supplier_email_deliveries PRIMARY KEY (email_id),
+    CONSTRAINT uq_supplier_email_deliveries_decision_id UNIQUE (decision_id),
+    CONSTRAINT ck_supplier_email_deliveries_reviewed_revision_positive
+        CHECK (reviewed_revision IS NULL OR reviewed_revision > 0),
+    CONSTRAINT ck_supplier_email_deliveries_send_status_valid CHECK (send_status IN ('draft', 'submitting', 'accepted', 'sent-confirmed', 'failed', 'uncertain')),
+    CONSTRAINT fk_supplier_email_deliveries_decision_id_decisions
+        FOREIGN KEY (decision_id) REFERENCES app.decisions (decision_id)
+);
+END;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.supplier_email_deliveries') AND name = N'ix_supplier_email_deliveries_decision_id')
+    CREATE INDEX ix_supplier_email_deliveries_decision_id ON app.supplier_email_deliveries (decision_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.supplier_email_deliveries') AND name = N'ix_supplier_email_deliveries_send_status')
+    CREATE INDEX ix_supplier_email_deliveries_send_status ON app.supplier_email_deliveries (send_status);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.supplier_email_deliveries') AND name = N'ix_supplier_email_deliveries_status_updated_at')
+    CREATE INDEX ix_supplier_email_deliveries_status_updated_at ON app.supplier_email_deliveries (status_updated_at);
+GO
+
+IF OBJECT_ID(N'app.supplier_email_revisions', N'U') IS NULL
+BEGIN
+CREATE TABLE app.supplier_email_revisions (
+    email_id nvarchar(128) NOT NULL,
+    revision int NOT NULL,
+    decision_id nvarchar(128) NOT NULL,
+    action_id nvarchar(128) NOT NULL,
+    subject nvarchar(255) NOT NULL,
+    body nvarchar(max) NOT NULL,
+    from_address nvarchar(320) NOT NULL,
+    to_address nvarchar(320) NOT NULL,
+    edited_at datetimeoffset(6) NOT NULL,
+    reviewed_at datetimeoffset(6) NULL,
+    payload_json nvarchar(max) NOT NULL,
+    CONSTRAINT pk_supplier_email_revisions PRIMARY KEY (email_id, revision),
+    CONSTRAINT uq_supplier_email_revisions_email_revision UNIQUE (email_id, revision),
+    CONSTRAINT ck_supplier_email_revisions_revision_positive CHECK (revision > 0),
+    CONSTRAINT fk_supplier_email_revisions_decision_id_decisions
+        FOREIGN KEY (decision_id) REFERENCES app.decisions (decision_id),
+    CONSTRAINT fk_supplier_email_revisions_action_id_execution_actions
+        FOREIGN KEY (action_id) REFERENCES app.execution_actions (action_id)
+);
+END;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.supplier_email_revisions') AND name = N'ix_supplier_email_revisions_decision_id')
+    CREATE INDEX ix_supplier_email_revisions_decision_id ON app.supplier_email_revisions (decision_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.supplier_email_revisions') AND name = N'ix_supplier_email_revisions_action_id')
+    CREATE INDEX ix_supplier_email_revisions_action_id ON app.supplier_email_revisions (action_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.supplier_email_revisions') AND name = N'ix_supplier_email_revisions_edited_at')
+    CREATE INDEX ix_supplier_email_revisions_edited_at ON app.supplier_email_revisions (edited_at);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'app.supplier_email_revisions') AND name = N'ix_supplier_email_revisions_reviewed_at')
+    CREATE INDEX ix_supplier_email_revisions_reviewed_at ON app.supplier_email_revisions (reviewed_at);
+GO
+
 IF OBJECT_ID(N'app.action_projection', N'U') IS NULL
 BEGIN
 CREATE TABLE app.action_projection (

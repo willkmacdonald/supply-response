@@ -42,6 +42,8 @@ def test_operational_schema_contains_the_complete_canonical_store_contract():
         "playbacks",
         "schema_version",
         "live_operational_sources",
+        "supplier_email_deliveries",
+        "supplier_email_revisions",
     }
 
     for table in required_tables:
@@ -54,6 +56,43 @@ def test_operational_schema_contains_the_complete_canonical_store_contract():
     assert "nvarchar(max)" in sql
     assert "datetimeoffset" in sql
     assert "isjson" in sql
+
+
+def test_operational_schema_contains_supplier_email_table_contract():
+    sql = _normalized(OPERATIONAL)
+
+    for table in (
+        "supplier_email_deliveries",
+        "supplier_email_revisions",
+    ):
+        assert f"if object_id(n'app.{table}', n'u') is null" in sql
+        assert f"create table app.{table}" in sql
+
+    for constraint in (
+        "pk_supplier_email_deliveries primary key (email_id)",
+        "uq_supplier_email_deliveries_decision_id unique (decision_id)",
+        "ck_supplier_email_deliveries_reviewed_revision_positive check (reviewed_revision is null or reviewed_revision > 0)",
+        "ck_supplier_email_deliveries_send_status_valid check (send_status in ('draft', 'submitting', 'accepted', 'sent-confirmed', 'failed', 'uncertain'))",
+        "fk_supplier_email_deliveries_decision_id_decisions foreign key (decision_id) references app.decisions (decision_id)",
+        "pk_supplier_email_revisions primary key (email_id, revision)",
+        "uq_supplier_email_revisions_email_revision unique (email_id, revision)",
+        "ck_supplier_email_revisions_revision_positive check (revision > 0)",
+        "fk_supplier_email_revisions_decision_id_decisions foreign key (decision_id) references app.decisions (decision_id)",
+        "fk_supplier_email_revisions_action_id_execution_actions foreign key (action_id) references app.execution_actions (action_id)",
+    ):
+        assert constraint in sql
+
+    for index in (
+        "ix_supplier_email_deliveries_decision_id",
+        "ix_supplier_email_deliveries_send_status",
+        "ix_supplier_email_deliveries_status_updated_at",
+        "ix_supplier_email_revisions_decision_id",
+        "ix_supplier_email_revisions_action_id",
+        "ix_supplier_email_revisions_edited_at",
+        "ix_supplier_email_revisions_reviewed_at",
+    ):
+        assert f"create index {index}" in sql
+        assert f"name = n'{index}'" in sql
 
 
 def test_operational_schema_avoids_sqlite_only_ddl_and_commands():
@@ -126,7 +165,7 @@ def test_every_operational_table_and_inline_constraint_is_retry_guarded():
         assert constraints
         constraint_count += len(constraints)
 
-    assert table_count == 18
+    assert table_count == 22
     assert constraint_count >= 50
 
 
@@ -144,7 +183,7 @@ def test_every_operational_index_has_its_own_retry_guard():
                 re.IGNORECASE | re.DOTALL,
             ), index_name
 
-    assert len(indexes) == 26
+    assert len(indexes) == 43
 
 
 def test_schemas_views_and_version_publication_are_idempotent():
@@ -323,6 +362,6 @@ def test_partial_operational_application_and_double_retry_do_not_collide():
         for batch in script:
             execute(batch)
 
-    assert len({name for kind, name in existing if kind == "table"}) == 18
-    assert len({name for kind, name in existing if kind == "index"}) == 26
+    assert len({name for kind, name in existing if kind == "table"}) == 22
+    assert len({name for kind, name in existing if kind == "index"}) == 43
     assert schema_version == 12
