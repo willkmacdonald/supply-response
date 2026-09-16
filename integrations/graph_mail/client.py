@@ -278,6 +278,13 @@ class GraphMailClient:
                                 )
                             raise GraphMailError("graph_response_invalid")
                         body.extend(chunk)
+        except httpx.DecodingError:
+            if diagnostic_stages is None:
+                raise
+            raise _CapabilityDiagnosticError(
+                diagnostic_stages.shape,
+                "invalid_shape",
+            ) from None
         except (TimeoutError, httpx.TimeoutException):
             transport_outcome = "timeout"
         except httpx.TransportError:

@@ -78,6 +78,65 @@ uv run pyright integrations/graph_mail/client.py tests/integration/test_graph_ma
 
 Result: 0 errors, 0 warnings, 0 informations.
 
+## Follow-up: invalid content-encoding regression
+
+A scoped review found that `httpx.DecodingError` from
+`response.aiter_bytes()` was not a subclass of the already handled
+`httpx.TransportError`. Invalid gzip bytes could therefore escape the
+capability diagnostic without the required safe `GraphMailError` and warning.
+
+The fix catches only `httpx.DecodingError`. Capability requests classify it as
+the current request's shape stage with outcome `invalid_shape`; non-diagnostic
+Graph requests re-raise it unchanged. No broad `httpx.RequestError` catch was
+added.
+
+### Follow-up RED
+
+Command:
+
+```text
+uv run pytest tests/integration/test_graph_mail_capability_diagnostics.py::test_capability_decoding_error_is_a_bounded_shape_failure
+```
+
+Observed result before the production fix:
+
+```text
+1 failed in 0.17s
+```
+
+The 200 `application/json` response with `Content-Encoding: gzip` and invalid
+gzip bytes raised `httpx.DecodingError` from `response.aiter_bytes()` instead of
+the expected safe `GraphMailError`.
+
+### Follow-up GREEN
+
+The same command after the narrow catch:
+
+```text
+1 passed in 0.13s
+```
+
+### Follow-up verification
+
+Focused Graph mail and API regression command:
+
+```text
+uv run pytest tests/integration/test_graph_mail.py tests/integration/test_graph_mail_capability_diagnostics.py tests/api
+```
+
+Result:
+
+```text
+106 passed, 1 warning in 13.35s
+```
+
+The warning remains the existing Starlette deprecation warning from
+`fastapi.testclient`.
+
+Scoped Ruff result: all checks passed.
+
+Scoped Pyright result: 0 errors, 0 warnings, 0 informations.
+
 ## Files changed for this task
 
 - `integrations/graph_mail/client.py`

@@ -32,6 +32,11 @@ class SequencedObo:
         return result
 
 
+class InvalidGzipStream(httpx.AsyncByteStream):
+    async def __aiter__(self):
+        yield b"invalid-gzip-" + PROVIDER_SECRET.encode()
+
+
 def _token() -> GraphAccessToken:
     return GraphAccessToken(TOKEN_SECRET)
 
@@ -179,6 +184,46 @@ async def test_capability_timeout_has_bounded_http_outcome(
     assert len(records) == 1
     assert "stage=sent_list_http outcome=timeout" in records[0].getMessage()
     assert PROVIDER_SECRET not in caplog.text
+
+
+@pytest.mark.anyio
+async def test_capability_decoding_error_is_a_bounded_shape_failure(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def graph(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={
+                "content-type": "application/json",
+                "content-encoding": "gzip",
+            },
+            stream=InvalidGzipStream(),
+        )
+
+    async with httpx.AsyncClient(
+        base_url="https://graph.microsoft.com",
+        transport=httpx.MockTransport(graph),
+        follow_redirects=False,
+    ) as http:
+        with (
+            caplog.at_level(logging.WARNING, logger=LOGGER_NAME),
+            pytest.raises(GraphMailError) as caught,
+        ):
+            await GraphMailClient(
+                http=http,
+                obo=SequencedObo(_token()),
+                mailbox_address=MAILBOX_ADDRESS,
+            ).capability(object())
+
+    records = [record for record in caplog.records if record.name == LOGGER_NAME]
+    assert len(records) == 1
+    assert records[0].getMessage() == (
+        "graph_mail_capability_failed "
+        "stage=sent_list_shape outcome=invalid_shape "
+        "code=graph_capability_failed"
+    )
+    observable = caplog.text + str(caught.value) + repr(caught.value)
+    assert PROVIDER_SECRET not in observable
 
 
 @pytest.mark.anyio
