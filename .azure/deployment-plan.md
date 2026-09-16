@@ -1,5 +1,350 @@
 # Supply Response Personal-Tenant Deployment Plan
 
+## Explicit Microsoft Graph OBO scopes release — 2026-09-16
+
+Status: Deployed; live signed-in Alex OBO acceptance remains pending. Scope:
+deploy source `5c7a802` to the existing `ca-sr-demo` Container App. The release replaces
+the Graph `.default` OBO request with the two already-consented delegated Graph
+mail scopes and accepts only their exact qualified or unqualified response
+forms. It does not change the workflow, identities, consent, permissions,
+infrastructure, database, Fabric, Foundry, Power BI, or email-send setting.
+
+### All validation checks pass — explicit Microsoft Graph OBO scopes
+
+- [x] 1. AZD Installation
+- [x] 2. Schema Validation
+- [x] 3. Environment Setup
+- [x] 4. Authentication Check
+- [x] 5. Subscription/Location Check
+- [x] 6. Aspire Pre-Provisioning Checks: not applicable
+- [x] 7. Provision Preview
+- [x] 8. Build Verification
+- [x] 9. Docker Build Context Validation
+- [x] 10. Package Validation
+- [x] 11. Azure Policy Validation
+- [x] 12. Aspire Post-Provisioning Checks: not applicable
+
+### Validation Proof — explicit Microsoft Graph OBO scopes
+
+At `2026-09-16`, source `5c7a802` was pushed to `github/main`. AZD 1.30.0
+and the existing `supply-response-personal` environment were selected. Fresh
+interactive authentication and the repository's guarded read-only preflight
+matched the existing Azure Dev subscription, tenant, East US 2 location,
+Container App, shared Container Apps environment, registry, Log Analytics
+workspace, Entra registrations, Foundry project, and Fabric SQL Database. No
+cloud resource was changed by preflight.
+
+The focused Graph integration suite passed 18 tests. Scoped Ruff and Pyright
+completed with no errors. The Python source and wheel packages built, the web
+production build completed across 205 modules, and `infra/main.bicep` compiled.
+The first no-apply preview stopped safely because the existing fixed mail sender
+and recipient were not exported in that shell; after supplying those existing
+non-secret values to the process, the preview completed in 19 seconds. It
+proposed no resource creation or deletion and showed only the already-known
+Container App and Application Insights projections. The named AZD package step
+passed, the deployment build context was clean, and seven existing policy
+assignments were readable with no preview denial. Static Bicep review
+reconfirmed the existing system identity receives only AcrPull at the exact
+registry, Key Vault Secrets User at the exact vault, and Azure AI User at the
+exact Foundry project. Email sending remains disabled.
+
+No deployment, mailbox request, email, permission change, schema change, or
+live-data change occurred during validation.
+
+### Deployment proof — explicit Microsoft Graph OBO scopes
+
+The repository's guarded existing-environment deployment built source
+`5c7a802b6f72` as immutable image
+`sha256:1072bb7f293c9cbad6758bc8dcdfb2dd49acc0f8810cfbb1040072534d7084fc`.
+Revision `ca-sr-demo--0000043` is Healthy, Provisioned, Running, and receives
+100% traffic. The fixed sender and recipient were supplied only as existing
+non-secret deployment inputs; live `SUPPLY_RESPONSE_MAIL_SEND_ENABLED` remains
+`False`.
+
+The first guarded apply emitted an intermediate health-attempt failure but then
+completed successfully. Because its final buffered output had not yet been
+polled, a retry started and produced a second healthy revision on the same
+immutable image. The retry was interrupted when the first completion became
+visible, but revision `ca-sr-demo--0000043` had already activated; the earlier
+healthy `ca-sr-demo--0000042` remains at 0% traffic. No rollback or cleanup was
+needed.
+
+Post-deployment preflight and the guarded live Fabric/Foundry readiness smoke
+passed without a delegated user operation. Live exact-resource role checks
+confirmed AcrPull at the registry, Key Vault Secrets User at the vault, and role
+definition `53ca6127-db72-4b80-b1b0-d745d6d5456d`—now displayed by Azure as
+Foundry User—at the exact Foundry project. `azd show` confirmed the existing
+environment and portal target.
+
+Both available app browser tabs were signed out, so no delegated Alex capability
+request or mailbox read was attempted during deployment verification. No email,
+permission change, schema change, or live-data deletion occurred.
+
+## Graph capability stage diagnostic release — 2026-09-15
+
+Status: Deployed and diagnostic accepted from source `34c4f23`. Scope: deploy
+commits `b358e78` and `34c4f23`
+to the existing `ca-sr-demo` Container App. The release adds one privacy-safe
+stage/outcome warning to the existing read-only Alex mailbox capability check.
+It does not change the public 503 response, Graph permissions, request shapes,
+identities, infrastructure, Fabric schema or data, and email sending remains
+disabled. After deployment, the approved live acceptance is exactly one
+authenticated read-only Alex capability GET followed by inspection of its one
+stage-only event.
+
+### All validation checks pass — Graph capability stage diagnostic
+
+- [x] 1. AZD Installation
+- [x] 2. Schema Validation
+- [x] 3. Environment Setup
+- [x] 4. Authentication Check
+- [x] 5. Subscription/Location Check
+- [x] 6. Aspire Pre-Provisioning Checks: not applicable
+- [x] 7. Provision Preview
+- [x] 8. Build Verification
+- [x] 9. Docker Build Context Validation
+- [x] 10. Package Validation
+- [x] 11. Azure Policy Validation
+- [x] 12. Aspire Post-Provisioning Checks: not applicable
+
+### Validation Proof — Graph capability stage diagnostic
+
+At `2026-09-16T03:52:38Z`, AZD 1.30.0 was present and a fresh authenticated
+status check confirmed the existing interactive Will operator. The selected
+`supply-response-personal` environment and the repository's guarded read-only
+preflight matched the exact existing subscription, tenant, East US 2 location,
+Container App, shared Container Apps environment, registry, Log Analytics
+workspace, Entra registrations, Foundry project, and Fabric SQL Database. The
+preflight confirmed email sending remains disabled and made no cloud changes.
+Two earlier local preflight starts stopped before checks because the shell lacked
+the explicit environment selector and current operator ID; neither changed Azure.
+
+The existing `azure.yaml` and Bicep configuration were accepted by AZD, and
+`infra/main.bicep` compiled without errors. The named provision preview completed
+in 19 seconds, applied nothing, proposed no creates or deletes, and showed only
+the already-known Container App and Application Insights projections. Seven
+existing policy assignments were readable and the preview reported no policy
+denial. Static Bicep review reconfirmed the unchanged system identity receives
+only AcrPull at the exact registry, Key Vault Secrets User at the exact vault,
+and Azure AI User at the exact Foundry project.
+
+The current Graph/API/deployment regression scope passed 165 tests with the one
+pre-existing Starlette deprecation warning. The web suite passed 386 tests and
+the production web build completed across 205 modules. The Python source and
+wheel packages built successfully. Scoped Ruff and Pyright had already passed
+for the reviewed diagnostic commits, and both independent task review and final
+whole-change review approved the release. Shell syntax, Dockerfile and lockfile
+presence, the clean deployment build context, and `git diff --check` passed.
+The named AZD package step succeeded; this project intentionally declares no AZD
+services because the guarded deployment script owns the argument-aware ACR build.
+The project is not an Aspire application. No deployment, mailbox call, email,
+permission change, schema change, or live-data change occurred during validation.
+
+### Deployment proof — Graph capability stage diagnostic
+
+At `2026-09-16T04:01:24Z`, the repository's guarded personal-tenant deployment
+completed from source `34c4f23`. ACR build `ch1y` succeeded and Azure activated
+revision `ca-sr-demo--0000041` on immutable image
+`sha256:85bccdba418a0718f68f196c58679583a40f49a46b0999279b378d1b411dd3dc`.
+The revision is latest-ready, Healthy, Running, and receives 100% traffic. The
+live Fabric and Foundry readiness smoke passed without a delegated user action.
+Live exact-scope checks returned one AcrPull assignment at the registry, one Key
+Vault Secrets User assignment at the project vault, and one Azure AI User
+assignment at the Foundry project. The deployed mail-send setting remains false.
+
+After separate explicit browser-session approval, one same-origin GET omitted
+the SPA's bearer token and returned HTTP 401 at the API boundary. It did not
+reach Graph or the mailbox and produced no capability event. A privacy-preserving
+session inspection confirmed an unexpired API token without exposing its value.
+After separate explicit retry approval, exactly one corrected bearer-authenticated
+GET returned the unchanged safe HTTP 503 response. Application Insights recorded
+exactly one bounded event at `2026-09-16T04:07:36.992453Z`:
+`stage=sent_list_obo`, `outcome=non_success`, and
+`code=graph_capability_failed`. The failure is therefore isolated to the first
+delegated OBO exchange, before any Microsoft Graph mailbox request. No email,
+mailbox write, permission change, schema change, or live-data deletion occurred.
+
+## Reviewed supplier-email Fabric schema application — 2026-09-15
+
+Status: Applied and verified. Scope: apply the reviewed additive definitions for
+`app.supplier_email_deliveries` and `app.supplier_email_revisions` from commit
+`0039ce0` to the existing configured Fabric SQL Database. The operation may
+create only those two missing tables, their constraints, and seven indexes. It
+must not delete or modify existing rows, change schema version 12, change
+permissions or identities, deploy application code, or send email.
+
+### Pre-application proof
+
+The implementation used a failing Fabric SQL contract test before the fix. The
+focused and existing schema suites then passed 55 tests with one explicitly
+environment-gated isolated SQL Server test skipped; Ruff and `git diff --check`
+passed. Task review and final whole-change review reported no Critical,
+Important, or Minor findings. Both reviews confirmed that the definitions match
+migration 0009 and runtime metadata, preserve foreign-key ordering and schema
+versioning, and are individually guarded for safe retry. The live database has
+not yet been changed, and the user explicitly approved this exact live schema
+application immediately before execution.
+
+### All validation checks pass — reviewed supplier-email Fabric schema
+
+- [x] 1. AZD Installation
+- [x] 2. Schema Validation
+- [x] 3. Environment Setup
+- [x] 4. Authentication Check
+- [x] 5. Subscription/Location Check
+- [x] 6. Aspire Pre-Provisioning Checks: not applicable
+- [x] 7. Provision Preview
+- [x] 8. Build Verification
+- [x] 9. Docker Build Context Validation
+- [x] 10. Package Validation: not applicable; `azure.yaml` intentionally has no services and this release applies only committed SQL
+- [x] 11. Azure Policy Validation
+- [x] 12. Aspire Post-Provisioning Checks: not applicable
+
+### Validation proof — reviewed supplier-email Fabric schema
+
+At `2026-09-16T01:22:04Z`, AZD 1.30.0 was present and authenticated to the
+existing `supply-response-personal` environment. The repository's guarded,
+read-only personal-tenant preflight verified the exact subscription, tenant,
+East US 2 location, shared resources, Foundry project, and configured Fabric SQL
+Database without printing credentials or tokens. Bicep compiled successfully.
+The provision preview succeeded with no resource creation or deletion and made
+no changes; its only reported modifications were the already-known Container App
+and Application Insights projections. Seven existing subscription policy
+assignments were readable and the preview reported no policy denial.
+
+The affected Fabric schema suites passed 55 tests with the one isolated local
+SQL Server execution test explicitly skipped because no disposable database was
+configured. Ruff, `git diff --check`, and `uv build` passed, producing the source
+distribution and wheel that include the committed Fabric SQL artifacts. The Docker/application build
+context is clean and unchanged from the already-deployed application; package
+validation is not applicable because `azure.yaml` deliberately declares no AZD
+services and the approved action runs only the reviewed SQL script. The exact
+Fabric SQL file matches committed source `0039ce0`, and Microsoft sqlcmd 18.6 is
+available. No live database statement has run during validation.
+
+Static Bicep review confirmed the unchanged Container App managed identity uses
+only AcrPull at the shared registry, Key Vault Secrets User at the project vault,
+and Azure AI User at the existing Foundry project. This database-only action
+adds no RBAC assignment and does not change the already-provisioned contained
+database user or its existing application-schema DML grants.
+
+### Live application proof — reviewed supplier-email Fabric schema
+
+At `2026-09-16T01:28:36Z`, the pre-application read confirmed operational schema
+version 12 and both reviewed supplier-email tables missing. Microsoft sqlcmd's
+integrated authentication was unavailable in the local macOS session, so the
+application used the repository's existing documented Azure CLI credential and
+ODBC access-token connector instead; no credential or token was printed or
+persisted. The reviewed `fabric/sql/001_operational_schema.sql` was applied once
+through the repository's existing `apply_sql_script` batch runner.
+
+Post-application reads confirmed schema version 12 remained unchanged, both
+tables are present, all seven named indexes are present, and all ten named
+constraints are present. The guarded live Fabric/Foundry smoke check passed.
+Live exact-scope role verification still returns one AcrPull assignment at the
+shared registry, one Key Vault Secrets User assignment at the project vault, and
+one Azure AI User assignment at the existing Foundry project.
+After a browser reload, the saved case opened tab 5 successfully and displayed
+the versioned **Review the supplier email** form with From, To, Subject, Message,
+**Review this email**, and disabled **Send email** controls; the previous
+**Supplier email unavailable** error was absent. No draft review, simulated
+coordination, email send, permission change, application deployment, or data
+deletion was performed.
+
+## Execute mitigation plan release — 2026-09-15
+
+Status: Deployed from source `0aa2bc6`; post-deployment acceptance is blocked.
+Scope: deploy the reviewed five-stage
+execution experience, simulated option-specific coordination, versioned supplier
+email review, default-off Graph send path, and Alex-only read-only mailbox
+capability. Email sending remains disabled. No live supplier email is authorized.
+The existing Azure target, identities, database, Fabric, Foundry, Power BI, and
+resource-scoped roles remain unchanged.
+
+### All validation checks pass — execute mitigation plan
+
+- [x] 1. AZD Installation
+- [x] 2. Schema Validation
+- [x] 3. Environment Setup
+- [x] 4. Authentication Check
+- [x] 5. Subscription/Location Check
+- [x] 6. Aspire Pre-Provisioning Checks: not applicable
+- [x] 7. Provision Preview
+- [x] 8. Build Verification
+- [x] 9. Docker Build Context Validation
+- [x] 10. Package Validation
+- [x] 11. Azure Policy Validation
+- [x] 12. Aspire Post-Provisioning Checks: not applicable
+
+### Validation Proof — execute mitigation plan
+
+The earlier Work IQ receipt mismatch was diagnosed as a stale or mixed shell
+environment rather than saved or deployed configuration drift. All seven local
+binding fields match the live Container App, both saved receipts match their
+recomputed values, and a clean read-only personal-tenant preflight passed.
+
+AZD 1.30.0 and the existing `supply-response-personal` environment are active.
+Azure authentication, the confirmed subscription/tenant/location, shared
+Container Apps environment, registry, Log Analytics workspace, Foundry project,
+Fabric SQL item, Entra application bindings, and Work IQ receipt passed the
+guarded preflight. Bicep compiled successfully. The AZD preview parsed the
+infrastructure and reported only expected modifications to the existing
+Container App and Application Insights resource; it reported no resource
+creation or deletion and applied nothing. Seven existing policy assignments were
+read, and the preview reported no policy denial.
+
+The directly affected Python tests passed with expected skips; scoped Ruff and
+Pyright checks passed. All 386 web tests and the production web build passed.
+The deployment build context is clean, `git diff --check` passed, and the exact
+production Dockerfile built successfully as local image
+`supply-response:validation-0aa2bc6` with the deployed Entra public arguments.
+This repository intentionally has no AZD service packaging path; its documented
+package validation is the argument-aware Docker build used by
+`deploy_personal_tenant.sh`, so generic `azd package` is not applicable.
+
+A supplementary whole-repository diagnostic exceeded the release's scoped
+acceptance surface and surfaced failures in untouched logging-order tests and
+whole-repository test-fixture type analysis. It did not identify a failure in a
+directly affected test or production module, and no unrelated cleanup was added
+to this release.
+
+### Role Assignment Verification — execute mitigation plan
+
+- Status: verified by static Bicep review.
+- Identity: the existing Container App system-assigned managed identity.
+- Roles: AcrPull scoped to the shared registry; Key Vault Secrets User scoped to
+  the project vault; Azure AI User scoped to the existing Foundry project.
+- No subscription- or resource-group-wide runtime role was added.
+
+### Deployment proof and acceptance blocker — execute mitigation plan
+
+The guarded personal-tenant deployment completed and activated revision
+`ca-sr-demo--0000040` with 100% traffic. The revision is latest-ready, healthy,
+and running on immutable image
+`sha256:d2b0750fa51973f019a8fa130cf8da2c54c3fc7b5fab5d07f3da36e354c5c0ae`.
+Email sending remains disabled. The post-deployment Fabric and Foundry readiness
+smoke check passed, and live exact-scope role checks confirmed AcrPull, Key Vault
+Secrets User, and Azure AI User.
+
+Browser verification confirmed that the new five-stage execution UI and the
+simulated coordination action are live. Full acceptance is blocked by two
+separate issues found during the approved post-deployment checks:
+
+- The new local Alembic migration defines `supplier_email_deliveries` and
+  `supplier_email_revisions`, but the matching additive Fabric SQL DDL is absent
+  from `fabric/sql/001_operational_schema.sql`. The live API therefore fails on
+  `Invalid object name 'app.supplier_email_deliveries'` when loading supplier
+  email state.
+- The read-only Graph mailbox capability endpoint returns
+  `SUPPLIER_EMAIL_CAPABILITY_FAILED`. Entra contains exactly one principal-specific
+  delegated grant for Alex with `Mail.ReadWrite` and `Mail.Send`, so the failure is
+  after consent configuration; the safe endpoint intentionally hides the
+  downstream provider detail and no mailbox write or email send was attempted.
+
+No Fabric schema change was applied after discovering the gap. Corrective schema
+implementation and any later live schema application require their own review and
+explicit approval.
+
 ## Taylor evidence and Alex handoff release — 2026-09-14
 
 Status: Validated
