@@ -1,5 +1,58 @@
 # Supply Response Personal-Tenant Deployment Plan
 
+## Native MSAL response acceptance release — 2026-09-17
+
+Status: Deployed. Scope: deploy commit `aa23272` to the existing `ca-sr-demo`
+Container App. The release removes only the custom exact-scope-string rejection
+after MSAL has successfully returned a bounded Bearer access token. The existing
+validated Alex actor requirement, opaque token handling, token bounds, Graph
+authorization, fixed sender and recipient, and user-confirmed send remain
+unchanged. It does not change identities, consent, permissions, infrastructure,
+mailbox configuration, or the business workflow, and deployment does not send
+an email.
+
+### All validation checks pass — native MSAL response acceptance
+
+- [x] Existing named AZD environment and authenticated operator
+- [x] Guarded personal-tenant preflight
+- [x] No-apply Bicep provisioning preview
+- [x] Python package, Bicep, shell, and exact Docker build verification
+- [x] Affected application regression, lint, and type verification
+- [x] Azure policy inventory and static exact-scope role verification
+
+### Validation proof — native MSAL response acceptance
+
+At `2026-09-17T14:43:33Z`, commit `aa23272` was present on local `main` after
+being pushed to `github/main`. The guarded read-only preflight matched the
+existing Azure Dev subscription, tenant, East US 2 location, Container App,
+shared resources, Entra registrations and exact delegated Graph permissions,
+Foundry project, and Fabric SQL Database. The no-apply preview completed with no
+creates or deletes and only the already-known Container App and Application
+Insights projections.
+
+The Bicep template, Python source and wheel packages, shell scripts, and exact
+production Docker image built successfully. The 71 directly affected
+Graph/API tests passed; scoped Ruff and Pyright checks passed. Seven existing
+policy assignments were readable. Static role review confirmed the existing
+AcrPull assignment at the registry, Key Vault Secrets User at the application
+vault, and Foundry User at the configured project. No mailbox operation, email,
+tenant permission change, schema change, or live-data deletion occurred during
+validation.
+
+### Deployment proof — native MSAL response acceptance
+
+At `2026-09-17T14:49:46Z`, the guarded existing-environment deployment activated
+revision `ca-sr-demo--0000051` on immutable image
+`sha256:1d8c5b3ba5c18110e07a8051654187de43dc7f600390e18ede11786c0f86db7f`.
+The revision is Healthy, Provisioned, Running with one replica, is both the
+latest and latest-ready revision, and receives 100% of traffic.
+
+Read-only live role verification confirmed one AcrPull assignment at the exact
+registry, one Key Vault Secrets User assignment at the exact application vault,
+and one Foundry User assignment at the configured project. The separately gated
+Fabric/Foundry endpoint smoke was not run. No mailbox operation, email, tenant
+permission change, schema change, or live-data deletion occurred.
+
 ## Native MSAL Graph OBO release — 2026-09-17
 
 Status: Deployed. Scope: commit `2b56e5b` replaced the custom Graph OBO HTTP
