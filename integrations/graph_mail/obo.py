@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import json
+import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -48,6 +49,54 @@ _OAUTH_ERRORS: Final = frozenset(
         "server_error",
     }
 )
+_AAD_CODES: Final = frozenset(
+    {
+        500011,
+        500131,
+        50076,
+        50079,
+        53003,
+        65001,
+        65004,
+        650057,
+        70000,
+        70011,
+        700016,
+        7000215,
+        7000222,
+    }
+)
+_logger = logging.getLogger(__name__)
+
+
+def _log_rejected_response(result: dict[str, Any]) -> str:
+    """Log only allowlisted categories; never provider text or credentials."""
+    error = result.get("error")
+    safe_code = (
+        error if isinstance(error, str) and error in _OAUTH_ERRORS else "unknown"
+    )
+    codes = result.get("error_codes")
+    first_code = codes[0] if isinstance(codes, list) and codes else None
+    aad_code = (
+        first_code
+        if type(first_code) is int and first_code in _AAD_CODES
+        else "unknown"
+    )
+    token = result.get("access_token")
+    scopes = result.get("scope")
+    scope_values = scopes.split() if isinstance(scopes, str) else []
+    _logger.warning(
+        "graph_obo_failed outcome=%s oauth_error=%s aad_code=%s "
+        "token_present=%s bearer_type=%s mail_readwrite=%s mail_send=%s",
+        "remote_error" if isinstance(error, str) and error else "response_rejected",
+        safe_code,
+        aad_code,
+        isinstance(token, str) and bool(token.strip()),
+        result.get("token_type") == "Bearer",
+        any(value in {"Mail.ReadWrite", GRAPH_SCOPES[0]} for value in scope_values),
+        any(value in {"Mail.Send", GRAPH_SCOPES[1]} for value in scope_values),
+    )
+    return safe_code
 
 
 class GraphAuthenticationError(PermissionError):
@@ -109,7 +158,17 @@ def _validated_scopes(scope: object) -> frozenset[str] | None:
 def _safe_token_result(value: dict[str, Any]) -> dict[str, Any]:
     if "error" in value:
         code = value.get("error")
-        return {"error": code if code in _OAUTH_ERRORS else "unknown"}
+        codes = value.get("error_codes")
+        return {
+            "error": code if code in _OAUTH_ERRORS else "unknown",
+            "error_codes": [
+                candidate
+                for candidate in codes
+                if type(candidate) is int and candidate in _AAD_CODES
+            ][:1]
+            if isinstance(codes, list)
+            else [],
+        }
     token = value.get("access_token")
     scope = value.get("scope")
     scopes = _validated_scopes(scope)
@@ -321,6 +380,7 @@ class GraphOboExchange:
             or token_type != "Bearer"
             or granted is None
         ):
+            _log_rejected_response(result)
             raise GraphAuthenticationError("Graph delegated token exchange failed")
         return GraphAccessToken(token)
 
