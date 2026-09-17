@@ -71,11 +71,12 @@ it("describes recorded ranking with business meaning and units without asserting
   expect(rankingReason({...stage, comparator: "constructor"}, "a")).toContain("additional saved comparison rule");
   expect(decisionContext(null, "a", false)).toBe("Case context unavailable; no decision is shown");
 });
-it("keeps the comparison summary compact with parts, service and response cost", () => {
+it("keeps revenue at risk visible in the compact option comparison", () => {
   render(<PredictionSummary predicted={predicted} snapshot={null} basis="response" compact />);
   expect(screen.getByText("Parts still needed")).toBeVisible();
+  expect(screen.getByText("Revenue at risk").nextElementSibling).toHaveTextContent("$0");
   expect(screen.getByText("Response cost")).toBeVisible();
-  expect(screen.queryByText("Revenue at risk")).not.toBeInTheDocument();
+  expect(screen.queryByText("Margin at risk")).not.toBeInTheDocument();
 });
 it("renders customer-line semantics only when the exact saved one-to-one lineage and percentage agree", () => {
   const snapshot = {disruption: null, inventory: [],
