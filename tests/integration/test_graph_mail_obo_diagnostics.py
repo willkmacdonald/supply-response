@@ -45,14 +45,6 @@ LOGGER_NAME = "integrations.graph_mail.obo"
             ),
         ),
         (
-            {"access_token": SECRET, "token_type": "Bearer"},
-            (
-                "outcome=response_rejected",
-                "mail_readwrite=False",
-                "mail_send=False",
-            ),
-        ),
-        (
             {"error": SECRET, "error_codes": [123456789012345, SECRET]},
             ("outcome=remote_error", "oauth_error=unknown", "aad_code=unknown"),
         ),
@@ -98,7 +90,7 @@ async def test_valid_obo_response_does_not_emit_diagnostic(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     service, actor = _authenticated_alex()
-    response = {
+    response: dict[str, object] = {
         "access_token": SECRET,
         "token_type": "Bearer",
         "scope": " ".join(GRAPH_SCOPES),

@@ -463,6 +463,24 @@ async def test_obo_accepts_resource_qualified_graph_mail_scopes():
 
 
 @pytest.mark.anyio
+async def test_obo_accepts_vendor_scope_metadata_without_revalidating_it():
+    auth_service, actor = _authenticated_alex()
+    confidential = ConfidentialClient(
+        {
+            "access_token": "fixture-downstream-secret",
+            "token_type": "Bearer",
+            "scope": "Mail.ReadWrite Mail.Send https://graph.microsoft.com/.default",
+        }
+    )
+
+    token = await GraphOboExchange(confidential, auth_service=auth_service).exchange(
+        actor
+    )
+
+    assert token.reveal() == "fixture-downstream-secret"
+
+
+@pytest.mark.anyio
 async def test_obo_rejects_foreign_actor_before_confidential_client_call():
     auth_service, _ = _authenticated_alex()
     _, foreign_actor = _authenticated_alex()

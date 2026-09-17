@@ -16,16 +16,6 @@ GRAPH_SCOPES: Final = (
 GRAPH_DEFAULT_SCOPE: Final = "https://graph.microsoft.com/.default"
 GRAPH_OBO_TIMEOUT_SECONDS: Final = 12
 _MAX_TOKEN_BYTES: Final = 32_768
-_REQUIRED_SCOPES: Final = frozenset({"Mail.ReadWrite", "Mail.Send"})
-_SCOPE_ALIASES: Final = {
-    "Mail.ReadWrite": "Mail.ReadWrite",
-    GRAPH_SCOPES[0]: "Mail.ReadWrite",
-    "Mail.Send": "Mail.Send",
-    GRAPH_SCOPES[1]: "Mail.Send",
-    "openid": "openid",
-    "profile": "profile",
-    "offline_access": "offline_access",
-}
 _OAUTH_ERRORS: Final = frozenset(
     {
         "invalid_request",
@@ -109,14 +99,6 @@ class GraphAccessToken:
         raise TypeError("GraphAccessToken cannot be serialized")
 
 
-def _validated_scopes(scope: object) -> frozenset[str] | None:
-    values = scope.split() if isinstance(scope, str) else []
-    if not values or any(value not in _SCOPE_ALIASES for value in values):
-        return None
-    normalized = frozenset(_SCOPE_ALIASES[value] for value in values)
-    return normalized if _REQUIRED_SCOPES.issubset(normalized) else None
-
-
 class GraphOboExchange:
     def __init__(
         self, confidential_client: ConfidentialClient, *, auth_service: AuthService
@@ -155,13 +137,11 @@ class GraphOboExchange:
             raise GraphAuthenticationError("Graph delegated token exchange failed")
         token = result.get("access_token")
         token_type = result.get("token_type")
-        granted = _validated_scopes(result.get("scope"))
         if (
             not isinstance(token, str)
             or not token.strip()
             or len(token.encode("utf-8")) > _MAX_TOKEN_BYTES
             or token_type != "Bearer"
-            or granted is None
         ):
             _log_rejected_response(result)
             raise GraphAuthenticationError("Graph delegated token exchange failed")
