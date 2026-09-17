@@ -1,5 +1,65 @@
 # Supply Response Personal-Tenant Deployment Plan
 
+## Direct Microsoft Graph sendMail release — 2026-09-17
+
+Status: Deployed. Scope: deploy commit `7b2ab23` to the existing `ca-sr-demo`
+Container App. The release replaces the multi-request draft/read-back/send path
+with Microsoft Graph's documented `POST /me/sendMail` operation while preserving
+the existing reviewed-email UI, duplicate-send guard, fixed recipient, and
+explicit user-confirmed send. It does not change identities, consent,
+permissions, infrastructure, mailbox configuration, or the business workflow,
+and deployment does not send an email.
+
+### All validation checks pass — direct Graph sendMail
+
+- [x] 1. AZD Installation
+- [x] 2. Schema Validation
+- [x] 3. Environment Setup
+- [x] 4. Authentication Check
+- [x] 5. Subscription/Location Check
+- [x] 6. Aspire Pre-Provisioning Checks: not applicable
+- [x] 7. Provision Preview
+- [x] 8. Build Verification
+- [x] 9. Docker Build Context Validation
+- [x] 10. Package Validation
+- [x] 11. Azure Policy Validation
+- [x] 12. Aspire Post-Provisioning Checks: not applicable
+
+### Validation proof — direct Graph sendMail
+
+At `2026-09-17T15:47:47Z`, commit `7b2ab23` was present on local `main` after
+being pushed to `github/main`. AZD 1.30.0 and the existing
+`supply-response-personal` environment were selected. The guarded read-only
+preflight matched the Azure Dev subscription, tenant, East US 2 location,
+existing Container App, shared resources, Entra registrations and delegated
+Graph mail permissions, Foundry project, and Fabric SQL Database. The no-apply
+provisioning preview completed without a blocking error.
+
+The Python package, Bicep template, shell scripts, production web bundle, exact
+tenant-configured Docker image, and AZD package all built successfully. The 103
+directly affected Graph, execution, API, and deployment tests passed; all 389
+web tests passed; scoped Ruff and Pyright checks passed. Seven existing Azure
+policy assignments were readable. Static Bicep review confirmed AcrPull at the
+shared registry, Key Vault Secrets User at the application vault, and Foundry
+User at the configured project, each scoped to its target resource. No mailbox
+operation, email, tenant
+permission change, schema change, or live-data deletion occurred during
+validation.
+
+### Deployment proof — direct Graph sendMail
+
+At `2026-09-17T15:54:26Z`, the guarded existing-environment deployment
+activated revision `ca-sr-demo--0000052` on immutable image
+`sha256:151b0ea4acc5dcc733b8b4d0fbeac857e1c8263c2a5ec5bd0d6e2dd38b3f6af9`.
+The revision is Healthy, Provisioned, Running with one replica, is both the
+latest and latest-ready revision, and receives 100% of traffic. The public
+`/health` endpoint returned the expected live Fabric SQL runtime contract.
+
+Read-only live role verification confirmed AcrPull at the shared registry, Key
+Vault Secrets User at the application vault, and Foundry User at the configured
+project. No mailbox operation, email, tenant permission change, schema change,
+or live-data deletion occurred during deployment or verification.
+
 ## Native MSAL response acceptance release — 2026-09-17
 
 Status: Deployed. Scope: deploy commit `aa23272` to the existing `ca-sr-demo`
