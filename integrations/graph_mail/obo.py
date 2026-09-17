@@ -21,6 +21,7 @@ GRAPH_SCOPES: Final = (
     "https://graph.microsoft.com/Mail.ReadWrite",
     "https://graph.microsoft.com/Mail.Send",
 )
+GRAPH_DEFAULT_SCOPE: Final = "https://graph.microsoft.com/.default"
 GRAPH_OBO_TIMEOUT_SECONDS: Final = 12
 _MAX_TOKEN_BYTES: Final = 32_768
 _REQUIRED_SCOPES: Final = frozenset({"Mail.ReadWrite", "Mail.Send"})
@@ -302,7 +303,7 @@ class GraphOboExchange:
             ) from None
         try:
             result = self._client.acquire_token_on_behalf_of(
-                user_assertion=assertion.reveal(), scopes=list(GRAPH_SCOPES)
+                user_assertion=assertion.reveal(), scopes=[GRAPH_DEFAULT_SCOPE]
             )
         except Exception:  # noqa: BLE001 - sanitize provider/library details
             raise GraphAuthenticationError(

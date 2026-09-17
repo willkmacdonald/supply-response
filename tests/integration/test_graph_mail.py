@@ -25,6 +25,8 @@ from integrations.graph_mail.obo import (
 from tests.auth.test_token_authorization import API_CLIENT_ID, TENANT_ID
 from tests.integration.test_workiq_contract import _authenticated_alex
 
+GRAPH_DEFAULT_SCOPE = "https://graph.microsoft.com/.default"
+
 
 class StubObo:
     def __init__(self) -> None:
@@ -415,7 +417,7 @@ async def test_capability_rejects_sent_item_from_another_mailbox():
 
 
 @pytest.mark.anyio
-async def test_obo_uses_validated_assertion_and_explicit_graph_mail_scopes():
+async def test_obo_uses_validated_assertion_and_graph_default_scope():
     auth_service, actor = _authenticated_alex()
     confidential = ConfidentialClient(
         {
@@ -432,7 +434,7 @@ async def test_obo_uses_validated_assertion_and_explicit_graph_mail_scopes():
     assert confidential.calls == [
         {
             "user_assertion": actor.downstream_user_assertion.reveal(),
-            "scopes": list(GRAPH_SCOPES),
+            "scopes": [GRAPH_DEFAULT_SCOPE],
         }
     ]
     assert "fixture-downstream-secret" not in repr(token)
@@ -474,7 +476,7 @@ async def test_obo_rejects_foreign_actor_before_confidential_client_call():
 
 
 @pytest.mark.anyio
-async def test_production_obo_builder_accepts_only_graph_mail_scopes(monkeypatch):
+async def test_production_obo_builder_uses_graph_default_scope(monkeypatch):
     authority = f"https://login.microsoftonline.com/{TENANT_ID}"
     requests: list[httpx.Request] = []
     token_fields: list[dict[str, list[str]]] = []
@@ -519,7 +521,7 @@ async def test_production_obo_builder_accepts_only_graph_mail_scopes(monkeypatch
     assert token.reveal() == "fixture-production-graph-token"
     assert [request.method for request in requests] == ["GET", "POST"]
     assert set(token_fields[0]["scope"][0].split()) == {
-        *GRAPH_SCOPES,
+        GRAPH_DEFAULT_SCOPE,
         "offline_access",
         "openid",
         "profile",
