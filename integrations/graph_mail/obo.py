@@ -49,24 +49,13 @@ _OAUTH_ERRORS: Final = frozenset(
         "server_error",
     }
 )
-_AAD_CODES: Final = frozenset(
-    {
-        500011,
-        500131,
-        50076,
-        50079,
-        53003,
-        65001,
-        65004,
-        650057,
-        70000,
-        70011,
-        700016,
-        7000215,
-        7000222,
-    }
-)
 _logger = logging.getLogger(__name__)
+
+
+def _safe_aad_code(value: object) -> int | str:
+    # Entra error codes are bounded integers. Unlike provider text, they cannot
+    # carry tokens, identifiers, claims, or free-form message content.
+    return value if type(value) is int and 10_000 <= value <= 99_999_999 else "unknown"
 
 
 def _log_rejected_response(result: dict[str, Any]) -> str:
@@ -77,11 +66,7 @@ def _log_rejected_response(result: dict[str, Any]) -> str:
     )
     codes = result.get("error_codes")
     first_code = codes[0] if isinstance(codes, list) and codes else None
-    aad_code = (
-        first_code
-        if type(first_code) is int and first_code in _AAD_CODES
-        else "unknown"
-    )
+    aad_code = _safe_aad_code(first_code)
     token = result.get("access_token")
     scopes = result.get("scope")
     scope_values = scopes.split() if isinstance(scopes, str) else []
@@ -164,7 +149,7 @@ def _safe_token_result(value: dict[str, Any]) -> dict[str, Any]:
             "error_codes": [
                 candidate
                 for candidate in codes
-                if type(candidate) is int and candidate in _AAD_CODES
+                if _safe_aad_code(candidate) != "unknown"
             ][:1]
             if isinstance(codes, list)
             else [],

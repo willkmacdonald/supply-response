@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlparse
 
+import httpx
 import pytest
 
 from integrations.graph_mail.obo import (
     GRAPH_SCOPES,
     GraphAuthenticationError,
     GraphOboExchange,
+    build_graph_obo_exchange,
 )
+from tests.auth.test_token_authorization import API_CLIENT_ID, TENANT_ID
 from tests.integration.test_graph_mail import ConfidentialClient
 from tests.integration.test_workiq_contract import _authenticated_alex
 
@@ -108,3 +112,56 @@ async def test_valid_obo_response_does_not_emit_diagnostic(
 
     assert token.reveal() == SECRET
     assert not [record for record in caplog.records if record.name == LOGGER_NAME]
+
+
+@pytest.mark.anyio
+async def test_production_obo_preserves_bounded_numeric_aad_code(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    authority = f"https://login.microsoftonline.com/{TENANT_ID}"
+
+    async def entra(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "authorization_endpoint": f"{authority}/oauth2/v2.0/authorize",
+                    "token_endpoint": f"{authority}/oauth2/v2.0/token",
+                    "issuer": f"{authority}/v2.0",
+                },
+            )
+        assert urlparse(str(request.url)).path.endswith("/oauth2/v2.0/token")
+        return httpx.Response(
+            400,
+            json={
+                "error": "invalid_grant",
+                "error_codes": [9002313],
+                "error_description": SECRET,
+                "correlation_id": SECRET,
+            },
+        )
+
+    monkeypatch.setattr(
+        httpx,
+        "AsyncHTTPTransport",
+        lambda **_: httpx.MockTransport(entra),
+    )
+    service, actor = _authenticated_alex()
+
+    with (
+        caplog.at_level(logging.WARNING, logger=LOGGER_NAME),
+        pytest.raises(GraphAuthenticationError),
+    ):
+        await build_graph_obo_exchange(
+            client_id=API_CLIENT_ID,
+            client_secret="fixture-client-secret",
+            tenant_id=TENANT_ID,
+            auth_service=service,
+        ).exchange(actor)
+
+    records = [record for record in caplog.records if record.name == LOGGER_NAME]
+    assert len(records) == 1
+    assert "oauth_error=invalid_grant" in records[0].getMessage()
+    assert "aad_code=9002313" in records[0].getMessage()
+    assert SECRET not in repr(records[0].__dict__)
