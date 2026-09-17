@@ -1,5 +1,42 @@
 # Supply Response Personal-Tenant Deployment Plan
 
+## Native MSAL Graph OBO release — 2026-09-17
+
+Status: Deployed. Scope: commit `2b56e5b` replaced the custom Graph OBO HTTP
+response wrapper with MSAL's supported HTTP path and built-in 12-second timeout.
+It preserves the existing `.default` scope, delegated Alex actor validation,
+opaque token handling, and privacy-safe error reporting. It does not change the
+business workflow, permissions, identities, infrastructure, mailbox addresses,
+or tenant configuration, and deployment did not send an email.
+
+### Validation proof — native MSAL Graph OBO
+
+The guarded read-only preflight matched the existing Azure Dev subscription,
+tenant, East US 2 location, Container App, shared resources, Entra
+registrations, Foundry project, and Fabric SQL Database. The no-apply preview
+completed successfully with no creates or deletes and only the already-known
+Container App and Application Insights projections.
+
+Bicep compiled, the Python packages and exact production Docker image built,
+the 56 affected Graph/API tests passed, and scoped Ruff and Pyright checks
+passed. Seven existing policy assignments were readable and static role checks
+remained unchanged.
+
+### Deployment proof — native MSAL Graph OBO
+
+At `2026-09-17T14:03:30Z`, commit `2b56e5b` was present on `github/main`
+and the guarded existing-environment deployment activated revision
+`ca-sr-demo--0000050` on immutable image
+`sha256:50acf080aa969768fe518ee06401625179ead0fb9ef487f8718adf9ef780599b`.
+The revision is Healthy, Provisioned, Running with one replica, and receives
+100% of traffic.
+
+The guarded live Fabric and Foundry readiness smoke passed without a delegated
+user operation. Exact-scope checks confirmed AcrPull at the registry, Key Vault
+Secrets User at the application vault, and Foundry User at the configured
+project. No mailbox operation, email, tenant permission change, schema change,
+or live-data deletion occurred.
+
 ## Bounded Entra error-code diagnostic release — 2026-09-17
 
 Status: Deployed. Scope: deploy commit `8e3a30a` to the
