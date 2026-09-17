@@ -1,5 +1,57 @@
 # Supply Response Personal-Tenant Deployment Plan
 
+## Graph OBO rejection diagnostic release — 2026-09-17
+
+Status: Deployed. Scope: deploy commit `37d7f5a` to the existing `ca-sr-demo`
+Container App. The release adds privacy-safe, allowlisted OAuth category and AAD
+code logging to the existing Microsoft Graph OBO exchange. It does not change the
+email workflow, user-facing behavior, permissions, identities, infrastructure,
+database, Fabric, Foundry, Power BI, or mailbox configuration, and it does not
+send an email.
+
+### All validation checks pass — Graph OBO rejection diagnostic
+
+- [x] 1. Core Azure CLI validation
+- [x] 2. Container build verification
+- [x] 3. Azure policy validation
+- [x] 4. Application regression verification
+- [x] 5. Static role verification
+
+### Validation Proof — Graph OBO rejection diagnostic
+
+At `2026-09-17T05:06:47Z`, the selected `supply-response-personal`
+environment and guarded read-only preflight matched the existing Azure Dev
+subscription, tenant, East US 2 location, Container App, shared Container Apps
+environment, registry, Log Analytics workspace, Entra registrations, Foundry
+project, Fabric SQL Database, and fixed mail addresses. No cloud resource was
+changed.
+
+The no-apply provisioning preview completed successfully with no creates or
+deletes and only the already-known Container App and Application Insights
+projections. Bicep compiled, the Python source and wheel packages built, and the
+exact Docker application image built successfully, including the production web
+bundle across 205 modules. The affected Graph/API suite passed 56 tests and
+scoped Ruff passed. Seven existing policy assignments were readable with no
+preview denial. Static Bicep review reconfirmed the existing app identity is
+limited to AcrPull at the registry, Key Vault Secrets User at the vault, and
+Foundry User at the exact project. No mailbox operation, email, permission
+change, schema change, or live-data change occurred during validation.
+
+### Deployment Proof — Graph OBO rejection diagnostic
+
+At `2026-09-17T05:13:17Z`, commit `37d7f5a13813` was present on
+`github/main` and the repository's guarded existing-environment deployment
+activated revision `ca-sr-demo--0000048` on immutable image
+`sha256:b9ec0152b93b974683364b3589e0ee6217b92b102689fb678599d4ad7c7d37d5`.
+The revision is Healthy, Provisioned, Running, and receives 100% traffic.
+
+The guarded live Fabric and Foundry readiness smoke passed without a delegated
+user operation. Live exact-scope checks confirmed AcrPull at the registry, Key
+Vault Secrets User at the application vault, and Foundry User at the configured
+project. No mailbox operation, email, tenant permission change, schema change,
+or live-data deletion occurred. The next failed Graph OBO attempt will emit only
+the allowlisted OAuth category and AAD code needed to diagnose the rejection.
+
 ## Explicit Microsoft Graph OBO scopes release — 2026-09-16
 
 Status: Deployed; live signed-in Alex OBO acceptance remains pending. Scope:
