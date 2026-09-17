@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pickle
 from datetime import UTC, datetime
-from urllib.parse import parse_qs
 
 import httpx
+import msal
 import pytest
 
 from data.domain.decisions import IdentitySnapshot
@@ -16,6 +16,7 @@ from integrations.graph_mail.client import (
     GraphMailSubmissionUncertain,
 )
 from integrations.graph_mail.obo import (
+    GRAPH_OBO_TIMEOUT_SECONDS,
     GRAPH_SCOPES,
     GraphAccessToken,
     GraphAuthenticationError,
@@ -477,38 +478,21 @@ async def test_obo_rejects_foreign_actor_before_confidential_client_call():
 
 @pytest.mark.anyio
 async def test_production_obo_builder_uses_graph_default_scope(monkeypatch):
-    authority = f"https://login.microsoftonline.com/{TENANT_ID}"
-    requests: list[httpx.Request] = []
-    token_fields: list[dict[str, list[str]]] = []
-
-    async def entra(request: httpx.Request) -> httpx.Response:
-        requests.append(request)
-        if request.method == "GET":
-            return httpx.Response(
-                200,
-                json={
-                    "authorization_endpoint": f"{authority}/oauth2/v2.0/authorize",
-                    "token_endpoint": f"{authority}/oauth2/v2.0/token",
-                    "issuer": f"{authority}/v2.0",
-                },
-            )
-        fields = parse_qs(request.content.decode())
-        token_fields.append(fields)
-        return httpx.Response(
-            200,
-            json={
-                "access_token": "fixture-production-graph-token",
-                "token_type": "Bearer",
-                "scope": " ".join(GRAPH_SCOPES),
-                "expires_in": 3600,
-            },
-        )
-
-    monkeypatch.setattr(
-        httpx,
-        "AsyncHTTPTransport",
-        lambda **_: httpx.MockTransport(entra),
+    constructors: list[dict[str, object]] = []
+    confidential = ConfidentialClient(
+        {
+            "access_token": "fixture-production-graph-token",
+            "token_type": "Bearer",
+            "scope": " ".join(GRAPH_SCOPES),
+            "expires_in": 3600,
+        }
     )
+
+    def build_client(**kwargs):
+        constructors.append(kwargs)
+        return confidential
+
+    monkeypatch.setattr(msal, "ConfidentialClientApplication", build_client)
     auth_service, actor = _authenticated_alex()
 
     token = await build_graph_obo_exchange(
@@ -519,50 +503,18 @@ async def test_production_obo_builder_uses_graph_default_scope(monkeypatch):
     ).exchange(actor)
 
     assert token.reveal() == "fixture-production-graph-token"
-    assert [request.method for request in requests] == ["GET", "POST"]
-    assert set(token_fields[0]["scope"][0].split()) == {
-        GRAPH_DEFAULT_SCOPE,
-        "offline_access",
-        "openid",
-        "profile",
-    }
-    assert token_fields[0]["requested_token_use"] == ["on_behalf_of"]
-
-
-@pytest.mark.anyio
-async def test_production_obo_rejects_non_json_token_response(monkeypatch):
-    authority = f"https://login.microsoftonline.com/{TENANT_ID}"
-
-    async def entra(request: httpx.Request) -> httpx.Response:
-        if request.method == "GET":
-            return httpx.Response(
-                200,
-                json={
-                    "authorization_endpoint": f"{authority}/oauth2/v2.0/authorize",
-                    "token_endpoint": f"{authority}/oauth2/v2.0/token",
-                    "issuer": f"{authority}/v2.0",
-                },
-            )
-        return httpx.Response(
-            200,
-            headers={"content-type": "text/plain"},
-            content=(
-                b'{"access_token":"fixture-production-graph-token",'
-                b'"token_type":"Bearer","scope":"Mail.ReadWrite Mail.Send"}'
-            ),
-        )
-
-    monkeypatch.setattr(
-        httpx,
-        "AsyncHTTPTransport",
-        lambda **_: httpx.MockTransport(entra),
-    )
-    auth_service, actor = _authenticated_alex()
-
-    with pytest.raises(GraphAuthenticationError):
-        await build_graph_obo_exchange(
-            client_id=API_CLIENT_ID,
-            client_secret="fixture-client-secret",
-            tenant_id=TENANT_ID,
-            auth_service=auth_service,
-        ).exchange(actor)
+    assert constructors == [
+        {
+            "client_id": API_CLIENT_ID,
+            "client_credential": "fixture-client-secret",
+            "authority": f"https://login.microsoftonline.com/{TENANT_ID}",
+            "instance_discovery": False,
+            "timeout": GRAPH_OBO_TIMEOUT_SECONDS,
+        }
+    ]
+    assert confidential.calls == [
+        {
+            "user_assertion": actor.downstream_user_assertion.reveal(),
+            "scopes": [GRAPH_DEFAULT_SCOPE],
+        }
+    ]

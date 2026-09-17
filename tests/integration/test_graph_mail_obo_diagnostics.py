@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import logging
-from urllib.parse import urlparse
 
-import httpx
+import msal
 import pytest
 
 from integrations.graph_mail.obo import (
@@ -119,33 +118,16 @@ async def test_production_obo_preserves_bounded_numeric_aad_code(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    authority = f"https://login.microsoftonline.com/{TENANT_ID}"
-
-    async def entra(request: httpx.Request) -> httpx.Response:
-        if request.method == "GET":
-            return httpx.Response(
-                200,
-                json={
-                    "authorization_endpoint": f"{authority}/oauth2/v2.0/authorize",
-                    "token_endpoint": f"{authority}/oauth2/v2.0/token",
-                    "issuer": f"{authority}/v2.0",
-                },
-            )
-        assert urlparse(str(request.url)).path.endswith("/oauth2/v2.0/token")
-        return httpx.Response(
-            400,
-            json={
-                "error": "invalid_grant",
-                "error_codes": [9002313],
-                "error_description": SECRET,
-                "correlation_id": SECRET,
-            },
-        )
-
+    response = {
+        "error": "invalid_grant",
+        "error_codes": [9002313],
+        "error_description": SECRET,
+        "correlation_id": SECRET,
+    }
     monkeypatch.setattr(
-        httpx,
-        "AsyncHTTPTransport",
-        lambda **_: httpx.MockTransport(entra),
+        msal,
+        "ConfidentialClientApplication",
+        lambda **_: ConfidentialClient(response),
     )
     service, actor = _authenticated_alex()
 
