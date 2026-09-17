@@ -5,6 +5,7 @@ import type {SupplierEmailState} from "../types";
 export interface SupplierEmailPanelProps {
   email: SupplierEmailState;
   busy: boolean;
+  sendEnabled: boolean;
   onSave: (input: {revision: number; subject: string; body: string}) => Promise<SupplierEmailState>;
   onReview: (revision: number) => Promise<SupplierEmailState>;
   onSend: (revision: number) => Promise<SupplierEmailState>;
@@ -25,6 +26,7 @@ type PendingAction = "save" | "review" | "send" | "check";
 export function SupplierEmailPanel({
   email,
   busy,
+  sendEnabled,
   onSave,
   onReview,
   onSend,
@@ -113,7 +115,7 @@ export function SupplierEmailPanel({
           () => onReview(current.revision))}>
         {pending === "review" ? "Reviewing…" : "Review this email"}
       </button>}
-      {editable && <button type="button" disabled={actionDisabled || dirty || !reviewed}
+      {editable && <button type="button" disabled={actionDisabled || dirty || !reviewed || !sendEnabled}
         onClick={() => void run("send", "Sending…", next => statusLabels.get(next.send_status) ?? "Send status unavailable",
           () => onSend(current.revision))}>
         {pending === "send" ? "Sending…" : "Send email"}
@@ -124,6 +126,7 @@ export function SupplierEmailPanel({
         {pending === "check" ? "Checking…" : "Check send status"}
       </button>}
     </div>
+    {!sendEnabled && <p>Email sending is not enabled for this demo environment.</p>}
     {notice && <p className="mail-notice" role="status" aria-live="polite">{notice}</p>}
     <p className="mail-boundary">This status reflects Microsoft 365 submission and send evidence only. It does not confirm receipt.</p>
   </section>;

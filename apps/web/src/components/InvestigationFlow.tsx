@@ -101,6 +101,7 @@ function InvestigationPresentation({state, independentFinanceEnabled}: {state: C
           decision={state.decision} actions={state.actions} drafts={state.drafts}
           retrying={state.operation === "planning"} onRetry={state.retryPlanning} onRetryAction={state.retryAction}
           supplierEmail={state.supplierEmail} supplierEmailLoading={state.supplierEmailLoading}
+          supplierEmailSendEnabled={state.runtime?.capability_health?.supplier_email === "ready"}
           supplierEmailError={state.supplierEmailError}
           onSaveSupplierEmail={state.saveSupplierEmail}
           onReviewSupplierEmail={state.reviewSupplierEmail} onSendSupplierEmail={state.sendSupplierEmail}

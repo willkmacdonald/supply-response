@@ -68,6 +68,7 @@ def test_runtime_contract_is_server_owned_and_cannot_be_overridden(client):
             "work_iq": "ready",
             "agent_runtime": "ready",
             "power_bi": "unavailable",
+            "supplier_email": "unavailable",
         },
         "deployment_contract": None,
     }

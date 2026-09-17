@@ -86,6 +86,11 @@ describe("API client", () => {
     expect(safeErrorMessage(error)).toBe("The information needed for this analysis could not be retrieved.");
   });
 
+  it("explains when supplier email sending is disabled", () => {
+    const error = new ApiRequestError("untrusted mutable message", 409, "SUPPLIER_EMAIL_SEND_DISABLED");
+    expect(safeErrorMessage(error)).toBe("Email sending is not enabled for this demo environment.");
+  });
+
   it("attaches fresh bearer tokens dynamically without persistence", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ok: true, json: async () => ({runtime_mode: "fallback"})})

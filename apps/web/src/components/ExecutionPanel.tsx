@@ -11,6 +11,7 @@ interface ExecutionPanelProps {
   onRetry: () => void;
   onRetryAction: (actionId: string) => void;
   supplierEmail?: SupplierEmailState | null;
+  supplierEmailSendEnabled?: boolean;
   supplierEmailLoading?: boolean;
   supplierEmailError?: string | null;
   onSaveSupplierEmail?: (input: {revision: number; subject: string; body: string}) => Promise<SupplierEmailState>;
@@ -62,6 +63,7 @@ function executionDescription(action: ExecutionAction): string {
 export function ExecutionPanel({
   decision, actions, drafts, retrying, busy, canRetryPlanning = false, onRetry, onRetryAction,
   supplierEmail, supplierEmailLoading, supplierEmailError,
+  supplierEmailSendEnabled = false,
   onSaveSupplierEmail, onReviewSupplierEmail, onSendSupplierEmail, onCheckSupplierEmail,
 }: ExecutionPanelProps) {
   if (!decision || decision.kind !== "approved") return null;
@@ -100,7 +102,7 @@ export function ExecutionPanel({
     </article>)}
   </section>
     {supplierEmail && onSaveSupplierEmail && onReviewSupplierEmail && onSendSupplierEmail && onCheckSupplierEmail &&
-      <SupplierEmailPanel email={supplierEmail} busy={Boolean(busy)} onSave={onSaveSupplierEmail}
+      <SupplierEmailPanel email={supplierEmail} busy={Boolean(busy)} sendEnabled={supplierEmailSendEnabled} onSave={onSaveSupplierEmail}
         onReview={onReviewSupplierEmail} onSend={onSendSupplierEmail} onCheckStatus={onCheckSupplierEmail} />}
     {!supplierEmail && supplierEmailLoading && <section className="panel supplier-email-panel" aria-labelledby="supplier-email-loading-heading">
       <p className="step">Supplier email</p>

@@ -33,7 +33,7 @@ describe("SupplierEmailPanel", () => {
 
     function Harness() {
       const [email, setEmail] = useState(initialEmail);
-      return <SupplierEmailPanel email={email} busy={false}
+      return <SupplierEmailPanel email={email} busy={false} sendEnabled
         onSave={async input => {
           save(input);
           const next = {...email, ...input, revision: email.revision + 1, reviewed_revision: null,
@@ -93,7 +93,7 @@ describe("SupplierEmailPanel", () => {
     const reviewed = {...initialEmail, reviewed_revision: 1, reviewed_at: "2026-09-15T12:00:00Z",
       reviewed_by: {persona_id: "RL-PERSONA-ALEX"} as never};
 
-    render(<SupplierEmailPanel email={reviewed} busy={false} onSave={vi.fn()} onReview={vi.fn()}
+    render(<SupplierEmailPanel email={reviewed} busy={false} sendEnabled onSave={vi.fn()} onReview={vi.fn()}
       onSend={onSend} onCheckStatus={vi.fn(() => new Promise<SupplierEmailState>(() => undefined))} />);
 
     const send = screen.getByRole("button", {name: "Send email"});
@@ -114,7 +114,7 @@ describe("SupplierEmailPanel", () => {
     const accepted = {...initialEmail, reviewed_revision: 1, reviewed_at: "2026-09-15T12:00:00Z",
       reviewed_by: {persona_id: "RL-PERSONA-ALEX"} as never, send_status: "accepted" as const};
 
-    render(<SupplierEmailPanel email={accepted} busy={false} onSave={vi.fn()} onReview={vi.fn()}
+    render(<SupplierEmailPanel email={accepted} busy={false} sendEnabled onSave={vi.fn()} onReview={vi.fn()}
       onSend={vi.fn()} onCheckStatus={onCheckStatus} />);
 
     expect(screen.getByText("Accepted by Microsoft 365")).toBeVisible();
@@ -133,7 +133,7 @@ describe("SupplierEmailPanel", () => {
     ["failed", "Send failed"],
     ["uncertain", "Send status uncertain"],
   ] as const)("maps %s to the proven status %s without claiming delivery", (send_status, label) => {
-    render(<SupplierEmailPanel email={{...initialEmail, send_status}} busy={false}
+    render(<SupplierEmailPanel email={{...initialEmail, send_status}} busy={false} sendEnabled
       onSave={vi.fn()} onReview={vi.fn()} onSend={vi.fn()}
       onCheckStatus={send_status === "accepted" ? vi.fn(() => new Promise<SupplierEmailState>(() => undefined)) : vi.fn()} />);
 
@@ -144,5 +144,16 @@ describe("SupplierEmailPanel", () => {
     } else {
       expect(screen.queryByRole("button", {name: "Check send status"})).not.toBeInTheDocument();
     }
+  });
+
+  it("disables Send and explains when the environment cannot send email", () => {
+    const reviewed = {...initialEmail, reviewed_revision: 1, reviewed_at: "2026-09-15T12:00:00Z",
+      reviewed_by: {persona_id: "RL-PERSONA-ALEX"} as never};
+
+    render(<SupplierEmailPanel email={reviewed} busy={false} sendEnabled={false}
+      onSave={vi.fn()} onReview={vi.fn()} onSend={vi.fn()} onCheckStatus={vi.fn()} />);
+
+    expect(screen.getByRole("button", {name: "Send email"})).toBeDisabled();
+    expect(screen.getByText("Email sending is not enabled for this demo environment.")).toBeVisible();
   });
 });

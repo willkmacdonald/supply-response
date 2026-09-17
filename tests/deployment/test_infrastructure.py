@@ -345,6 +345,7 @@ def test_mail_send_configuration_is_default_off_and_declares_exact_graph_scopes(
     manifest = json.loads(_read("infra/entra/api-app.json"))
     configure = _read("infra/entra/configure.sh")
     preflight = _read("scripts/preflight_personal_tenant.sh")
+    deploy = _read("scripts/deploy_personal_tenant.sh")
 
     assert "mail_send_enabled: bool = False" in settings
     assert "param mailSendEnabled bool = false" in main
@@ -369,6 +370,13 @@ def test_mail_send_configuration_is_default_off_and_declares_exact_graph_scopes(
     assert "Mail.ReadWrite" in preflight
     assert "Mail.Send" in preflight
     assert 'graph_sp_json="$(python3' not in preflight
+    required = deploy.split("required_runtime_settings=(", 1)[1].split(")", 1)[0]
+    for setting in (
+        "SUPPLY_RESPONSE_MAIL_FROM_ADDRESS",
+        "SUPPLY_RESPONSE_MAIL_TO_ADDRESS",
+        "SUPPLY_RESPONSE_MAIL_SEND_ENABLED",
+    ):
+        assert setting in required
 
 
 def test_deploy_preflight_validates_versioned_workiq_binding_receipt():

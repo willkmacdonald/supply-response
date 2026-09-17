@@ -50,7 +50,12 @@ def runtime(
         ),
         power_bi_available=power_bi_available,
         power_bi_url=services.power_bi_url if power_bi_available else None,
-        capability_health=readiness.capability_health,
+        capability_health={
+            **readiness.capability_health,
+            "supplier_email": (
+                "ready" if services.settings.mail_send_enabled else "unavailable"
+            ),
+        },
         deployment_contract=(
             {
                 "scenario_effective_time": services.settings.scenario_effective_time.isoformat(),

@@ -30,6 +30,7 @@ const SAFE_ERROR_MESSAGES = new Map<string, string>([
   ["FINANCE_COMMAND_CONFLICT", "This Finance command conflicts with the current request. Refresh before continuing."],
   ["FINANCE_FINALIZATION_CONFLICT", "Final approval conflicts with the current proposal. Refresh before continuing."],
   ["ACTION_PLANNING_RETRY_NOT_AVAILABLE", "Independent action planning is not enabled for retry."],
+  ["SUPPLIER_EMAIL_SEND_DISABLED", "Email sending is not enabled for this demo environment."],
 ]);
 const GENERIC_ERROR_MESSAGE = "The request could not be completed.";
 
