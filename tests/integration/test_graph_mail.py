@@ -100,6 +100,42 @@ def _message(revision: SupplierEmailRevision, *, sent: bool = False):
 
 
 @pytest.mark.anyio
+async def test_adapter_sends_reviewed_message_in_one_standard_graph_call(
+    reviewed_revision,
+):
+    requests: list[httpx.Request] = []
+
+    async def graph(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.headers["Authorization"] == "Bearer fixture-graph-access-token"
+        assert request.headers["Content-Type"] == "application/json"
+        assert request.content == (
+            b'{"message":{"subject":"Reviewed supplier recovery request",'
+            b'"body":{"contentType":"Text","content":"Fictional demo body."},'
+            b'"toRecipients":[{"emailAddress":{"address":"will@willmacdonald.com"}}]}}'
+        )
+        return httpx.Response(202)
+
+    obo = StubObo()
+    async with httpx.AsyncClient(
+        base_url="https://graph.microsoft.com",
+        transport=httpx.MockTransport(graph),
+        follow_redirects=False,
+    ) as http:
+        client = GraphMailClient(
+            http=http,
+            obo=obo,
+            mailbox_address="agent@willmacdonald.com",
+        )
+        await client.send_message(reviewed_revision, object())
+
+    assert [(request.method, request.url.path) for request in requests] == [
+        ("POST", "/v1.0/me/sendMail"),
+    ]
+    assert len(obo.actors) == 1
+
+
+@pytest.mark.anyio
 async def test_adapter_creates_verifies_and_submits_exact_immutable_draft(
     reviewed_revision,
 ):

@@ -105,30 +105,24 @@ describe("SupplierEmailPanel", () => {
     expect(onSend).toHaveBeenCalledWith(1);
 
     finishSend({...reviewed, send_status: "accepted"});
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Accepted by Microsoft 365"));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Email submitted to Microsoft 365"));
   });
 
-  it("reconciles an accepted submission once while keeping its accepted feedback visible", async () => {
-    let finishCheck!: (email: SupplierEmailState) => void;
-    const onCheckStatus = vi.fn(() => new Promise<SupplierEmailState>(resolve => { finishCheck = resolve; }));
+  it("keeps an accepted submission visible without starting another provider check", async () => {
+    const onCheckStatus = vi.fn();
     const accepted = {...initialEmail, reviewed_revision: 1, reviewed_at: "2026-09-15T12:00:00Z",
       reviewed_by: {persona_id: "RL-PERSONA-ALEX"} as never, send_status: "accepted" as const};
 
     render(<SupplierEmailPanel email={accepted} busy={false} sendEnabled onSave={vi.fn()} onReview={vi.fn()}
       onSend={vi.fn()} onCheckStatus={onCheckStatus} />);
 
-    expect(screen.getByText("Accepted by Microsoft 365")).toBeVisible();
-    await waitFor(() => expect(onCheckStatus).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("Accepted by Microsoft 365")).toBeVisible();
+    expect(screen.getByText("Email submitted to Microsoft 365")).toBeVisible();
+    expect(onCheckStatus).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", {name: "Check send status"})).not.toBeInTheDocument();
-
-    finishCheck({...accepted, send_status: "sent-confirmed"});
-    expect(await screen.findByRole("status")).toHaveTextContent("Sent");
-    expect(onCheckStatus).toHaveBeenCalledTimes(1);
   });
 
   it.each([
-    ["accepted", "Accepted by Microsoft 365"],
+    ["accepted", "Email submitted to Microsoft 365"],
     ["sent-confirmed", "Sent"],
     ["failed", "Send failed"],
     ["uncertain", "Send status uncertain"],
@@ -139,11 +133,7 @@ describe("SupplierEmailPanel", () => {
 
     expect(screen.getByText(label)).toBeVisible();
     expect(screen.queryByText(/Delivered/i)).not.toBeInTheDocument();
-    if (send_status === "uncertain") {
-      expect(screen.getByRole("button", {name: "Check send status"})).toBeEnabled();
-    } else {
-      expect(screen.queryByRole("button", {name: "Check send status"})).not.toBeInTheDocument();
-    }
+    expect(screen.queryByRole("button", {name: "Check send status"})).not.toBeInTheDocument();
   });
 
   it("disables Send and explains when the environment cannot send email", () => {

@@ -407,36 +407,7 @@ class ReviewedEmailService:
             uow.commit()
 
         try:
-            draft = await self._graph_mail.create_draft(content, actor)
-        except GraphMailError as error:
-            return self._transition(
-                decision_id,
-                correlation_id,
-                expected_statuses=("submitting",),
-                status="failed",
-                failure_code=error.code,
-            )
-        prepared = self._transition(
-            decision_id,
-            correlation_id,
-            expected_statuses=("submitting",),
-            status="submitting",
-            provider_message_id=draft.provider_message_id,
-            internet_message_id=draft.internet_message_id,
-        )
-        if prepared.send_status != "submitting":
-            return prepared
-        with self._uow_factory() as uow:
-            persisted = uow.mail.get_current(decision_id)
-            if (
-                persisted is None
-                or persisted[1].correlation_id != correlation_id
-                or persisted[1].provider_message_id != draft.provider_message_id
-                or persisted[1].send_status != "submitting"
-            ):
-                return self._state(persisted) if persisted is not None else prepared
-        try:
-            await self._graph_mail.send_draft(draft.provider_message_id, actor)
+            await self._graph_mail.send_message(content, actor)
         except GraphMailSubmissionUncertain as error:
             return self._transition(
                 decision_id,

@@ -5,69 +5,34 @@ import pytest
 from integrations.graph_mail.client import (
     GraphMailError,
     GraphMailSubmissionUncertain,
-    ProviderDraft,
-    ProviderMessage,
 )
 from services.execution.mail_service import EmailRevisionConflict
-from services.persistence.store import SqlAlchemySupplierEmailRepository
 
 
 class FakeGraphMail:
-    def __init__(self, *, create_error=None, send_error=None, sent=False):
-        self.create_error = create_error
+    def __init__(self, *, send_error=None):
         self.send_error = send_error
-        self.sent = sent
-        self.create_calls = []
         self.send_calls = []
-        self.get_calls = []
 
-    async def create_draft(self, revision, actor):  # allowed: mocked provider seam
-        self.create_calls.append((revision, actor))
-        await asyncio.sleep(0.02)
-        if self.create_error is not None:
-            raise self.create_error
-        return ProviderDraft(
-            provider_message_id="immutable-provider-id",
-            internet_message_id="<fixture@willmacdonald.com>",
-        )
-
-    async def send_draft(self, provider_message_id, actor):
-        self.send_calls.append((provider_message_id, actor))
+    async def send_message(self, revision, actor):
+        self.send_calls.append((revision, actor))
         if self.send_error is not None:
             raise self.send_error
-
-    async def get_message(self, provider_message_id, actor):
-        self.get_calls.append((provider_message_id, actor))
-        revision = self.create_calls[0][0]
-        return ProviderMessage(
-            provider_message_id=provider_message_id,
-            internet_message_id="<fixture@willmacdonald.com>",
-            sender_address=revision.from_address,
-            to_addresses=(revision.to_address,),
-            subject=revision.subject,
-            body_content_type="text",
-            body=revision.body,
-            sent_at=(revision.reviewed_at if self.sent else None),
-        )
 
 
 class BlockingGraphMail(FakeGraphMail):
     def __init__(self) -> None:
         super().__init__()
-        self.create_started = asyncio.Event()
-        self.release_create = asyncio.Event()
+        self.send_started = asyncio.Event()
+        self.release_send = asyncio.Event()
 
-    async def create_draft(self, revision, actor):  # allowed: provider race fake
-        self.create_calls.append((revision, actor))
-        self.create_started.set()
-        await self.release_create.wait()
-        return ProviderDraft(
-            provider_message_id="immutable-provider-id",
-            internet_message_id="<fixture@willmacdonald.com>",
-        )
+    async def send_message(self, revision, actor):
+        self.send_calls.append((revision, actor))
+        self.send_started.set()
+        await self.release_send.wait()
 
 
-def _enable_mocked_send(services, graph: FakeGraphMail) -> None:
+def _enable_mocked_send(services, graph) -> None:
     services.mail_service._graph_mail = graph
     services.mail_service._mail_send_enabled = True
 
@@ -204,6 +169,25 @@ def _reviewed_email(client, services):
     return decision_id, path
 
 
+def test_send_uses_one_direct_graph_submission(client, services):
+    decision_id, path = _reviewed_email(client, services)
+    graph = FakeGraphMail()
+    _enable_mocked_send(services, graph)
+
+    sent = client.post(f"{path}/send", json={"revision": 1})
+    repeated = client.post(f"{path}/send", json={"revision": 1})
+
+    assert sent.status_code == repeated.status_code == 200
+    assert sent.json()["send_status"] == "accepted"
+    assert repeated.json() == sent.json()
+    assert len(graph.send_calls) == 1
+    with services.uow_factory() as uow:
+        _, delivery = uow.mail.get_current(decision_id)
+    assert delivery.provider_message_id is None
+    assert delivery.internet_message_id is None
+    assert delivery.correlation_id is not None
+
+
 def test_send_accepts_only_revision_and_persists_accepted_state(client, services):
     decision_id, path = _reviewed_email(client, services)
     graph = FakeGraphMail()
@@ -220,11 +204,11 @@ def test_send_accepts_only_revision_and_persists_accepted_state(client, services
     assert sent.status_code == repeated.status_code == 200
     assert sent.json()["send_status"] == "accepted"
     assert repeated.json() == sent.json()
-    assert len(graph.create_calls) == len(graph.send_calls) == 1
+    assert len(graph.send_calls) == 1
     with services.uow_factory() as uow:
         _, delivery = uow.mail.get_current(decision_id)
-    assert delivery.provider_message_id == "immutable-provider-id"
-    assert delivery.internet_message_id == "<fixture@willmacdonald.com>"
+    assert delivery.provider_message_id is None
+    assert delivery.internet_message_id is None
     assert delivery.correlation_id is not None
 
 
@@ -243,7 +227,7 @@ async def test_concurrent_send_claim_causes_at_most_one_provider_submission(
     )
 
     assert {first.send_status, second.send_status}.issubset({"submitting", "accepted"})
-    assert len(graph.create_calls) == len(graph.send_calls) == 1
+    assert len(graph.send_calls) == 1
     assert services.mail_service.get(decision_id).send_status == "accepted"
 
 
@@ -256,7 +240,7 @@ async def test_edit_racing_send_cannot_erase_submitting_claim(client, services):
     send = asyncio.create_task(
         services.mail_service.send(decision_id, 1, services.identity)
     )
-    await graph.create_started.wait()
+    await graph.send_started.wait()
     with services.uow_factory() as uow:
         before = uow.mail.get_current(decision_id)
     assert before is not None
@@ -274,17 +258,17 @@ async def test_edit_racing_send_cannot_erase_submitting_claim(client, services):
     with services.uow_factory() as uow:
         after = uow.mail.get_current(decision_id)
     assert after == before
-    graph.release_create.set()
+    graph.release_send.set()
     result = await send
     repeated = await services.mail_service.send(decision_id, 1, services.identity)
 
     assert result.send_status == repeated.send_status == "accepted"
-    assert len(graph.create_calls) == len(graph.send_calls) == 1
+    assert len(graph.send_calls) == 1
 
 
 @pytest.mark.parametrize(
     "send_status",
-    ["accepted", "failed", "uncertain", "sent-confirmed"],
+    ["accepted", "uncertain"],
 )
 def test_edit_after_provider_submission_preserves_tracking_and_cannot_resubmit(
     client,
@@ -294,20 +278,13 @@ def test_edit_after_provider_submission_preserves_tracking_and_cannot_resubmit(
     decision_id, path = _reviewed_email(client, services)
     graph = FakeGraphMail(
         send_error=(
-            GraphMailError("graph_send_failed")
-            if send_status == "failed"
-            else (
-                GraphMailSubmissionUncertain("graph_send_uncertain")
-                if send_status == "uncertain"
-                else None
-            )
+            GraphMailSubmissionUncertain("graph_send_uncertain")
+            if send_status == "uncertain"
+            else None
         ),
-        sent=send_status == "sent-confirmed",
     )
     _enable_mocked_send(services, graph)
     sent = client.post(f"{path}/send", json={"revision": 1})
-    if send_status == "sent-confirmed":
-        sent = client.post(f"{path}/check-send-status")
     assert sent.json()["send_status"] == send_status
     with services.uow_factory() as uow:
         before = uow.mail.get_current(decision_id)
@@ -328,33 +305,24 @@ def test_edit_after_provider_submission_preserves_tracking_and_cannot_resubmit(
     assert repeated.status_code == 200
     assert repeated.json()["send_status"] == send_status
     assert after == before
-    assert len(graph.create_calls) == len(graph.send_calls) == 1
+    assert len(graph.send_calls) == 1
 
 
-@pytest.mark.parametrize(
-    ("error", "expected"),
-    [
-        (GraphMailError("graph_create_failed"), "failed"),
-        (GraphMailError("graph_message_mismatch"), "failed"),
-    ],
-)
-def test_create_or_verified_content_failure_is_failed_without_send(
-    client, services, error, expected
-):
+def test_graph_rejection_is_failed(client, services):
     _, path = _reviewed_email(client, services)
-    graph = FakeGraphMail(create_error=error)
+    graph = FakeGraphMail(send_error=GraphMailError("graph_send_failed"))
     _enable_mocked_send(services, graph)
 
     response = client.post(f"{path}/send", json={"revision": 1})
 
     assert response.status_code == 200
-    assert response.json()["send_status"] == expected
-    assert graph.send_calls == []
+    assert response.json()["send_status"] == "failed"
+    assert len(graph.send_calls) == 1
 
 
 def test_failure_before_provider_submission_remains_editable(client, services):
     decision_id, path = _reviewed_email(client, services)
-    graph = FakeGraphMail(create_error=GraphMailError("graph_create_failed"))
+    graph = FakeGraphMail(send_error=GraphMailError("graph_send_failed"))
     _enable_mocked_send(services, graph)
 
     failed = client.post(f"{path}/send", json={"revision": 1})
@@ -372,19 +340,16 @@ def test_failure_before_provider_submission_remains_editable(client, services):
     assert failed.json()["send_status"] == "failed"
     assert before_edit is not None
     assert before_edit[1].provider_message_id is None
-    assert graph.send_calls == []
+    assert len(graph.send_calls) == 1
     assert edited.status_code == 200
     assert edited.json()["revision"] == 2
     assert edited.json()["send_status"] == "draft"
 
 
-def test_indeterminate_send_cannot_repeat_and_can_reconcile_with_get_only(
-    client, services
-):
+def test_indeterminate_send_cannot_repeat_or_claim_confirmation(client, services):
     _, path = _reviewed_email(client, services)
     graph = FakeGraphMail(
         send_error=GraphMailSubmissionUncertain("graph_send_uncertain"),
-        sent=True,
     )
     _enable_mocked_send(services, graph)
 
@@ -392,48 +357,8 @@ def test_indeterminate_send_cannot_repeat_and_can_reconcile_with_get_only(
     repeated = client.post(f"{path}/send", json={"revision": 1})
     checked = client.post(f"{path}/check-send-status")
 
-    assert uncertain.status_code == repeated.status_code == checked.status_code == 200
+    assert uncertain.status_code == repeated.status_code == 200
+    assert checked.status_code == 409
     assert uncertain.json()["send_status"] == "uncertain"
     assert repeated.json() == uncertain.json()
-    assert checked.json()["send_status"] == "sent-confirmed"
-    assert len(graph.create_calls) == len(graph.send_calls) == len(graph.get_calls) == 1
-
-
-def test_send_never_starts_until_provider_id_is_durably_persisted(
-    client, services, monkeypatch
-):
-    _, path = _reviewed_email(client, services)
-    graph = FakeGraphMail()
-    _enable_mocked_send(services, graph)
-    original = SqlAlchemySupplierEmailRepository.update_delivery_state
-
-    def reject_provider_id(self, delivery, **kwargs):
-        if delivery.provider_message_id is not None:
-            return False
-        return original(self, delivery, **kwargs)
-
-    monkeypatch.setattr(
-        SqlAlchemySupplierEmailRepository,
-        "update_delivery_state",
-        reject_provider_id,
-    )
-
-    response = client.post(f"{path}/send", json={"revision": 1})
-
-    assert response.status_code == 200
-    assert response.json()["send_status"] == "submitting"
-    assert len(graph.create_calls) == 1
-    assert graph.send_calls == []
-
-
-def test_exact_sent_item_reconciliation_is_the_only_sent_confirmation(client, services):
-    _, path = _reviewed_email(client, services)
-    graph = FakeGraphMail(sent=True)
-    _enable_mocked_send(services, graph)
-
-    accepted = client.post(f"{path}/send", json={"revision": 1})
-    confirmed = client.post(f"{path}/check-send-status")
-
-    assert accepted.json()["send_status"] == "accepted"
-    assert confirmed.json()["send_status"] == "sent-confirmed"
-    assert len(graph.create_calls) == len(graph.send_calls) == len(graph.get_calls) == 1
+    assert len(graph.send_calls) == 1

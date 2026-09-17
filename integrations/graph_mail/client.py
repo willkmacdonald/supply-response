@@ -136,6 +136,10 @@ class GraphTokenPort(Protocol):
 class GraphMailPort(Protocol):
     async def capability(self, actor: object) -> GraphMailCapability: ...
 
+    async def send_message(
+        self, revision: SupplierEmailRevision, actor: object
+    ) -> None: ...
+
     async def create_draft(
         self, revision: SupplierEmailRevision, actor: object
     ) -> ProviderDraft: ...
@@ -381,6 +385,27 @@ class GraphMailClient:
                 error.code,
             )
             raise GraphMailError("graph_capability_failed") from None
+
+    async def send_message(
+        self, revision: SupplierEmailRevision, actor: object
+    ) -> None:
+        payload: dict[str, object] = {
+            "message": {
+                "subject": revision.subject,
+                "body": {"contentType": "Text", "content": revision.body},
+                "toRecipients": [{"emailAddress": {"address": revision.to_address}}],
+            }
+        }
+        await self._request(
+            "POST",
+            "/me/sendMail",
+            actor,
+            json=payload,
+            failure_code="graph_send_failed",
+            expect_json=False,
+            expected_statuses=frozenset({202}),
+            uncertain_after_submit=True,
+        )
 
     async def create_draft(
         self, revision: SupplierEmailRevision, actor: object

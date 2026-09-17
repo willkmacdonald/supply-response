@@ -15,13 +15,13 @@ export interface SupplierEmailPanelProps {
 const statusLabels = new Map<SupplierEmailState["send_status"], string>([
   ["draft", "Not sent"],
   ["submitting", "Sending…"],
-  ["accepted", "Accepted by Microsoft 365"],
+  ["accepted", "Email submitted to Microsoft 365"],
   ["sent-confirmed", "Sent"],
   ["failed", "Send failed"],
   ["uncertain", "Send status uncertain"],
 ]);
 
-type PendingAction = "save" | "review" | "send" | "check";
+type PendingAction = "save" | "review" | "send";
 
 export function SupplierEmailPanel({
   email,
@@ -30,7 +30,6 @@ export function SupplierEmailPanel({
   onSave,
   onReview,
   onSend,
-  onCheckStatus,
 }: SupplierEmailPanelProps) {
   const [current, setCurrent] = useState(email);
   const [subject, setSubject] = useState(email.subject);
@@ -38,7 +37,6 @@ export function SupplierEmailPanel({
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const pendingRef = useRef(false);
-  const reconciledAccepted = useRef<string | null>(null);
 
   useEffect(() => {
     setCurrent(email);
@@ -75,15 +73,6 @@ export function SupplierEmailPanel({
     }
   }
 
-  useEffect(() => {
-    if (current.send_status !== "accepted" || pending !== null) return;
-    const key = `${current.email_id}:${current.revision}`;
-    if (reconciledAccepted.current === key) return;
-    reconciledAccepted.current = key;
-    void run("check", "Accepted by Microsoft 365. Checking send status…",
-      next => statusLabels.get(next.send_status) ?? "Send status unavailable", onCheckStatus);
-  }, [current.email_id, current.revision, current.send_status, onCheckStatus, pending]);
-
   const status = pending === "send" ? "Sending…" : statusLabels.get(current.send_status) ?? "Send status unavailable";
 
   return <section className="panel supplier-email-panel" aria-labelledby="supplier-email-heading">
@@ -119,11 +108,6 @@ export function SupplierEmailPanel({
         onClick={() => void run("send", "Sending…", next => statusLabels.get(next.send_status) ?? "Send status unavailable",
           () => onSend(current.revision))}>
         {pending === "send" ? "Sending…" : "Send email"}
-      </button>}
-      {current.send_status === "uncertain" && <button type="button" disabled={actionDisabled}
-        onClick={() => void run("check", "Checking send status…", next => statusLabels.get(next.send_status) ?? "Send status unavailable",
-          onCheckStatus)}>
-        {pending === "check" ? "Checking…" : "Check send status"}
       </button>}
     </div>
     {!sendEnabled && <p>Email sending is not enabled for this demo environment.</p>}
