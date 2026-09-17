@@ -1,5 +1,54 @@
 # Supply Response Personal-Tenant Deployment Plan
 
+## Bounded Entra error-code diagnostic release — 2026-09-17
+
+Status: Deployed. Scope: deploy commit `8e3a30a` to the
+existing `ca-sr-demo` Container App. The release preserves the existing Graph
+OBO workflow and diagnostic event, but records a bounded numeric Microsoft Entra
+error code when one is returned. Provider text, tokens, claims, correlation IDs,
+and other free-form values remain discarded. It does not change permissions,
+identities, infrastructure, mailbox configuration, or user-facing behavior, and
+it does not send an email.
+
+### Validation checks — bounded Entra error-code diagnostic
+
+- [x] 1. Guarded existing-environment preflight
+- [x] 2. No-apply provisioning preview
+- [x] 3. Application and infrastructure build verification
+- [x] 4. Affected regression verification
+- [x] 5. Azure policy and exact-scope role verification
+
+### Validation proof — bounded Entra error-code diagnostic
+
+At `2026-09-17T05:24:12Z`, the guarded read-only preflight matched the
+existing Azure Dev subscription, tenant, East US 2 location, Container App,
+shared resources, Entra registrations, Foundry project, and Fabric SQL
+Database. The no-apply provisioning preview completed successfully with no
+creates or deletes and only the already-known Container App and Application
+Insights projections.
+
+Bicep compiled, the Python source and wheel packages built, and the exact
+production Docker image built successfully. The affected Graph/API suite passed
+57 tests and scoped Ruff passed. Seven existing Azure policy assignments were
+readable, and static infrastructure review reconfirmed the existing exact-scope
+role definitions. No mailbox operation, email, permission change, schema
+change, or live-data change occurred during validation.
+
+### Deployment proof — bounded Entra error-code diagnostic
+
+At `2026-09-17T05:29:24Z`, commit `8e3a30a` was present on `github/main`
+and the guarded existing-environment deployment activated revision
+`ca-sr-demo--0000049` on immutable image
+`sha256:99668efd51caad5e32fbbdb0fe8e9a0cc8798e76326e6a7d4ea2d3e0e9f62ece`.
+The revision is Healthy, Provisioned, and receives 100% of traffic.
+
+The guarded live Fabric and Foundry readiness smoke passed without a delegated
+user operation. Live exact-scope checks confirmed AcrPull at the registry, Key
+Vault Secrets User at the application vault, and Foundry User at the configured
+project. No mailbox operation, email, tenant permission change, schema change,
+or live-data deletion occurred. A new user-initiated failed send, if one occurs,
+will now record the bounded numeric Entra error code needed for diagnosis.
+
 ## Graph OBO rejection diagnostic release — 2026-09-17
 
 Status: Deployed. Scope: deploy commit `37d7f5a` to the existing `ca-sr-demo`
